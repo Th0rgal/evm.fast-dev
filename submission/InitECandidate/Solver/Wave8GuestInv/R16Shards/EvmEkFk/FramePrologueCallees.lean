@@ -8954,6 +8954,52 @@ theorem precompile_byteEff_while_guard_inv {F : Type}
   · exact R10Shards.P26_P28.ByteEff.refl s Rl
 termination_by s.clock
 
+theorem precompile_sha256_finish_store_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (out i : BitVec 64) (value : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hout : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hindex : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hib : i.toNat < 8) (hob : out.toNat + 32 < 2^64)
+    (hnt : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "st_be32")
+      [.op .add [.var .local (ofString "out"),
+        .panop .mul [.var .local (ofString "i"), .const 4]], value])).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "st_be32")
+      [.op .add [.var .local (ofString "out"),
+        .panop .mul [.var .local (ofString "i"), .const 4]], value])).1 = none ∨
+      Resumes (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "st_be32")
+      [.op .add [.var .local (ofString "out"),
+        .panop .mul [.var .local (ofString "i"), .const 4]], value])).1) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "st_be32")
+        [.op .add [.var .local (ofString "out"),
+          .panop .mul [.var .local (ofString "i"), .const 4]], value])).2 [(out.toNat,32)] := by
+  apply R10Shards.P26_P28.call0_byteEff R10Shards.P26_P28.funByteEff_st_be32 s _ _ hc hi ?_ hnt hr
+  intro vals hvals region hregion hpos
+  have hm : (i * (4 : BitVec 64)).toNat = i.toNat * 4 := by
+    rw [BitVec.toNat_mul]
+    change (i.toNat * 4) % 2^64 = i.toNat * 4
+    exact Nat.mod_eq_of_lt (by omega)
+  have ha : (out + i * (4 : BitVec 64)).toNat = out.toNat + i.toNat * 4 := by
+    rw [BitVec.toNat_add, hm]
+    exact Nat.mod_eq_of_lt (by omega)
+  simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hout, hindex,
+    valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL] at hvals
+  split at hvals
+  · rename_i v vs hv hvs
+    injection hvals with hvls
+    subst vals
+    injection hv with hv
+    subst v
+    simp only [List.getElem?_cons_zero, Option.getD_some, R10Shards.P26_P28.valWordNat,
+      List.mem_singleton] at hregion
+    subst region
+    refine ⟨(out.toNat,32), List.mem_singleton.mpr rfl, ?_, ?_⟩
+    · change out.toNat ≤ (out + i * (4 : BitVec 64)).toNat
+      rw [ha]; omega
+    · change (out + i * (4 : BitVec 64)).toNat + 4 ≤ out.toNat + 32
+      rw [ha]; omega
+  · simp at hvals
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
