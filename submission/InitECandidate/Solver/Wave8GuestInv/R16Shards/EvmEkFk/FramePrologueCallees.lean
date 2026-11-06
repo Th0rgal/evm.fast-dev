@@ -11184,6 +11184,34 @@ theorem precompile_global_buffer_bound {F : Type}
     · have hlim : scratchEnd ≤ heapEnd := by decide
       exact le_trans hs.2 hlim
 
+theorem precompile_sha256_globals_of_evmInv {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
+    (hpad : globN s "sha_pad" ≠ 0) (hst : globN s "sha_st" ≠ 0) :
+    ∃ pad stp heap : BitVec 64,
+      s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)) ∧
+      s.globals.lookup (ofString "sha_st") = some (.val (.word stp)) ∧
+      s.globals.lookup (ofString "heap_ptr") = some (.val (.word heap)) ∧
+      pad.toNat ≠ 0 ∧ stp.toNat ≠ 0 ∧ pad.toNat+128 ≤ heapEnd ∧
+      heap.toNat+32 < 2^64 := by
+  have words := hi.1.2.2.2.2.2.2.2.2.2
+  obtain ⟨pad,hp⟩ := words "sha_pad" (by decide)
+  obtain ⟨stp,hs⟩ := words "sha_st" (by decide)
+  obtain ⟨heap,hh⟩ := words "heap_ptr" (by decide)
+  change s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)) at hp
+  change s.globals.lookup (ofString "sha_st") = some (.val (.word stp)) at hs
+  change s.globals.lookup (ofString "heap_ptr") = some (.val (.word heap)) at hh
+  have hpv : pad.toNat = globN s "sha_pad" := by simp [globN,hp]
+  have hsv : stp.toNat = globN s "sha_st" := by simp [globN,hs]
+  have hhv : heap.toNat = globN s "heap_ptr" := by simp [globN,hh]
+  have hpz : pad.toNat ≠ 0 := by rw [hpv]; exact hpad
+  have hsz : stp.toNat ≠ 0 := by rw [hsv]; exact hst
+  refine ⟨pad,stp,heap,hp,hs,hh,hpz,hsz,
+    precompile_global_buffer_bound hi ("sha_pad",128) (by decide) pad hp hpz (by decide),?_⟩
+  have hb := hi.1.2.2.1
+  have hc : heapLimit+32 < 2^64 := by decide
+  rw [hhv]
+  omega
+
 theorem precompile_sha256_buffers_avoid {F : Type}
     (s : PanSemStateFiniteExact 64 F) (pad stp : BitVec 64)
     (hi : EvmInv s)
