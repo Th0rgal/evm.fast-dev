@@ -13162,4 +13162,48 @@ theorem log_growth_buffer_disj_g09 {F : Type}
   · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
   · exact Or.inr (Or.inr (Or.inr hright))
 
+/-- Assemble the exposed growth invariant from local frame reconstruction and
+separation of only the replacement buffer and newly appended log regions. -/
+theorem evmInvAt_of_log_growth_new_objects_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {head : Ivl} {log : Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hscratch : globN post "scratch_ptr" ≤ globN s "scratch_ptr")
+    (hglobals : ∀ g, ofString g ≠ ofString "heap_ptr" →
+      ofString g ≠ ofString "scratch_ptr" → ofString g ≠ ofString "frame_mem_ptr" →
+      globN post g = globN s g)
+    (hcell : SameTypedCells s post S Nd)
+    (hchain : evmChain post = evmChain s)
+    (hhead_mem : head ∈ evmChain s)
+    (hhead : ∀ ec ∈ evmChain s, ec = head ∨ ec ∈ (evmChain s).tail)
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 → k % 8 = 0 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hframes : ∀ ec ∈ evmChain s, FrameWF post S ec)
+    (hpairwise : ((evmChain post).map (frameObjects post)).flatten.Pairwise Disj)
+    (hold : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd))
+    (hbuffer : ∀ i ∈ worldOwned s S Nd, Disj (frameLogs post head) i)
+    (hnew : IvlsDisj (logOwnedIvls post log) (worldOwned s S Nd))
+    (happend : frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log)
+    (hobjects : ∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec)
+    (hlogs : ∀ ec ∈ (evmChain s).tail, frameLogs post ec = frameLogs s ec) :
+    EvmInvAt post S := by
+  have hhead_fields : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (head.1 + k) = memW s (head.1 + k) := by
+    intro k hk
+    have hb : k + 8 ≤ 280 ∧ k % 8 = 0 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+    exact hfields head hhead_mem k hb.1 hb.2
+  have hret : frameRet post head = frameRet s head := by
+    unfold frameRet
+    rw [hfields head hhead_mem 144 (by omega) (by omega),
+      hfields head hhead_mem 216 (by omega) (by omega)]
+  have hdisj := log_growth_chain_disj_g09 hchain hhead hobjects hhead_fields hret happend
+    hold hbuffer hnew
+  exact evmInvAt_of_log_growth_cells_g09 hAs hAp hinv hWT hheap hscratch hglobals
+    hcell hchain hfields hcont hframes hpairwise hdisj hobjects hlogs
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
