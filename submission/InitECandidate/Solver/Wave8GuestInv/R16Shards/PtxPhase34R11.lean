@@ -17019,4 +17019,21 @@ theorem journal_alloc_to_writes_backing_resume {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Journal typing and remaining capacity put the next record strictly below address wraparound. -/
+theorem journal_record_bound_of_typed {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} (n : Nat)
+    (hA : ArenaOK s) (hJ : JournalTyped s S) (hn : n < globN s "journal_cap") :
+    globN s "journal" + 32 * n + 32 < 2 ^ 64 := by
+  rcases hJ.2.2.1 with hz | ⟨hal, _⟩
+  · omega
+  have hh : heapLimit < 2 ^ 64 := by decide
+  have hs : scratchEnd < 2 ^ 64 := by decide
+  rcases hal with ⟨_, hi⟩ | ⟨_, hi⟩
+  · have := hA.2.1; dsimp at hi; omega
+  · have := hA.2.2.2.2.1; dsimp at hi; omega
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
