@@ -16675,4 +16675,29 @@ theorem journal_counter_tail_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Carry the journal's narrow backing frame past the counter increment into the tail. -/
+theorem journal_counter_backing_resume {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {b : Ivl} {n : Nat}
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hn : n < globN s "journal_cap")
+    (heff : WorldEff s cur [(globN s "journal" + 32 * n, 32)] [] ["heap_ptr"])
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.assign .global (ofString "journal_n")
+        (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail) =
+      (some (.returned rv), out)) :
+    ∃ mid, IvlUnhit s mid b ∧ mid.locals = cur.locals ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨mid, hm, hl, ht⟩ := journal_counter_tail_frame tail rv hr
+  refine ⟨mid, ?_, hl, ht⟩
+  have hf := journal_worldEff_blockOut_frame hA hfix hb hal hb1 hb2 hn heff
+  intro x hx hh
+  rw [hm]
+  exact hf x hx hh
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
