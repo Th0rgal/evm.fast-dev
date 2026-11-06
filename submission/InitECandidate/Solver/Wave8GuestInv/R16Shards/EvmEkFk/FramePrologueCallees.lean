@@ -8521,6 +8521,32 @@ theorem precompile_step_call0 {fname : MlS}
           | timeOut => simp at hnt
           | _ => rcases hfr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
 
+theorem precompile_step_weaken {F : Type} {gw gw' : List String}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hsub : ∀ k ∈ gw.map ofString, k ∈ gw'.map ofString)
+    (h : EvmStepCC gw s post) : EvmStepCC gw' s post := by
+  refine ⟨⟨h.1.1, h.1.2.1, ?_, h.1.2.2.2⟩, h.2⟩
+  intro k hk
+  exact h.1.2.2.1 k (fun hm => hk (hsub k hm))
+
+theorem ek_cc_precompile_alloc :
+    EvmKeeps EvmInv frameStartGw (ofString "alloc") ∧
+      ChainCellsKept EvmInv (ofString "alloc") := by
+  constructor
+  · refine ⟨_, _, _, lookup_alloc_r16, ?_⟩
+    intro F s hcode hi hex hnt hres
+    exact (precompile_step_weaken (gw' := frameStartGw)
+      (by intro k hk; simp only [List.map_cons, List.map_nil, List.mem_singleton] at hk
+          subst k; simp [frameStartGw])
+      (alloc_body_evmStepCC s hi hres)).1
+  · refine ⟨_, _, _, lookup_alloc_r16, ?_⟩
+    intro F s hcode hi hex hnt hres
+    exact (alloc_body_evmStepCC s hi hres).2
+
+theorem precompile_alloc_call_step (args : List (ExpHOL 64)) :
+    EvmProgStep frameStartGw (.call (some (none, none)) (ofString "alloc") args) :=
+  precompile_step_call0 ek_cc_precompile_alloc.1 ek_cc_precompile_alloc.2 args
+
 theorem precompile_charge_gas_call_step (args : List (ExpHOL 64)) :
     EvmProgStep frameStartGw (.call (some (none, none)) (ofString "charge_gas") args) := by
   apply precompile_step_call0 (hc := precompile_charge_gas_chainCellsKept)
