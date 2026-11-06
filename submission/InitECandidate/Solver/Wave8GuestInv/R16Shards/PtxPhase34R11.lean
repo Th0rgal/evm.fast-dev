@@ -17545,4 +17545,66 @@ theorem decCall_return_replace_tail_memory {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+theorem seq_return_replace_tail_memory {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {pre body : ProgHOL 64} {rv : ValueHOL 64}
+    (hp : evaluateHOLFiniteState s pre = (none, mid))
+    (h : evaluateHOLFiniteState s (.seq pre body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64) (P : (BitVec 64 → HolWordLab 64) → Prop)
+    (hc : evaluateHOLFiniteState mid body = (some (.returned rv), post) →
+      ∃ post', evaluateHOLFiniteState mid body' = (some (.returned rv'), post') ∧ P post'.memory) :
+    ∃ post', evaluateHOLFiniteState s (.seq pre body') = (some (.returned rv'), post') ∧ P post'.memory := by
+  rw [evaluateHOLFiniteState_seq_line780, hp] at h ⊢
+  exact hc h
+
+open private journalAppendTailProg seq_call0_ret_inv seq_store_ret_inv seq_assign_ret_inv
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Preserve a final-memory predicate while replacing the complete journal continuation. -/
+theorem journal_append_replace_tail_memory {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail tail' : ProgHOL 64) (rv rv' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → Prop)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry tail' = (some (.returned rv'), u') ∧ P u'.memory) :
+    ∃ out', evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail') = (some (.returned rv'), out') ∧ P out'.memory := by
+  unfold journalAppendTailProg at hr ⊢
+  have ⟨hn, hrest⟩ := journal_guard_seq_resume s out jn jc trapCode _ rv hcode hjn hjc hr
+  have hcmp : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  simp only [evalHOLExact, hjn, hjc, hcmp, evaluateHOLFiniteState_skip]
+  apply dec_return_replace_tail_memory hrest
+  intro w mid he hb
+  apply decCall_return_replace_tail_memory hb
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_call0_ret_inv hu
+  apply seq_return_replace_tail_memory hm hu
+  intro _
+  apply dec_return_replace_tail_memory ht
+  intro w mid he hb
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hb
+  apply seq_return_replace_tail_memory hm hb
+  intro _
+  obtain ⟨m, hm, ht'⟩ := seq_store_ret_inv ht
+  apply seq_return_replace_tail_memory hm ht
+  intro _
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv ht'
+  apply seq_return_replace_tail_memory hm ht'
+  intro _
+  obtain ⟨m, hm, ht'⟩ := seq_store_ret_inv ht
+  apply seq_return_replace_tail_memory hm ht
+  intro _
+  obtain ⟨m, hm, ht⟩ := seq_assign_ret_inv ht'
+  apply seq_return_replace_tail_memory hm ht'
+  exact hc m _
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
