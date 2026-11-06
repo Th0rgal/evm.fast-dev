@@ -10022,6 +10022,39 @@ theorem precompile_sha256_total_decl_effect {F : Type}
   · exact hntb
   · exact hrb
 
+theorem precompile_storeByte_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (dst value : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.storeByte dst value)).2.locals = s.locals := by
+  rw [evaluateHOLFiniteState_storeByte]
+  split <;> try rfl
+  split <;> try rfl
+  split <;> rfl
+
+open R10Shards.P26_P28 in
+theorem precompile_sha256_marker_then {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad rem : BitVec 64)
+    (body : ProgHOL 64) (Rl : List Ivl)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hr : s.locals.lookup (ofString "rem") = some (.val (.word rem)))
+    (hb : rem.toNat < 64) (hpad : pad.toNat + 128 ≤ heapEnd)
+    (hin : ∀ i ∈ [(pad.toNat,128)], 0 < i.2 →
+      ∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2)
+    (hbody : ∀ (m : PanSemStateFiniteExact 64 F), m.code = originalRuntimeCode → GuestInv m →
+      m.globals = s.globals → m.locals = s.locals →
+      ByteEff m (evaluateHOLFiniteState m body).2 Rl) :
+    ByteEff s (evaluateHOLFiniteState s
+      (.seq (.storeByte (.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "rem")])
+        (.const 128)) body)).2 Rl := by
+  have he := precompile_sha256_padding_byte_effect s pad rem hi hp hr hb hpad
+  apply byteEff_seq (he.mono hin)
+  intro m hm
+  have hl := precompile_storeByte_locals s
+    (.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "rem")]) (.const 128)
+  rw [hm] at he hl
+  exact hbody m (he.code.trans hc)
+    (guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi) he.globals hl
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
