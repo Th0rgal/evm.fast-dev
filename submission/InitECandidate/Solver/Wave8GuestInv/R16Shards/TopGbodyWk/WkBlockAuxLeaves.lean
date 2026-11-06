@@ -9283,4 +9283,41 @@ theorem merge_heap_stepIn_withdrawal
     · exact ha i (List.mem_append_left _ (List.mem_append_left _ hi)) hhit
     · exact ha i (List.mem_append_right _ hi) hhit
 
+/-- Allocation and insertion share the extended table witness used by the inner union. -/
+theorem merge_new_set_union_entry {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hA : ArenaReady s) (hw : WorldTypedWith s S Nd)
+    (hnew : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])).1) :
+    let mid := (evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])).2
+    ∃ iw : BitVec 64, mid.locals.lookup (ofString "binner") = some (.val (.word iw)) ∧
+      ∀ (et ek : ExpHOL 64) (tw kw : BitVec 64),
+      evalAt mid et = some (.val (.word tw)) →
+      evalAt mid ek = some (.val (.word kw)) →
+      tw.toNat ∈ S → globN mid "bs" ≠ 0 → tw.toNat ≠ 0 →
+      tw.toNat = memW mid (globN mid "bs" + 32) →
+      FlowingOrResumes (evaluateHOLFiniteState mid
+        (.call (some (none, none)) (ofString "htab_set")
+          [et, ek, .var .local (ofString "binner")])).1 →
+      let post := (evaluateHOLFiniteState mid
+        (.call (some (none, none)) (ofString "htab_set")
+          [et, ek, .var .local (ofString "binner")])).2
+      WorldOK post ∧ WorldTypedWith post (S ++ [iw.toNat]) Nd ∧
+        globN post "bs" ≠ 0 ∧ memW post (globN post "bs" + 32) ≠ 0 ∧
+        locN post "binner" ∈ htabValues post (memW post (globN post "bs" + 32)) := by
+  dsimp only
+  obtain ⟨iw, hi, _, _, _, hk, _, hf, hw', _⟩ :=
+    merge_new_call_bound_owned s (ofString "binner") 32#64 8#64 S Nd
+      hA hw (by decide) (by decide) hnew
+  obtain ⟨_, _, _, hAm, _⟩ := merge_new_call_flow_props s (ofString "binner")
+    32#64 8#64 hA (by decide) (by decide) hnew
+  refine ⟨iw, hi, ?_⟩
+  intro et ek tw kw ht hkey htS hbs ht0 htbs hset
+  exact merge_set_call_union_entry_with _ et ek tw kw iw (S ++ [iw.toNat]) Nd
+    ht hkey hi hAm hw' (List.mem_append_left _ htS) (by simp) hbs ht0 htbs
+    (by rw [show roleKeyLen "bs.inner" = 32 by decide]; exact hk) hf hset
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
