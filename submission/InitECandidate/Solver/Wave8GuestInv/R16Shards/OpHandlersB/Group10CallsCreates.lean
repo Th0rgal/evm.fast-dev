@@ -11385,4 +11385,50 @@ theorem ts8_then_readOnly_preserves_g10 {F : Type}
   rw [hgp]
   exact hg n hn
 
+/-- Boundary for a child-running suffix after the opcode has charged gas.
+The suffix may change the chain on return; errors must retain its depth. -/
+def ChildContinuationA {F : Type}
+    (P : PanSemStateFiniteExact 64 F → Prop) (prog : ProgHOL 64) : Prop :=
+  ∀ t : PanSemStateFiniteExact 64 F, t.code = originalRuntimeCode →
+    EvmInv t → Group10.HeadMemChainWF t → P t →
+    (evaluateHOLFiniteState t prog).1 ≠ some .timeOut →
+    let r := (evaluateHOLFiniteState t prog).1
+    let post := (evaluateHOLFiniteState t prog).2
+    ((∃ v, r = some (.returned v)) →
+      (EvmInv post ∧ Group10.HeadMemChainWF post) ∧ evmR post ≤ evmR t) ∧
+    (IsEvmErr r → (EvmInv post ∧ Group10.HeadMemChainWF post) ∧
+      (evmChain post).length = (evmChain t).length ∧ evmR post ≤ evmR t)
+
+theorem handlerRunA_of_childContinuation_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (P : PanSemStateFiniteExact 64 F → Prop)
+    (prog : ProgHOL 64) (hchild : ChildContinuationA P prog) :
+    HandlerRunA s0 P true prog := by
+  intro t hc hi hw hlen hR hp hnt
+  have h := hchild t hc hi hw hp hnt
+  refine ⟨?_, ?_⟩
+  · intro hr
+    obtain ⟨hinv, hle⟩ := h.1 hr
+    exact ⟨hinv, evmPot_lt_of_evmR_lt hinv.1 (lt_of_le_of_lt hle hR)⟩
+  · intro he
+    obtain ⟨hinv, hdepth, hle⟩ := h.2 he
+    exact ⟨hinv, hdepth.trans hlen, le_trans hle (Nat.le_of_lt hR)⟩
+
+theorem charge_then_childContinuation_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F)
+    (P Q : PanSemStateFiniteExact 64 F → Prop) (charged : Bool)
+    (amtExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hpos : ∀ t (w : BitVec 64),
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) amtExp =
+        some (.val (.word w)) → EvmInv t → Group10.HeadMemChainWF t → P t → 0 < w.toNat)
+    (hstep : ∀ t cpost,
+      EvmInv t → Group10.HeadMemChainWF t → P t →
+      EvmInv cpost → Group10.HeadMemChainWF cpost →
+      cpost.globals = t.globals → evmChain cpost = evmChain t →
+      Q { cpost with locals := t.locals })
+    (hchild : ChildContinuationA Q cont) :
+    HandlerRunA s0 P charged
+      (.seq (.call (some (none, none)) (ofString "charge_gas") [amtExp]) cont) :=
+  HandlerRunA.seq_charge_gas hpos hstep
+    (handlerRunA_of_childContinuation_g10 s0 Q cont hchild)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
