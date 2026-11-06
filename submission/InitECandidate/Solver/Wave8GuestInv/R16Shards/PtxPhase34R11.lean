@@ -19407,4 +19407,45 @@ theorem journal_cut_delete_tail_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Extract the successful journal cut and compose it with deletion. -/
+theorem journal_append_delete_tail_header_words {F : Type}
+    (s cur out : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (jn jc trapCode tw kw f0 f1 w16 : BitVec 64)
+    (e16 key result : ExpHOL 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (heff : WorldEff s cur [] [] ["heap_ptr"])
+    (hg : ∀ k : MlS, cur.globals.lookup k = s.globals.lookup k)
+    (hjn : cur.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : cur.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : cur.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (ho : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (he : ∀ st : PanSemStateFiniteExact 64 F,
+      st.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]) →
+      @evalHOLExact 64 F _ st.toExact (fun a => Classical.propDecidable (st.memaddrs a)) e16 = some (.val (.word w16)))
+    (htw : ∀ S, TablesTyped s S → tw.toNat ∈ S ∧
+      ∀ p ∈ (tw.toNat, journalRole s tw.toNat) ::
+        (if w16.toNat ≠ 0 ∧ journalRole s tw.toNat = "ts+32" then [(f1.toNat, "ts.inner")] else []),
+        p ∈ worldRoleSlots s)
+    (hf : ∀ cut, evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut) →
+      ∀ k ∈ ([40, 72] : List Nat), IvlUnhit s cut (memW s (globN s "bo" + k), 24))
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16
+      (.seq (.call (some (none, none)) (ofString "htab_del")
+        [.var .local (ofString "t"), key]) (.return result))) = (some (.returned rv), out)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW out (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨cut, hcut⟩ := journal_append_cut_return cur out jn jc trapCode e16 _ rv
+    heff.arena.1.code hjn hjc hr
+  obtain ⟨mid, hw, _, _, hm⟩ := journal_cut_world_entry s cur cut trapCode e16 tw kw f0 f1 w16
+    hW.1 heff hg ht hk ho he htw hcut
+  exact journal_cut_delete_tail_header_words s cur out cut mid S Nd jn jc trapCode tw e16 key result rv
+    hW hT (htw S hT.1).1 heff.arena.1.code hjn hjc ht hr hcut hw hm (hf cut hcut)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
