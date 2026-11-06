@@ -9319,6 +9319,36 @@ theorem precompile_memzero_128_nonzero_of_flow {F : Type}
   subst pad
   exact precompile_memzero_call_null_128_not_flows s ptr hi hp hr
 
+theorem precompile_sha256_padding_nonzero {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad : BitVec 64) (cont : ProgHOL 64)
+    (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s
+      (.seq (.call (some (none,none)) (ofString "memzero")
+        [.var .global (ofString "sha_pad"),.const 128]) cont)).1) :
+    pad.toNat ≠ 0 :=
+  precompile_memzero_128_nonzero_of_flow s _ pad hi
+    (by simp [evalHOLFinite,evalHOLExact,hp])
+    (precompile_seq_flows_left s _ cont hr)
+
+theorem precompile_sha256_remainder_padding_nonzero {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad : BitVec 64)
+    (init : ExpHOL 64) (cont : ProgHOL 64) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s
+      (.dec (ofString "rem") .one init
+        (.seq (.call (some (none,none)) (ofString "memzero")
+          [.var .global (ofString "sha_pad"),.const 128]) cont))).1) :
+    pad.toNat ≠ 0 := by
+  rw [evaluateHOLFiniteState_dec_total] at hr
+  dsimp only at hr
+  split at hr
+  · simp [R13.FlowsOrResumes,Resumes] at hr
+  · split at hr
+    · exact precompile_sha256_padding_nonzero _ pad cont
+        (guestInv_setVar _ _ s hi) hp hr
+    · simp [R13.FlowsOrResumes,Resumes] at hr
+
 theorem precompile_sha256_init_nonzero_of_flow {F : Type}
     (s : PanSemStateFiniteExact 64 F) (ptr : ExpHOL 64) (stp : BitVec 64)
     (hi : GuestInv s)
