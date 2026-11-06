@@ -17187,4 +17187,33 @@ theorem phase2_htabExit_aa_tables_backing_gas {F : Type}
     rw [hf]
     exact hg
 
+/-- The private address-table call preserves transaction backing after caller restoration. -/
+theorem phase2_htab_set_aa_backing (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (fun s => (WorldOK s ∧ TxEnv s) ∧ R16Shards.TxBacking s ∧
+      PtxMessageTables s aa ak ∧ locN s "aa" = aa)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.var .local (ofString "aa"), key, value])
+      (fun r s => r = none → R16Shards.TxBacking s) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨S, Nd, hw, ham, _⟩ := hp.2.2.1
+  obtain ⟨v1, _, _, he1, _, _, hct, _, _⟩ := R16WkAcctWs.callee_param_three s
+    (ofString "htab_set") (ofString "t") (ofString "key") (ofString "value")
+    .one .one .one _ _ (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set)
+    _ _ _ vs body callee ret ha hl
+  have hev : s.locals.lookup (ofString "aa") = some v1 := by
+    simpa [evalAt, evalHOLExact] using he1
+  have ht : locN (callEntryStateHOLFinite s callee) "t" = aa := by
+    simpa [locN, callEntryStateHOLFinite, hct, hev] using hp.2.2.2
+  have harg : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1.1, ?_, ?_⟩
+    · rw [ht]
+      exact (htabWF_with_locals s callee (s.clock - 1) _).mpr (hw.1.2.1 _ ham).1
+    · rw [ht]
+      exact fun i hi => ((hw.1.2.1 _ ham).2 i hi).1
+  have hx := FunSpec.at_lookup htab_set_spec s hc vs body callee ret hl harg (by rw [hr]; simp)
+  rw [hr] at hx
+  exact phase2_htabExit_callEntry_backing callee hp.1.1.1 hp.1.2 hw
+    (ht.symm ▸ ham) hp.2.1 (hx v rfl)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
