@@ -10820,4 +10820,32 @@ theorem eval_merge_storage_root_init {F : Type} (s : PanSemStateFiniteExact 64 F
     (mergeStorageInv_bind_roots s tw ow hW hbs ht0 htbs hts hots) hnt hfr
   exact (WorldStepSc.of_pre_locals_clock (s := s) hs).with_locals_clock _ _
 
+theorem mergeStorageSuffix_eq : mergeStorageSuffix =
+    .dec (ofString "outer") .one
+      (.load .one (.op .add [.var .global (ofString "ts"), .const 32#64]))
+      (.dec (ofString "bouter") .one
+        (.load .one (.op .add [.var .global (ofString "bs"), .const 32#64])) mergeCapInit) := by
+  rfl
+
+theorem eval_merge_storage_suffix_loaded {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (tw ow : BitVec 64) (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (heo : evalAt s (.load .one (.op .add [.var .global (ofString "ts"), .const 32#64])) = some (.val (.word ow)))
+    (het : evalAt s (.load .one (.op .add [.var .global (ofString "bs"), .const 32#64])) = some (.val (.word tw)))
+    (ht0 : tw.toNat ≠ 0)
+    (hnt : (evaluateHOLFiniteState s mergeStorageSuffix).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageSuffix).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeStorageSuffix).1 (evaluateHOLFiniteState s mergeStorageSuffix).2 := by
+  obtain ⟨ow', hov, how, hts⟩ := evalAt_loadG_nz s hW.1.1 "ts" 32#64 (by decide) _ heo
+  obtain ⟨tw', htv, htw, hbs⟩ := evalAt_loadG_nz s hW.1.1 "bs" 32#64 (by decide) _ het
+  cases hov
+  cases htv
+  rw [mergeStorageSuffix_eq] at hnt hfr ⊢
+  apply eval_merge_storage_root_init s _ _ tw ow hc hW heo ?_ hbs ht0 htw hts how hnt hfr
+  simp [evalAt, evalHOLExact, evalListHOLExact, setVarHOLFinite] at het ⊢
+  split at het <;> try contradiction
+  rename_i he
+  simp only [he]
+  exact het
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
