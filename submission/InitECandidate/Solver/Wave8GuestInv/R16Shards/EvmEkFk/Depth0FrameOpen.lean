@@ -7276,4 +7276,70 @@ theorem ext_code_of_return_of_cache_tail {F : Type} (s : PanSemStateFiniteExact 
   exact ext_code_of_get_code_return_strong _ (hm.trans hc)
     (hentry values body callee ret v post ha hl hb)
 
+/-- Rebinding the cache result cannot change the other cache's typed entry. -/
+theorem codeCacheLookupStrong_set_w {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (owner : String) (value : ValueHOL 64) (clock : Nat)
+    (h : CodeCacheLookupStrong s owner) :
+    CodeCacheLookupStrong (setVarHOLFinite (ofString "w") value {s with clock := clock}) owner := by
+  obtain ⟨hA, db, hash, ha, hW, he⟩ := h
+  refine ⟨localsFree_arenaReady s _ _ hA, db, hash, ?_, ?_, ?_⟩
+  · have heval : evalListHOLFinite
+        (setVarHOLFinite (ofString "w") value {s with clock := clock})
+        (h := fun a => Classical.propDecidable (_)) (getCodeCacheArgs owner) =
+        evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+          (getCodeCacheArgs owner) := by
+      simp (config := {decide := true}) only [getCodeCacheArgs, evalListHOLFinite,
+        evalListHOLExact, evalHOLExact, setVarHOLFinite,
+        HolFiniteMapExact.lookup_update, FUPDATE]
+      rfl
+    exact heval.trans ha
+  · exact (WkBal.htabWF_with_locals s _ _ _).2 hW
+  · simpa [NodeDbEntriesStrong, htabValues, hdr, nodeF, memW, WordsOK, WordAt,
+      globN, setVarHOLFinite] using he
+
+/-- A genuine first-cache miss preserves the second cache entry invariant. -/
+theorem get_code_second_cache_entry_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (post : PanSemStateFiniteExact 64 F) (ptr : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hsecond : CodeCacheLookupStrong s "bs")
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_get") values = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned (.rStruct [.val (.word 0), .val (.word ptr)])), post)) :
+    CodeCacheLookupStrong
+      (setVarHOLFinite (ofString "w") (.rStruct [.val (.word 0), .val (.word ptr)])
+        {post with locals := s.locals}) "bs" := by
+  have hl' := hl
+  rw [hc] at hl'
+  have hf := R16WkAcctWs.evaluate_roProgR16 R16WkAcctWs.wsGetCodeCallees
+    R16WkAcctWs.wsGetCodeCallees_good body
+    (R16WkAcctWs.wsGetCodeCallees_good _ (by decide) values body callee ret hl')
+    (callEntryStateHOLFinite s callee) hc
+  rw [hb] at hf
+  have hp : post = {s with locals := post.locals, clock := post.clock} := by
+    simpa [R16WkAcctWs.LocFrameR16, callEntryStateHOLFinite] using hf
+  rw [hp]
+  exact codeCacheLookupStrong_set_w s "bs" _ post.clock hsecond
+
+/-- Both cache invariants may be supplied at entry: the first lookup's
+read-only contract discharges preservation of the second lookup entry. -/
+theorem get_code_cache_tail_return_entry_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hfirst : CodeCacheLookupStrong s "ts") (hsecond : CodeCacheLookupStrong s "bs")
+    (hfallback : ∀ (st : PanSemStateFiniteExact 64 F) values body callee ret post (ptr : BitVec 64),
+      evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        (getCodeCacheArgs "bs") = some values →
+      lookupCodeHOLFinite st.code.lookup (ofString "htab_get") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite st callee) body =
+        (some (.returned (.rStruct [.val (.word 0), .val (.word ptr)])), post) →
+      Ret (setVarHOLFinite (ofString "w") (.rStruct [.val (.word 0), .val (.word ptr)])
+        {post with locals := st.locals}) getCodeAccessTail
+        (fun v _ => ∃ code code_n : BitVec 64,
+          v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40)) :
+    Ret s getCodeCacheTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply get_code_cache_tail_return_strong s hc hfirst ?_ hfallback
+  intro values body callee ret post ptr _ha hl hb
+  exact get_code_second_cache_entry_strong s values body callee ret post ptr hc hsecond hl hb
+
 end HeadStore
