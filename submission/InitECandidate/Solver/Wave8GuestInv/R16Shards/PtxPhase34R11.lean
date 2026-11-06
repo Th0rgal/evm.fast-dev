@@ -16914,4 +16914,25 @@ theorem journal_address_dec_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Allocation and key-copy effects retain the globals used to calculate the journal record. -/
+theorem journal_address_after_effect {F : Type}
+    {s cur : PanSemStateFiniteExact 64 F} {jrec : Ivl} (j n : BitVec 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hbound : j.toNat + 32 * n.toNat + 32 < 2 ^ 64) :
+    @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a))
+      (.op .add [.var .global (ofString "journal"),
+        .panop .mul [.var .global (ofString "journal_n"), .const 32#64]]) =
+      some (.val (.word (j + n * 32#64))) ∧
+      (j + n * 32#64).toNat = j.toNat + 32 * n.toNat := by
+  apply journal_record_address_eval cur j n
+  · rw [← heff.gw_kept (ofString "journal") (by decide)]; exact hj
+  · rw [← heff.gw_kept (ofString "journal_n") (by decide)]; exact hn
+  · exact hbound
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
