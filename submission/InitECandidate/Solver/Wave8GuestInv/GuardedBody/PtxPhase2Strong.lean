@@ -18022,4 +18022,43 @@ theorem phase2_compute_contract_address_txEnv (h : PtxCallees) {F : Type}
     rw [hbo, hk 80 (by simp)]; exact henv.idx_lt
   · change globN post "journal_cap" ≠ 0; rw [hj]; exact henv.jcap_nz
 
+/-- Contract-address computation restores message-store readiness under write separation. -/
+theorem phase2_compute_contract_address_store_ready (h : PtxCallees)
+    {ι F : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (writes : List Ivl)
+    (hwrites : writes = [(locN (callEntryStateHOLFinite s callee) "out", 20),
+      (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+      (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "compute_contract_address") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hnt : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : PtxMessageStoreReady buffers contents s)
+    (hd : ∀ S Nd, WorldTypedWith s S Nd → IvlsDisj writes (worldTypedIvls s S Nd))
+    (hf : ∀ i region, region ∈ writes → Disj (buffers i) region)
+    (hunhit : ∀ k ∈ ([24, 32, 40, 72, 80] : List Nat),
+      ∀ region ∈ writes, ¬ CellHits (globN s "bo" + k) region) :
+    PtxMessageStoreReady buffers contents {post with locals := s.locals} := by
+  subst writes
+  have hh := PtxP1.funSpec_at_lookup h.wk_compute_contract_address s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp.1 callee) (by rw [he]; exact hnt)
+  rw [he] at hh
+  have step := hh hr
+  apply phase2_message_store_ready_write_step buffers contents s _ _ hp
+    ((arenaReady_with_locals post s.locals post.clock).mpr step.1)
+    (phase2_compute_contract_address_txEnv h s post vs body callee ret r hc hl he hnt hr hp.1 hp.2.1 hunhit)
+    rfl step.2.1 hf
+  · intro region hm hz
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+    rcases hm with rfl | rfl | rfl
+    · simp at hz
+    · simp at hz; simp [hz]
+    · simp at hz; simp [hz]
+  · intro S Nd hw
+    obtain ⟨S', Nd', _, hw', hg, hframe, _⟩ := step.2.2.2.2 S Nd
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (hd S Nd hw)
+    exact ⟨S', Nd', (worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hw', hg, hframe⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
