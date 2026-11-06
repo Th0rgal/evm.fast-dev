@@ -12521,4 +12521,17 @@ theorem heap_frontier_evm_avoids_g10 {F : Type}
     obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hmap
     exact heap_frontier_disj_frame_g10 ha.2 (hfw ec hec) p n hp hb i hiobj
 
+theorem alloc_return_prestate_avoids_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p n : BitVec 64)
+    (hi : EvmInv s) (hc : s.code = originalRuntimeCode)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    EvmAvoids (fun _ => [(p.toNat, n.toNat)]) s := by
+  obtain ⟨_, heq, _, hb, hlim, _⟩ := alloc_return_buffer_bounds_g10 s p n hi hc hp hn v post hr
+  apply heap_frontier_evm_avoids_g10 s hi p.toNat n.toNat
+  · exact le_of_eq heq.symm
+  · exact le_trans hb hlim
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
