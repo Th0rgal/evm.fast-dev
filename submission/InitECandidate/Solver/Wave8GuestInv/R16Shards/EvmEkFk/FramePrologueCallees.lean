@@ -8805,6 +8805,26 @@ theorem precompile_seq_flows_left {F : Type}
   | none => exact Or.inl rfl
   | some r => simpa only [he] using hr
 
+theorem precompile_seq_flow_cases {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (first cont : ProgHOL 64)
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq first cont)).1) :
+    ((evaluateHOLFiniteState s first).1 = none ∧
+      R13.FlowsOrResumes
+        (evaluateHOLFiniteState (evaluateHOLFiniteState s first).2 cont).1) ∨
+      ((evaluateHOLFiniteState s first).1 = some .break ∨
+        (evaluateHOLFiniteState s first).1 = some .continue ∨
+        Resumes (evaluateHOLFiniteState s first).1) := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases he : evaluateHOLFiniteState s first with ⟨r,t⟩
+  cases r with
+  | none => exact Or.inl ⟨rfl,by simpa only [he] using hr⟩
+  | some r =>
+    right
+    have hf : R13.FlowsOrResumes (some r) := by simpa only [he] using hr
+    rcases hf with h | h
+    · cases h
+    · exact h
+
 theorem precompile_memzero_null_128 {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hi : GuestInv s)
     (hp : s.locals.lookup (ofString "dst") = some (.val (.word 0)))
