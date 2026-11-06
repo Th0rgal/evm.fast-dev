@@ -10593,6 +10593,54 @@ theorem precompile_sha256_blocks_normal_local {F : Type}
     · exact (precompile_sha256_blocks_body_local t name hne hflow).trans ht
     · exact False.elim ((precompile_sha256_blocks_body_control t).2 hflow)
 
+open R10Shards.P26_P28 in
+theorem precompile_sha256_blocks_then {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (stp len : BitVec 64)
+    (body : ProgHOL 64) (Rl : List Ivl)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : ∃ i : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word i)) ∧ i.toNat ≤ len.toNat)
+    (hbound : len.toNat + 64 < 2^64)
+    (hin : ∀ i ∈ [(stp.toNat,64)], 0 < i.2 → ∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1+i.2 ≤ j.1+j.2)
+    (hbody : ∀ (m : PanSemStateFiniteExact 64 F), m.code = originalRuntimeCode → GuestInv m →
+      m.globals = s.globals →
+      (∀ name, name ≠ ofString "i" → m.locals.lookup name = s.locals.lookup name) →
+      m.locals.lookup (ofString "len") = some (.val (.word len)) →
+      (∃ i : BitVec 64, m.locals.lookup (ofString "i") = some (.val (.word i)) ∧
+        i.toNat ≤ len.toNat ∧ len.toNat-i.toNat < 64) →
+      (evaluateHOLFiniteState m body).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState m body).1 = none ∨ Resumes (evaluateHOLFiniteState m body).1) →
+      ByteEff m (evaluateHOLFiniteState m body).2 Rl) :
+    let loop := ProgHOL.while
+      (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"), .const 64]))
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64])))
+    (evaluateHOLFiniteState s (.seq loop body)).1 ≠ some .timeOut →
+    ((evaluateHOLFiniteState s (.seq loop body)).1 = none ∨ Resumes (evaluateHOLFiniteState s (.seq loop body)).1) →
+    ByteEff s (evaluateHOLFiniteState s (.seq loop body)).2 Rl := by
+  dsimp only
+  intro hnt hr
+  have he := precompile_sha256_blocks_loop_effect s stp hc hi hs
+  refine precompile_byteEff_seq_resumes s _ body Rl hnt hr
+    (fun _ _ => he.mono hin) ?_
+  intro m run hntm hrm
+  have hn : (evaluateHOLFiniteState s _).1 = none := congrArg Prod.fst run
+  obtain ⟨hlm,hxm⟩ := precompile_sha256_blocks_normal_remainder s len hl hx hbound hn
+  have hloc := fun name hne => precompile_sha256_blocks_normal_local s name hne hn
+  rw [run] at he hlm hxm
+  apply hbody m (he.code.trans hc)
+    (guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi) he.globals
+  · intro name hne
+    simpa only [run] using hloc name hne
+  · exact hlm
+  · exact hxm
+  · exact hntm
+  · exact hrm
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
