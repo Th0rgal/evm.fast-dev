@@ -16594,4 +16594,35 @@ theorem journal_final_stores_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private seq_store_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The table and key-pointer stores retain the narrow journal effect and locals. -/
+theorem journal_first_stores_effect {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} (r t kc : BitVec 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [(r.toNat, 32)] [] ["heap_ptr"])
+    (hrloc : cur.locals.lookup (ofString "r") = some (.val (.word r)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hk : cur.locals.lookup (ofString "kc") = some (.val (.word kc)))
+    (hbound : r.toNat + 32 < 2 ^ 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.store (.var .local (ofString "r")) (.var .local (ofString "t")))
+        (.seq (.store (.op .add [.var .local (ofString "r"), .const 8#64])
+          (.var .local (ofString "kc"))) tail)) = (some (.returned rv), out)) :
+    ∃ mid, WorldEff s mid [(r.toNat, 32)] [] ["heap_ptr"] ∧
+      mid.locals = cur.locals ∧ evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨mid0, h0, hrest⟩ := seq_store_ret_inv hr
+  have hl0 := store_fall_locals h0
+  have he0 := journal_record_store_effect (.var .local (ofString "r")) (.var .local (ofString "t"))
+    r t heff (by simp [evalHOLExact, hrloc]) (by simp [evalHOLExact, ht]) (by simp) (by simp) h0
+  obtain ⟨mid8, h8, htail⟩ := seq_store_ret_inv hrest
+  have hl8 := store_fall_locals h8
+  have he8 := journal_offset_store_effect r kc 8 (.var .local (ofString "kc"))
+    he0 (by rw [hl0]; exact hrloc) (by decide) hbound
+    (by simp [evalHOLExact, hl0, hk]) h8
+  exact ⟨mid8, he8, hl8.trans hl0, htail⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
