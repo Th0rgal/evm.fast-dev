@@ -13162,4 +13162,202 @@ theorem log_growth_buffer_disj_g09 {F : Type}
   · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
   · exact Or.inr (Or.inr (Or.inr hright))
 
+/-- Assemble the exposed growth invariant from local frame reconstruction and
+separation of only the replacement buffer and newly appended log regions. -/
+theorem evmInvAt_of_log_growth_new_objects_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {head : Ivl} {log : Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hscratch : globN post "scratch_ptr" ≤ globN s "scratch_ptr")
+    (hglobals : ∀ g, ofString g ≠ ofString "heap_ptr" →
+      ofString g ≠ ofString "scratch_ptr" → ofString g ≠ ofString "frame_mem_ptr" →
+      globN post g = globN s g)
+    (hcell : SameTypedCells s post S Nd)
+    (hchain : evmChain post = evmChain s)
+    (hhead_mem : head ∈ evmChain s)
+    (hhead : ∀ ec ∈ evmChain s, ec = head ∨ ec ∈ (evmChain s).tail)
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 → k % 8 = 0 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hframes : ∀ ec ∈ evmChain s, FrameWF post S ec)
+    (hpairwise : ((evmChain post).map (frameObjects post)).flatten.Pairwise Disj)
+    (hold : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd))
+    (hbuffer : ∀ i ∈ worldOwned s S Nd, Disj (frameLogs post head) i)
+    (hnew : IvlsDisj (logOwnedIvls post log) (worldOwned s S Nd))
+    (happend : frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log)
+    (hobjects : ∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec)
+    (hlogs : ∀ ec ∈ (evmChain s).tail, frameLogs post ec = frameLogs s ec) :
+    EvmInvAt post S := by
+  have hhead_fields : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (head.1 + k) = memW s (head.1 + k) := by
+    intro k hk
+    have hb : k + 8 ≤ 280 ∧ k % 8 = 0 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+    exact hfields head hhead_mem k hb.1 hb.2
+  have hret : frameRet post head = frameRet s head := by
+    unfold frameRet
+    rw [hfields head hhead_mem 144 (by omega) (by omega),
+      hfields head hhead_mem 216 (by omega) (by omega)]
+  have hdisj := log_growth_chain_disj_g09 hchain hhead hobjects hhead_fields hret happend
+    hold hbuffer hnew
+  exact evmInvAt_of_log_growth_cells_g09 hAs hAp hinv hWT hheap hscratch hglobals
+    hcell hchain hfields hcont hframes hpairwise hdisj hobjects hlogs
+
+/-- Reconstructed log-growth invariants give the handler-facing invariant,
+potential equality and memory alignment directly from unchanged frame records. -/
+theorem log_growth_handler_post_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hA : ArenaReady post) (hinv : EvmInvAt post S)
+    (hchain : evmChain post = evmChain s)
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hev : globN post "ev" = globN s "ev")
+    (hframe : globN post "frame_mem_ptr" = globN s "frame_mem_ptr")
+    (hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s)
+    (hHM : HeadMemAligned s) :
+    EvmInv post ∧ evmR post = evmR s ∧ HeadMemAligned post := by
+  refine ⟨⟨hA, S, hinv.1, hinv.2⟩, ?_, ?_⟩
+  · unfold evmR
+    rw [hchain]
+    congr 1
+    apply List.map_congr_left
+    intro ec hec
+    rw [hfields ec hec 64 (by omega) (by omega),
+      hfields ec hec 192 (by omega) (by omega)]
+  · have hm24 := hfields _ hhead 24 (by omega) (by omega)
+    have hm32 := hfields _ hhead 32 (by omega) (by omega)
+    have hm40 := hfields _ hhead 40 (by omega) (by omega)
+    unfold HeadMemAligned at hHM ⊢
+    rw [hev, hm24, hm32, hm40, hframe]
+    exact hHM
+
+/-- The in-place append writes only the header length and the insertion slot,
+with a byte effect suitable for old-record and typed-world framing. -/
+theorem log_no_growth_final_effect_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n log : BitVec 64)
+    (hma : s.memaddrs = ordinaryDomain)
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64) :
+    ByteRegionEffect s {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+      [(l.toNat + 8, 8), (p.toNat + 8 * n.toNat, 8)] := by
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  let Rl : List Ivl := [(l.toNat + 8, 8), (p.toNat + 8 * n.toNat, 8)]
+  have hlen := log_growth_store_effect_g09 s (l + 8#64) (n + 1#64) Rl hma hd8
+    ⟨(l.toNat + 8, 8), by simp [Rl], by dsimp only; rw [hl8]; omega⟩
+  have hstore := log_growth_store_effect_g09
+    {s with memory := fun a => if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    (p + n * 8#64) log Rl hma hdslot
+    ⟨(p.toNat + 8 * n.toNat, 8), by simp [Rl], by dsimp only; rw [hs]; omega⟩
+  exact hlen.trans hstore
+
+/-- In-place append readback preserves the buffer pointer, capacity and every
+old slot, while incrementing length and installing the new record pointer. -/
+theorem log_no_growth_final_cells_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hn : n.toNat + 1 < 2 ^ 64)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    memW post l.toNat = p.toNat ∧
+    memW post (l.toNat + 8) = n.toNat + 1 ∧
+    memW post (l.toNat + 16) = cap.toNat ∧
+    memW post (p.toNat + 8 * n.toNat) = log.toNat ∧
+    ∀ i, i < n.toNat → memW post (p.toNat + 8 * i) = memW s (p.toNat + 8 * i) := by
+  dsimp only
+  obtain ⟨h08, h016, h816, hs0, hs8, hs16, hold⟩ :=
+    log_growth_write_disjoint_g09 hl hp hdisj
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  have hn1 : (n + 1#64).toNat = n.toNat + 1 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt hn
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · simpa [memW, Ne.symm hs0, h08] using hm0
+  · rw [← hl8]
+    simp only [memW, BitVec.ofNat_toNat]
+    simp [memW, Ne.symm hs8, hn1]
+  · rw [← hl16] at hm16 ⊢
+    simp only [memW, BitVec.ofNat_toNat] at hm16 ⊢
+    simpa [memW, Ne.symm hs16, Ne.symm h816] using hm16
+  · rw [← hs]
+    simp only [memW, BitVec.ofNat_toNat]
+    simp [memW]
+  · intro i hi
+    obtain ⟨hns, hn8', _, _⟩ := hold i hi
+    simp [memW, hns, hn8']
+
+/-- Concrete in-place readback and byte framing establish the semantic append
+contract, including preservation of all pre-existing log-owned intervals. -/
+theorem log_no_growth_semantic_post_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) (hn_bound : n.toNat + 1 < 2 ^ 64)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hp_bound : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hrecords : ∀ x ∈ ([(l.toNat + 8, 8), (p.toNat + 8 * n.toNat, 8)] : List Ivl),
+      ∀ i, i < n.toNat → Disj x (memW s (p.toNat + 8 * i), 40)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    memW post (ec.1 + 88) = l.toNat →
+    WordsOK post (l.toNat, 24) → Allocated post (l.toNat, 24) →
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8 * i)) →
+    LogEntryOK post log.toNat →
+    LogsListOK post (memW post (ec.1 + 88)) ∧
+      frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log.toNat := by
+  dsimp only
+  intro hframe hwords hallocated hslots hlog
+  have heff := log_no_growth_final_effect_g09 s l p n log hA.1.memaddrs
+    hd8 hdslot hl_bound hp_bound
+  obtain ⟨h0, h8, h16, hstore, hprefix⟩ :=
+    log_no_growth_final_cells_g09 s l p n cap log hl_bound hp_bound hdisj hn_bound hm0 hm16
+  apply log_append_post_of_frame_effect_g09 hA hFW heff (le_refl _) rfl
+  · simpa only [hl, hn, hm0] using hrecords
+  · exact hframe.trans hl.symm
+  · simpa only [hl] using hwords
+  · simpa only [hl] using hallocated
+  · simpa only [hl, hn] using h8
+  · rw [hl, hn, h16]; omega
+  · intro i hi
+    rw [hl, hn] at hi
+    simp only [hl, h0, hm0]
+    exact ⟨hslots i (Nat.le_of_lt hi), hprefix i hi⟩
+  · simpa only [hl, hn, h0] using hslots n.toNat (le_refl _)
+  · simpa only [hl, hn, h0] using hstore
+  · exact hlog
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

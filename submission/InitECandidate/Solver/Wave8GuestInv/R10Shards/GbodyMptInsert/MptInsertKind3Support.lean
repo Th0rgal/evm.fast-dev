@@ -21,7 +21,7 @@ def insertWalkCost : ProgHOL 64 → Nat
   | _ => 0
 
 /-- The syntactic one-iteration budget applies to every insertion kind. -/
-theorem mptInsert_body_bound (h : MptInsertCallees) :
+theorem mptInsert_kind3_body_bound (h : MptInsertCallees) :
     TerminatingProgBoundedOn GuestInv mptInsertBody mptInsertCost := by
   have hb : TerminatingProgBoundedOn GuestInv mptInsertBody (insertWalkCost mptInsertBody) := by
     simp only [mptInsertBody, mptInsertTail, mptInsertCode, mptDecBody,

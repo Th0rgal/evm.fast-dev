@@ -14977,4 +14977,154 @@ theorem phase2_htab_set_ts8_message_world_backing
     s hc hp hnt hr
   exact ⟨h.1.1.1, h.1.1.2.1, h.2⟩
 
+/-- Transaction-table warming composes with a backing-aware message continuation. -/
+theorem phase2_htab_set_ts8_message_scalar_backing_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (key value : ExpHOL 64)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value]) tail)
+      (K.htab_set + 1 + b) := by
+  intro F s hc hp
+  refine seq_bound_trans
+    (P := fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+    (Q := fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+    ?_ ?_ ht s hc hp
+  · apply TerminatingProgBoundedOn.call_on h.fb_htab_set none _
+    intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · exact phase2_htab_set_ts8_message_scalar_backing buffers contents names key value
+
+/-- Warming the transaction account table preserves every initialized message word. -/
+theorem phase2_htab_set_ts8_message_fields
+    {ι F : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) (key value : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hp : PtxMessageStoreReady buffers contents s)
+    (hnt : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])).1 = none) :
+    let post := (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])).2
+    ∀ k, k < 22 → memW post (locN post "m" + 8 * k) = memW s (locN s "m" + 8 * k) := by
+  dsimp only
+  have hs := R16WkAcctWs.progWStep_call0_htab_set_recSlot (B := []) (gw := ["heap_ptr"])
+    "ts" "ts+8" 8 key value (by simp) (by decide)
+    (fun s S hT hts ht0 => R16WkAcctWs.nonValueSlot_ts8 s S hT hts ht0)
+    s hc hp.1 hnt (Or.inl hr)
+  have hl := phase2_call0_locals s (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value] hr
+  have hm : locN (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])).2 "m" = locN s "m" := by
+    simp only [locN, hl]
+  rw [hm]
+  apply phase2_message_world_step_fields buffers contents s _ hp
+  intro S Nd hw
+  obtain ⟨S', Nd', _, hw', hg, hf, _⟩ := hs.1.2.2.2.2 S Nd hw
+    (by simp [R16WkAcctWs.bufRegions, IvlsDisj])
+  exact ⟨S', Nd', hw', hg, hf⟩
+
+/-- The initialized message words and Phase-4 locals carried across account calls. -/
+def PtxMessageInitialized {ι : Type} (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String) (aa ak : Nat) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+  (PtxMessageScalarReady buffers contents names s ∧ TxBacking s) ∧
+    PtxPhase4LocalShapes s ∧
+    memW s (locN s "m" + 152) = aa ∧ memW s (locN s "m" + 160) = ak ∧
+    memW s (locN s "m" + 40) < 2 ^ 63
+
+/-- Account lookup preserves all initialized readiness fields and caller shapes. -/
+theorem phase2_get_account_message_initialized (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    (hshape : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n) :
+    DecCallResumeOn (PtxMessageInitialized buffers contents names aa ak)
+      (PtxMessageInitialized buffers contents names aa ak) name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hs := phase2_get_account_message_scalar_backing h buffers contents names name args hm hi hn
+    s vs body callee ret v post hc hp.1 ha hl hr
+  have hf := phase2_get_account_message_fields h s post vs body callee ret v hc hp.1.1.1 hl hr
+  have hmp : locN (setVarHOLFinite name v {post with locals := s.locals}) "m" = locN s "m" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hm]
+  refine ⟨hs, ?_, ?_, ?_, ?_⟩
+  · apply phase2_phase4_shapes_localsOnly s _ post.clock (fun n hmem => ?_) hp.2.1
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hshape n hmem]
+  · change memW post (_ + 152) = aa
+    rw [hmp, show 152 = 8 * 19 from rfl, hf 19 (by decide)]
+    exact hp.2.2.1
+  · change memW post (_ + 160) = ak
+    rw [hmp, show 160 = 8 * 20 from rfl, hf 20 (by decide)]
+    exact hp.2.2.2.1
+  · change memW post (_ + 40) < 2 ^ 63
+    rw [hmp, show 40 = 8 * 5 from rfl, hf 5 (by decide)]
+    exact hp.2.2.2.2
+
+/-- Transaction-table warming preserves the initialized readiness fields and shapes. -/
+theorem phase2_htab_set_ts8_message_initialized
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (PtxMessageInitialized buffers contents names aa ak)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none → PtxMessageInitialized buffers contents names aa ak s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hs := (phase2_htab_set_ts8_message_scalar_backing buffers contents names key value).run
+    s hc hp.1 hnt hr
+  have hf := phase2_htab_set_ts8_message_fields buffers contents s key value hc hp.1.1.1 hnt hr
+  have hl := phase2_call0_locals s (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value] hr
+  refine ⟨hs, ?_, ?_, ?_, ?_⟩
+  · exact phase2_phase4_shapes_localsOnly s _ (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])).2.clock
+      (fun n _ => congrArg (fun locals => locals.lookup (ofString n)) hl) hp.2.1
+  · exact (hf 19 (by decide)).trans hp.2.2.1
+  · exact (hf 20 (by decide)).trans hp.2.2.2.1
+  · rw [show 40 = 8 * 5 from rfl, hf 5 (by decide)]
+    exact hp.2.2.2.2
+
+/-- Account lookup feeds a continuation without dropping initialized message words. -/
+theorem phase2_get_account_message_initialized_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    (hshape : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageInitialized buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageInitialized buffers contents names aa ak)
+      (.decCall name .one (ofString "get_account") args tail) (K.get_account + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := PtxMessageInitialized buffers contents names aa ak) h.fb_get_account
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1
+  · exact phase2_get_account_message_initialized h buffers contents names aa ak name args hm hi hn hshape
+  · exact ht
+
+/-- Warming composes at its original clock cost with initialized message continuations. -/
+theorem phase2_htab_set_ts8_message_initialized_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (key value : ExpHOL 64)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageInitialized buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageInitialized buffers contents names aa ak)
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value]) tail)
+      (K.htab_set + 1 + b) := by
+  intro F s hc hp
+  refine seq_bound_trans (P := PtxMessageInitialized buffers contents names aa ak)
+    (Q := PtxMessageInitialized buffers contents names aa ak) ?_ ?_ ht s hc hp
+  · apply TerminatingProgBoundedOn.call_on h.fb_htab_set none _
+    intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1
+  · exact phase2_htab_set_ts8_message_initialized buffers contents names aa ak key value
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

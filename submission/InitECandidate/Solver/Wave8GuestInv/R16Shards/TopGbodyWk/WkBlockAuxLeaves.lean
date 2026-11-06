@@ -4309,7 +4309,7 @@ theorem bal_ensure_account_miss_worldStepSc {F : Type}
     · have hhi := (ivl_allocated_bound hAs.2 hal).2
       have hg8 : (globN s rec.1) % 8 = 0 := hwords.1
       have hu_rec : IvlUnhit s post (globN s rec.1, sz) :=
-        ivlUnhit_of_frameOutside_aligned hsz_nz hfr hk_al0 hf_al
+        R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hsz_nz hfr hk_al0 hf_al
           (fun j hj => by
             rcases List.mem_cons.1 hj with rfl | hj_fp
             · exact Or.inr (Or.inl rfl)
@@ -4327,7 +4327,7 @@ theorem bal_ensure_account_miss_worldStepSc {F : Type}
       exact ⟨hw.1, hw.2.1⟩
   have hunhit_disj : ∀ i : Ivl, i.2 ≠ 0 → (∀ j ∈ htabFootprint s ba, Disj i j) →
       Allocated s i → IvlUnhit s post i := fun i hipos hdi hal =>
-    ivlUnhit_of_frameOutside_aligned hipos hfr hk_al hf_al
+    R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hipos hfr hk_al hf_al
       (fun j hj => by
         rcases List.mem_cons.1 hj with rfl | hj_fp
         · exact Or.inr (Or.inl rfl)
@@ -4410,14 +4410,14 @@ theorem bal_ensure_account_miss_worldStepSc {F : Type}
     hu_fix i (M13.blockOut_in_fixedObjects hi) (by omega)
   have hu_bal : ∀ i ∈ balObjects s, i.2 ≠ 0 → IvlUnhit s post i := fun i hi hipos =>
     hu_fix i (M13.bal_in_fixedObjects hi) hipos
-  have hbo_eq := blockOutObjects_eq_of_bo_unhit hAs.2 hF (hcore "bo" (by decide))
+  have hbo_eq := R10Shards.P26_P28.blockOutObjects_eq_of_bo_unhit hAs.2 hF (hcore "bo" (by decide))
     hT.2.2.2.2.2.2.2.2.2.2.1 hu_bo hu_bo_lst
   obtain ⟨hNH_post, hne_eq⟩ := nodeHeap_congr_bytes
     hAs.1 hARp.1 hag hTr.1 hu_nd_rec hu_nd_byte
   let T_new : List Nat := [t1w.toNat, t2w.toNat]
   let S' : List Nat := S ++ T_new
   have hsub_S : ∀ u ∈ S, u ∈ S' := fun u hu => List.mem_append_left _ hu
-  obtain ⟨hjr_eq, hJ_post⟩ := journalRoleSlots_eq_of_unhit
+  obtain ⟨hjr_eq, hJ_post⟩ := R10Shards.P26_P28.journalRoleSlots_eq_of_unhit
     hAs.1 hARp.1 hAs.2 hag hsub_S hJ hF
     hcore
     hu_ts hu_jr
@@ -7760,7 +7760,7 @@ theorem merge_set_other_table_frame {F : Type}
     exact ⟨hw.1, hw.2.1⟩
   have hunhit : ∀ i ∈ htabFootprint s u, IvlUnhit s post i := by
     intro i hi
-    exact ivlUnhit_of_frameOutside_aligned
+    exact R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned
       (htabFootprint_len_pos (hW.1.2.1 u hu).1 hi) hfr ht_al hf_al
       (fun j hj => hW.1.2.2.1 u hu t ht hne i hi j hj)
       (disj_fresh_of_zero_or_allocated hA.2 hAp.2 hhp
@@ -7851,7 +7851,7 @@ theorem merge_set_fixed_unhit {F : Type}
     rcases hW.2.2.1.1 i hi with hz | ⟨hal, _⟩
     · exact False.elim (hpos hz)
     · exact hal
-  exact ivlUnhit_of_frameOutside_aligned hpos hfr ht_al hf_al
+  exact R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hpos hfr ht_al hf_al
     (fun j hj => (((hW.1.2.1 t ht).2 j hj).2 i hi).flip)
     (disj_fresh_of_zero_or_allocated hA.2 hAp.2 hhp (Or.inr hal))
 
@@ -8043,7 +8043,7 @@ theorem merge_set_journal_kept {F : Type}
     intro g hg'
     apply globN_eq_of_lookup (hg (ofString g) ?_)
     revert g hg'; decide
-  apply journalRoleSlots_eq_of_unhit hA.1 he.1.1 hA.2 hag
+  apply R10Shards.P26_P28.journalRoleSlots_eq_of_unhit hA.1 he.1.1 hA.2 hag
     (fun _ hx => hx) hW.2.1 hW.2.2.1 hcore
   · intro hnz
     have hm := typedRecord_mem_fixedObjects s (r := ("ts", 72)) (by simp [typedRecords])
@@ -8105,7 +8105,7 @@ theorem merge_set_other_values_kept {F : Type}
     exact ⟨hw.1, hw.2.1⟩
   apply htabValues_eq_of_unhit (hW.1.2.1 u hu).1
   intro i hi
-  exact ivlUnhit_of_frameOutside_aligned
+  exact R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned
     (htabFootprint_len_pos (hW.1.2.1 u hu).1 hi) hfr ht_al hf_al
     (fun j hj => hW.1.2.2.1 u hu t ht hne i hi j hj)
     (disj_fresh_of_zero_or_allocated hA.2 hAp.2 hhp
@@ -8731,8 +8731,8 @@ theorem merge_set_nodes_kept {F : Type}
   · intro j hj
     have hw := ((hW.1.2.1 t ht).1.1 j hj).2
     exact ⟨hw.1, hw.2.1⟩
-  · have h1 := hA.2.2.2.2.2.2.1
-    have h2 := he.1.2.2.2.2.2.2.1
+  · have h1 : globN s "heap_ptr" % 8 = 0 := hA.2.2.2.2.2.2.1
+    have h2 : globN post "heap_ptr" % 8 = 0 := he.1.2.2.2.2.2.2.1
     exact ⟨h1, by omega⟩
   · exact (hW.2.2.2.2.1 o ho).1 t ht
   · apply R16WkMarkAccountCreated.disj_fresh_of_zero_or_allocated hA.2 he.1.2 he.2.2.2.2.1
@@ -8764,9 +8764,11 @@ theorem merge_set_tries_typed {F : Type}
     have hg : globN post "ws" = globN s "ws" :=
       globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "ws") (by decide))
     rw [hg] at hn
-    have e24 := merge_set_record_word_kept hA hW ht he "ws" 40 24
+    have e24 : memW post (globN post "ws" + 24) = memW s (globN s "ws" + 24) :=
+      merge_set_record_word_kept hA hW ht he "ws" 40 24
       (by decide) (by decide) hn (by decide) (by decide)
-    have e32 := merge_set_record_word_kept hA hW ht he "ws" 40 32
+    have e32 : memW post (globN post "ws" + 32) = memW s (globN s "ws" + 32) :=
+      merge_set_record_word_kept hA hW ht he "ws" 40 32
       (by decide) (by decide) hn (by decide) (by decide)
     rw [e24, e32]
     refine ⟨(hW.2.2.2.2.2 hn).1, ?_⟩
@@ -8807,5 +8809,134 @@ theorem merge_set_world_typed {F : Type}
     (merge_set_journal_kept hA hW ht he).2,
     (merge_set_fixed_typed hA hW ht he hbs ht0 htbs).2,
     merge_set_tries_typed hA hW ht he hbe hbs ht0 htbs⟩
+
+/-- Outer insertion preserves the existential world invariant using the same
+table and node witnesses. -/
+theorem merge_set_world_ok {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {t inner : Nat}
+    (hW : WorldOK s)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbe : post.be = s.be)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32))
+    (howned : ∀ S Nd, WorldTypedWith s S Nd → t ∈ S ∧ inner ∈ S)
+    (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    WorldOK post := by
+  obtain ⟨S, htyped⟩ := hW.2
+  obtain ⟨Nd, htyped⟩ := (WkBal.worldTyped_iff_with s S).1 htyped
+  obtain ⟨ht, hi⟩ := howned S Nd htyped
+  refine ⟨he.1, S, (WkBal.worldTyped_iff_with post S).2 ⟨Nd, ?_⟩⟩
+  exact merge_set_world_typed hW.1 htyped ht he hbe hbs ht0 htbs hi hk hf hv
+
+/-- Outer insertion only reuses existing owned intervals or allocates fresh heap. -/
+theorem merge_set_owned_grows {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbe : post.be = s.be)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    OwnedGrows s post (worldOwned s S Nd) (worldOwned post S Nd) := by
+  have hfix := (merge_set_fixed_typed hA hW ht he hbs ht0 htbs).1
+  have hnodes := (merge_set_nodes_kept hA hW ht he hbe).2
+  intro o ho
+  unfold worldOwned at ho
+  rcases List.mem_append.1 ho with ho | ho
+  · rcases List.mem_append.1 ho with ho | ho
+    · obtain ⟨u, hu, hi⟩ := List.mem_flatMap.1 ho
+      by_cases hut : u = t
+      · subst u
+        rcases (he.2.2.2.2.2.1 o hi).2 with ⟨j, hj, hin⟩ | hin
+        · exact Or.inr (Or.inl ⟨j, List.mem_append_left _
+            (List.mem_append_left _ (List.mem_flatMap.2 ⟨t, ht, hj⟩)), hin⟩)
+        · exact Or.inr (Or.inr ⟨hin.1, by
+            have hh := he.2.2.2.2.1
+            dsimp [Inside] at hin ⊢
+            omega⟩)
+      · rw [(merge_set_other_table_frame hA hW ht hu hut he).2.1] at hi
+        exact Or.inr (Or.inl ⟨o, List.mem_append_left _
+          (List.mem_append_left _ (List.mem_flatMap.2 ⟨u, hu, hi⟩)), le_rfl, le_rfl⟩)
+    · rw [hfix] at ho
+      exact Or.inr (Or.inl ⟨o, List.mem_append_left _
+        (List.mem_append_right _ ho), le_rfl, le_rfl⟩)
+  · rw [hnodes] at ho
+    exact Or.inr (Or.inl ⟨o, List.mem_append_right _ ho, le_rfl, le_rfl⟩)
+
+/-- The complete relational world step for installing a fresh block inner table. -/
+theorem merge_set_worldStepSc {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {t inner : Nat} (hW : WorldOK s)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbe : post.be = s.be)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32))
+    (howned : ∀ S Nd, WorldTypedWith s S Nd → t ∈ S ∧ inner ∈ S)
+    (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post := by
+  have hsp : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "scratch_ptr") (by decide))
+  refine ⟨⟨he.1, he.2.2.2.2.1, he.2.2.2.2.2.2.2, ?_, ?_⟩, by rw [hsp]⟩
+  · obtain ⟨S, hw⟩ := hW.2
+    obtain ⟨Nd, hw⟩ := (WkBal.worldTyped_iff_with s S).1 hw
+    have ht := (howned S Nd hw).1
+    intro rec hrec hn k hks _
+    have hrec_sz : ∃ sz, (rec.1, sz) ∈ typedRecords ∧
+        ofString rec.1 ≠ ofString "heap_ptr" ∧ k % 8 = 0 ∧ k + 8 ≤ sz := by
+      simp only [stdKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+      rcases hrec with rfl | rfl | rfl | rfl
+      · refine ⟨40, by decide, by decide, ?_⟩; simp at hks; omega
+      · refine ⟨80, by decide, by decide, ?_⟩; simp at hks; omega
+      · refine ⟨72, by decide, by decide, ?_⟩; simp at hks; omega
+      · refine ⟨88, by decide, by decide, ?_⟩; simp at hks; omega
+    obtain ⟨sz, hrec, hg, hk8, hbound⟩ := hrec_sz
+    have hh := merge_set_record_word_kept hW.1 hw ht he rec.1 sz k hrec hg hn hk8 hbound
+    rwa [globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString rec.1)
+      (by simpa using hg))] at hh
+  · intro S Nd hw _
+    obtain ⟨ht, hi⟩ := howned S Nd hw
+    refine ⟨S, Nd, fun _ h => h,
+      merge_set_world_typed hW.1 hw ht he hbe hbs ht0 htbs hi hk hf hv,
+      merge_set_owned_grows hW.1 hw ht he hbe hbs ht0 htbs, ?_, trivial⟩
+    intro a hkeep hfree
+    apply he.2.2.2.2.2.2.1 a
+    · intro j hj hh
+      apply hkeep j _ hh
+      apply List.mem_append_left
+      apply List.mem_append_left
+      exact List.mem_append_left _ (List.mem_append_left _
+        (List.mem_flatMap.2 ⟨t, ht, hj⟩))
+    · intro hh
+      apply hfree
+      have hpmax := he.1.2.2.1
+      obtain ⟨h1, h2⟩ := hh
+      unfold heapFree CellHits at *
+      dsimp at h1 h2 ⊢
+      omega
+
+/-- The evaluator-level outer insertion inherits the complete world step. -/
+theorem merge_set_call_worldStepSc {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek ev : ExpHOL 64)
+    (tw kw iw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : evalAt s ev = some (.val (.word iw)))
+    (hW : WorldOK s) (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (howned : ∀ S Nd, WorldTypedWith s S Nd → tw.toNat ∈ S ∧ iw.toNat ∈ S)
+    (hkey : hdr s iw.toNat 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ iw.toNat)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).1) :
+    let out := evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])
+    WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s out.1 out.2 := by
+  obtain ⟨S, hw⟩ := hW.2
+  obtain ⟨Nd, hw⟩ := (WkBal.worldTyped_iff_with s S).1 hw
+  have htab := (hw.1.2.1 tw.toNat (howned S Nd hw).1).1
+  obtain ⟨he, hv, hbe, _, _⟩ := merge_set_call_flow_props s et ek ev tw kw iw
+    ht hk hi hW.1 htab
+      (fun i him => ((hw.1.2.1 tw.toNat (howned S Nd hw).1).2 i him).1) hfr
+  exact merge_set_worldStepSc hW he hbe hbs ht0 htbs howned hkey hf hv
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

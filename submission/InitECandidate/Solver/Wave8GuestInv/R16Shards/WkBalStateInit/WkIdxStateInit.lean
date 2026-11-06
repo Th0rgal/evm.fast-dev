@@ -8218,7 +8218,7 @@ private theorem balRecord_slot_load {F : Type}
   simp [evalHOLExact, evalListHOLExact, hev_ad, valueIsWord, valueWord, wordOpHOL, wordOp,
     hz_off, memLoadHOLExact, isWfShapeExactHOL, hdom, hfw_mem]
 
-theorem decCall_bal_ensure_account_resumes {F : Type}
+theorem decCall_bal_ensure_account_resumes_idx {F : Type}
     (s : PanSemStateFiniteExact 64 F)
     (x : MlS) (addrExp : ExpHOL 64) (addrw : BitVec 64) (cont : ProgHOL 64)
     (hW : WorldOK s)
@@ -9767,7 +9767,7 @@ private theorem add_storage_write_body_worldStep {F : Type}
   -- Step 1: `bal_ensure_account`
   obtain ⟨adw, mid1, _, _, _, _, hws1, hW1, had_rec1, hslot1,
       _, hmid1_other, hnt1, hres1, heq1_r, heq1_s⟩ :=
-    decCall_bal_ensure_account_resumes s (ofString "ad")
+    decCall_bal_ensure_account_resumes_idx s (ofString "ad")
       (.var .local (ofString "addr")) addrw decTProg hW
       (by simp [evalHOLExact, hs_addr]) hnt hres
   obtain ⟨tw, htw_nat, hev_t⟩ := hslot1 0#64 (by decide) (by decide)
@@ -10200,7 +10200,7 @@ private theorem add_storage_read_body_worldStep {F : Type}
         [.var .local (ofString "addr")] addStorageReadTailProg := rfl
   rw [hbody_eq] at hnt hres ⊢
   obtain ⟨adw, mid, _, _, _, _, hws1, hW1, had_rec1, _, hmid_ad, _, hnt1, hres1, heq1_r, heq1_s⟩ :=
-    decCall_bal_ensure_account_resumes s (ofString "ad") (.var .local (ofString "addr"))
+    decCall_bal_ensure_account_resumes_idx s (ofString "ad") (.var .local (ofString "addr"))
       addrw addStorageReadTailProg hW (by simp [evalHOLExact, hs_addr]) hnt hres
   have hB : R16WkAcctWs.ValidBufList [] := fun _ hp => by cases hp
   have hgw : R16WkAcctWs.SafeStepGlobals ["heap_ptr"] := fun g hg => by

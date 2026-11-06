@@ -17,7 +17,7 @@ Prove the bound and the continuing-state effect. No other kind shard is imported
 theorem mptInsert_kind3 (h : MptInsertCallees) :
     MptStepAt MptInsertActive MptInsertHead MptInsertEffect mptInsertBody mptInsertCost 3 := by
   intro F s hc hs hk
-  refine ⟨mptInsert_body_bound h s hc hs.1.1.1, fun hflow => ?_⟩
+  refine ⟨mptInsert_kind3_body_bound h s hc hs.1.1.1, fun hflow => ?_⟩
   have hnone : (evaluateHOLFiniteState s mptInsertBody).1 = none :=
     hflow.resolve_right (evaluate_noTopContinue mptInsertBody (by decide) s)
   have heval : evaluateHOLFiniteState s mptInsertBody =
