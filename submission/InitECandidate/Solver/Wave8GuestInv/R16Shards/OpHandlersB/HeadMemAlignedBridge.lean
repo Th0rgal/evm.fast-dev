@@ -15515,4 +15515,106 @@ theorem fcBranches_kind2_err_step {F : Type}
     rw [hf]
     dsimp only
     rw [hf]
+
+/-- Rung 20: incorporate-peel of the kind-2 error tail.  At the rollback
+post state `m` (carrying the branch-state bundle, the `ev`-window word
+facts and the gas budget sums), the `incorporate_child_on_error` call
+heading the kind-2 error tail neither returns nor errors; when it finishes
+quietly the tail reduces to the post-refund continuation run from the
+incorporate post state `m2`, which keeps the branch-state bundle, the
+locals, globals, chain and frame words, bumps `evmR` by the child refund
+cell, and preserves the `ev` window except cells 64/72/184.  A terminal
+incorporate outcome propagates as the tail's outcome. -/
+theorem fcKind2ErrTail_incorporate_step {F : Type}
+    {s0 m : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hbnd : globN s0 "ev" + 280 ≤ 2 ^ 64)
+    (hBS : FcBranchState s0 m S)
+    (hwok : WordsOK m (globN s0 "ev", 280))
+    (hdfo : ∀ ec ∈ evmChain m, ∀ o ∈ frameObjects m ec, Disj (globN s0 "ev", 280) o)
+    (hr_sum : OpDispatchSpec.evmR m + memW m (globN s0 "ev" + 64) ≤ OpDispatchSpec.evmR s0)
+    (hgas_sum : OpDispatchSpec.evmR m + memW m (globN s0 "ev" + 64) + 1 < 2 ^ 64)
+    (hnt : (evaluateHOLFiniteState m
+        (.call (some (none, none)) (ofString "incorporate_child_on_error")
+          [.var .local (ofString "child")])).1 ≠ some .timeOut) :
+    (∀ u, (evaluateHOLFiniteState m
+        (.call (some (none, none)) (ofString "incorporate_child_on_error")
+          [.var .local (ofString "child")])).1 ≠ some (.returned u)) ∧
+    ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState m
+        (.call (some (none, none)) (ofString "incorporate_child_on_error")
+          [.var .local (ofString "child")])).1 ∧
+    ((evaluateHOLFiniteState m
+        (.call (some (none, none)) (ofString "incorporate_child_on_error")
+          [.var .local (ofString "child")])).1 = none →
+      ∃ m2, m2 = (evaluateHOLFiniteState m
+          (.call (some (none, none)) (ofString "incorporate_child_on_error")
+            [.var .local (ofString "child")])).2 ∧
+        FcBranchState s0 m2 S ∧
+        m2.locals = m.locals ∧
+        m2.globals = m.globals ∧
+        evmChain m2 = evmChain m ∧
+        OpDispatchSpec.evmR m2 = OpDispatchSpec.evmR m + memW m (globN s0 "ev" + 64) ∧
+        (∀ off : Nat, off + 8 ≤ 280 →
+          memW m2 (globN s0 "ev" + off) = memW m (globN s0 "ev" + off)) ∧
+        memW m2 (globN m2 "ev" + 16) = memW m (globN m "ev" + 16) ∧
+        memW m2 (globN m2 "ev" + 40) = memW m (globN m "ev" + 40) ∧
+        memW m2 (globN m2 "ev" + 232) = memW m (globN m "ev" + 232) ∧
+        evaluateHOLFiniteState m
+            (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                [.var .local (ofString "child")])
+              (.seq (.ite (.cmp .notEqual
+                      (.var .local (ofString "new_account_charged")) (.const 0#64))
+                    (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                      [.const 183600#64])
+                    .skip)
+                (.seq (.call (some (none, none)) (ofString "set_retdata")
+                    [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                     .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                  (.call (some (none, none)) (ofString "stack_push")
+                    [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))) =
+          evaluateHOLFiniteState m2
+              (.seq (.ite (.cmp .notEqual
+                      (.var .local (ofString "new_account_charged")) (.const 0#64))
+                    (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                      [.const 183600#64])
+                    .skip)
+                (.seq (.call (some (none, none)) (ofString "set_retdata")
+                    [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                     .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                  (.call (some (none, none)) (ofString "stack_push")
+                    [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))) ∧
+    (∀ f, (evaluateHOLFiniteState m
+        (.call (some (none, none)) (ofString "incorporate_child_on_error")
+          [.var .local (ofString "child")])).1 = some f →
+      evaluateHOLFiniteState m
+          (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+              [.var .local (ofString "child")])
+            (.seq (.ite (.cmp .notEqual
+                    (.var .local (ofString "new_account_charged")) (.const 0#64))
+                  (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                    [.const 183600#64])
+                  .skip)
+              (.seq (.call (some (none, none)) (ofString "set_retdata")
+                  [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                   .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                (.call (some (none, none)) (ofString "stack_push")
+                  [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))) =
+        evaluateHOLFiniteState m
+          (.call (some (none, none)) (ofString "incorporate_child_on_error")
+            [.var .local (ofString "child")])) := by
+  classical
+  obtain ⟨hnret, hnerr, hpost⟩ :=
+    incorporate_child_on_error_fc_step hBS hwok hbnd hdfo hr_sum hgas_sum hnt
+  refine ⟨hnret, hnerr, ?_, ?_⟩
+  · intro hfin
+    have hp := hpost hfin
+    dsimp only at hp
+    obtain ⟨hBSm, hlocm, hglobm, hchm, hrm, hmemm, hm16, hm40, hm232⟩ := hp
+    refine ⟨_, rfl, hBSm, hlocm, hglobm, hchm, hrm, hmemm, hm16, hm40, hm232, ?_⟩
+    rw [evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [hfin]
+  · intro f hf
+    rw [evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [hf]
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
