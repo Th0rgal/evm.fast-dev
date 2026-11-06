@@ -14672,4 +14672,248 @@ theorem phase2_fresh_worldEff_backing {F : Type}
     exact phase2_worldEff_allocated_unhit hf ha ⟨hi.2.1, by norm_num⟩ hi.1
       (by simp) (by simp)
 
+/-- Concrete account allocation and initialization preserve existing transaction backing. -/
+theorem phase2_acct_new_backing {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (hp : WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+    {wn wc : BitVec 64} {vb : ValueHOL 64}
+    (hb : shapeEqHOL (.comb [.one, .one, .one, .one]) (shapeOfHOLExact vb) = true)
+    (hn : s.locals.lookup (ofString "nonce") = some (.val (.word wn)))
+    (hbal : s.locals.lookup (ofString "balance") = some vb)
+    (hcode : s.locals.lookup (ofString "code_hash") = some (.val (.word wc)))
+    (hnt : (evaluateHOLFiniteState s (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).1) :
+    R16Shards.TxBacking (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).2 := by
+  have hf := R16Shards.EvmEkFk.worldEff_acct_new s s (Rl := []) (B := []) (gw := ["heap_ptr"])
+    (by decide) (R16Shards.WorldEff.refl s [] [] ["heap_ptr"] hp.1.1 hc)
+    hb hn hbal hcode hnt hr
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  apply phase2_fresh_worldEff_backing hp.1.1 hp.2.1 hw hp.2.2 _ hf
+  have hg := hf.gw_kept (ofString "bo") (by decide)
+  unfold globN
+  rw [← hg]
+
+/-- Resolve account-constructor parameters and restore the caller backing. -/
+theorem phase2_acct_new_resume_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      R16Shards.TxBacking name (ofString "acct_new") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "acct_new") vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_acct_new] at hx
+  rcases vs with _ | ⟨vn, _ | ⟨vb, _ | ⟨vc, _ | rest⟩⟩⟩ <;> try simp at hx
+  rcases vn with ⟨⟨wn⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    rcases vc with ⟨⟨wc⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    try simp [shapeOfHOLExact, shapeEqHOL] at hx
+  simp [show ofString "nonce" ≠ ofString "balance" by decide,
+    show ofString "nonce" ≠ ofString "code_hash" by decide,
+    show ofString "balance" ≠ ofString "code_hash" by decide] at hx
+  obtain ⟨hsh, rfl, hL, rfl⟩ := hx
+  have hi : callee.lookup (ofString "index") = none := by
+    rw [← hL]; simp [show ofString "index" ≠ ofString "nonce" by decide,
+      show ofString "index" ≠ ofString "balance" by decide,
+      show ofString "index" ≠ ofString "code_hash" by decide]
+  have hn : callee.lookup (ofString "nonce") = some (.val (.word wn)) := by
+    rw [← hL]; simp [show ofString "nonce" ≠ ofString "balance" by decide,
+      show ofString "nonce" ≠ ofString "code_hash" by decide]
+  have hb : callee.lookup (ofString "balance") = some vb := by
+    rw [← hL]; simp [show ofString "balance" ≠ ofString "code_hash" by decide]
+  have hw : callee.lookup (ofString "code_hash") = some (.val (.word wc)) := by
+    rw [← hL]; simp
+  have hback := phase2_acct_new_backing (callEntryStateHOLFinite s callee) hc
+    ⟨R16Shards.PtxP1.worldOK_callEntry hp.1 callee,
+      phase2_txEnv_callEntry_without_index s callee hp.2.1 hi, hp.2.2⟩ hsh hn hb hw
+    (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at hback
+  exact hback
+
+/-- The empty-account constructor preserves transaction backing. -/
+theorem phase2_acct_empty_backing :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  dsimp only [GuestTrapAndLookup.sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_acct_empty,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  exact phase2_decCall_backing (phase2_acct_new_resume_backing _ _) (phase2_return_backing _)
+
+/-- Resolve the empty-account constructor and retain backing across caller restoration. -/
+theorem phase2_acct_empty_resume_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      R16Shards.TxBacking name (ofString "acct_empty") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "acct_empty") vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_acct_empty] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_acct_empty,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  cases vs with
+  | cons a rest => simp at hx
+  | nil =>
+    simp at hx
+    obtain ⟨rfl, hL, rfl⟩ := hx
+    have hi : callee.lookup (ofString "index") = none := by rw [← hL]
+    change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty) =
+        (some (.returned v), post) at hr
+    have hb := phase2_acct_empty_backing.run (callEntryStateHOLFinite s callee) hc
+      ⟨R16Shards.PtxP1.worldOK_callEntry hp.1 callee,
+        phase2_txEnv_callEntry_without_index s callee hp.2.1 hi, hp.2.2⟩
+      (by rw [hr]; simp) (by rw [hr]; exact ⟨v, rfl⟩)
+    rw [hr] at hb
+    exact hb
+
+/-- Installing a newly created empty account in a caller local preserves backing. -/
+theorem phase2_acct_empty_call_backing (name : MlS) (args : List (ExpHOL 64)) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (some (.local, name), none)) (ofString "acct_empty") args)
+      (fun r t => r = none → R16Shards.TxBacking t) := by
+  exact Hoare.callLocal_resume (phase2_acct_empty_resume_backing name args)
+
+/-- Optional lookup restores the full guard needed by the empty-account branch. -/
+theorem phase2_get_account_optional_resume_world_backing (name : MlS)
+    (args : List (ExpHOL 64)) (hi : name ≠ ofString "index") :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      name (ofString "get_account_optional") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hb := phase2_get_account_optional_resume_backing name args s vs body callee ret v post hc hp ha hl hr
+  have hh := R16Shards.PtxP1.funSpec_at_lookup
+    R16Shards.EvmEkFk.wkSc_get_account_optional s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hr]; simp)
+  rw [hr] at hh
+  have hs := (R16WkAcctWs.WorldStepSc.of_pre_locals_clock
+    (hh (Or.inl ⟨v, rfl⟩))).1
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  have hd : ∀ i ∈ R16WkAcctWs.bufRegions R16Shards.EvmEkFk.wsAcctBufs s,
+      Disj i (globN s "bo", 88) := by
+    intro i hi
+    simp only [R16WkAcctWs.bufRegions, R16Shards.EvmEkFk.wsAcctBufs, List.map_cons,
+      List.map_nil, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl
+    · exact bufferRegion_disj_le hw ("keccak_pad", 136) (by decide) (by decide) 136 (by omega) _ (R16Shards.PtxP1.bo_mem_typed hp.2.1.bo_nz)
+    · exact bufferRegion_disj_le hw ("keccak_st", 200) (by decide) (by decide) 200 (by omega) _ (R16Shards.PtxP1.bo_mem_typed hp.2.1.bo_nz)
+    · exact bufferRegion_disj_le hw ("mpt_nib_scratch", 64) (by decide) (by decide) 64 (by omega) _ (R16Shards.PtxP1.bo_mem_typed hp.2.1.bo_nz)
+  have hz : ∀ i ∈ R16WkAcctWs.bufRegions R16Shards.EvmEkFk.wsAcctBufs s,
+      i.2 = 0 → i.1 % 8 = 0 := by
+    intro i hi
+    simp only [R16WkAcctWs.bufRegions, R16Shards.EvmEkFk.wsAcctBufs, List.map_cons,
+      List.map_nil, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl
+    all_goals exact R16Shards.PtxP1.bufferRegion_zero_aligned s _ _ (by omega)
+  have he := txEnv_preserved_by_worldStep hs (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by decide)
+    (by intro k hk; simp at hk ⊢; tauto) hd
+    (bo_words hw.2.2.1 hp.2.1.bo_nz).2.1 hz
+    hp.2.1 (locals := (setVarHOLFinite name v {post with locals := s.locals}).locals)
+    (by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hi])
+  have hwpost := R16WkAcctWs.WorldStepSc.worldOK_bufs
+    R16Shards.EvmEkFk.validBufList_wsAcctBufs hp.1
+    (R16WkAcctWs.WorldStepSc.of_pre_locals_clock (hh (Or.inl ⟨v, rfl⟩)))
+  exact ⟨localsFree_worldOK post _ post.clock hwpost, he, hb⟩
+
+/-- A call installing a local result cannot propagate a returned result. -/
+theorem phase2_callLocal_ne_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name fname : MlS) (args : List (ExpHOL 64)) (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s (.call (some (some (.local, name), none)) fname args)).1 ≠ some (.returned v) := by
+  rw [evaluateHOLFiniteState_call]
+  split
+  · simp
+  · split
+    · simp
+    · split
+      · simp
+      · split <;> simp_all
+        split <;> try simp
+        split <;> simp
+
+/-- Full non-optional account lookup preserves backing on both existing and fresh accounts. -/
+theorem phase2_get_account_backing :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  dsimp only [GuestTrapAndLookup.sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_get_account,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  apply phase2_decCall_backing (R := fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+    (phase2_get_account_optional_resume_world_backing (ofString "a") _ (by decide))
+  apply Hoare.seq
+  · apply Hoare.ite
+    · refine ⟨fun s hc hp hn => ⟨?_, ?_⟩⟩
+      · exact (phase2_acct_empty_call_backing _ _).run s hc hp.1 hn
+      · intro hne hr
+        obtain ⟨v, hv⟩ := hr
+        exact (phase2_callLocal_ne_returned s _ _ _ v hv).elim
+    · exact Hoare.skip (fun s hp => ⟨fun _ => hp.1.2.2, fun hn => (hn rfl).elim⟩)
+    · intro F s hp
+      constructor
+      · intro h; cases h
+      · intro _ h
+        obtain ⟨v, hv⟩ := h
+        cases hv
+  · exact phase2_return_backing _
+
+/-- Restore transaction backing after the complete non-optional account lookup. -/
+theorem phase2_get_account_resume_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      R16Shards.TxBacking name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "get_account") vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_get_account] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_get_account,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL,
+      InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  have hi : callee.lookup (ofString "index") = none := by
+    rw [← hcallee]
+    simp [show ofString "index" ≠ ofString "addr" by decide]
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account) =
+      (some (.returned v), post) at hr
+  have hb := phase2_get_account_backing.run (callEntryStateHOLFinite s callee) hc
+    ⟨R16Shards.PtxP1.worldOK_callEntry hp.1 callee,
+      phase2_txEnv_callEntry_without_index s callee hp.2.1 hi, hp.2.2⟩
+    (by rw [hr]; simp) (by rw [hr]; exact ⟨v, rfl⟩)
+  rw [hr] at hb
+  exact hb
+
+/-- Account lookup jointly preserves message buffers, scalar locals and transaction backing. -/
+theorem phase2_get_account_message_scalar_backing (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n) :
+    DecCallResumeOn (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+      (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+      name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  exact ⟨phase2_get_account_message_scalar_ready h buffers contents names name args hm hi hn
+    s vs body callee ret v post hc hp.1 ha hl hr,
+    phase2_get_account_resume_backing name args s vs body callee ret v post hc
+      ⟨hp.1.1.1, hp.1.1.2.1, hp.2⟩ ha hl hr⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

@@ -6197,4 +6197,336 @@ theorem htab_get_code_record_words {F : Type}
   obtain ⟨code, code_n, hc, hn, hb⟩ := dispatch_code_record_words hA hw hin
   exact ⟨hw, code, code_n, by simpa using hc, hn, hb⟩
 
+/-- A returning `ws_get_code` lookup suffix must have found its entry. Missing
+entries take the catchable exception branch, so require no code-length premise. -/
+theorem ws_get_code_tail_return_cases {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (found code code_n : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word code), .val (.word code_n)]))
+    (hn : found ≠ 0 → code_n.toNat < 2 ^ 40)
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one) :
+    Ret s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.raise (ofString "StateErr") (.const 2)) .skip)
+        (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+          .rfield 2 (.var .local (ofString "r"))])))
+      (fun v post => found ≠ 0 ∧
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  by_cases hf : found = 0
+  · subst found
+    intro v hv
+    rw [ws_get_code_missing_tail s code code_n hr hshape] at hv
+    cases hv
+  · intro v hv
+    exact ⟨hf, ws_get_code_tail_return s found code code_n hr (hn hf) hf v hv⟩
+
+/-- Equality with the empty code hash returns the empty pair immediately,
+independently of the table-lookup continuation. -/
+theorem ws_get_code_empty_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (eqw : BitVec 64) (heq : s.locals.lookup (ofString "eq") = some (.val (.word eqw)))
+    (hne : eqw ≠ 0) (tail : ProgHOL 64) :
+    evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+        (.return (.rstruct [.const 0, .const 0])) .skip) tail) =
+      (some (.returned (.rStruct [.val (.word 0), .val (.word 0)])), emptyLocalsHOLFinite s) := by
+  have he : ev s (.cmp .notEqual (.var .local (ofString "eq")) (.const 0)) =
+      some (.val (.word 1)) := by
+    simp [ev, evalHOLExact, heq, Compiler.Encoders.Asm.wordCmpHOL]
+    exact hne
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  unfold ev at he
+  rw [he]
+  simp [evaluateHOLFiniteState_return, evalHOLExact, evalListHOLExact,
+    shapeOfHOLExact, sizeOfShapeWithContextHOL]
+
+/-- Compose the actual `nodedb_lookup` invocation with both `ws_get_code`
+suffix branches. The callee bound is needed only for a present entry. -/
+theorem ws_get_code_nodedb_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (args : List (ExpHOL 64))
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hcallee : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "nodedb_lookup") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      post.eshapes = s.eshapes ∧ ∃ found code code_n : BitVec 64,
+        v = .rStruct [.val (.word found), .val (.word code), .val (.word code_n)] ∧
+        (found ≠ 0 → code_n.toNat < 2 ^ 40)) :
+    Ret s (.decCall (ofString "r") (.comb [.one, .one, .one]) (ofString "nodedb_lookup") args
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.raise (ofString "StateErr") (.const 2)) .skip)
+        (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+          .rfield 2 (.var .local (ofString "r"))]))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  obtain ⟨hs, found, code, code_n, hv, hn⟩ := hcallee values body callee ret v post ha hl hb
+  subst v
+  let st := setVarHOLFinite (ofString "r")
+    (.rStruct [.val (.word found), .val (.word code), .val (.word code_n)]) {post with locals := s.locals}
+  have hr : st.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word code), .val (.word code_n)]) := by
+    simp [st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hsh : st.eshapes.lookup (ofString "StateErr") = some .one := by
+    change post.eshapes.lookup _ = _
+    rw [hs]; exact hshape
+  intro w hw
+  obtain ⟨_, hv, hb, _⟩ := ws_get_code_tail_return_cases st found code code_n hr hn hsh w hw
+  exact ⟨code, code_n, hv, hb⟩
+
+/-- Compose the code-hash comparison with the empty return and the nonempty
+lookup continuation. Only the latter needs the bounded lookup contract. -/
+theorem ws_get_code_compare_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (args : List (ExpHOL 64)) (tail : ProgHOL 64)
+    (hcallee : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      ∃ eqw : BitVec 64, v = .val (.word eqw) ∧
+        (eqw = 0 → Ret (setVarHOLFinite (ofString "eq") v {post with locals := s.locals}) tail
+          (fun v _ => ∃ code code_n : BitVec 64,
+            v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40))) :
+    Ret s (.decCall (ofString "eq") .one (ofString "memeq") args
+      (.seq (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+        (.return (.rstruct [.const 0, .const 0])) .skip) tail))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  obtain ⟨eqw, hv, htail⟩ := hcallee values body callee ret v post ha hl hb
+  subst v
+  let st := setVarHOLFinite (ofString "eq") (.val (.word eqw)) {post with locals := s.locals}
+  have heq : st.locals.lookup (ofString "eq") = some (.val (.word eqw)) := by
+    simp [st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  by_cases hz : eqw = 0
+  · have he : ev st (.cmp .notEqual (.var .local (ofString "eq")) (.const 0)) =
+        some (.val (.word 0)) := by
+      simp [ev, evalHOLExact, heq, hz, Compiler.Encoders.Asm.wordCmpHOL]
+    have hi : evaluateHOLFiniteState st
+        (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+          (.return (.rstruct [.const 0, .const 0])) .skip) = (none, st) := by
+      rw [evaluateHOLFiniteState_ite]
+      unfold ev at he
+      rw [he]
+      simp [evaluateHOLFiniteState_skip]
+    intro w hw
+    rw [evaluateHOLFiniteState_seq_line780, hi] at hw
+    exact htail hz w hw
+  · intro w hw
+    rw [ws_get_code_empty_tail st eqw heq hz tail] at hw
+    cases hw
+    exact ⟨0, 0, rfl, by decide⟩
+
+/-- The concrete nonempty-hash lookup continuation of `ws_get_code`. -/
+def wsCodeLookupTail : ProgHOL 64 :=
+  .decCall (ofString "r") (.comb [.one, .one, .one]) (ofString "nodedb_lookup")
+    [.load .one (.op .add [.var .global (ofString "ws"), .const 16]),
+      .var .local (ofString "code_hash")]
+    (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+      (.raise (ofString "StateErr") (.const 2)) .skip)
+      (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+        .rfield 2 (.var .local (ofString "r"))])))
+
+theorem ws_get_code_body_eq :
+    sourceFnBody Guest.Software.guestFn_ws_get_code =
+      .decCall (ofString "eq") .one (ofString "memeq")
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32]
+        (.seq (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+          (.return (.rstruct [.const 0, .const 0])) .skip) wsCodeLookupTail) := by rfl
+
+/-- Full-body return composition, with the remaining nonempty lookup
+obligation exposed at the comparison's concrete resumed state. -/
+theorem ws_get_code_body_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcompare : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      ∃ eqw : BitVec 64, v = .val (.word eqw) ∧
+        (eqw = 0 → Ret (setVarHOLFinite (ofString "eq") v {post with locals := s.locals}) wsCodeLookupTail
+          (fun v _ => ∃ code code_n : BitVec 64,
+            v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ws_get_code)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  rw [ws_get_code_body_eq]
+  exact ws_get_code_compare_return s _ wsCodeLookupTail hcompare
+
+/-- Returning declaration calls expose their successful result-shape check
+to the continuation proof. -/
+theorem Ret.decCall_gen_shape {F : Type} {s : PanSemStateFiniteExact 64 F} {x fname : MlS}
+    {sh : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hk : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      (shapeEqHOL (shapeOfHOLExact v) sh && shapeEqHOL (shapeOfHOLExact v) ret) = true →
+      Ret (setVarHOLFinite x v {post with locals := s.locals}) cont
+        (fun w t => Φ w {t with locals := HolFiniteMapExact.resVarEq t.locals (x, s.locals.lookup x)})) :
+    Ret s (.decCall x sh fname args cont) Φ := by
+  intro v hv
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hv ⊢
+  revert hv
+  split
+  · simp
+  · rename_i values ha
+    split
+    · simp
+    · rename_i body callee ret hl
+      split
+      · simp
+      · dsimp only
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        dsimp only
+        rcases r with _ | r
+        · simp
+        · cases r with
+          | returned w =>
+            dsimp only
+            split
+            · rename_i hs
+              intro hv
+              exact hk values body callee ret w post ha hl hr hs v hv
+            · simp
+          | exception _ _ => simp
+          | _ => simp
+
+/-- The comparison result is a word by the call's shape check; only the
+zero-comparison continuation remains as a callee obligation. -/
+theorem ws_get_code_compare_return_of_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (args : List (ExpHOL 64)) (tail : ProgHOL 64)
+    (htail : ∀ values body callee ret eqw post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned (.val (.word eqw))), post) →
+      eqw = 0 → Ret (setVarHOLFinite (ofString "eq") (.val (.word eqw)) {post with locals := s.locals}) tail
+        (fun v _ => ∃ code code_n : BitVec 64,
+          v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40)) :
+    Ret s (.decCall (ofString "eq") .one (ofString "memeq") args
+      (.seq (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+        (.return (.rstruct [.const 0, .const 0])) .skip) tail))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen_shape
+  intro values body callee ret v post ha hl hb hs
+  rcases v with ⟨⟨eqw⟩⟩ | _ | _ <;> try (simp [shapeOfHOLExact, shapeEqHOL] at hs)
+  let st := setVarHOLFinite (ofString "eq") (.val (.word eqw)) {post with locals := s.locals}
+  have heq : st.locals.lookup (ofString "eq") = some (.val (.word eqw)) := by
+    simp [st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  by_cases hz : eqw = 0
+  · have he : ev st (.cmp .notEqual (.var .local (ofString "eq")) (.const 0)) =
+        some (.val (.word 0)) := by
+      simp [ev, evalHOLExact, heq, hz, Compiler.Encoders.Asm.wordCmpHOL]
+    have hi : evaluateHOLFiniteState st
+        (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+          (.return (.rstruct [.const 0, .const 0])) .skip) = (none, st) := by
+      rw [evaluateHOLFiniteState_ite]
+      unfold ev at he
+      rw [he]
+      simp [evaluateHOLFiniteState_skip]
+    intro w hw
+    rw [evaluateHOLFiniteState_seq_line780, hi] at hw
+    exact htail values body callee ret eqw post ha hl hb hz w hw
+  · intro w hw
+    rw [ws_get_code_empty_tail st eqw heq hz tail] at hw
+    cases hw
+    exact ⟨0, 0, rfl, by decide⟩
+
+/-- Full concrete `ws_get_code` return composition. Only calls reached after
+a zero hash comparison need the present-entry bound from `nodedb_lookup`. -/
+theorem ws_get_code_return_of_nodedb {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hlookup : ∀ values body callee ret post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned (.val (.word 0))), post) →
+      let st := setVarHOLFinite (ofString "eq") (.val (.word 0)) {post with locals := s.locals}
+      st.eshapes.lookup (ofString "StateErr") = some .one ∧
+      ∀ values' body' callee' ret' v' post',
+        evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+          [.load .one (.op .add [.var .global (ofString "ws"), .const 16]),
+            .var .local (ofString "code_hash")] = some values' →
+        lookupCodeHOLFinite st.code.lookup (ofString "nodedb_lookup") values' = some (body', callee', ret') →
+        evaluateHOLFiniteState (callEntryStateHOLFinite st callee') body' = (some (.returned v'), post') →
+        post'.eshapes = st.eshapes ∧ ∃ found code code_n : BitVec 64,
+          v' = .rStruct [.val (.word found), .val (.word code), .val (.word code_n)] ∧
+          (found ≠ 0 → code_n.toNat < 2 ^ 40)) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ws_get_code)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  rw [ws_get_code_body_eq]
+  apply ws_get_code_compare_return_of_tail
+  intro values body callee ret eqw post ha hl hb hz
+  subst eqw
+  obtain ⟨hs, hn⟩ := hlookup values body callee ret post ha hl hb
+  exact ws_get_code_nodedb_return _ _ hs hn
+
+/-- Live database values designate two-word records and heap-contained code.
+`WorldOK` types the database table, but does not type its payload records. -/
+def NodeDbEntriesStrong {F : Type} (s : PanSemStateFiniteExact 64 F) (db : Nat) : Prop :=
+  ∀ p ∈ htabValues s db, WordsOK s (p, 16) ∧
+    Inside (memW s p, memW s (p + 8)) sourceBase (globN s "heap_ptr")
+
+theorem nodedb_lookup_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (db hash : BitVec 64) (hcode : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hdb : s.locals.lookup (ofString "db") = some (.val (.word db)))
+    (hhash : s.locals.lookup (ofString "hash") = some (.val (.word hash)))
+    (hW : HtabWF s db.toNat) (hentries : NodeDbEntriesStrong s db.toNat) :
+    Ret s (sourceFnBody Guest.Software.guestFn_nodedb_lookup)
+      (fun v _ => ∃ found code code_n : BitVec 64,
+        v = .rStruct [.val (.word found), .val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ (found = 0 ∨ found = 1)) := by
+  change Ret s (.decCall (ofString "r") (.comb [.one, .one]) (ofString "htab_get")
+    [.var .local (ofString "db"), .var .local (ofString "hash")] _) _
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  have hvals : values = [.val (.word db), .val (.word hash)] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, hdb, hhash] using ha.symm
+  subst values
+  obtain ⟨hbody, ht⟩ := lookupCodeHOLFinite_param_at
+    s.code.lookup (ofString "htab_get") [] (ofString "t") .one [(ofString "key", .one)]
+    (sourceFnBody Guest.Software.guestFn_htab_get) (.comb [.one, .one])
+    (by intro p hp; simp at hp; rw [hp]; decide)
+    (by rw [hcode]; exact WkBal.lookup_htab_get) (vpre := []) (by simp) hl
+  obtain ⟨_, hk⟩ := lookupCodeHOLFinite_param_at
+    s.code.lookup (ofString "htab_get") [(ofString "t", .one)] (ofString "key") .one []
+    (sourceFnBody Guest.Software.guestFn_htab_get) (.comb [.one, .one])
+    (by simp) (by rw [hcode]; exact WkBal.lookup_htab_get)
+    (vpre := [.val (.word db)]) (by simp) hl
+  subst body
+  let ce := callEntryStateHOLFinite s callee
+  have hWce : HtabWF ce db.toNat := WkBal.htabWF_with_locals s callee (s.clock - 1) db.toNat |>.2 hW
+  obtain ⟨found, ptr, hv, hm⟩ := WkBal.htab_get_ret_in_values ce db hash hcode ht hk hWce v
+    (congrArg Prod.fst hb)
+  have hframe := R16WkAcctWs.evaluate_roProgR16 R16WkAcctWs.wsGetCodeCallees
+    R16WkAcctWs.wsGetCodeCallees_good (sourceFnBody Guest.Software.guestFn_htab_get)
+    (by decide) ce hcode
+  rw [hb] at hframe
+  have hpost : post = {s with locals := post.locals, clock := post.clock} := by
+    simpa [R16WkAcctWs.LocFrameR16, ce, callEntryStateHOLFinite] using hframe
+  subst v
+  let st := setVarHOLFinite (ofString "r")
+    (.rStruct [.val (.word found), .val (.word ptr)]) {post with locals := s.locals}
+  have hst : st = {s with locals := st.locals, clock := st.clock} := by
+    dsimp only [st, setVarHOLFinite]; rw [hpost]
+  have hr : st.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]) := by
+    simp [st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hAst : ArenaReady st := by rw [hst]; exact localsFree_arenaReady s _ _ hA
+  have hrecord : found ≠ 0 → WordsOK st (ptr.toNat, 16) ∧
+      Inside (memW st ptr.toNat, memW st (ptr.toNat + 8)) sourceBase (globN st "heap_ptr") := by
+    intro hf
+    have hin : ptr.toNat ∈ htabValues s db.toNat := by
+      simpa [ce, callEntryStateHOLFinite, htabValues, hdr, nodeF, memW] using hm hf
+    have he := hentries ptr.toNat hin
+    rw [hst]
+    simpa [WordsOK, WordAt, memW, globN] using he
+  intro w hw
+  obtain ⟨f, c, n, hv, hn, hf, _⟩ := nodedb_lookup_code_tail_cases st hAst found ptr hr hrecord w hw
+  exact ⟨f, c, n, hv, hn, hf⟩
+
 end HeadStore

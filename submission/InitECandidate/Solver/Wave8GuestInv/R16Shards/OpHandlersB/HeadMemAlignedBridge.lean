@@ -11145,4 +11145,368 @@ theorem log_append_no_growth_contents {F : Type} (s : PanSemStateFiniteExact 64 
   exact log_append_store_contents X arr n lg (fun i => memW s (arr.toNat + 8 * i))
     (by omega) hprefix
 
+attribute [local irreducible] Ret in
+/-- Exact log contents after append, uniformly through in-place and copying growth. -/
+theorem log_append_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (e L lg arr0 n cap : BitVec 64) (hA : ArenaReady s)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word lg)))
+    (hd88 : s.memaddrs (e + 88)) (hmL : s.memory (e + 88) = .word L)
+    (hma : s.memory L = .word arr0)
+    (hmn : s.memory (L + 8) = .word n) (hmc : s.memory (L + 16) = .word cap)
+    (hd0 : s.memaddrs L) (hd8 : s.memaddrs (L + 8)) (hd16 : s.memaddrs (L + 16))
+    (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 59)
+    (ha8 : arr0.toNat % 8 = 0)
+    (hw : arr0.toNat + 8 * cap.toNat ≤ 2 ^ 64)
+    (hold : arr0.toNat + 8 * n.toNat ≤ globN s "heap_ptr")
+    (hLw : L.toNat + 24 ≤ 2 ^ 64)
+    (hsep : L.toNat + 24 ≤ arr0.toNat ∨ arr0.toNat + 8 * cap.toNat ≤ L.toNat)
+    (hLh : L.toNat + 24 ≤ globN s "heap_ptr" ∨ heapLimit ≤ L.toNat)
+    (hc1 : 1 ≤ cap.toNat) :
+    Ret s (sourceFnBody Guest.Software.guestFn_log_append)
+      (fun _ post => ∃ arr : BitVec 64, post.memory L = .word arr ∧
+        (∀ i, i < n.toNat →
+          memW post (arr.toNat + 8 * i) = memW s (arr0.toNat + 8 * i)) ∧
+        memW post (arr.toNat + 8 * n.toNat) = lg.toNat) := by
+  have hb : sourceFnBody Guest.Software.guestFn_log_append =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_log_append).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_log_append,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.decCallL (by intro v t M h; exact h) fun vals body cal ret v post h1 h2 h3 => ?_
+  have hv : vals = [.val (.word L), .val (.word 8)] := by
+    obtain ⟨v1, v2, rfl, he1, he2⟩ := evalList2_inv _ _ _ h1
+    have e1 := he1.symm.trans (ev_load_loc_eq s _ e _ L he hd88 hmL)
+    have e2 := he2.symm.trans (ev_const s _)
+    rw [Option.some.inj e1, Option.some.inj e2]; rfl
+  obtain ⟨rfl, rfl⟩ := lk2 hA.1.code (by decide) fl_lookup_lst_push L 8 hv h2
+  have hAE : ArenaReady (callEntryStateHOLFinite s
+      ((HolFiniteMapExact.empty.update (ofString "l", .val (.word L))).update
+        (ofString "esz", .val (.word 8)))) :=
+    ⟨guestInv_callEntry _ _ hA.1, arenaOK_congr (s := s) rfl hA.2⟩
+  have hp := Ret.apply
+    (lst_push_run (callEntryStateHOLFinite s _) L 8 n cap hAE
+      (by simp (config := {decide := true}) [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+      (by simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+      hmn hmc hd0 hd8 hd16 hle (by omega) (by decide)) h3
+  obtain ⟨arr, pmL, hv, hprefix⟩ := Ret.apply
+    (lst_push_run_contents (callEntryStateHOLFinite s _) L arr0 n cap hAE
+      (by simp (config := {decide := true}) [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+      (by simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+      hma hmn hmc hd0 hle (by omega) ha8
+      (by have hh := hA.2.2.1; change globN s "heap_ptr" ≤ 2952790016 at hh; omega)
+      hold hLw (by rcases hsep with h | h <;> [left; right] <;> omega) hLh) h3
+  obtain ⟨_, _, _, _, _, _, _, pA, arr', d, len, pmL', _, _, halt, _⟩ := hp
+  have harr : arr' = arr := by have h := pmL'.symm.trans pmL; cases h; rfl
+  subst arr'
+  have hbound : arr.toNat + 8 * n.toNat < 2 ^ 64 := by
+    rcases halt with ⟨hlt, _, _, hm, _⟩ | ⟨rfl, had, _, _, hg, _⟩
+    · have ha : arr = arr0 := by have h := hm.symm.trans hma; cases h; rfl
+      subst arr; omega
+    · have hh := pA.2.2.1
+      change globN post "heap_ptr" ≤ 2952790016 at hh
+      change d.toNat + 2 * (8 * n.toNat) ≤ globN post "heap_ptr" at hg
+      rw [had]
+      omega
+  have hslot : arr + n * 8 ≠ L := by
+    intro h
+    have hn := congrArg BitVec.toNat h
+    rw [log_slot_toNat arr n hbound] at hn
+    rcases halt with ⟨_, _, _, hm, _⟩ | ⟨_, had, _, hg, hb, _⟩
+    · have ha : arr = arr0 := by have h := hm.symm.trans hma; cases h; rfl
+      subst arr; rcases hsep with h | h <;> omega
+    · have hh := pA.2.2.1
+      change globN post "heap_ptr" ≤ 2952790016 at hh
+      have hg' : globN s "heap_ptr" ≤ d.toNat := hg
+      have hb' : d.toNat + 2 * (8 * cap.toNat) ≤ globN post "heap_ptr" := hb
+      subst d
+      rcases hLh with h | h
+      · omega
+      · change 2952790016 ≤ L.toNat at h; omega
+  subst v
+  let X := setVarHOLFinite (ofString "slot") (.val (.word (arr + n * 8)))
+    { post with locals := s.locals }
+  have hXs : X.locals.lookup (ofString "slot") = some (.val (.word (arr + n * 8))) := setVar_lookup_eq _ _ _
+  have hXlg : X.locals.lookup (ofString "log") = some (.val (.word lg)) := by
+    simp (config := {decide := true}) [X, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlg]
+  show Ret X _ _
+  refine Ret.seq_storeWv (arr + n * 8) (by rw [ev_loc]; exact hXs)
+    (fun v hv => ⟨lg, by rw [ev_loc, hXlg] at hv; exact (Option.some.inj hv).symm⟩) fun w hw' _ => ?_
+  have hwl : w = lg := by rw [ev_loc, hXlg] at hw'; simpa using hw'.symm
+  subst w
+  refine Ret.ret fun _ _ => ⟨arr, ?_, ?_⟩
+  · change updW X.memory (arr + n * 8) lg L = _
+    rw [updW_ne _ _ _ _ (Ne.symm hslot)]; exact pmL
+  · exact log_append_store_contents X arr n lg (fun i => memW s (arr0.toNat + 8 * i))
+      hbound hprefix
+
+/-- Contents component of the child-log loop invariant.  It follows the current
+array through reallocations while indexing both segments in the entry state. -/
+def LAContents {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (L arr0 n0 : BitVec 64) (child : Nat → Nat) (i : Nat)
+    (u : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ arr : BitVec 64, u.memory L = .word arr ∧
+    (∀ k, k < n0.toNat → memW u (arr.toNat + 8 * k) = memW s (arr0.toNat + 8 * k)) ∧
+    ∀ k, k < i → memW u (arr.toNat + 8 * (n0.toNat + k)) = child k
+
+theorem laContents_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (L arr0 n0 : BitVec 64) (child : Nat → Nat)
+    (hm : s.memory L = .word arr0) : LAContents s L arr0 n0 child 0 s := by
+  exact ⟨arr0, hm, fun _ _ => rfl, fun _ h => by omega⟩
+
+theorem laContents_locals {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 n0 : BitVec 64} {child : Nat → Nat} {i : Nat}
+    (h : LAContents s L arr0 n0 child i u) (M : HolFiniteMapExact MlS (ValueHOL 64)) :
+    LAContents s L arr0 n0 child i { u with locals := M } := h
+
+/-- A uniform append extends the contents invariant by exactly one child log. -/
+theorem laContents_step {F : Type} {s u post : PanSemStateFiniteExact 64 F}
+    {L arr0 n0 arr n lg : BitVec 64} {child : Nat → Nat} {i : Nat}
+    (h : LAContents s L arr0 n0 child i u)
+    (hm : u.memory L = .word arr) (hn : n.toNat = n0.toNat + i)
+    (hlg : lg.toNat = child i)
+    (hp : ∃ next : BitVec 64, post.memory L = .word next ∧
+      (∀ k, k < n.toNat →
+        memW post (next.toNat + 8 * k) = memW u (arr.toNat + 8 * k)) ∧
+      memW post (next.toNat + 8 * n.toNat) = lg.toNat) :
+    LAContents s L arr0 n0 child (i + 1) post := by
+  obtain ⟨old, hold, hprefix, hsuffix⟩ := h
+  have heq : old = arr := by have he := hold.symm.trans hm; cases he; rfl
+  subst old
+  obtain ⟨next, hnext, hkeep, hnew⟩ := hp
+  refine ⟨next, hnext, ?_⟩
+  apply append_contents_step
+    (fun k => memW s (arr0.toNat + 8 * k)) child
+    (fun k => memW u (arr.toNat + 8 * k))
+    (fun k => memW post (next.toNat + 8 * k)) n0.toNat i hprefix hsuffix
+  · intro k hk
+    exact hkeep k (by omega)
+  · simpa only [hn, hlg] using hnew
+
+/-- Strengthened loop invariant: retain the allocation/frame invariant and the
+exact parent prefix and appended child suffix at the local loop index. -/
+def LAInvContents {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (L arr0 cap0 n0 nc : BitVec 64) (child : Nat → Nat)
+    (u : PanSemStateFiniteExact 64 F) : Prop :=
+  LAInv s L arr0 cap0 n0 nc u ∧
+    ∀ i : BitVec 64, u.locals.lookup (ofString "i") = some (.val (.word i)) →
+      LAContents s L arr0 n0 child i.toNat u
+
+theorem laInvContents_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (L arr0 cap0 n0 nc : BitVec 64) (child : Nat → Nat)
+    (h : LAInv s L arr0 cap0 n0 nc s)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word 0)))
+    (hm : s.memory L = .word arr0) : LAInvContents s L arr0 cap0 n0 nc child s := by
+  refine ⟨h, fun i hli => ?_⟩
+  have heq : i = 0 := by have he := hli.symm.trans hi; cases he; rfl
+  subst i
+  exact laContents_init s L arr0 n0 child hm
+
+attribute [local irreducible] Ret in
+/-- The contents and footprint results describe the same deterministic append
+run, so the loop can consume them jointly without losing either component. -/
+theorem log_append_run_contents_step {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (e L lg arr0 arr n0 n cap : BitVec 64) (child : Nat → Nat) (i : Nat)
+    (hcontents : LAContents s L arr0 n0 child i u)
+    (hn : n.toNat = n0.toNat + i) (hlgChild : lg.toNat = child i)
+    (hA : ArenaReady u)
+    (he : u.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : u.locals.lookup (ofString "log") = some (.val (.word lg)))
+    (hd88 : u.memaddrs (e + 88)) (hmL : u.memory (e + 88) = .word L)
+    (hma : u.memory L = .word arr)
+    (hmn : u.memory (L + 8) = .word n) (hmc : u.memory (L + 16) = .word cap)
+    (hd0 : u.memaddrs L) (hd8 : u.memaddrs (L + 8)) (hd16 : u.memaddrs (L + 16))
+    (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 59)
+    (ha8 : arr.toNat % 8 = 0)
+    (hw : arr.toNat + 8 * cap.toNat ≤ 2 ^ 64)
+    (hold : arr.toNat + 8 * n.toNat ≤ globN u "heap_ptr")
+    (hLw : L.toNat + 24 ≤ 2 ^ 64)
+    (hsep : L.toNat + 24 ≤ arr.toNat ∨ arr.toNat + 8 * cap.toNat ≤ L.toNat)
+    (hLh : L.toNat + 24 ≤ globN u "heap_ptr" ∨ heapLimit ≤ L.toNat)
+    (hc1 : 1 ≤ cap.toNat) :
+    Ret u (sourceFnBody Guest.Software.guestFn_log_append)
+      (fun _ post => LogAppendPost2 u L arr n cap post ∧
+        LAContents s L arr0 n0 child (i + 1) post) := by
+  have hframe := log_append_run2 u e L lg arr n cap hA he hlg hd88 hmL
+    hma hmn hmc hd0 hd8 hd16 hle hcap hw hLw hsep hLh hc1
+  have hcontent := log_append_run_contents u e L lg arr n cap hA he hlg hd88 hmL
+    hma hmn hmc hd0 hd8 hd16 hle hcap ha8 hw hold hLw hsep hLh hc1
+  unfold Ret at hframe hcontent ⊢
+  intro v hr
+  exact ⟨hframe v hr, laContents_step hcontents hma hn hlgChild (hcontent v hr)⟩
+
+/-- At normal exit the strengthened invariant contains the complete child
+suffix, including when the last iteration reallocated the parent array. -/
+theorem laInvContents_exit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {L arr cap n nc : BitVec 64} {child : Nat → Nat}
+    (h : LAInvContents s L arr cap n nc child post)
+    (hnc : nc.toNat < 2 ^ 63)
+    (hexit : evalAt post (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "n"))) = some (.val (.word 0))) :
+    LAContents s L arr n child nc.toNat post := by
+  obtain ⟨_, _, _, _, _, hn, i, ar, cp, hi, hle, _⟩ := h.1
+  have hc := h.2 i hi
+  obtain ⟨a, b, ha, hb, hcw⟩ := evalAt_cmp post .less _ _ 0 hexit
+  simp [evalAt, evalHOLExact, hn, hi] at ha hb
+  subst ha hb
+  have hieq : i.toNat = nc.toNat := by
+    by_contra hh
+    have hlt : i.toNat < nc.toNat := by omega
+    simp [Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+      Flapjack.Compiler.Encoders.Asm.holAsmSignedLess] at hcw
+    split at hcw <;> omega
+  rwa [hieq] at hc
+
+/-- The loop's exact contents discharge both segments of the appended-list
+reconstruction, leaving only allocation, word validity and record preservation. -/
+theorem laContents_logsListOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {L arr n : BitVec 64} {child nc : Nat}
+    (h : LAContents s L arr n
+      (fun i => memW s (memW s child + 8 * i)) nc post)
+    (hma : memW s L.toNat = arr.toNat)
+    (hp : LogsListOK s L.toNat) (hc : LogsListOK s child)
+    (hn : memW s (L.toNat + 8) = n.toNat)
+    (hnc : memW s (child + 8) = nc)
+    (hpn : L.toNat ≠ 0) (hcn : child ≠ 0)
+    (hwords : WordsOK post (L.toNat, 24)) (halloc : Allocated post (L.toNat, 24))
+    (hcount : memW post (L.toNat + 8) = n.toNat + nc)
+    (hbound : n.toNat + nc < 2 ^ 28)
+    (hcap : n.toNat + nc ≤ memW post (L.toNat + 16))
+    (hslots : ∀ i, i < n.toNat + nc → WordAt post (memW post L.toNat + 8 * i))
+    (hkeepP : ∀ i, i < n.toNat →
+      LogEntryOK post (memW s (memW s L.toNat + 8 * i)))
+    (hkeepC : ∀ i, i < nc →
+      LogEntryOK post (memW s (memW s child + 8 * i))) :
+    LogsListOK post L.toNat := by
+  obtain ⟨next, hm, hprefix, hsuffix⟩ := h
+  have hnext : memW post L.toNat = next.toNat := by
+    simpa only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq] using
+      congrArg (fun w => match w with | .word v => v.toNat) hm
+  apply logsListOK_of_append_contents hp hc hn hnc hpn hcn hwords halloc
+    hcount hbound hcap hslots _ _ hkeepP hkeepC
+  · simpa only [hnext, hma] using hprefix
+  · simpa only [hnext] using hsuffix
+
+attribute [local irreducible] Ret in
+/-- Execute the call and counter increment of one child-log iteration.  The
+callee post is transported across both caller-local restoration and assignment. -/
+theorem laContents_iteration {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (e L arr0 n0 i : BitVec 64) (child : Nat → Nat) (a2 : ExpHOL 64)
+    (hcode : u.code = originalRuntimeCode)
+    (he : u.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hi : u.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hiw : i.toNat + 1 < 2 ^ 64)
+    (ha2 : ∀ v, ev u a2 = some v → ∃ lg : BitVec 64, v = .val (.word lg))
+    (hcall : ∀ lg : BitVec 64, ev u a2 = some (.val (.word lg)) →
+      Ret (callEntryStateHOLFinite u
+        ((HolFiniteMapExact.empty.update (ofString "e", .val (.word e))).update
+          (ofString "log", .val (.word lg))))
+        (sourceFnBody Guest.Software.guestFn_log_append)
+        (fun _ post => LAContents s L arr0 n0 child (i.toNat + 1) post)) :
+    Flw u
+      (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun _ post => ∀ j : BitVec 64,
+        post.locals.lookup (ofString "i") = some (.val (.word j)) →
+        LAContents s L arr0 n0 child j.toNat post) := by
+  refine Flw.seq_call00 fun values body callee ret v cpost h1 h2 h3 => ?_
+  obtain ⟨v1, v2, rfl, he1, he2⟩ := evalList2_inv _ _ _ h1
+  have hv1 : v1 = .val (.word e) := by
+    simp [ev, evalHOLExact, he] at he1
+    exact he1.symm
+  obtain ⟨lg, hv2⟩ := ha2 v2 he2
+  subst v1 v2
+  obtain ⟨rfl, rfl⟩ := lk2 hcode (by decide) fl_lookup_log_append e lg rfl h2
+  have hcontents := Ret.apply (hcall lg he2) h3
+  apply Flw.assign
+  intro v hv
+  have hvi : v = .val (.word (i + 1)) := by
+    rw [ev_addr { cpost with locals := u.locals } (ofString "i") i 1 hi] at hv
+    exact (Option.some.inj hv).symm
+  subst v
+  intro j hj
+  have hji : j = i + 1 := by
+    rw [setVar_lookup_eq] at hj
+    have hh := Option.some.inj hj
+    cases hh
+    rfl
+  subst j
+  have hin : (i + 1).toNat = i.toNat + 1 := by
+    rw [BitVec.toNat_add]
+    exact Nat.mod_eq_of_lt hiw
+  rw [hin]
+  exact laContents_locals hcontents _
+
+/-- Strengthen the executable allocation/frame step with exact log contents.
+The contents premise is the append-callee obligation; the original `la_step`
+continues to discharge all allocation and memory-footprint obligations. -/
+theorem la_step_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (e L arr0 cap0 n0 nc : BitVec 64) (child : Nat → Nat) (a2 : ExpHOL 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hd88 : s.memaddrs (e + 88)) (hm88 : s.memory (e + 88) = .word L)
+    (h88 : ¬ CellHits (e + 88).toNat (arr0.toNat, 8 * cap0.toNat) ∧
+      ((e + 88).toNat + 8 ≤ globN s "heap_ptr" ∨ heapLimit ≤ (e + 88).toNat) ∧
+      e + 88 ≠ L ∧ e + 88 ≠ L + 8 ∧ e + 88 ≠ L + 16)
+    (hd0 : s.memaddrs L) (hd8 : s.memaddrs (L + 8)) (hd16 : s.memaddrs (L + 16))
+    (hLw : L.toNat + 24 ≤ 2 ^ 64)
+    (hLd : L.toNat + 24 ≤ arr0.toNat ∨ arr0.toNat + 8 * cap0.toNat ≤ L.toNat)
+    (hLh : L.toNat + 24 ≤ globN s "heap_ptr" ∨ heapLimit ≤ L.toNat)
+    (hsum : n0.toNat + nc.toNat < 2 ^ 58)
+    (ha2 : ∀ (t : PanSemStateFiniteExact 64 F) v, ev t a2 = some v → ∃ w, v = .val (.word w))
+    (u : PanSemStateFiniteExact 64 F) (hu : LAInvContents s L arr0 cap0 n0 nc child u)
+    (hact : InitECandidate.Solver.Wave8M19.LoopActive
+      (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n"))) u)
+    (hcall : ∀ (i lg : BitVec 64),
+      u.locals.lookup (ofString "i") = some (.val (.word i)) →
+      ev (decClockHOLFinite u) a2 = some (.val (.word lg)) →
+      Ret (callEntryStateHOLFinite (decClockHOLFinite u)
+        ((HolFiniteMapExact.empty.update (ofString "e", .val (.word e))).update
+          (ofString "log", .val (.word lg))))
+        (sourceFnBody Guest.Software.guestFn_log_append)
+        (fun _ post => LAContents s L arr0 n0 child (i.toNat + 1) post)) :
+    Flw (decClockHOLFinite u)
+      (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun _ post => LAInvContents s L arr0 cap0 n0 nc child post) := by
+  have hframe := la_step s e L arr0 cap0 n0 nc a2 he hd88 hm88 h88
+    hd0 hd8 hd16 hLw hLd hLh hsum ha2 u hu.1 hact
+  obtain ⟨uc, ud, uA, ug, uh, un, i, arr, cap, ui, hile, rest⟩ := hu.1
+  have hilt := la_active u i nc ui un hile (by omega) hact
+  have hue : (decClockHOLFinite u).globals.lookup (ofString "ev") = some (.val (.word e)) := by
+    change u.globals.lookup _ = _
+    rw [ug _ (by decide)]
+    exact he
+  have hcontents := laContents_iteration s (decClockHOLFinite u) e L arr0 n0 i child a2
+    uA.1.code hue ui (by omega) (ha2 (decClockHOLFinite u))
+    (fun lg hlg => hcall i lg ui hlg)
+  exact Flw.and hframe hcontents
+
+/-- The strengthened invariant is retained by the complete executable loop,
+so the success-tail continuation receives both contents and the write frame. -/
+theorem la_loop_contents {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (L arr0 cap0 n0 nc : BitVec 64) (child : Nat → Nat) (a2 : ExpHOL 64)
+    (cont : ProgHOL 64)
+    (Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop)
+    (hinit : LAInvContents s L arr0 cap0 n0 nc child u)
+    (hstep : ∀ t, LAInvContents s L arr0 cap0 n0 nc child t →
+      InitECandidate.Solver.Wave8M19.LoopActive
+        (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n"))) t →
+      t.clock ≠ 0 →
+      Flw (decClockHOLFinite t)
+        (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+        (fun _ post => LAInvContents s L arr0 cap0 n0 nc child post))
+    (hk : ∀ t, LAInvContents s L arr0 cap0 n0 nc child t → Ret t cont Φ) :
+    Ret u
+      (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n")))
+        (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))) cont) Φ := by
+  exact Ret.seq_while_inv (LAInvContents s L arr0 cap0 n0 nc child) hinit
+    (NoRet.seq NoRet.call0 NoRet.assign) hstep hk
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge

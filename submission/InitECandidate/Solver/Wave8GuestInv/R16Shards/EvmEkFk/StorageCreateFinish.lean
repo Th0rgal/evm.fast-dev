@@ -9036,6 +9036,119 @@ theorem rlp_list_to_slices_evm_and_witness_so {F : Type}
   obtain ⟨hE, hdb', _⟩ := decoderNodeStep_evm_and_witness hInv hdb hsteps
   exact ⟨hE, hdb', pw, wcnt, hrv, hfresh, hcnt, hslices⟩
 
+/-- A decoder step cannot overwrite an already allocated slice record which
+is separate from the input node records.  Payload bytes need no extra frame:
+the slice invariant only requires their heap containment. -/
+theorem witnessSliceOK_of_decoderNodeStep {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {Nd Nd' : List Nat} {v : Nat}
+    (hAR : ArenaReady s) (hNd : NodeHeap s Nd)
+    (hstep : DecoderNodeStep s post Nd Nd')
+    (hv : WitnessSliceOK s v)
+    (hdisj : ∀ n ∈ Nd, Disj (v, 16) (nodeIvl s n)) :
+    WitnessSliceOK post v := by
+  have hal : Allocated s (v, 16) := Or.inl hv.2.1
+  obtain ⟨hgap, hheap⟩ := allocated_disj_free_regions hAR.2 hal
+  have hu : InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post (v, 16) := by
+    apply aligned_cell_unhit_of_frameOutside hstep.step.frame
+    · intro j hj
+      rcases List.mem_append.1 hj with hj | hj
+      · obtain ⟨n, hn, rfl⟩ := List.mem_map.1 hj
+        exact Or.inr (Or.inl ((hNd.1 n hn).2.2.2.1.1))
+      · rw [List.mem_singleton.1 hj]
+        exact Or.inr (Or.inl hAR.2.2.2.2.2.2.2.1)
+    · exact Or.inr (Or.inl hAR.2.2.2.2.2.2.1)
+    · intro j hj
+      rcases List.mem_append.1 hj with hj | hj
+      · obtain ⟨n, hn, rfl⟩ := List.mem_map.1 hj
+        exact hdisj n hn
+      · rw [List.mem_singleton.1 hj]
+        exact hgap
+    · exact hheap
+  have hhi : v + 16 ≤ 2 ^ 64 := by
+    have := hv.2.1.2
+    have := hAR.2.2.1
+    have : heapLimit ≤ 2 ^ 64 := by decide
+    omega
+  refine witnessSliceOK_of_preserved hv
+    (InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hAR.1 hstep.step.arena.1 hv.1)
+    hstep.step.hp_le ?_ ?_
+  · exact InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit hu hv.1.1 hhi
+      ⟨by omega, by omega⟩
+  · exact InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit hu (by have := hv.1.1; omega) hhi
+      ⟨by omega, by omega⟩
+
+/-- Fully decoding the payload of a witness slice keeps the returned RLP
+payload inside the original heap and below the decoder's length bound. -/
+theorem rlp_decode_fully_witness_payload_so {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (v : Nat) (P L : BitVec 64) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hAR : ArenaReady s)
+    (hv : WitnessSliceOK s v)
+    (hP : P.toNat = memW s v) (hL : L.toNat = memW s (v + 8))
+    (hp : s.locals.lookup (ofString "p") = some (.val (.word P)))
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word L)))
+    (hret : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_decode_fully)).1 =
+      some (.returned rv)) :
+    ∃ tag p' n' tot : BitVec 64,
+      rv = .rStruct [.val (.word tag), .val (.word p'), .val (.word n'), .val (.word tot)] ∧
+      (tag = 0#64 ∨ tag = 1#64) ∧
+      Inside (p'.toNat, n'.toNat) sourceBase (globN s "heap_ptr") ∧ n'.toNat < 2 ^ 40 := by
+  have hPL : P.toNat + L.toNat < 2 ^ 64 := by
+    have := hv.2.2.2.2
+    have := hAR.2.2.1
+    have : heapLimit < 2 ^ 64 := by decide
+    omega
+  obtain ⟨tag, p', n', tot, hrv, htag, htotpos, htot, hp', hn'⟩ :=
+    rlp_decode_fully_ret_spec s hc P L hPL hp hl rv hret
+  refine ⟨tag, p', n', tot, hrv, htag, ⟨?_, ?_⟩, ?_⟩
+  · have := hv.2.2.2.1; omega
+  · have := hv.2.2.2.2; omega
+  · have := hv.2.2.1; omega
+
+/-- Slice records remain separated from all decoded nodes and their nibble
+paths, so the insertion-loop invariant can be used again at its next iteration. -/
+theorem witnessSliceOK_separated_of_decoderNodeStep {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {Nd Nd' : List Nat} {v : Nat}
+    (hAR : ArenaReady s) (hNd : NodeHeap s Nd)
+    (hstep : DecoderNodeStep s post Nd Nd')
+    (hv : WitnessSliceOK s v)
+    (hdisj : ∀ j ∈ nodeExtents s Nd, Disj (v, 16) j) :
+    WitnessSliceOK post v ∧ ∀ j ∈ nodeExtents post Nd', Disj (v, 16) j := by
+  have hgrow : OwnedGrows s post (nodeExtents s Nd) (nodeExtents post Nd') := by
+    apply ownedGrows_nodeExtents_of_fresh
+    · intro n hn
+      refine ⟨hstep.step.sub n hn, ?_, hstep.old_path n hn⟩
+      simp only [nodeIvl, hstep.step.kinds n hn]
+    · intro x hx hnx
+      exact ⟨(hstep.step.fresh x hx).resolve_left hnx, hstep.fresh_path x hx hnx⟩
+  refine ⟨witnessSliceOK_of_decoderNodeStep hAR hNd hstep hv ?_,
+    allocated_disj_ownedGrows hAR.2 hstep.step.arena.2 hstep.step.hp_le
+      (Or.inl hv.2.1) hdisj hgrow⟩
+  intro n hn
+  apply hdisj
+  exact List.mem_flatMap.2 ⟨n, hn, List.mem_cons_self ..⟩
+
+/-- A successful witness-table lookup supplies a slice satisfying the decoder's
+memory and size preconditions, rather than merely an untyped table value. -/
+theorem witness_htab_get_ret_slice_so {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw kw : BitVec 64) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hdb : WitnessDbSlices s)
+    (hws : globN s "ws" ≠ 0) (htw : tw.toNat = memW s (globN s "ws"))
+    (htnz : tw.toNat ≠ 0)
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (hret : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_get)).1 =
+      some (.returned rv)) :
+    ∃ found ptr : BitVec 64,
+      rv = .rStruct [.val (.word found), .val (.word ptr)] ∧
+      (found ≠ 0 → WitnessSliceOK s ptr.toNat) := by
+  obtain ⟨hwf, _, _, hvals⟩ := hdb hws (htw ▸ htnz)
+  obtain ⟨found, ptr, hrv, hptr⟩ := WkBal.htab_get_ret_in_values s tw kw hc ht hk
+    (htw ▸ hwf) rv hret
+  refine ⟨found, ptr, hrv, fun hf => ?_⟩
+  apply hvals
+  rw [← htw]
+  exact hptr hf
+
 end StorageOriginal
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish

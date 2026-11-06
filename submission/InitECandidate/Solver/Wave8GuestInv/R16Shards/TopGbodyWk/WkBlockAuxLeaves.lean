@@ -15,6 +15,7 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.rv_u256_to_be_min
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.ro_u256_mul
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkSysTxLeaves
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.PayloadWorldHelpers
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -8689,5 +8690,122 @@ theorem merge_set_tables_typed {F : Type}
     obtain ⟨e0, e8, _, hl, hll⟩ := hbal.2 ad had
     have h := hW.1.2.2.2.2.2.2.2.2.2.1 ad hads
     exact ⟨e0 ▸ h.1, e8 ▸ h.2.1, hl, hll⟩
+
+/-- Insertion frames both trie records and their byte-valued nibble paths. -/
+theorem merge_set_nodes_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbe : post.be = s.be) :
+    NodeHeap post Nd ∧ nodeExtents post Nd = nodeExtents s Nd := by
+  have hag : AllocatorGrows s post := by
+    refine ⟨he.2.2.2.2.1, ?_⟩
+    rw [globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "scratch_ptr") (by decide))]
+  apply R16Shards.nodeHeap_congr_unhit hA.1 he.1.1 hbe hag hW.2.2.2.1
+  intro o ho
+  have ha : o = (0, 0) ∨ Allocated s o := by
+    unfold nodeExtents at ho
+    obtain ⟨n, hn, hno⟩ := List.mem_flatMap.1 ho
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hno
+    rcases hno with rfl | rfl
+    · exact Or.inr (hW.2.2.2.1.1 n hn).2.1
+    · unfold nodePath
+      split_ifs with hc
+      · rcases (hW.2.2.2.1.1 n hn).2.2.2.2.2.2.1 hc.1 with hz | ⟨_, hal, _⟩
+        · exact False.elim (hc.2 hz)
+        · exact Or.inr hal
+      · exact Or.inl rfl
+  apply R16Shards.ivlUnhit_of_frameOutside_aligned he.2.2.2.2.2.2.1
+  · intro hz
+    unfold nodeExtents at ho
+    obtain ⟨n, hn, hno⟩ := List.mem_flatMap.1 ho
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hno
+    rcases hno with rfl | rfl
+    · have hp : 0 < nodeSize (memW s n) := by
+        unfold nodeSize
+        split_ifs <;> decide
+      exact False.elim (Nat.ne_of_gt hp hz)
+    · unfold nodePath at hz ⊢
+      split_ifs with hc
+      · simp [hc] at hz
+      · rfl
+  · intro j hj
+    have hw := ((hW.1.2.1 t ht).1.1 j hj).2
+    exact ⟨hw.1, hw.2.1⟩
+  · have h1 := hA.2.2.2.2.2.2.1
+    have h2 := he.1.2.2.2.2.2.2.1
+    exact ⟨h1, by omega⟩
+  · exact (hW.2.2.2.2.1 o ho).1 t ht
+  · apply R16WkMarkAccountCreated.disj_fresh_of_zero_or_allocated hA.2 he.1.2 he.2.2.2.2.1
+    rcases ha with rfl | hal
+    · exact Or.inl rfl
+    · exact Or.inr hal
+
+/-- Block outer insertion preserves trie geometry and all witness trie roots. -/
+theorem merge_set_tries_typed {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbe : post.be = s.be)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    TriesTypedWith post S Nd := by
+  obtain ⟨hN, hne⟩ := merge_set_nodes_kept hA hW ht he hbe
+  have hfix := (merge_set_fixed_typed hA hW ht he hbs ht0 htbs).1
+  refine ⟨hN, ?_, ?_⟩
+  · rw [hne, hfix]
+    intro o ho
+    refine ⟨?_, (hW.2.2.2.2.1 o ho).2⟩
+    intro u hu i hi
+    by_cases hut : u = t
+    · subst u
+      exact ((merge_set_footprint_disjoint hA hW ht he i hi).2.2 o ho).flip
+    · rw [(merge_set_other_table_frame hA hW ht hu hut he).2.1] at hi
+      exact (hW.2.2.2.2.1 o ho).1 u hu i hi
+  · intro hn
+    have hg : globN post "ws" = globN s "ws" :=
+      globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "ws") (by decide))
+    rw [hg] at hn
+    have e24 := merge_set_record_word_kept hA hW ht he "ws" 40 24
+      (by decide) (by decide) hn (by decide) (by decide)
+    have e32 := merge_set_record_word_kept hA hW ht he "ws" 40 32
+      (by decide) (by decide) hn (by decide) (by decide)
+    rw [e24, e32]
+    refine ⟨(hW.2.2.2.2.2 hn).1, ?_⟩
+    intro hu i hi
+    have huz : memW s (globN s "ws" + 32) ≠ 0 :=
+      WkBal.htab_nonzero_of_wf (hW.1.2.1 _ hu).1
+    have hb : (t, "bs+32") ∈ worldRoleSlots s := by
+      rw [htbs]
+      apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hbs
+        (by rwa [← htbs])
+      simp [recRoles, hbs]
+    have hx : (memW s (globN s "ws" + 32), "ws+32") ∈ worldRoleSlots s := by
+      apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "ws" 32 _ hn huz
+      simp [recRoles, hn]
+    have hut := R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role
+      hW.1.2.2.2.2.2.2.2.2.2.2.2 hx hb (by decide)
+    have hh := (merge_set_other_table_frame hA hW ht hu hut he).2.2
+    have hv := merge_set_other_values_kept hA hW ht hu hut he
+    rw [hh 3 (by decide)] at hi
+    have hget := congrArg (fun l : List Nat => l[i]?) hv
+    simp only [htabValues, List.getElem?_map, List.getElem?_range,
+      hh 3 (by decide), hi, Option.map_some, Option.some.injEq] at hget
+    rw [hget]
+    exact (hW.2.2.2.2.2 hn).2 hu i hi
+
+/-- Full world typing survives installing a fresh inner table in the block outer table. -/
+theorem merge_set_world_typed {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t inner : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbe : post.be = s.be)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32))
+    (hi : inner ∈ S) (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    WorldTypedWith post S Nd := by
+  exact ⟨merge_set_tables_typed hA hW ht he hbs ht0 htbs hi hk hf hv,
+    (merge_set_journal_kept hA hW ht he).2,
+    (merge_set_fixed_typed hA hW ht he hbs ht0 htbs).2,
+    merge_set_tries_typed hA hW ht he hbe hbs ht0 htbs⟩
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
