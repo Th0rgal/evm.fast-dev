@@ -14919,4 +14919,43 @@ theorem op_log_base_cost_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
     simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
   · exact hcont
 
+/-- Charging a positive log cost preserves the expansion alignment and all
+caller-local facts, and rules out a saturated cost on the continuing path. -/
+theorem op_log_charge_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (cost : BitVec 64) (P : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
+    (cont : ProgHOL 64)
+    (hcont : HandlerRun s0 (fun t => (HeadMemAligned t ∧ XCostAligned t) ∧
+      P t.locals ∧ cost.toNat < 2^64 - 1) true cont) :
+    HandlerRun s0 (fun t => (HeadMemAligned t ∧ XCostAligned t) ∧ P t.locals ∧
+      t.locals.lookup (ofString "cost") = some (.val (.word cost)) ∧ 0 < cost.toNat) false
+      (.seq (.call (some (none, none)) (ofString "charge_gas")
+        [.var .local (ofString "cost")]) cont) := by
+  apply seq_charge_gas_exact_g09 (Q := fun t => (HeadMemAligned t ∧ XCostAligned t) ∧
+      P t.locals ∧ cost.toNat < 2^64 - 1)
+  · intro t w he hInv hP
+    have hw : w = cost := by
+      simpa [evalHOLExact, hP.2.2.1] using he.symm
+    subst hw
+    exact hP.2.2.2
+  · intro t post amount he hlt hInv hP hPost hg hchain hmem
+    have hw : amount = cost := by
+      simpa [evalHOLExact, hP.2.2.1] using he.symm
+    subst hw
+    have hHM : HeadMemAligned post := headMemAligned_congr_head hg hmem hP.1.1
+    have hHMres : HeadMemAligned {post with locals := t.locals} :=
+      headMemAligned_congr_head rfl (fun _ _ => rfl) hHM
+    obtain ⟨cw,ebw,hx,heb⟩ := hP.1.2
+    refine ⟨⟨hHMres, cw, ebw, hx, ?_⟩, hP.2.1, hlt⟩
+    rcases heb with hz | ⟨hbound,hmod,hptr⟩
+    · exact Or.inl hz
+    · right
+      have hm32 : memW post (globN post "ev" + 32) = memW t (globN t "ev" + 32) := by
+        rw [globN_congr hg]
+        exact hmem 32 (by simp)
+      change memW post (globN post "ev" + 32) + ebw.toNat < 2^37 ∧
+        (memW post (globN post "ev" + 32) + ebw.toNat) % 8 = 0 ∧ _
+      rw [hm32]
+      exact ⟨hbound,hmod,hHMres.2⟩
+  · exact hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
