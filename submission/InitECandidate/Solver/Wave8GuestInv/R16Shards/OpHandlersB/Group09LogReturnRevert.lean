@@ -15329,4 +15329,53 @@ theorem op_log_expand_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
     exact hP.1
   · exact hcont
 
+/-- Allocate the padded log-data buffer, exposing its exact separated extent. -/
+theorem op_log_data_allocation_g09 {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {n : BitVec 64} {cont : ProgHOL 64}
+    (hcode : s.code = originalRuntimeCode) (hInvW : EvmInvWith s S Nd)
+    (hlen : (evmChain s).length = (evmChain s0).length) (hR : evmR s < evmR s0)
+    (hHM : HeadMemAligned s) (hnb : n.toNat < 2^37)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcont : ∀ (data finish : BitVec 64) (last : PanSemStateFiniteExact 64 F),
+      last.code = originalRuntimeCode → EvmInvWith last S Nd →
+      (evmChain last).length = (evmChain s0).length → evmR last < evmR s0 →
+      HeadMemAligned last →
+      worldTypedIvls last S Nd = worldTypedIvls s S Nd →
+      (evmChain last).map (frameObjects last) = (evmChain s).map (frameObjects s) →
+      last.memory = s.memory → last.memaddrs = s.memaddrs →
+      globN s "heap_ptr" = data.toNat → globN last "heap_ptr" = finish.toNat →
+      data.toNat + n.toNat + 8 ≤ finish.toNat → finish.toNat ≤ heapLimit →
+      data.toNat % 8 = 0 → sourceBase ≤ data.toNat →
+      WordsOK last (data.toNat, finish.toNat - data.toNat) →
+      IvlsDisj [(data.toNat, finish.toNat - data.toNat)]
+        (worldTypedIvls last S Nd ++ ((evmChain last).map (frameObjects last)).flatten) →
+      last.locals.lookup (ofString "data") = some (.val (.word data)) →
+      (∀ nm : MlS, nm ≠ ofString "data" → last.locals.lookup nm = s.locals.lookup nm) →
+      (evaluateHOLFiniteState last cont).1 ≠ some .timeOut →
+      OpDispatchPost s0 (evaluateHOLFiniteState last cont).1 (evaluateHOLFiniteState last cont).2)
+    (hnt : (evaluateHOLFiniteState s (.decCall (ofString "data") .one (ofString "alloc")
+      [.op .add [.var .local (ofString "n"), .const 8]] cont)).1 ≠ some .timeOut) :
+    OpDispatchPost s0
+      (evaluateHOLFiniteState s (.decCall (ofString "data") .one (ofString "alloc")
+        [.op .add [.var .local (ofString "n"), .const 8]] cont)).1
+      (evaluateHOLFiniteState s (.decCall (ofString "data") .one (ofString "alloc")
+        [.op .add [.var .local (ofString "n"), .const 8]] cont)).2 := by
+  have he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.op .add [.var .local (ofString "n"), .const 8]) = some (.val (.word (n + 8#64))) := by
+    simp [evalHOLExact, evalListHOLExact, hn, wordOpHOL, wordOp, valueIsWord, valueWord]
+  have hsum : (n + 8#64).toNat = n.toNat + 8 := by
+    rw [BitVec.toNat_add]
+    change (n.toNat + 8) % 2^64 = _
+    exact Nat.mod_eq_of_lt (by omega)
+  apply decCall_alloc_step_g09 (s0 := s0) (s := s) (charged := true) hcode hInvW hlen hR he hnt
+  intro data finish last hc hw hworld hframes hchain hpotential hhead hg hm hdom hl hp hq hfit hlim ha hqa hlo hwords hdj hncont
+  apply hcont data finish last hc hw (by rw [hchain]; exact hlen)
+    (by rw [hpotential]; exact hR) (hhead hHM) hworld hframes hm hdom hp hq
+    (by rw [hsum] at hfit; omega) hlim ha hlo hwords hdj
+  · rw [hl]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  · intro nm hne
+    rw [hl]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
+  · exact hncont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
