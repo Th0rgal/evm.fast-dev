@@ -19178,4 +19178,29 @@ theorem modify_state_commit_prefix_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- The emptiness test reaches its continuation with unchanged memory and globals. -/
+theorem acct_is_empty_continuation_cut {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (args : List (ExpHOL 64)) (cont : ProgHOL 64) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "e") .one (ofString "acct_is_empty") args cont) =
+      (some (.returned v), post)) :
+    ∃ cur out : PanSemStateFiniteExact 64 F, TxWorld cur ∧ WorldTypedWith cur S Nd ∧
+      cur.memory = s.memory ∧ cur.globals = s.globals ∧
+      evaluateHOLFiniteState cur cont = (some (.returned v), out) ∧ post.memory = out.memory := by
+  obtain ⟨vs, body, callee, ret, rv, cp, out, _, hl, hb, ht, hm⟩ := dec_call_return_inv_args hr
+  have he := acct_is_empty_restored_state s cp vs body callee ret rv hW.1.1.1 hl hb
+  rw [he] at ht
+  let cur := setVarHOLFinite (ofString "e") rv {s with clock := cp.clock}
+  have hwc := localsOnly_txWorld s s.locals cp.clock (by intros; rfl) hW
+  have hw := LocalsOnly.setVar localsOnly_txWorld (name := ofString "e") (by decide) rv _ hwc
+  have hty : WorldTypedWith cur S Nd :=
+    (R13Shards.worldTypedWith_with_locals s cur.locals cp.clock S Nd).2 hT
+  exact ⟨cur, out, hw, hty, rfl, rfl, ht, hm⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
