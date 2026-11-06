@@ -15205,4 +15205,27 @@ theorem fcRollback_of_popped {F : Type}
   exact rollback_child_access_step hBS hPC.child_scr hPC.rec_scr
     hPC.child_disj_ht hPC.rec_disj_ht hPC.child_disj_fix hPC.child_disj_fo
     hPC.addr_table_ok hPC.key_table_ok hnt
+
+/-- Walk helper mirroring the staging `dec_const_zero_unwrap`, for a
+`.dec` whose initializer is a global word read: the declaration runs
+its body from the state extended with the declared local, then restores
+the shadowed local. -/
+theorem dec_glob_unwrap {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (nm : MlS) (g : MlS) (w : BitVec 64) (body : ProgHOL 64)
+    (hg : s.globals.lookup g = some (.val (.word w))) :
+    (evaluateHOLFiniteState s (.dec nm .one (.var .global g) body)).1 =
+      (evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body).1 ∧
+    (evaluateHOLFiniteState s (.dec nm .one (.var .global g) body)).2 =
+      { (evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body).2 with
+        locals := (evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body).2.locals.resVarEq
+          (nm, s.locals.lookup nm) } := by
+  rw [evaluateHOLFiniteState_dec_total]; dsimp only
+  have he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var .global g) = some (.val (.word w)) := by
+    simp [evalHOLExact, hg]
+  rw [he]; dsimp only
+  have hsh : shapeEqHOL .one (shapeOfHOLExact (ValueHOL.val (HolWordLab.word w))) = true := by
+    simp [shapeOfHOLExact, shapeEqHOL]
+  rw [if_pos hsh]; dsimp only
+  exact ⟨rfl, rfl⟩
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
