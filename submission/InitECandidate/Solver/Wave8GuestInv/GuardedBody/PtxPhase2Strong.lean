@@ -17050,4 +17050,15 @@ theorem phase2_private_table_nonValue {F : Type}
     apply List.mem_append.2; right
     exact List.mem_flatMap.2 ⟨ad, had, by simp [memW]⟩
 
+/-- Private-address warming preserves world and journal role slots. -/
+theorem phase2_htabExit_aa_roles {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (hm : PtxMessageTables s aa ak)
+    (ht : locN s "t" = aa) (hx : HtabExit s post) :
+    worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := hm
+  have hnv := phase2_private_table_nonValue s S Nd aa hw ha haf
+  rw [← ht] at hnv
+  exact phase2_htabExit_nonValue_roles hs hw hnv hx
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
