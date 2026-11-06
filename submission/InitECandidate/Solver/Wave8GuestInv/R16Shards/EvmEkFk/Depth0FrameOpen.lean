@@ -9487,4 +9487,28 @@ theorem codeDbPayloadStrong_of_owned_growth {F : Type}
   · intro i hi'
     exact protected_payload_disj_of_growth he hp (hg i (Or.inr hi'))
 
+/-- A relational outside-frame yields protected code-word preservation. -/
+theorem protected_payload_words_of_frameOutside {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat} {keep : List Ivl}
+    (he : CodeDbPayloadStrong s S db) (hA : ArenaReady s)
+    (hF : FrameOutside s post (keep ++ [freeGap s]) (heapFree s))
+    (hk : ∀ i ∈ keep, 0 < i.2 ∧
+      ((∃ t ∈ S, i ∈ htabFootprint s t) ∨ i ∈ fixedObjects s)) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  apply protected_payload_words_of_world_frame he hA
+  intro a hn
+  by_contra hc
+  apply hn
+  apply hF a
+  · intro i hi hit
+    rcases List.mem_append.1 hi with hi | hi
+    · obtain ⟨hp,hi'⟩ := hk i hi
+      exact hc (Or.inl ⟨i,hi',hp,hit⟩)
+    · have heq : i = freeGap s := by simpa using hi
+      subst i
+      exact hc (Or.inr (Or.inl hit))
+  · intro hit
+    exact hc (Or.inr (Or.inr hit))
+
 end HeadStore
