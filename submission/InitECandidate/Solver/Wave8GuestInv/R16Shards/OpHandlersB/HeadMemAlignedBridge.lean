@@ -14691,6 +14691,45 @@ theorem fcSeq_timeOut_first {F : Type} (st : PanSemStateFiniteExact 64 F) (p q :
   dsimp only
   exact h
 
+theorem globN_setGlobal_word_ne {F : Type} (t : PanSemStateFiniteExact 64 F) (g : MlS)
+    (w : BitVec 64) (n : String) (hn : ofString n ≠ g) :
+    globN (setGlobalHOLFinite g (.val (.word w)) t) n = globN t n := by
+  have hb : (g == ofString n) = false := by
+    cases h : (g == ofString n) with
+    | true => exact absurd (beq_iff_eq.mp h) (Ne.symm hn)
+    | false => rfl
+  simp [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE, hb]
+
+theorem globN_setGlobal_word_eq {F : Type} (t : PanSemStateFiniteExact 64 F) (g : MlS)
+    (w : BitVec 64) (n : String) (he : ofString n = g) :
+    globN (setGlobalHOLFinite g (.val (.word w)) t) n = w.toNat := by
+  have hb : (g == ofString n) = true := beq_iff_eq.mpr he.symm
+  simp [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE, hb]
+
+def fcPopPost {F : Type} (s : PanSemStateFiniteExact 64 F) : PanSemStateFiniteExact 64 F :=
+  setGlobalHOLFinite (ofString "cur_cont")
+    (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+    (setGlobalHOLFinite (ofString "ev")
+      (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont"))))) s)
+
+theorem fcPopPost_globN_case {F : Type} (s : PanSemStateFiniteExact 64 F) (n : String) :
+    globN (fcPopPost s) n = globN s n ∨
+    (ofString n = ofString "ev" ∧ globN (fcPopPost s) n = memW s (globN s "cur_cont")) ∨
+    (ofString n = ofString "cur_cont" ∧
+      globN (fcPopPost s) n = memW s (globN s "cur_cont" + 8)) := by
+  unfold fcPopPost
+  by_cases hev : ofString n = ofString "ev"
+  · refine Or.inr (Or.inl ⟨hev, ?_⟩)
+    rw [globN_setGlobal_word_ne _ _ _ _ (by rw [hev]; decide)]
+    rw [globN_setGlobal_word_eq _ _ _ _ hev, BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (memW_lt s _)
+  · by_cases hcc : ofString n = ofString "cur_cont"
+    · refine Or.inr (Or.inr ⟨hcc, ?_⟩)
+      rw [globN_setGlobal_word_eq _ _ _ _ hcc, BitVec.toNat_ofNat]
+      exact Nat.mod_eq_of_lt (memW_lt s _)
+    · refine Or.inl ?_
+      rw [globN_setGlobal_word_ne _ _ _ _ hcc, globN_setGlobal_word_ne _ _ _ _ hev]
+
 end FcNoEvmErr
 
 
