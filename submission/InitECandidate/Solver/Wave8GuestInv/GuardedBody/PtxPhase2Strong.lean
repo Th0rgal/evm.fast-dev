@@ -18953,4 +18953,67 @@ theorem body_effect {F : Type} (s : PanSemStateFiniteExact 64 F)
 
 end ContractAddressEffect
 
+/-- The stronger concrete effect is available at every successful code lookup. -/
+theorem phase2_compute_contract_address_effect {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (hc : s.code = originalRuntimeCode)
+    (ha : ArenaReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "compute_contract_address") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hnt : r ≠ some .timeOut) (hr : Resumes r) :
+    R16Shards.WkBlockTxEnc.HeapByteEff (callEntryStateHOLFinite s callee) post
+      [(locN (callEntryStateHOLFinite s callee) "out", 20),
+        (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)] ["heap_ptr"] := by
+  have hs : FunSpec ArenaReady (fun pre r post => Resumes r →
+      R16Shards.WkBlockTxEnc.HeapByteEff pre post
+        [(locN pre "out", 20),
+          (globN pre "keccak_pad", if globN pre "keccak_pad" = 0 then 0 else 136),
+          (globN pre "keccak_st", if globN pre "keccak_st" = 0 then 0 else 200)] ["heap_ptr"])
+      (ofString "compute_contract_address") := by
+    refine ⟨_, _, _, R16Shards.WkBlockTxEnc.lookup_compute_contract_address,
+      fun {F} pre hc ha hp hn hr => ?_⟩
+    obtain ⟨vals, hv⟩ := hp
+    obtain ⟨a, n, o, _, haddr, hnonce, hout⟩ :=
+      Keccak256.lookupCode_three_words (by decide) (by decide) (by decide)
+        R16Shards.WkBlockTxEnc.lookup_compute_contract_address hv
+    exact ContractAddressEffect.body_effect pre hc ha a n o haddr hnonce hout hn hr
+  have hh := PtxP1.funSpec_at_lookup hs s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr ha) (by rw [he]; exact hnt)
+  rw [he] at hh
+  exact hh hr
+
+/-- An allocated interval is outside both free regions of a heap byte effect. -/
+theorem phase2_heapByteEff_allocated_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String} {i : Ivl}
+    (h : R16Shards.WkBlockTxEnc.HeapByteEff s post R gw) (hs : ArenaReady s)
+    (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0) (ha : Allocated s i)
+    (hR : ∀ j ∈ R, Disj i j) : IvlUnhit s post i := by
+  apply phase2_heapByteEff_unhit h hi hR
+  · unfold Allocated Inside at ha
+    unfold Disj freeGap
+    rcases ha with ⟨hlo, hhi⟩ | ⟨hlo, hhi⟩
+    · exact Or.inr (Or.inr (Or.inl (by
+        have horder := hs.2
+        rcases horder with ⟨_, hp, hf, hsc, _⟩
+        dsimp at *
+        have sep : heapLimit ≤ InitE.scratchStart := by decide
+        omega)))
+    · exact Or.inr (Or.inr (Or.inr (by
+        have horder := hs.2
+        rcases horder with ⟨_, hp, hf, hsc, _⟩
+        dsimp at *
+        omega)))
+  · unfold Allocated Inside at ha
+    unfold Disj heapFree
+    rcases ha with ⟨hlo, hhi⟩ | ⟨hlo, hhi⟩
+    · exact Or.inr (Or.inr (Or.inl hhi))
+    · exact Or.inr (Or.inr (Or.inr (by
+        have horder := hs.2
+        rcases horder with ⟨_, hp, hf, hsc, _⟩
+        dsimp at *
+        have sep : heapLimit ≤ InitE.scratchStart := by decide
+        omega)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
