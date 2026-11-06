@@ -18115,4 +18115,29 @@ theorem journal_cut_world_frames_tail_output {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Allocation and key copying retain the table local for the journal suffix. -/
+theorem journal_alloc_copy_prefix_table_local {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {jrec : Ivl} (p n tw : BitVec 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : cur.locals.lookup (ofString "klen") = some (.val (.word n)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hr : evaluateHOLFiniteState cur
+      (.decCall (ofString "kc") .one (ofString "alloc") [.var .local (ofString "klen")]
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "kc"), .var .local (ofString "key"), .var .local (ofString "klen")]) tail)) =
+      (some (.returned rv), out)) :
+    ∃ mid u, WorldEff s mid [jrec] [] ["heap_ptr"] ∧
+      mid.locals.lookup (ofString "t") = some (.val (.word tw)) ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨mid, u, he, hl, hr', hm⟩ := journal_alloc_copy_prefix_effect p n tail rv heff hp hn hr
+  refine ⟨mid, u, he, ?_, hr', hm⟩
+  simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, ht,
+    show ofString "kc" ≠ ofString "t" by decide]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
