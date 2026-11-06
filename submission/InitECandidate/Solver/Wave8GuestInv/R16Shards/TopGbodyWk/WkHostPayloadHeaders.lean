@@ -15053,6 +15053,22 @@ private theorem worldStep_store_fresh {F : Type}
     exact hnb (base, sz) (by simp) ⟨by omega, by omega⟩
   rw [hal_eq]
 
+/-- Lift a `HeapByteEff` across `.dec x .one e body` when `e` evaluates to a word. -/
+private theorem heapByteEff_of_dec_word_vh {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {x : MlS} {e : ExpHOL 64} {w : BitVec 64}
+    {body : ProgHOL 64} {Rl : List Ivl} {gw : List String}
+    (hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e =
+      some (.val (.word w)))
+    (hb : WkBlockTxEnc.HeapByteEff s0
+      (evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) body).2 Rl gw) :
+    WkBlockTxEnc.HeapByteEff s0 (evaluateHOLFiniteState s (.dec x .one e body)).2 Rl gw := by
+  rw [evaluateHOLFiniteState_dec_total]
+  dsimp only; rw [hev]; dsimp only
+  have hsh : shapeEqHOL .one (shapeOfHOLExact (.val (.word w) : ValueHOL 64)) = true := by
+    simp [shapeOfHOLExact, shapeEqHOL]
+  rw [if_pos hsh]
+  exact hb.locals_clock _ (evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) body).2.clock
+
 /-- Entry scratch regions of `payload_header` (the `R` component of its `C08` contract). -/
 private def phR : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl :=
   fun s =>
