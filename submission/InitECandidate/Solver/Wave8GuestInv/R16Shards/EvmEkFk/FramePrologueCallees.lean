@@ -8521,6 +8521,66 @@ theorem precompile_step_call0 {fname : MlS}
           | timeOut => simp at hnt
           | _ => rcases hfr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
 
+theorem precompile_step_weaken {F : Type} {gw gw' : List String}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hsub : ∀ k ∈ gw.map ofString, k ∈ gw'.map ofString)
+    (h : EvmStepCC gw s post) : EvmStepCC gw' s post := by
+  refine ⟨⟨h.1.1, h.1.2.1, ?_, h.1.2.2.2⟩, h.2⟩
+  intro k hk
+  exact h.1.2.2.1 k (fun hm => hk (hsub k hm))
+
+theorem ek_cc_precompile_alloc :
+    EvmKeeps EvmInv frameStartGw (ofString "alloc") ∧
+      ChainCellsKept EvmInv (ofString "alloc") := by
+  constructor
+  · refine ⟨_, _, _, lookup_alloc_r16, ?_⟩
+    intro F s hcode hi hex hnt hres
+    exact (precompile_step_weaken (gw' := frameStartGw)
+      (by intro k hk; simp only [List.map_cons, List.map_nil, List.mem_singleton] at hk
+          subst k; simp [frameStartGw])
+      (alloc_body_evmStepCC s hi hres)).1
+  · refine ⟨_, _, _, lookup_alloc_r16, ?_⟩
+    intro F s hcode hi hex hnt hres
+    exact (alloc_body_evmStepCC s hi hres).2
+
+theorem precompile_decCall_alloc_step {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (x : MlS) (cont : ProgHOL 64) (p : BitVec 64) (n : Nat)
+    (hn : n = 40 ∨ n = 96 ∨ n = 32) (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall x .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).1)
+    (hcont : ∀ next : PanSemStateFiniteExact 64 F,
+      next.locals.lookup x = some (.val (.word p)) →
+      globN next "heap_ptr" = p.toNat + n →
+      WordsOK next (p.toNat, n) → EvmStepCC frameStartGw s next →
+      next.memory = s.memory → next.be = s.be →
+      (∀ k, k ≠ x → next.locals.lookup k = s.locals.lookup k) →
+      Resumes (evaluateHOLFiniteState next cont).1 →
+      EvmStepCC frameStartGw next (evaluateHOLFiniteState next cont).2) :
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s
+      (.decCall x .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).2 := by
+  obtain ⟨next, hx, hhp, hwords, hstep, hr, hs, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec s x cont p n hn hInv hp hres
+  have hstep' : EvmStepCC frameStartGw s next := precompile_step_weaken
+    (by intro k hk; simp only [List.map_cons, List.map_nil, List.mem_singleton] at hk
+        subst k; simp [frameStartGw]) hstep
+  have hc := hcont next hx hhp hwords hstep' hm hb hl (hr ▸ hres)
+  have hboth : EvmStepCC frameStartGw s (evaluateHOLFiniteState next cont).2 := by
+    refine ⟨⟨hc.1.1, le_trans hstep'.1.2.1 hc.1.2.1,
+      fun k hk => (hstep'.1.2.2.1 k hk).trans (hc.1.2.2.1 k hk),
+      hc.1.2.2.2.trans hstep'.1.2.2.2⟩, ?_⟩
+    intro ec hec
+    obtain ⟨a, b, c, d⟩ := hstep'.2 ec hec
+    obtain ⟨a', b', c', d'⟩ := hc.2 ec (hstep'.1.2.2.2.symm ▸ hec)
+    exact ⟨a'.trans a, b'.trans b, c'.trans c, d'.trans d⟩
+  rw [hs]
+  exact ⟨⟨localsFree_evmInv _ _ _ hboth.1.1, hboth.1.2.1, hboth.1.2.2.1,
+    (evmChain_with_locals _ _ _).trans hboth.1.2.2.2⟩, hboth.2⟩
+
+theorem precompile_alloc_call_step (args : List (ExpHOL 64)) :
+    EvmProgStep frameStartGw (.call (some (none, none)) (ofString "alloc") args) :=
+  precompile_step_call0 ek_cc_precompile_alloc.1 ek_cc_precompile_alloc.2 args
+
 theorem precompile_charge_gas_call_step (args : List (ExpHOL 64)) :
     EvmProgStep frameStartGw (.call (some (none, none)) (ofString "charge_gas") args) := by
   apply precompile_step_call0 (hc := precompile_charge_gas_chainCellsKept)
@@ -8734,6 +8794,40 @@ theorem precompile_store_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
     (evaluateHOLFiniteState s (.store addr val)).2.locals = s.locals := by
   rw [evaluateHOLFiniteState_store]
   split <;> (try split) <;> (try split) <;> rfl
+
+theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : MlS) (out size : BitVec 64)
+    (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
+    (hout : s.locals.lookup name = some (.val (.word out))) :
+    let p : ProgHOL 64 := .seq
+      (.store (.op .add [.var .global (ofString "ev"), .const 120]) (.var .local name))
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 128]) (.const size))
+        (.return (.const 0)))
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    R13.FlowsOrResumes (evaluateHOLFiniteState s p).1 →
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s p).2 := by
+  dsimp only
+  intro hnt hfr
+  apply precompile_step_seq_at s _ _ _ _ hnt hfr
+  · intro _ hfr
+    exact precompile_store_output_local_at s 120 (Or.inl rfl) name out hi hout hfr
+  · intro hflow hnt hfr
+    let mid := (evaluateHOLFiniteState s (.store
+      (.op .add [.var .global (ofString "ev"), .const 120]) (.var .local name))).2
+    have hs := precompile_store_output_local_at s 120 (Or.inl rfl) name out hi hout (Or.inl hflow)
+    have hc : mid.code = originalRuntimeCode := ((evaluateHOLFiniteState_metadata s _).1).trans hcode
+    apply precompile_step_seq_at mid _ _ _ _ hnt hfr
+    · exact precompile_store_output_step 128 (Or.inr rfl) (.const size)
+        (by intro F s v hv; simp only [evalHOLExact, Option.some.injEq] at hv; exact ⟨size, hv.symm⟩)
+        mid hc hs.1.1
+    · intro hflow hnt hfr
+      change (evaluateHOLFiniteState mid (.store
+        (.op .add [.var .global (ofString "ev"), .const 128#64]) (.const size))).1 = none at hflow
+      have ht := precompile_store_output_step 128 (Or.inr rfl) (.const size)
+        (by intro F s v hv; simp only [evalHOLExact, Option.some.injEq] at hv; exact ⟨size, hv.symm⟩)
+        mid hc hs.1.1 (by rw [hflow]; simp) (Or.inl hflow)
+      exact dispatch_step_ro (ReadOnlyProg.ret _) _
+        (((evaluateHOLFiniteState_metadata mid _).1).trans hc) ht.1.1 hnt hfr
 
 theorem precompile_identity_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (args : List (ExpHOL 64)) (n : BitVec 64)
