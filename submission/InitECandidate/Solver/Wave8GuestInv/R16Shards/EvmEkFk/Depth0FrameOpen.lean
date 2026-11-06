@@ -9701,4 +9701,44 @@ theorem get_account_execution_world_live_roots {F : Type} (s : PanSemStateFinite
     rw [get_account_execution_code_roots s values body callee ret v post hc hW hl hb g k hm hn]
     exact hv
 
+/-- The full world-step frame protects payload words given cell-level separation.
+This handles empty owned intervals without assuming they have positive size. -/
+theorem protected_payload_words_of_worldStep_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db) (hA : ArenaReady s)
+    (hF : FrameOutside s post
+      (worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s ++ [freeGap s]) (heapFree s))
+    (hsep : ∀ p ∈ htabValues s db, ∀ a ∈ [p,p+8],
+      ∀ i ∈ worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s, ¬ CellHits a i) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  intro p hp
+  obtain ⟨hi,hb,_,_⟩ := he.2 p hp
+  have hheap := hA.2.2.1
+  have hw : ∀ a ∈ [p,p+8], memW post a = memW s a := by
+    intro a ha
+    have ha' : a = p ∨ a = p+8 := by simpa using ha
+    have hn : (BitVec.ofNat 64 a).toNat = a := by
+      rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt (by rcases ha' with rfl | rfl <;> omega)]
+    unfold memW
+    rw [hF (BitVec.ofNat 64 a) (by
+      intro i him hit
+      rw [hn] at hit
+      rcases List.mem_append.1 him with him | him
+      · exact hsep p hp a ha i him hit
+      · have hi' : i = freeGap s := by simpa using him
+        subst i
+        have hfmp := hA.2.2.2.1
+        have hlim : heapLimit ≤ InitE.scratchStart := by decide
+        unfold CellHits freeGap at hit
+        unfold Inside at hi
+        dsimp only at hit hi
+        rcases ha' with rfl | rfl <;> omega) (by
+      rw [hn]
+      unfold CellHits heapFree
+      unfold Inside at hi
+      dsimp only at hi ⊢
+      rcases ha' with rfl | rfl <;> omega)]
+  exact ⟨hw p (by simp),hw (p+8) (by simp)⟩
+
 end HeadStore
