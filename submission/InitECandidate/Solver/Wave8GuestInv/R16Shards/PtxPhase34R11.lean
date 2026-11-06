@@ -17854,4 +17854,25 @@ theorem journal_cut_frames_tail_resume {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- A return-only journal cut retains its world step after enclosing locals are restored. -/
+theorem worldStepSc_return_restore {F : Type}
+    {s mid u out : PanSemStateFiniteExact 64 F}
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (hr : evaluateHOLFiniteState mid (.return (.const 0#64)) = (some (.returned (.val (.word 0#64))), u))
+    (ho : out = {u with locals := out.locals}) :
+    WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none out := by
+  have hu : u = mid.emptyLocalsHOLFinite := by
+    have he : evaluateHOLFiniteState mid (.return (.const 0#64)) =
+        (some (.returned (.val (.word 0#64))), mid.emptyLocalsHOLFinite) := by
+      simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+    exact (Prod.mk.inj (hr.symm.trans he)).2
+  rw [hu] at ho
+  rw [ho]
+  exact hw.with_locals_clock out.locals mid.clock
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
