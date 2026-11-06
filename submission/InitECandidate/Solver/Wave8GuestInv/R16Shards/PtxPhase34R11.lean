@@ -19068,4 +19068,38 @@ theorem set_account_call_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+
+/-- Account installation preserves backing after restoration of caller locals. -/
+theorem set_account_call0_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (args : List (ExpHOL 64))
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "set_account") args) =
+      (none, post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨vs, body, callee, ret, v, cp, _, hl, hb, hm⟩ := ignored_call_fall_inv_args hr
+  have hh := set_account_call_header_words s cp vs body callee ret v S Nd hW hT hl hb
+  subst post
+  exact hh
+
+/-- Retain the account-installation world step at the restored caller state. -/
+theorem set_account_call_worldStep {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64)) (hW : WorldOK s)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "set_account") args) =
+      (none, post)) :
+    WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"]
+      R10Shards.P26_P28.stdKeep NoExtra s none post := by
+  obtain ⟨vs, body, callee, ret, v, cp, _, hl, hb, hm⟩ := ignored_call_fall_inv_args hr
+  have hwc := (WkBal.worldOK_with_locals s callee (s.clock - 1)).2 hW
+  have hs := PtxP1.funSpec_at_lookup EvmEkFk.wkSc_set_account s hW.1.1.code
+    vs body callee ret hl hwc (by rw [hb]; simp)
+  rw [hb] at hs
+  have hs' := (hs (Or.inl ⟨v, rfl⟩)).of_pre_locals_clock
+  subst post
+  exact hs'.with_locals_clock s.locals cp.clock
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
