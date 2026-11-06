@@ -9332,4 +9332,19 @@ theorem worldTypedCodeStrong_of_typed_frame {F : Type}
   rw [hgg,hr]
   exact codeDbPayloadStrong_of_preserved_layout (he.2 g k hm hn') hAs hAp hhp (hv _) (hw _) hf hfixed
 
+/-- Typed-cell preservation discharges table layout and value preservation. -/
+theorem codeDbPayloadStrong_of_typed_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db) (hW : WorldTypedWith s S Nd) (hm : db ∈ S)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hC : EvmBase.SameTypedCells s post S Nd)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hw : ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hfixed : fixedObjects post = fixedObjects s) :
+    CodeDbPayloadStrong post S db := by
+  exact codeDbPayloadStrong_of_preserved_layout he hAs hAp hhp
+    (EvmBase.htabValues_eq hC hm (hW.1.2.1 db hm).1) hw
+    (fun t ht => EvmBase.htabFootprint_eq hC ht (hW.1.2.1 t ht).1) hfixed
+
 end HeadStore
