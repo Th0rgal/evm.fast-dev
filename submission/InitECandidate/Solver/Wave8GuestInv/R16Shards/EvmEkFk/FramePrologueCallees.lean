@@ -5861,6 +5861,46 @@ theorem transfer_log_append_return_tail {F : Type}
     have hret : r = .returned v := Option.some.inj hv
     exact False.elim (transfer_call0_no_return s _ _ v (by rw [hc, hret]))
 
+theorem transfer_log_append_tail_step_at {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (evw logw : BitVec 64) (topics data : Nat)
+    (S Nd : List Nat) (hInvAt : EvmInvAt s S) (hTr : TriesTypedWith s S Nd)
+    (hAT : ∀ o ∈ ((evmChain s).map (frameObjects s)).flatten,
+      ∀ j ∈ nodeExtents s Nd, Disj o j)
+    (hInv : EvmInv s) (hev : evw.toNat = globN s "ev")
+    (hwords : WordsOK s (logw.toNat, 40))
+    (hlog : Inside (logw.toNat, 40) sourceBase (globN s "heap_ptr"))
+    (hsys : Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr"))
+    (htopics : Inside (topics, 96) sourceBase (globN s "heap_ptr"))
+    (hdata : Inside (data, 32) sourceBase (globN s "heap_ptr"))
+    (haddr : memW s logw.toNat = globN s "vm_system_address")
+    (htp : memW s (logw.toNat + 8) = topics)
+    (htn : memW s (logw.toNat + 16) = 3)
+    (hdp : memW s (logw.toNat + 24) = data)
+    (hdn : memW s (logw.toNat + 32) = 32)
+    (hlt : logw.toNat + 40 ≤ topics) (htd : topics + 96 ≤ data)
+    (hdisj : ∀ x ∈ logOwnedIvls s logw.toNat,
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj x i) ∧
+      (∀ j ∈ fixedObjects s, Disj x j) ∧
+      (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj x o) ∧
+      (∀ j ∈ nodeExtents s Nd, Disj x j) ∧
+      (∀ ec ∈ evmChain s, Disj x (memW s (ec.1 + 112), 176)))
+    (heval_ev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var .global (ofString "ev")) = some (.val (.word evw)))
+    (heval_log : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var .local (ofString "log")) = some (.val (.word logw)))
+    (hres : ∃ v, (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])
+        (.return (.const 0)))).1 = some (.returned v)) :
+    EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])
+        (.return (.const 0)))).2 := by
+  apply transfer_log_append_return_tail s (fun hcall => ?_) hres
+  exact (transfer_log_append_returned_step_at s evw logw topics data S Nd hInvAt hTr hAT
+    hInv hev hwords hlog hsys htopics hdata haddr htp htn hdp hdn hlt htd hdisj
+    hcall heval_ev heval_log).1
+
 theorem transfer_log_append_tail_step {F : Type}
     (s : PanSemStateFiniteExact 64 F) (evw logw : BitVec 64) (topics data : Nat)
     (hInv : EvmInv s) (hev : evw.toNat = globN s "ev")
@@ -7042,15 +7082,19 @@ theorem transfer_data_tail_step {F : Type}
     (hlt : logw.toNat + 40 ≤ topics) (htd : topics + 96 ≤ data.toNat)
     (hdisj : ∀ mid : PanSemStateFiniteExact 64 F,
       EvmStepCC ["heap_ptr"] s mid →
+      globN mid "heap_ptr" = data.toNat + 32 →
       mid.be = s.be →
       (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) →
       (∀ b : Nat, b < 2 ^ 64 →
         ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) →
+      ∃ S Nd, EvmInvAt mid S ∧ TriesTypedWith mid S Nd ∧
+      (∀ o ∈ ((evmChain mid).map (frameObjects mid)).flatten,
+        ∀ j ∈ nodeExtents mid Nd, Disj o j) ∧
       ∀ x ∈ [(logw.toNat, 40), (topics, 96), (data.toNat, 32)],
-      (∀ t, ∀ S0, TablesTyped mid S0 → t ∈ S0 → ∀ i ∈ htabFootprint mid t, Disj x i) ∧
+      (∀ t ∈ S, ∀ i ∈ htabFootprint mid t, Disj x i) ∧
       (∀ j ∈ fixedObjects mid, Disj x j) ∧
       (∀ ec ∈ evmChain mid, ∀ o ∈ frameObjects mid ec, Disj x o) ∧
-      (∀ S0 Nd0, TriesTypedWith mid S0 Nd0 → ∀ j ∈ nodeExtents mid Nd0, Disj x j) ∧
+      (∀ j ∈ nodeExtents mid Nd, Disj x j) ∧
       (∀ ec ∈ evmChain mid, Disj x (memW mid (ec.1 + 112), 176)))
     (hr : Resumes (evaluateHOLFiniteState cur transferDataTail).1) :
     EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState cur transferDataTail).2 := by
@@ -7071,7 +7115,8 @@ theorem transfer_data_tail_step {F : Type}
     have hpNat : globN cur "heap_ptr" = data.toNat := by simp [globN, hp]
     rw [hpNat, heap]; omega
   have tail : EvmStepCC ["heap_ptr"] mid (evaluateHOLFiniteState mid transferAppendReturn).2 := by
-    apply transfer_log_append_tail_step mid evw logw topics data.toNat step.1.1
+    obtain ⟨S, Nd, inv, tries, avoids, disj⟩ := hdisj mid step heap be out bytes
+    apply transfer_log_append_tail_step_at mid evw logw topics data.toNat S Nd inv tries avoids step.1.1
       (by simp [globN, ev, hev]) words
       ⟨le_trans hInv.1.2.1 hin.1, le_trans hin.2 hmono⟩
       ⟨by simpa only [sys] using hsys.1, by rw [sys]; exact le_trans hsys.2 hmono⟩
@@ -7082,7 +7127,7 @@ theorem transfer_data_tail_step {F : Type}
           change sourceBase ≤ data.toNat
           omega,
         by rw [heap]⟩ addr tp tn dp dn hlt htd
-      (by rw [logOwnedIvls_of_transfer addr tp tn dp dn]; exact hdisj mid step be out bytes)
+      (by rw [logOwnedIvls_of_transfer addr tp tn dp dn]; exact disj)
       (by simpa only [evalHOLExact, ev] using hev)
       (by simpa only [evalHOLExact] using hl')
       (transfer_log_append_tail_resumes_returned mid step.1.1.1.1.code resum)
@@ -7591,6 +7636,107 @@ theorem transfer_fresh_disjoint_of_accumulated_frame {F : Type}
     · exact fresh.2.2.2.1 S Nd hWT.2.2.2 o hn
   · exact fresh.2.2.1
   · exact fresh.2.2.2.2
+
+theorem transfer_fixed_witness_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hInv : EvmInv s) (hAt : EvmInvAt s S)
+    (hTr : TriesTypedWith s S Nd)
+    (hAT : ∀ o ∈ ((evmChain s).map (frameObjects s)).flatten,
+      ∀ j ∈ nodeExtents s Nd, Disj o j)
+    (hstep : EvmStepCC ["heap_ptr"] s post) (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b) :
+    EvmInvAt post S ∧ TriesTypedWith post S Nd ∧
+      (∀ o ∈ ((evmChain post).map (frameObjects post)).flatten,
+        ∀ j ∈ nodeExtents post Nd, Disj o j) := by
+  have inv := (OpHandlersB.evmInvAt_of_fresh_heap_step hInv.1 hAt hstep.1.1.1 hbe
+    hstep.1.2.1 hstep.1.2.2.1 hout hbyte).1
+  have wt : WorldTypedWith s S Nd := ⟨hAt.1.1, hAt.1.2.1, hAt.1.2.2.1, hTr⟩
+  obtain ⟨fix, tables, nodes⟩ :=
+    transfer_world_footprints_of_accumulated_frame hInv hstep wt hbe hout hbyte
+  have cell := transfer_sameTypedCells_of_accumulated_frame hInv hstep wt hbe hout hbyte
+  have globals : ∀ name, ofString name ≠ ofString "heap_ptr" → globN post name = globN s name := by
+    intro name hn
+    unfold globN
+    rw [hstep.1.2.2.1 _ (by simpa using hn)]
+  have wt' := (worldTypedWith_congr_w1 hInv.1 hstep.1.1.1 hstep.1.2.1
+    (by rw [globals "scratch_ptr" (by decide)])
+    (fun g hg => globals g (by revert g hg; decide)) cell wt
+    ⟨inv.1.2.2.1, fun o ho => Or.inl (fix ▸ ho)⟩).1
+  refine ⟨inv, wt'.2.2.2, ?_⟩
+  have frames := transfer_chain_footprints_of_accumulated_frame hInv hstep hbe hout hbyte
+  rw [hstep.1.2.2.2, nodes]
+  have eq : (evmChain s).map (frameObjects post) = (evmChain s).map (frameObjects s) :=
+    List.map_congr_left (fun ec hec => (frames ec hec).1)
+  rw [eq]
+  exact hAT
+
+theorem transfer_fresh_fixed_disjoint_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {x : Ivl}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s post)
+    (hWT : WorldTypedWith s S Nd) (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b)
+    (hx : Inside x (globN s "heap_ptr") (globN post "heap_ptr")) :
+    (∀ t ∈ S, ∀ i ∈ htabFootprint post t, Disj x i) ∧
+    (∀ j ∈ fixedObjects post, Disj x j) ∧
+    (∀ ec ∈ evmChain post, ∀ o ∈ frameObjects post ec, Disj x o) ∧
+    (∀ j ∈ nodeExtents post Nd, Disj x j) ∧
+    (∀ ec ∈ evmChain post, Disj x (memW post (ec.1 + 112), 176)) := by
+  obtain ⟨world, frames, msgs⟩ := transfer_fresh_disjoint_of_accumulated_frame
+    hInv hstep hWT hbe hout hbyte (Or.inr hx)
+  refine ⟨fun t ht i hi => world i ?_, fun j hj => world j ?_, frames,
+    fun j hj => world j ?_, msgs⟩
+  · simp only [worldOwned, List.mem_append, List.mem_flatMap]
+    exact Or.inl (Or.inl ⟨t, ht, hi⟩)
+  · simp only [worldOwned, List.mem_append]
+    exact Or.inl (Or.inr hj)
+  · simp only [worldOwned, List.mem_append]
+    exact Or.inr hj
+
+theorem transfer_data_tail_fresh_step {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (data logw evw : BitVec 64) (topics : Nat)
+    (av : ValueHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ha : cur.locals.lookup (ofString "amount") = some av)
+    (hl : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (hev : cur.globals.lookup (ofString "ev") = some (.val (.word evw)))
+    (hw : WordsOK cur (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word data)))
+    (hsys : Inside (globN cur "vm_system_address", 20) sourceBase (globN cur "heap_ptr"))
+    (htop : Inside (topics, 96) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (haddr : memW cur logw.toNat = globN cur "vm_system_address")
+    (htp : memW cur (logw.toNat + 8) = topics)
+    (htn : memW cur (logw.toNat + 16) = 3)
+    (hlt : logw.toNat + 40 ≤ topics) (htd : topics + 96 ≤ data.toNat)
+    (hr : Resumes (evaluateHOLFiniteState cur transferDataTail).1) :
+    EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState cur transferDataTail).2 := by
+  apply transfer_data_tail_step s cur data logw evw topics av hInv hstep hbe hout hbyte ha hl hev hw hin hp
+    hsys ⟨le_trans hInv.1.2.1 htop.1, htop.2⟩ haddr htp htn hlt htd (hr := hr)
+  intro mid step heap be out bytes
+  obtain ⟨_, S, inv⟩ := (evmInv_iff_at s).1 hInv
+  obtain ⟨Nd, tries, avoids⟩ := inv.2.2.2.2.2.2.2.2.2.1
+  obtain ⟨inv', tries', avoids'⟩ := transfer_fixed_witness_of_accumulated_frame
+    hInv inv tries avoids step be out bytes
+  refine ⟨S, Nd, inv', tries', avoids', ?_⟩
+  intro x hx
+  have inCur : globN cur "heap_ptr" = data.toNat := by simp [globN, hp]
+  have mono : globN cur "heap_ptr" ≤ globN mid "heap_ptr" := by
+    rw [inCur, heap]; omega
+  apply transfer_fresh_fixed_disjoint_of_accumulated_frame hInv step
+    ⟨inv.1.1, inv.1.2.1, inv.1.2.2.1, tries⟩ be out bytes
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+  rcases hx with rfl | rfl | rfl
+  · exact ⟨hin.1, le_trans hin.2 mono⟩
+  · exact ⟨htop.1, le_trans htop.2 mono⟩
+  · exact ⟨by rw [← inCur]; exact hstep.1.2.1, by omega⟩
 
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
