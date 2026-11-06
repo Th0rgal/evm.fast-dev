@@ -15258,4 +15258,44 @@ theorem op_log_record_allocations_g09 {F : Type}
     simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hnlog, Ne.symm hnaddr]
   · exact hn2
 
+/-- Exact effects of the three header stores in log construction. -/
+theorem op_log_header_stores_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (log address topics nt : BitVec 64)
+    (hl : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (ha : s.locals.lookup (ofString "log_address") = some (.val (.word address)))
+    (ht : s.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hn : s.locals.lookup (ofString "ntopics") = some (.val (.word nt)))
+    (hd0 : s.memaddrs log) (hd8 : s.memaddrs (log + 8#64))
+    (hd16 : s.memaddrs (log + 16#64)) :
+    evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+          (.var .local (ofString "log_address")))
+        (.seq (.store (.op .add [.var .local (ofString "log"), .const 8])
+          (.var .local (ofString "topics")))
+          (.store (.op .add [.var .local (ofString "log"), .const 16])
+            (.var .local (ofString "ntopics"))))) =
+      (none, {s with memory := fun a => if a = log + 16#64 then .word nt else
+        if a = log + 8#64 then .word topics else if a = log then .word address else s.memory a}) := by
+  simp [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store,
+    evalHOLExact, evalListHOLExact, hl, ha, ht, hn, valueIsWord, valueWord,
+    wordOpHOL, wordOp, flattenHOL, panMemStoresHOL, panMemStoreHOL, hd0, hd8, hd16]
+
+/-- Exact effects of the final two data-field stores before log_append. -/
+theorem op_log_data_stores_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (log data n : BitVec 64)
+    (hl : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hd : s.locals.lookup (ofString "data") = some (.val (.word data)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hd24 : s.memaddrs (log + 24#64)) (hd32 : s.memaddrs (log + 32#64)) :
+    evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "log"), .const 24])
+          (.var .local (ofString "data")))
+        (.store (.op .add [.var .local (ofString "log"), .const 32])
+          (.var .local (ofString "n")))) =
+      (none, {s with memory := fun a => if a = log + 32#64 then .word n else
+        if a = log + 24#64 then .word data else s.memory a}) := by
+  simp [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store,
+    evalHOLExact, evalListHOLExact, hl, hd, hn, valueIsWord, valueWord,
+    wordOpHOL, wordOp, flattenHOL, panMemStoresHOL, panMemStoreHOL, hd24, hd32]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
