@@ -18061,4 +18061,40 @@ theorem phase2_compute_contract_address_store_ready (h : PtxCallees)
       ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (hd S Nd hw)
     exact ⟨S', Nd', (worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hw', hg, hframe⟩
 
+/-- The creation branch allocates a fresh 24-byte address buffer. -/
+theorem phase2_ct_alloc_fresh (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : ArenaReady s)
+    (ha : @evalListHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) [.const 24] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (hb : (callEntryStateHOLFinite s callee).evaluateHOLFiniteState body = (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ FreshBlock (callEntryStateHOLFinite s callee) post w.toNat 24 := by
+  obtain ⟨nv, he, hn⟩ := PtxP1.params_one_value s (ofString "alloc") (ofString "n")
+    .one _ .one (by rw [hc]; exact PtxP1.lookup_alloc) _ vs body callee ret ha hl
+  have hnv : nv = .val (.word 24) := by simpa [evalAt, evalHOLExact] using he.symm
+  subst nv
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = 24 := by
+    simp [locN, callEntryStateHOLFinite, hn]
+  have hr := PtxP1.funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp) (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, hv, _, _, hf⟩ := hr v rfl
+  exact ⟨w, hv, by simpa only [hcn] using hf⟩
+
+/-- The address output cannot overlap the message or its saved buffers. -/
+theorem phase2_ct_fresh_message_separation {ι F : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (s post : PanSemStateFiniteExact 64 F) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (p : Nat) (hp : PtxMessageStoreReady buffers contents s)
+    (hf : FreshBlock (callEntryStateHOLFinite s callee) post p 24) :
+    Disj (locN s "m", 176) (p, 20) ∧ ∀ i, Disj (buffers i) (p, 20) := by
+  have hstart : globN s "heap_ptr" ≤ p := hf.2.1.1
+  constructor
+  · exact Or.inr (Or.inr (Or.inl (hp.2.2.2.1.2.trans hstart)))
+  · intro i
+    obtain ⟨_, S, Nd, _, hb, _⟩ := hp.2.2.2.2.2 i
+    exact Or.inr (Or.inr (Or.inl (hb.1.2.trans hstart)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
