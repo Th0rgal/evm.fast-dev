@@ -7586,4 +7586,51 @@ theorem nodeDbEntriesStrong_of_sk_make {F : Type}
   obtain ⟨hp64, hd⟩ := hrec p hp
   exact sk_make_preserves_code_record s hc hma hfit p hp64 hd v post hb
 
+/-! ## Explicit code-payload strengthening
+
+Cutover bridge: replace `WorldTyped s S` by `WorldTypedCodeStrong s S` in the
+world conjunct shared by `WorldOK` and `EvmInvAt` in `ContractParts/C00.lean`.
+The additional conjunct describes record contents and separation, not execution
+or the desired postcondition. Existing world consumers use its first projection.
+-/
+
+/-- Code payload records occupy protected old heap; their code bytes are
+bounded by `NodeDbEntriesStrong`. Table values themselves remain unrestricted. -/
+def CodeDbPayloadStrong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (db : Nat) : Prop :=
+  NodeDbEntriesStrong s db ∧ ∀ p ∈ htabValues s db,
+    Inside (p, 16) sourceBase (globN s "heap_ptr") ∧ p + 16 ≤ 2 ^ 64 ∧
+    (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (p, 16) i) ∧
+    ∀ i ∈ fixedObjects s, Disj (p, 16) i
+
+/-- Only the three code databases gain payload typing: the witness database
+at `ws+16` and the block/transaction code caches at `bs+48` and `ts+48`. -/
+def WorldTypedCodeStrong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) : Prop :=
+  WorldTyped s S ∧
+  ∀ g k, (g, k) ∈ ([("ws", 16), ("bs", 48), ("ts", 48)] : List (String × Nat)) →
+    globN s g ≠ 0 → CodeDbPayloadStrong s S (memW s (globN s g + k))
+
+def WorldOKCodeStrong {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ArenaReady s ∧ ∃ S, WorldTypedCodeStrong s S
+
+theorem worldOK_of_codeStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : WorldOKCodeStrong s) : WorldOK s := by
+  obtain ⟨hA, S, hW, _⟩ := h
+  exact ⟨hA, S, hW⟩
+
+/-- The strengthened entry invariant supplies all payload-side premises of
+the mutating-table transport lemma. -/
+theorem codeDbPayloadStrong_entries_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (h : CodeDbPayloadStrong s S db) (hAs : ArenaReady s)
+    (hx : HtabExit s post) (ht : locN s "t" ∈ S)
+    (hw : HtabWF s (locN s "t"))
+    (hv : htabValues post db = htabValues s db) : NodeDbEntriesStrong post db := by
+  apply nodeDbEntriesStrong_of_htab_exit db h.1 hAs hx hv
+  · intro p hp
+    obtain ⟨hin, hp64, hd, _⟩ := h.2 p hp
+    exact ⟨hin.2, hp64, hd _ ht⟩
+  · exact htabFootprint_pos s _ hw.2.2.1 hw.2.2.2.2.1
+
 end HeadStore
