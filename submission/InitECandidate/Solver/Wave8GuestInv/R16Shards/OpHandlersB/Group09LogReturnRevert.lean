@@ -14799,4 +14799,61 @@ theorem op_log_memory_cost_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F
         (by decide : ofString "x" ≠ ofString "n")] using hP.2.2.2.2.2
   · exact hcont
 
+/-- Multiplication of data length by eight preserves the aligned expansion
+and exposes both result words for the overflow branch. -/
+theorem op_log_mul_cost_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (nt : BitVec 64) (start size : ValueHOL 64) (n : BitVec 64) (cont : ProgHOL 64)
+    (hcont : HandlerRun s0 (fun t => (HeadMemAligned t ∧ XCostAligned t) ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word n)) ∧
+      ∃ lo hi : BitVec 64, t.locals.lookup (ofString "dc") =
+        some (.rStruct [.val (.word lo), .val (.word hi)])) false cont) :
+    HandlerRun s0 (fun t => (HeadMemAligned t ∧ XCostAligned t) ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word n))) false
+      (.decCall (ofString "dc") (.comb [.one, .one]) (ofString "mul64x64")
+        [.const 8, .var .local (ofString "n")] cont) := by
+  apply HandlerRun.decCall_shaped (Q := fun t => (HeadMemAligned t ∧ XCostAligned t) ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word n)) ∧
+      ∃ lo hi : BitVec 64, t.locals.lookup (ofString "dc") =
+        some (.rStruct [.val (.word lo), .val (.word hi)])) eps_mul64x64
+  · intros; trivial
+  · intro t values body callee ret v post hInv hP hsh hargs hl hPost hchain hQc
+    rw [hQc]
+    have hpair : ∃ lo hi : BitVec 64,
+        v = .rStruct [.val (.word lo), .val (.word hi)] := by
+      cases v with
+      | val x => simp [shapeOfHOLExact, shapeEqHOL] at hsh
+      | nStruct nm xs => simp [shapeOfHOLExact, shapeEqHOL] at hsh
+      | rStruct xs =>
+        cases xs with
+        | nil => simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
+        | cons a xs =>
+          cases xs with
+          | nil => simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
+          | cons b xs =>
+            cases xs with
+            | cons c xs => simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
+            | nil =>
+              cases a <;> cases b <;> simp_all [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL]
+              rename_i a b
+              cases a <;> cases b <;> simp_all [shapeOfHOLExact, shapeEqHOL]
+    obtain ⟨lo, hi, rfl⟩ := hpair
+    obtain ⟨⟨hHM,cw,ebw,hx,heb⟩,hnt,hbound,hs,hz,hn⟩ := hP
+    refine ⟨⟨hHM, cw, ebw, ?_, heb⟩, ?_, hbound, ?_, ?_, ?_, lo, hi, ?_⟩
+    all_goals simp_all [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      (by decide : ofString "dc" ≠ ofString "x"),
+      (by decide : ofString "dc" ≠ ofString "ntopics"),
+      (by decide : ofString "dc" ≠ ofString "start"),
+      (by decide : ofString "dc" ≠ ofString "size"),
+      (by decide : ofString "dc" ≠ ofString "n")]
+  · exact hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
