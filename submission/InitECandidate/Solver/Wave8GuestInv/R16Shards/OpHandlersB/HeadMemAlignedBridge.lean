@@ -7725,6 +7725,53 @@ theorem lst_push_growth_prefix {F : Type} {s copied : PanSemStateFiniteExact 64 
   rw [updW_ne _ _ _ _ h8, updW_ne _ _ _ _ h16, updW_ne _ _ _ _ h0]
   exact hc
 
+attribute [local irreducible] Ret in
+/-- Preserve the source-array local alongside exact contents throughout the
+executable loop. The concrete iteration rule can therefore use the same `p`
+at every call, including after a reallocation of the destination array. -/
+theorem la_loop_source_contents {F : Type} (u : PanSemStateFiniteExact 64 F)
+    (p : BitVec 64) (P : PanSemStateFiniteExact 64 F → Prop)
+    (cont : ProgHOL 64) (Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop)
+    (hinit : P u)
+    (hp : u.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hstep : ∀ t, P t →
+      t.locals.lookup (ofString "p") = some (.val (.word p)) →
+      InitECandidate.Solver.Wave8M19.LoopActive
+        (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n"))) t →
+      t.clock ≠ 0 →
+      Flw (decClockHOLFinite t)
+        (.seq (.call (some (none, none)) (ofString "log_append")
+          [.var .global (ofString "ev"), .load .one (.op .add [.var .local (ofString "p"),
+            .panop .mul [.var .local (ofString "i"), .const 8]])])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+        (fun _ post => P post))
+    (hk : ∀ t, P t →
+      t.locals.lookup (ofString "p") = some (.val (.word p)) → Ret t cont Φ) :
+    Ret u
+      (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n")))
+        (.seq (.call (some (none, none)) (ofString "log_append")
+          [.var .global (ofString "ev"), .load .one (.op .add [.var .local (ofString "p"),
+            .panop .mul [.var .local (ofString "i"), .const 8]])])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))) cont) Φ := by
+  apply Ret.seq_while_inv
+    (fun t => P t ∧
+      t.locals.lookup (ofString "p") = some (.val (.word p))) ⟨hinit, hp⟩
+    (NoRet.seq NoRet.call0 NoRet.assign)
+  · intro t ht hact hc
+    apply Flw.and (hstep t ht.1 ht.2 hact hc)
+    intro hf
+    have hkeep := InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.evaluate_notAssignedLocal
+      (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .load .one (.op .add [.var .local (ofString "p"),
+          .panop .mul [.var .local (ofString "i"), .const 8]])])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])) )
+      (show InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.notAssignedLocal
+        (ofString "p") _ = true from by decide) (decClockHOLFinite t)
+      (by rcases hf with h | h | h <;> rw [h] <;> rfl)
+    exact hkeep.trans ht.2
+  · intro t ht
+    exact hk t ht.1 ht.2
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
 
 /-! ## Copied `htab_union_into` spec (from `R16Shards/HtabUnionIntoSpec.lean`, not importable)
