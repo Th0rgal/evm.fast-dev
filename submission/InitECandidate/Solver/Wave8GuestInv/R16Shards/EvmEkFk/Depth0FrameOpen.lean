@@ -9511,4 +9511,23 @@ theorem protected_payload_words_of_frameOutside {F : Type}
   · intro hit
     exact hc (Or.inr (Or.inr hit))
 
+/-- Combine a relational write frame with growth of typed objects. -/
+theorem codeDbPayloadStrong_of_frame_and_growth {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S S' : List Nat} {db : Nat} {keep : List Ivl}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hv : htabValues post db = htabValues s db)
+    (hF : FrameOutside s post (keep ++ [freeGap s]) (heapFree s))
+    (hk : ∀ i ∈ keep, 0 < i.2 ∧
+      ((∃ t ∈ S, i ∈ htabFootprint s t) ∨ i ∈ fixedObjects s))
+    (hg : ∀ i, ((∃ t ∈ S', i ∈ htabFootprint post t) ∨ i ∈ fixedObjects post) →
+      i = (0,0) ∨
+      (∃ j, ((∃ t ∈ S, j ∈ htabFootprint s t) ∨ j ∈ fixedObjects s) ∧
+        Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr")) :
+    CodeDbPayloadStrong post S' db := by
+  exact codeDbPayloadStrong_of_owned_growth he hAs hAp hhp hv
+    (protected_payload_words_of_frameOutside he hAs hF hk) hg
+
 end HeadStore
