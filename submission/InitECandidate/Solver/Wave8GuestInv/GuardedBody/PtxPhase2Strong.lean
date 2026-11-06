@@ -17976,4 +17976,50 @@ theorem phase2_message_store_ready_write_step {ι F : Type} [Nonempty ι]
     rw [hm]
     exact ⟨(hp.2.2.2.2.2 j).1, hf j⟩
 
+/-- Contract-address computation retains the transaction environment when its writes miss the block fields. -/
+theorem phase2_compute_contract_address_txEnv (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64))
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "compute_contract_address") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hnt : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK s) (henv : TxEnv s)
+    (hunhit : ∀ k ∈ ([24, 32, 40, 72, 80] : List Nat),
+      ∀ region ∈ [(locN (callEntryStateHOLFinite s callee) "out", 20),
+        (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)],
+        ¬ CellHits (globN s "bo" + k) region) :
+    TxEnv {post with locals := s.locals} := by
+  have hh := PtxP1.funSpec_at_lookup h.wk_compute_contract_address s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp callee) (by rw [he]; exact hnt)
+  rw [he] at hh
+  have hs := hh hr
+  have hbo : globN post "bo" = globN s "bo" := by
+    have hg := hs.2.2.1 (ofString "bo") (by decide)
+    change s.globals.lookup (ofString "bo") = post.globals.lookup (ofString "bo") at hg
+    simp only [globN, hg]
+  have hj : globN post "journal_cap" = globN s "journal_cap" := by
+    have hg := hs.2.2.1 (ofString "journal_cap") (by decide)
+    change s.globals.lookup (ofString "journal_cap") = post.globals.lookup (ofString "journal_cap") at hg
+    simp only [globN, hg]
+  have hk : ∀ k ∈ ([24, 32, 40, 72, 80] : List Nat),
+      memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+    intro k hk
+    apply hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) henv.bo_nz k
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp
+    · exact hunhit k hk
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · change globN post "bo" ≠ 0; rw [hbo]; exact henv.bo_nz
+  · change memW post (globN post "bo" + 24) ≠ 0; rw [hbo, hk 24 (by simp)]; exact henv.bo24
+  · change memW post (globN post "bo" + 32) ≠ 0; rw [hbo, hk 32 (by simp)]; exact henv.bo32
+  · change memW post (globN post "bo" + 40) ≠ 0; rw [hbo, hk 40 (by simp)]; exact henv.bo40
+  · change memW post (globN post "bo" + 72) ≠ 0; rw [hbo, hk 72 (by simp)]; exact henv.bo72
+  · change locN s "index" < memW post (globN post "bo" + 80)
+    rw [hbo, hk 80 (by simp)]; exact henv.idx_lt
+  · change globN post "journal_cap" ≠ 0; rw [hj]; exact henv.jcap_nz
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
