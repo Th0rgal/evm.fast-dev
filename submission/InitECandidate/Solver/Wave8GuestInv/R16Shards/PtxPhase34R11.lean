@@ -20144,4 +20144,90 @@ theorem htab_set_call0_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open private eval_sk_make_body from InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmFrameSpecs
+
+theorem sk_make_call_byte_effect {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "sk_make") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned rv), post)) :
+    EvmStepLemmas.ByteRegionEffect s post [(globN s "sk_buf", 52)] := by
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "sk_make") _ _ body _ ret vs callee EvmFrameSpecs.lookup_sk_make
+    (by rwa [← hW.1.1.1.code])
+  subst body
+  have hfit : globN s "sk_buf" + 52 ≤ 2 ^ 64 := by
+    by_cases hz : globN s "sk_buf" = 0
+    · rw [hz]; decide
+    have hmem : (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 64) ∈ fixedObjects s := by
+      unfold fixedObjects
+      apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+      exact List.mem_map.2 ⟨("sk_buf", 64), by decide, rfl⟩
+    rw [if_neg hz] at hmem
+    rcases EvmBase.fixedObject_le_2pow64 hW.1.1.2 hT.2.2.1 hmem with h0 | hbnd
+    · dsimp only at h0; omega
+    · dsimp only at hbnd; omega
+  obtain ⟨_, _, _, he⟩ := eval_sk_make_body (callEntryStateHOLFinite s callee)
+    hW.1.1.1.code hW.1.1.1.memaddrs hfit (by rw [hr]; exact Or.inl ⟨rv, rfl⟩)
+  rw [hr] at he
+  exact ⟨he.code, he.memaddrs, he.shMemaddrs, he.baseAddr, he.be, he.globals,
+    he.out_dom, he.cell_frame, he.byte_frame⟩
+
+theorem sk_make_call_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "sk_make") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have he := sk_make_call_byte_effect s post S Nd vs body callee ret rv hW hT hl hr
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "sk_make") _ _ body _ ret vs callee EvmFrameSpecs.lookup_sk_make
+    (by rwa [← hW.1.1.1.code])
+  subst body
+  have hfit : globN s "sk_buf" + 52 ≤ 2 ^ 64 := by
+    by_cases hz : globN s "sk_buf" = 0
+    · rw [hz]; decide
+    have hmem : (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 64) ∈ fixedObjects s := by
+      unfold fixedObjects
+      apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+      exact List.mem_map.2 ⟨("sk_buf", 64), by decide, rfl⟩
+    rw [if_neg hz] at hmem
+    rcases EvmBase.fixedObject_le_2pow64 hW.1.1.2 hT.2.2.1 hmem with h0 | hbnd
+    · dsimp only at h0; omega
+    · dsimp only at hbnd; omega
+  obtain ⟨_, _, hnz, _⟩ := eval_sk_make_body (callEntryStateHOLFinite s callee)
+    hW.1.1.1.code hW.1.1.1.memaddrs hfit (by rw [hr]; exact Or.inl ⟨rv, rfl⟩)
+  change globN s "sk_buf" ≠ 0 at hnz
+  intro k hk
+  have hb := txWorld_header_fixed hW k hk
+  have hf := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  have hbo : (memW s (globN s "bo" + k), 24) ∈ blockOutObjects s := by
+    have hk' : k = 40 ∨ k = 72 := by simpa using hk
+    rcases hk' with rfl | rfl <;> simp [blockOutObjects, hW.2.bo_nz, hW.2.bo40, hW.2.bo72]
+  have hd := blockOut_disj_global_buffer hT.2.2.1 hbo (g := ("sk_buf", 64)) (by decide)
+  have hu : IvlUnhit s post (memW s (globN s "bo" + k), 24) := by
+    intro a ha hit
+    apply he.cell_frame a
+    intro i hi _ hhit
+    simp only [List.mem_singleton] at hi
+    subst i
+    simp only [bufferRegion, if_neg hnz] at hd
+    unfold Disj at hd
+    unfold CellHits at hit hhit
+    have hbalign : memW s (globN s "bo" + k) % 8 = 0 := hf.2.1
+    omega
+  apply memW_eq_of_ivlUnhit hu hf.2.1 (ivl_allocated_bound hW.1.1.2 hf.1).2
+  exact ⟨le_rfl, by dsimp; omega⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
