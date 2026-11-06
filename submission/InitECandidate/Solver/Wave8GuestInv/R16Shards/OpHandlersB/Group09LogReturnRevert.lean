@@ -14343,4 +14343,48 @@ theorem log_tail_frame_owned_g09 {F : Type}
     hchain hcons hhead htail hnew hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
   exact log_tail_frameWF_of_readback_g09 hFW hglobals hdom hfields hheader hslots hrecords hmsg
 
+/-- Assemble all frame validity from a reconstructed head and suspended-frame
+readback; message ownership for every suspended frame is derived internally. -/
+theorem log_all_frames_owned_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {head : Ivl} {tail newObjects : List Ivl}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hWT : WorldTypedWith s S Nd) (hcell : SameTypedCells s post S Nd)
+    (hglobals : post.globals = s.globals) (hdom : post.memaddrs = s.memaddrs)
+    (hchain : evmChain post = evmChain s) (hcons : evmChain s = head :: tail)
+    (hhead : frameObjects post head = frameObjects s head ++ newObjects)
+    (hheadWF : FrameWF post S head)
+    (hFW : ∀ ec ∈ evmChain s, FrameWF s S ec)
+    (hnew : ∀ ec ∈ tail, ∀ o ∈ newObjects, Disj (memW s (ec.1 + 112), 176) o)
+    (hfields : ∀ ec ∈ tail, ∀ k, k + 8 ≤ 280 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hheader : ∀ ec ∈ tail, ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hslots : ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8 * i))
+    (hrecords : ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+        memW post (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k) =
+          memW s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k)) :
+    (∀ ec ∈ evmChain s, FrameWF post S ec) ∧
+    (∀ ec ∈ tail, frameObjects post ec = frameObjects s ec) ∧
+    (∀ ec ∈ tail, frameLogs post ec = frameLogs s ec) := by
+  have hg : globN post "vm_system_address" = globN s "vm_system_address" := by
+    unfold globN; rw [hglobals]
+  have ht : ∀ ec ∈ tail,
+      frameObjects post ec = frameObjects s ec ∧ frameLogs post ec = frameLogs s ec := by
+    intro ec hec
+    exact log_no_growth_tail_objects_congr_g09 hg (hfields ec hec)
+      (hheader ec hec) (hslots ec hec) (hrecords ec hec)
+  refine ⟨?_, fun ec hec => (ht ec hec).1, fun ec hec => (ht ec hec).2⟩
+  intro ec hec
+  rw [hcons] at hec
+  rcases List.mem_cons.1 hec with heq | hec
+  · subst ec; exact hheadWF
+  · apply log_tail_frame_owned_g09 hAs hAp hWT hcell hglobals hdom hchain hcons hhead
+      (fun ec hec => (ht ec hec).1) (hnew ec hec)
+      (hFW ec (by rw [hcons]; exact List.mem_cons_of_mem _ hec))
+      (hfields ec hec) (hheader ec hec) (hslots ec hec) (hrecords ec hec)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
