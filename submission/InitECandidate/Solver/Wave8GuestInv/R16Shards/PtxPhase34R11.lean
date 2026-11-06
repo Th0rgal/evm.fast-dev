@@ -16538,4 +16538,29 @@ theorem journal_record_store_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Offset stores within a 32-byte journal record retain the narrow write effect. -/
+theorem journal_offset_store_effect {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F}
+    (r w : BitVec 64) (off : Nat) (value : ExpHOL 64)
+    (heff : WorldEff s cur [(r.toNat, 32)] [] ["heap_ptr"])
+    (hrloc : cur.locals.lookup (ofString "r") = some (.val (.word r)))
+    (hoff : off ≤ 24) (hbound : r.toNat + 32 < 2 ^ 64)
+    (hv : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) value =
+      some (.val (.word w)))
+    (hr : evaluateHOLFiniteState cur
+      (.store (.op .add [.var .local (ofString "r"), .const (BitVec.ofNat 64 off)]) value) = (none, post)) :
+    WorldEff s post [(r.toNat, 32)] [] ["heap_ptr"] := by
+  have ho : (BitVec.ofNat 64 off).toNat = off := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  have ha : (r + BitVec.ofNat 64 off).toNat = r.toNat + off := by
+    rw [BitVec.toNat_add, ho, Nat.mod_eq_of_lt (by omega)]
+  apply journal_record_store_effect _ value (r + BitVec.ofNat 64 off) w heff ?_ hv ?_ ?_ hr
+  · simp [evalHOLExact, evalListHOLExact, hrloc, wordOpHOL, wordOp, valueIsWord, valueWord]
+  · simp only [ha]; omega
+  · simp only [ha]; omega
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
