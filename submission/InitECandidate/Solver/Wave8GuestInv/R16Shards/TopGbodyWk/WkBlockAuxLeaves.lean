@@ -10936,4 +10936,47 @@ theorem eval_merge_occupied_zero {F : Type}
     intro tw hw
     simpa [evalAt, evalHOLExact, ht] using hw.symm
 
+theorem eval_merge_occupied_increment_zero {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word 0#64)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hnt : (evaluateHOLFiniteState s mergeOccupiedThenIncrement).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeOccupiedThenIncrement).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeOccupiedThenIncrement).1
+        (evaluateHOLFiniteState s mergeOccupiedThenIncrement).2 := by
+  exact eval_withdrawal_then s _ _ hc hW
+    (eval_merge_occupied_zero s f0 kw vw hc hW ht hk)
+    (progWithdrawalStep_assign_local _ _) hnt hfr
+
+theorem eval_merge_storage_body_zero {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ow : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word 0#64)))
+    (ho : s.locals.lookup (ofString "outer") = some (.val (.word ow)))
+    (hts : globN s "ts" ≠ 0)
+    (hots : ow.toNat = memW s (globN s "ts" + 32))
+    (hnt : (evaluateHOLFiniteState s mergeStorageBody).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageBody).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeStorageBody).1 (evaluateHOLFiniteState s mergeStorageBody).2 := by
+  apply merge_outer_item_flow_continuation s (ofString "s") _ _ _ hc hW hts ?_ ?_ hnt hfr
+  · intro t he
+    have he' : evalAt s (.var .local (ofString "outer")) = some (.val (.word ow)) := by
+      simp [evalAt, evalHOLExact, ho]
+    rw [he'] at he
+    cases he
+    exact hots
+  · intro t f0 kw vw ck _ _
+    dsimp only
+    intro hnt hfr
+    apply eval_merge_occupied_increment_zero
+      (setVarHOLFinite (ofString "s") (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)])
+        {s with clock := ck}) f0 kw vw hc
+      (localsFree_worldOK s _ ck hW) ?_ ?_ hnt hfr
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "s" ≠ ofString "bouter" by decide] using ht
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
