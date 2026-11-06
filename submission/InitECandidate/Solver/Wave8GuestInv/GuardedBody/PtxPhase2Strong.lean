@@ -16036,4 +16036,31 @@ theorem phase2_record_pre_state_read_message_tables {F : Type}
     rw [he] at hn
     exact (hn (congrArg Prod.fst hr)).elim
 
+/-- Read-only cache queries preserve private tables and their message allocation guard. -/
+theorem phase2_resume_ro_message_tables {fname name : MlS}
+    (hro : ReadOnlyFn fname) (hm : name ≠ ofString "m")
+    (aa ak : Nat) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+      Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+        Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr")) name fname args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  have he := hr (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  have hrestore : ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) =
+      {s with locals := s.locals, clock := post.clock} := by rw [he]; rfl
+  rw [hrestore]
+  have hlm : (s.locals.update (name, v)).lookup (ofString "m") =
+      s.locals.lookup (ofString "m") := by
+    simp [HolFiniteMapExact.update, FUPDATE, hm]
+  refine ⟨(arenaReady_with_locals s _ post.clock).mpr hp.1,
+    phase2_message_tables_with_locals s _ post.clock hp.2.1 hlm, ?_⟩
+  change Inside (locN {s with locals := s.locals.update (name, v), clock := post.clock} "m", 176)
+    InitE.sourceBase (globN s "heap_ptr")
+  rw [locN_congr s _ post.clock "m" hlm]
+  exact hp.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
