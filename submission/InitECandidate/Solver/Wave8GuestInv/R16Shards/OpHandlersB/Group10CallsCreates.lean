@@ -13182,4 +13182,88 @@ theorem op_create_specA_g10 (hW : WorldAccountSpecsA)
   intro F s0 hInv0 hWF0 hnd0
   exact op_create_run_full_g10 s0 hW hcc hgc
 
+
+/-! ## op_create2 suffix tail walk and aligned spec (ccA) -/
+
+/-! ## 5. op_create2 -/
+
+
+theorem create2ChargedSuffixTail_ccA_g10 {F : Type}
+    (hU : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "u256_to_be32"))
+    (hcc2 : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "compute_create2_contract_address"))
+    (hgc : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "generic_create")) :
+    ChildContinuationA (F := F) MemoryExpansionLocal_g10
+      (handlerSuffix_g10 1 create2ChargedSuffix_g10) := by
+  apply ccA_seq_call_g10 (Q := MemoryExpansionLocal_g10) hU
+    (hentry := fun t values body callee rs hc hi hw hp ha hl => trivial)
+    (hstep := fun t values body callee rs v cpost hi hw hp hci hw2 hch hq => by
+      unfold LocFrame at hq
+      have hgg := congrArg PanSemStateFiniteExact.globals hq
+      have hmm := congrArg PanSemStateFiniteExact.memory hq
+      refine memoryExpansionLocal_transport_g10 hp ?_ ?_ ?_
+      · rfl
+      · show globN { cpost with locals := t.locals } "ev" = globN t "ev"
+        unfold globN
+        rw [hgg]
+        rfl
+      · show memW { cpost with locals := t.locals } _ = memW t _
+        unfold memW
+        rw [hmm]
+        rfl)
+  apply ccA_seq_call_g10 (Q := fun _ => True) epsA_extend_memory
+    (hentry := fun t values body callee rs hc hi hw hp ha hl =>
+      memoryExpansionLocal_callee_pre_g10 t hc hw hp ha hl)
+    (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ => trivial)
+  apply ccA_dec_g10 (Q := fun _ => True) (fun t v hv hi hp => trivial)
+  apply ccA_decCall_g10 (Q := fun _ => True) epsA_sat_word
+    (hentry := fun t values body callee ret' hc hi hw hp ha hl => trivial)
+    (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ _ _ => trivial)
+  apply ccA_decCall_g10 (Q := fun _ => True) epsA_alloc_g10
+    (hentry := fun t values body callee ret' hc hi hw hp ha hl => trivial)
+    (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ _ _ => trivial)
+  apply ccA_seq_call_g10 (Q := fun _ => True) hcc2
+    (hentry := fun t values body callee rs hc hi hw hp ha hl => trivial)
+    (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ => trivial)
+  apply ccA_decCall_g10 (Q := fun _ => True) hgc
+    (hentry := fun t values body callee ret' hc hi hw hp ha hl => trivial)
+    (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ _ _ => trivial)
+  apply ccA_seq_ite_g10
+  · intro t w hcond hw0
+    exact ccA_seq_call_g10 (Q := fun _ => True) epsA_pc_add
+      (hentry := fun t values body callee rs hc hi hw hp ha hl => trivial)
+      (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ => trivial)
+      (ccA_ret_g10 (.const 0#64))
+  · intro t hcond
+    exact ccA_seq_skip_g10 (ccA_ret_g10 (.const 0#64))
+
+
+theorem op_create2_run_full_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hU : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "u256_to_be32"))
+    (hW : WorldAccountSpecsA)
+    (hcc2 : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "compute_create2_contract_address"))
+    (hgc : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "generic_create")) :
+    HandlerRunA s0 (fun _ => True) false (sourceFnBody Guest.Software.guestFn_op_create2) :=
+  create2_prefix_through_alloc_g10 s0
+    (handlerRunA_of_childContinuation_g10 s0 _ _ (create2ChargedSuffixTail_ccA_g10 hU hcc2 hgc))
+
+
+theorem op_create2_specA_g10 (hU : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "u256_to_be32"))
+    (hW : WorldAccountSpecsA)
+    (hcc2 : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "compute_create2_contract_address"))
+    (hgc : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "generic_create")) :
+    OpHandlerSpecA (ofString "op_create2") := by
+  refine opHandlerSpecA_of_run 600 (by rw [guestAst_len]; decide) Guest.Software.guestFn_op_create2 rfl ?_
+  intro F s0 hInv0 hWF0 hnd0
+  exact op_create2_run_full_g10 s0 hU hW hcc2 hgc
+
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
