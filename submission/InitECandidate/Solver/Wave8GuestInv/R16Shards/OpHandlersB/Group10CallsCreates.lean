@@ -12455,4 +12455,52 @@ theorem heap_frontier_disj_world_g10 {F : Type}
   subst j
   exact heap_frontier_disj_allocated_g10 ha p n hp hb (worldTypedIvls_allocated hw hi)
 
+theorem heap_frontier_disj_frame_g10 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl}
+    (ha : ArenaOK s) (hw : FrameWF s S ec)
+    (p n : Nat) (hp : globN s "heap_ptr" ≤ p) (hb : p + n ≤ heapLimit) :
+    ∀ i ∈ frameObjects s ec, Disj (p, n) i := by
+  have hf := ha.2.2.1
+  have hs := ha.2.2.2.1
+  have hlim : heapLimit = scratchStart := rfl
+  have above : ∀ i : Ivl, scratchStart ≤ i.1 → Disj (p,n) i := by
+    intro i hi
+    exact Or.inr (Or.inr (Or.inl (by dsimp; omega)))
+  have below : ∀ i : Ivl, i.1 + i.2 ≤ globN s "heap_ptr" → Disj (p,n) i := by
+    intro i hi
+    exact Or.inr (Or.inr (Or.inr (by dsimp; omega)))
+  obtain ⟨hscr, hmem, _, _, _, _, _, _, _, _, _, _, hlogs, _, hret, hll, _⟩ := hw
+  intro i hi
+  unfold frameObjects at hi
+  rcases List.mem_append.1 hi with hi | hi
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    · apply above; have h := (hscr (ec.1,280) (by simp)).1.1; dsimp at h ⊢; omega
+    · apply above; have h := (hscr (ec.2,104) (by simp)).1.1; dsimp at h ⊢; omega
+    · apply above; have h := (hscr (memW s (ec.1+8),32 * memW s (ec.1+232)) (by simp)).1.1; dsimp at h ⊢; omega
+    · exact above _ hmem.1
+    · apply above; have h := (hscr (memW s (ec.1+88),24) (by simp)).1.1; dsimp at h ⊢; omega
+    · rcases hlogs with h | h
+      · exact below _ h.2
+      · apply above; have hh := h.1; omega
+    · rcases hret with ⟨hz,_⟩ | ⟨h,_⟩
+      · exact Or.inr (Or.inl (by simp [frameRet, hz]))
+      · exact below _ h.2
+  · unfold frameLogObjects at hi
+    obtain ⟨idx, hidx, ho⟩ := List.mem_flatMap.1 hi
+    rw [List.mem_range] at hidx
+    rcases hll with hz | ⟨_,_,_,_,hent⟩
+    · have hlo := (hscr (memW s (ec.1+88),24) (by simp)).1.1
+      have hpos : 0 < scratchStart := by decide
+      dsimp at hlo
+      omega
+    · have hle := (hent idx hidx).2
+      have hr := (List.mem_filter.1 ho).1
+      simp only [logRecordIvls, List.mem_cons, List.not_mem_nil, or_false] at hr
+      rcases hr with rfl | rfl | rfl | rfl
+      · exact below _ hle.2.1.2
+      · exact below _ hle.2.2.2.2.1.2
+      · exact below _ hle.2.2.2.2.2.1.2
+      · exact below _ hle.2.2.2.2.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
