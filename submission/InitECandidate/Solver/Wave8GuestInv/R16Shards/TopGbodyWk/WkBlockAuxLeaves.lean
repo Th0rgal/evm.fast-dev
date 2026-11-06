@@ -9805,4 +9805,36 @@ theorem eval_merge_get_inner {F : Type}
     exact (WorldStepSc.of_pre_locals_clock hs).with_locals_clock _
       (evaluateHOLFiniteState mid mergeInnerBranch).2.clock
 
+def mergeOccupiedInner : ProgHOL 64 :=
+  .ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0#64))
+    mergeGetInner .skip
+
+/-- Empty enumeration slots are skipped; occupied slots execute the inner merge. -/
+theorem eval_merge_occupied_inner {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hnt : (evaluateHOLFiniteState s mergeOccupiedInner).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeOccupiedInner).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeOccupiedInner).1 (evaluateHOLFiniteState s mergeOccupiedInner).2 := by
+  unfold mergeOccupiedInner at hnt hfr ⊢
+  rw [evaluateHOLFiniteState_ite] at hnt hfr ⊢
+  by_cases hz : f0 = 0
+  · subst f0
+    simp only [evalHOLExact, hk, List.getElem?_cons_zero,
+      Flapjack.Compiler.Encoders.Asm.wordCmpHOL] at hnt hfr ⊢
+    simp at hnt hfr ⊢
+    exact WorldStepSc.refl s _ hW.1
+  · have he : evalAt s (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0#64)) =
+        some (.val (.word 1#64)) := by
+      simpa [evalAt, evalHOLExact, hk, Flapjack.Compiler.Encoders.Asm.wordCmpHOL] using hz
+    unfold evalAt at he
+    rw [he] at hnt hfr ⊢
+    simp only [show (1#64 : BitVec 64) ≠ 0 by decide, ↓reduceIte] at hnt hfr ⊢
+    exact eval_merge_get_inner s tw f0 kw vw hc hW ht hk hbs ht0 htbs hnt hfr
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
