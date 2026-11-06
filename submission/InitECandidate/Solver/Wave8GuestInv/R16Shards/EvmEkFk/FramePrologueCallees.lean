@@ -8478,6 +8478,131 @@ theorem precompile_charge_gas_call_step (args : List (ExpHOL 64)) :
   have hh := hs s hcode hInv hex hnt hr
   exact ⟨hh.1, hh.2.1, fun k _ => hh.2.2.1 k (by simp), hh.2.2.2⟩
 
+theorem precompile_step_dec (name : MlS) (shape : ShapeHOL) (init : ExpHOL 64)
+    {body : ProgHOL 64} (hb : EvmProgStep frameStartGw body) :
+    EvmProgStep frameStartGw (.dec name shape init body) := by
+  have bad : ¬ R13.FlowsOrResumes (some (.error : PanSemResultExact 64)) := by
+    rintro (h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩) <;> cases h
+  intro F s hcode hInv hnt hfr
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  dsimp only at hnt hfr ⊢
+  revert hnt hfr
+  split <;> intro hnt hfr
+  · exact absurd hfr bad
+  · rename_i v hv
+    by_cases hsh : shapeEqHOL shape (shapeOfHOLExact v) = true
+    · simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+      have hset : setVarHOLFinite name v s =
+          {s with locals := (setVarHOLFinite name v s).locals, clock := s.clock} := by
+        cases s; rfl
+      have hi : EvmInv (setVarHOLFinite name v s) := by
+        rw [hset]; exact localsFree_evmInv s _ _ hInv
+      have hh := hb (setVarHOLFinite name v s) hcode hi hnt hfr
+      rw [hset] at hh
+      exact precompile_step_locals_right _ _ (precompile_step_locals_left _ _ hh)
+    · simp only [hsh, Bool.false_eq_true, ↓reduceIte] at hfr
+      exact absurd hfr bad
+
+theorem precompile_step_decCall_ro {fn : MlS} (hf : ReadOnlyFn fn)
+    (name : MlS) (shape : ShapeHOL) (args : List (ExpHOL 64)) {cont : ProgHOL 64}
+    (hc : EvmProgStep frameStartGw cont) :
+    EvmProgStep frameStartGw (.decCall name shape fn args cont) := by
+  have bad : ¬ R13.FlowsOrResumes (some (.error : PanSemResultExact 64)) := by
+    rintro (h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩) <;> cases h
+  obtain ⟨params, body, ret, hlook, hspec⟩ := hf
+  intro F s hcode hInv hnt hfr
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hfr ⊢
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · simp only [ha] at hfr; exact absurd hfr bad
+  · simp only [ha] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fn vals with _ | ⟨body', callee, ret'⟩
+    · simp only [hl] at hfr; exact absurd hfr bad
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt hfr ⊢
+        have hsame := lookupCodeHOLFinite_installed_body s.code.lookup fn params body body'
+          ret ret' vals callee (by rw [hcode]; exact hlook) hl
+        subst hsame
+        have hrEq := lookupCodeHOLFinite_installed_return s fn params body' body'
+          ret ret' vals callee (by rw [hcode]; exact hlook) hl
+        subst hrEq
+        have entry : callEntryStateHOLFinite s callee =
+            {s with locals := callee, clock := (callEntryStateHOLFinite s callee).clock} := by cases s; rfl
+        have hex : ∃ vs, lookupCodeHOLFinite originalRuntimeCode.lookup fn vs =
+            some (body', (callEntryStateHOLFinite s callee).locals, ret') :=
+          ⟨vals, by simpa only [hcode, callEntryStateHOLFinite] using hl⟩
+        rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨res, post⟩
+        simp only [run] at hnt hfr ⊢
+        cases res with
+        | none => exact absurd hfr bad
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hnt hfr ⊢
+            by_cases hsh : (shapeEqHOL (shapeOfHOLExact v) shape &&
+                shapeEqHOL (shapeOfHOLExact v) ret') = true
+            · simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+              have ro := hspec (callEntryStateHOLFinite s callee) hcode
+                (guestInv_callEntry s callee hInv.1.1) hex
+                (by rw [run]; simp) (by rw [run]; exact Or.inl ⟨v, rfl⟩)
+              rw [run] at ro
+              have postEq := state_trans_locals_clock entry ro
+              let mid := setVarHOLFinite name v {post with locals := s.locals}
+              have midEq : mid = {s with locals := mid.locals, clock := mid.clock} := by
+                have hh : mid = {post with locals := mid.locals, clock := post.clock} := by cases post; rfl
+                exact state_trans_locals_clock postEq hh
+              have hi : EvmInv mid := by rw [midEq]; exact localsFree_evmInv s _ _ hInv
+              have hcodeMid : mid.code = originalRuntimeCode := by rw [midEq]; exact hcode
+              have hh := hc mid hcodeMid hi hnt hfr
+              conv at hh => arg 2; rw [midEq]
+              exact precompile_step_locals_right _ _ (precompile_step_locals_left _ _ hh)
+            · simp only [hsh, Bool.false_eq_true, ↓reduceIte] at hfr
+              exact absurd hfr bad
+          | exception e v =>
+            dsimp only at hfr ⊢
+            have hr : Resumes (some (.exception e v)) := by
+              rcases hfr with h | h | h | hr <;> [simp at h; simp at h; simp at h; exact hr]
+            have ro := hspec (callEntryStateHOLFinite s callee) hcode
+              (guestInv_callEntry s callee hInv.1.1) hex
+              (by rw [run]; simp) (by rw [run]; exact hr)
+            rw [run] at ro
+            dsimp only at ro
+            have postEq := state_trans_locals_clock entry ro
+            have hemp : emptyLocalsHOLFinite post =
+                {s with locals := (emptyLocalsHOLFinite post).locals, clock := post.clock} := by
+              rw [postEq]; cases s; rfl
+            rw [hemp]
+            refine ⟨⟨localsFree_evmInv s _ _ hInv, le_refl _, fun _ _ => rfl,
+              evmChain_with_locals s _ _⟩, ?_⟩
+            intro ec hec; exact ⟨rfl, rfl, rfl, rfl⟩
+          | timeOut => simp at hnt
+          | _ => rcases hfr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
+
+theorem precompile_ro_add_sat : ReadOnlyFn (ofString "add_sat") := by
+  refine R13.readOnlyFn_of_guestAst 441 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_add_sat rfl ?_
+  dsimp only [Guest.Software.guestFn_add_sat, extractFn,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural]
+  exact R13.ReadOnlyProg.dec _ _ _ (R13.ReadOnlyProg.seq
+    (R13.ReadOnlyProg.ite _ (R13.ReadOnlyProg.ret _) R13.ReadOnlyProg.skip) (R13.ReadOnlyProg.ret _))
+
+theorem precompile_ro_ceil32 : ReadOnlyFn (ofString "ceil32") := by
+  refine R13.readOnlyFn_of_guestAst 442 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_ceil32 rfl ?_
+  dsimp only [Guest.Software.guestFn_ceil32, extractFn,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural]
+  exact R13.ReadOnlyProg.dec _ _ _ (R13.ReadOnlyProg.seq
+    (R13.ReadOnlyProg.ite _ (R13.ReadOnlyProg.ret _) R13.ReadOnlyProg.skip)
+    (R13.ReadOnlyProg.decCall precompile_ro_add_sat _ _ _ (R13.ReadOnlyProg.ret _)))
+
+theorem precompile_ro_words_of : ReadOnlyFn (ofString "words_of") := by
+  refine R13.readOnlyFn_of_guestAst 443 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_words_of rfl ?_
+  dsimp only [Guest.Software.guestFn_words_of, extractFn,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural]
+  exact R13.ReadOnlyProg.decCall precompile_ro_ceil32 _ _ _ (R13.ReadOnlyProg.ret _)
+
 private theorem dispatch_step_trans {F : Type} {s mid post : PanSemStateFiniteExact 64 F}
     (h1 : EvmStepCC frameStartGw s mid) (h2 : EvmStepCC frameStartGw mid post) :
     EvmStepCC frameStartGw s post := by

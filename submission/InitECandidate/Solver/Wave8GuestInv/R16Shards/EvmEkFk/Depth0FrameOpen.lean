@@ -7757,4 +7757,79 @@ theorem codeDbPayloadStrong_entries_of_separated_htab_exit {F : Type}
     · exact hW.1.2.2.1 db hdb (locN s "t") ht hne
   exact codeDbPayloadStrong_entries_of_htab_exit db h hAs hx ht htw hv
 
+/-- The fallback's witness database and accessed-code table have different
+key lengths, so even the raw typed world already rules out their aliasing. -/
+theorem fallback_code_roots_distinct {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S : List Nat) (hW : WorldTyped s S)
+    (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hdb : memW s (globN s "ws" + 16) ≠ 0)
+    (ht : memW s (globN s "ts" + 40) ≠ 0) :
+    memW s (globN s "ws" + 16) ∈ S ∧
+    memW s (globN s "ts" + 40) ∈ S ∧
+    memW s (globN s "ws" + 16) ≠ memW s (globN s "ts" + 40) := by
+  have hmdb : (memW s (globN s "ws" + 16), "ws+16") ∈ worldRoleSlots s := by
+    simp [worldRoleSlots, recRoles, hws, hdb]
+  have hmt : (memW s (globN s "ts" + 40), "ts+40") ∈ worldRoleSlots s := by
+    simp [worldRoleSlots, recRoles, hts, ht]
+  have hr := hW.1.2.2.2.2.2.2.2.2.2.2.2
+  have hd := hr.1 _ (List.mem_append_left _ hmdb)
+  have ht' := hr.1 _ (List.mem_append_left _ hmt)
+  refine ⟨hd.1, ht'.1, ?_⟩
+  intro heq
+  have hdlen : hdr s (memW s (globN s "ws" + 16)) 0 = 32 := hd.2
+  have htlen : hdr s (memW s (globN s "ts" + 40)) 0 = 52 := ht'.2
+  rw [heq] at hdlen
+  omega
+
+/-- Instantiation for the fallback's actual `ts+40` access table and
+`ws+16` witness-code database. -/
+theorem fallback_witness_entries_after_access_set {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hW : WorldTypedCodeStrong s S) (hAs : ArenaReady s)
+    (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hdb : memW s (globN s "ws" + 16) ≠ 0)
+    (ht : memW s (globN s "ts" + 40) ≠ 0)
+    (hlocal : locN s "t" = memW s (globN s "ts" + 40))
+    (hx : HtabExit s post) :
+    NodeDbEntriesStrong post (memW s (globN s "ws" + 16)) := by
+  obtain ⟨hmdb, hmt, hne⟩ := fallback_code_roots_distinct s S hW.1 hws hts hdb ht
+  apply codeDbPayloadStrong_entries_of_separated_htab_exit _
+    (hW.2 "ws" 16 (by simp) hws) hAs hW.1 hmdb
+  · rw [hlocal]; exact hmt
+  · rw [hlocal]; exact hne
+  · exact hx
+
+/-- The actual access-table exit supplies the witness payload fact for the
+resumed `ws_get_code` continuation; caller locals may be restored freely. -/
+theorem fallback_ws_return_after_access_set {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hW : WorldTypedCodeStrong s S) (hAs : ArenaReady s)
+    (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hdb : memW s (globN s "ws" + 16) ≠ 0)
+    (ht : memW s (globN s "ts" + 40) ≠ 0)
+    (hlocal : locN s "t" = memW s (globN s "ts" + 40))
+    (hx : HtabExit s post)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (db hash : BitVec 64)
+    (hdbnat : db.toNat = memW s (globN s "ws" + 16))
+    (hc : post.code = originalRuntimeCode)
+    (hs : post.eshapes.lookup (ofString "StateErr") = some .one)
+    (heval : evalHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (hh : locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hw : HtabWF post db.toNat) :
+    Ret {post with locals := locals}
+      (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+        [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  have he := fallback_witness_entries_after_access_set hW hAs hws hts hdb ht hlocal hx
+  rw [← hdbnat] at he
+  apply get_code_ws_fallback_return_entry_strong {post with locals := locals} db hash hc hs
+    (localsFree_arenaReady post locals post.clock hx.1)
+  · rw [evalHOLFinite_eq_toExact] at heval ⊢
+    exact heval
+  · exact hh
+  · exact (WkBal.htabWF_with_locals post locals post.clock db.toNat).2 hw
+  · simpa [NodeDbEntriesStrong, htabValues, hdr, nodeF, memW, WordsOK, WordAt, globN] using he
+
 end HeadStore

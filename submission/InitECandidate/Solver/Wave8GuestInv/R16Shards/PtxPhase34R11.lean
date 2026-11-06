@@ -15366,4 +15366,119 @@ theorem acct_empty_tx_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Compose backing-word preservation across a step retaining the header roots. -/
+theorem tx_header_words_trans {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hbo : globN mid "bo" = globN s "bo")
+    (hheaders : ∀ k ∈ ([40, 72] : List Nat),
+      memW mid (globN s "bo" + k) = memW s (globN s "bo" + k))
+    (hfirst : ∀ k ∈ ([40, 72] : List Nat),
+      memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)))
+    (hsecond : ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW mid (globN mid "bo" + k)) = memW mid (memW mid (globN mid "bo" + k))) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have h := hsecond k hk
+  rw [hbo, hheaders k hk] at h
+  exact h.trans (hfirst k hk)
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Extract stable header roots from a world step without scratch writes. -/
+theorem worldStep_empty_tx_header_roots {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {gw : List String}
+    {keep : List (String × List Nat)} {boKeep : List Nat}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hs : WorldStep (fun _ => []) gw keep Q s r post)
+    (hW : TxWorld s) (hg : ofString "bo" ∉ gw.map ofString)
+    (hk : ("bo", boKeep) ∈ keep)
+    (hoff : ∀ k ∈ ([40, 72] : List Nat), k ∈ boKeep) :
+    globN post "bo" = globN s "bo" ∧
+      ∀ k ∈ ([40, 72] : List Nat), memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+  refine ⟨R16Shards.globN_eq_of_lookup (hs.2.2.1 _ hg), ?_⟩
+  intro k hmem
+  exact hs.2.2.2.1 ("bo", boKeep) hk hW.2.bo_nz k (hoff k hmem)
+    (by intro i hi; cases hi)
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- The concrete pre-state lookup's initial table update preserves backing. -/
+theorem get_pre_state_account_optional_prefix_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_get_pre_state_account_optional) =
+      (some (.returned v), post)) :
+    ∃ mid, evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]),
+       .var .local (ofString "addr"), .const 1]) = (none, mid) ∧
+      ∀ k ∈ ([40, 72] : List Nat),
+        memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]),
+     .var .local (ofString "addr"), .const 1]) _) = _ at hr
+  obtain ⟨mid, hc, _, _, _⟩ := ignored_call_seq_returned hr
+  refine ⟨mid, hc, tx_header_words_of_fixed_frame hW hT ?_⟩
+  intro b hb hn
+  exact htab_set_recSlot_fixed_frame s mid S Nd b "ts" 8 _ _ hW.1.1 hT hb hn
+    (by decide) (fun hts hz => (hT.1.2.2.2.2.2.1 8 (by simp [tsTableSlots]) hts).resolve_left hz) hc
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Decompose a returning declared call for concrete continuation framing. -/
+theorem dec_call_return_inv_args {F : Type} {s t : PanSemStateFiniteExact 64 F}
+    {x fname : MlS} {sh : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    {v : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (some (.returned v), t)) :
+    ∃ values body callee retShape rv post u,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values ∧
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, retShape) ∧
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned rv), post) ∧
+      evaluateHOLFiniteState (setVarHOLFinite x rv {post with locals := s.locals}) cont = (some (.returned v), u) ∧
+      t.memory = u.memory := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h
+  split at h
+  · simp at h
+  · split at h
+    · simp at h
+    · rename_i optvalues values hargs optbody body callee retShape hl
+      split at h
+      · simp at h
+      · dsimp only at h
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => simp at h
+        | some r =>
+          cases r with
+          | returned rv =>
+            dsimp only at h
+            split at h
+            · rcases ht : evaluateHOLFiniteState
+                (setVarHOLFinite x rv {post with locals := s.locals}) cont with ⟨rc, u⟩
+              rw [ht] at h
+              cases rc with
+              | none => simp at h
+              | some r =>
+                cases r <;> try simp at h
+                rename_i w
+                obtain ⟨rfl, he⟩ := h
+                exact ⟨_, body, callee, retShape, rv, post, u, hargs, hl, hr, ht,
+                  congrArg (fun st => st.memory) he.symm⟩
+            · simp at h
+          | _ => simp at h
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
