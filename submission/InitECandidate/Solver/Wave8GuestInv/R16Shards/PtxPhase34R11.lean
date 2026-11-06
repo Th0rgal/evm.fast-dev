@@ -14317,4 +14317,94 @@ theorem receipt_dec_word_continuation_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- Concrete receipt suffix starting with cumulative-gas serialization. -/
+def receiptGasReturnCode : ProgHOL 64 :=
+  .seq
+    (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_word")
+      [.var .local (ofString "p"), .var .local (ofString "cumulative_gas")])
+    (.seq
+      (.assign .local (ofString "p")
+        (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+      (.decCall (ofString "bloom") .one (ofString "alloc") [.const 256]
+        (.seq
+          (.call (some (none, none)) (ofString "logs_bloom")
+            [.var .local (ofString "logs"), .var .local (ofString "bloom")])
+          (.seq
+            (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_bytes")
+              [.var .local (ofString "p"), .var .local (ofString "bloom"), .const 256])
+            (.seq
+              (.assign .local (ofString "p")
+                (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+              (.seq
+                (.call (some (some (.local, ofString "w"), none)) (ofString "encode_logs")
+                  [.var .local (ofString "p"), .var .local (ofString "logs")])
+                (.seq
+                  (.assign .local (ofString "p")
+                    (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+                  (.seq
+                    (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+                      [.var .local (ofString "start"), .var .local (ofString "p")])
+                    (.seq
+                      (.ite (.cmp .notEqual (.var .local (ofString "tx_type")) (.const 0))
+                        (.seq
+                          (.storeByte (.op .sub [.var .local (ofString "start"), .const 1])
+                            (.var .local (ofString "tx_type")))
+                          (.return (.rstruct
+                            [.op .sub [.var .local (ofString "start"), .const 1],
+                             .op .add [.var .local (ofString "w"), .const 1]]))) .skip)
+                      (.return (.rstruct [.var .local (ofString "start"),
+                        .var .local (ofString "w")])))))))))))
+
+/-- The complete status-to-return suffix preserves the receipt entry frame. -/
+theorem receipt_status_gas_return_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (he : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (start p logs gas old succeeded : BitVec 64) (bound : Nat) (v : ValueHOL 64)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hg : mid.locals.lookup (ofString "cumulative_gas") = some (.val (.word gas)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hsu : mid.locals.lookup (ofString "succeeded") = some (.val (.word succeeded)))
+    (hle : start.toNat + 9 ≤ p.toNat)
+    (hfresh : globN s "heap_ptr" + 1 ≤ start.toNat ∧ p.toNat + 275 + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hr : evaluateHOLFiniteState mid
+      (.seq
+        (.ite (.cmp .notEqual (.var .local (ofString "succeeded")) (.const 0))
+          (.seq (.storeByte (.var .local (ofString "p")) (.const 1))
+            (.assign .local (ofString "w") (.const 1)))
+          (.seq (.storeByte (.var .local (ofString "p")) (.const 128))
+            (.assign .local (ofString "w") (.const 1))))
+        (.seq (.assign .local (ofString "p")
+          (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+          receiptGasReturnCode)) = (some (.returned v), post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  apply receipt_status_advance_continuation_frame he p old succeeded hp hw hsu
+    ⟨by omega, by omega⟩ _ v ?_ hr
+  intro next q he' hq hp' hw' hkeep hr'
+  apply receipt_gas_alloc_bloom_return_frame hA hma he' start q logs gas 1#64 bound v
+  · rw [hkeep _ (by decide) (by decide)]; exact hs
+  · exact hp'
+  · rw [hkeep _ (by decide) (by decide)]; exact hl
+  · rw [hkeep _ (by decide) (by decide)]; exact hg
+  · exact hw'
+  · omega
+  · exact ⟨hfresh.1, by omega⟩
+  · exact hnz
+  · exact hL
+  · exact hD
+  · exact hfit
+  · exact hr'
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
