@@ -17496,4 +17496,85 @@ theorem op_log_no_growth_tail_list_protection_g09 {F : Type}
       dsimp only at hd ⊢
       rcases hd with hd | hd | hd | hd <;> omega
 
+/-- Every enumerated record interval is an exclusive frame object, including null-list views. -/
+theorem op_log_record_is_frame_object_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {ec : Ivl} {i : Nat}
+    (hi : i < memW s (memW s (ec.1 + 88) + 8)) :
+    (memW s (memW s (memW s (ec.1 + 88)) + 8*i), 40) ∈ frameObjects s ec := by
+  apply List.mem_append_right
+  unfold frameLogObjects
+  apply List.mem_flatMap.2
+  refine ⟨i, List.mem_range.2 hi, ?_⟩
+  apply List.mem_filter.2
+  exact ⟨by simp [logRecordIvls], by simp⟩
+
+/-- Suspended record bounds and separation follow directly from frame-object ownership. -/
+theorem op_log_no_growth_tail_record_protection_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {head : Ivl} {tail : List Ivl}
+    (l p n cap : BitVec 64) (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) :
+    ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let o := (memW s (memW s (memW s (ec.1 + 88)) + 8*i), 40)
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8*n.toNat + 8) := by
+  obtain ⟨_, _, hFW, _, _⟩ := op_log_old_ownership_g09 hinv
+  intro ec hec i hi
+  have hmem : ec ∈ evmChain s := by rw [hcons]; exact List.mem_cons_of_mem _ hec
+  have ho := op_log_record_is_frame_object_g09 hi
+  have hb := (frameWF_bounds hA.2 (hFW ec hmem)).2.2.2 _ ho
+  have hd := op_log_no_growth_tail_object_protection_g09 l p n cap hinv hcons hl hm0 hm16 hlt ec hec _ ho
+  refine ⟨?_, hd⟩
+  rcases hb with hz | hb
+  · contradiction
+  · exact hb
+
+/-- In-place execution derives all old-state protection and store domains from the invariant. -/
+theorem op_log_no_growth_execution_of_owned_log_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (head : Ivl) (tail : List Ivl) (S : List Nat)
+    (e l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8))
+    (hnewMsg : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls s log.toNat,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hnew : (logOwnedIvls s log.toNat).Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls s log.toNat))
+    (hnewWorld : ∀ Nd, WorldTypedWith s S Nd →
+      IvlsDisj (logOwnedIvls s log.toNat) (worldOwned s S Nd))
+    (hclock : s.clock ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hm0w : s.memory l = .word p) (hm8w : s.memory (l + 8#64) = .word n)
+    (hm16w : s.memory (l + 16#64) = .word cap)
+    (hne : l ≠ l + 8#64) (hHM : HeadMemAligned s) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append)
+    out.1 = some (.returned (.val (.word 0))) ∧
+      EvmInv out.2 ∧ evmR out.2 = evmR s ∧ HeadMemAligned out.2 := by
+  have hm : head ∈ evmChain s := by rw [hcons]; exact List.mem_cons_self
+  obtain ⟨_, _, hFW, hpw, _⟩ := op_log_old_ownership_g09 hinv
+  have hpwh : (frameObjects s head).Pairwise Disj := by
+    rw [hcons, List.map_cons, List.flatten_cons, List.pairwise_append] at hpw
+    exact hpw.1
+  obtain ⟨hd0, hd8, hd16, hdslot⟩ := op_log_no_growth_store_domains_g09 l p n cap
+    (hFW head hm) hl hm0 hm16 hlt
+  exact op_log_no_growth_execution_from_store_world_g09 s head tail S e l p n cap log
+    hA hinv hpwh hcons hl hn hm0 hm16 hnonnull hlt hdisj hd8 hdslot hlog hdheader
+    hdbuffer hnewMsg hnew hnewOld hnewWorld
+    (op_log_no_growth_frame_protection_g09 l p n cap hA hinv hcons hl hm0 hm16 hlt)
+    (op_log_no_growth_tail_list_protection_g09 l p n cap hA hinv hcons hl hm0 hm16 hlt)
+    (op_log_no_growth_tail_record_protection_g09 l p n cap hA hinv hcons hl hm0 hm16 hlt)
+    hclock he hlg hde hme hd0 hd16 hm0w hm8w hm16w hne hHM
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

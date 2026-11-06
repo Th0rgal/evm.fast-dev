@@ -12577,4 +12577,21 @@ theorem heap_step_fixed_objects_g10 {F : Type}
   have hne : ofString gn.1 ≠ ofString "heap_ptr" := by revert gn hgn; decide
   rw [hglob gn.1 hne]
 
+theorem heap_step_world_typed_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (ha : ArenaReady s) (hap : ArenaReady post) (hw : WorldTypedWith s S Nd)
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hm : post.memory = s.memory) (hbe : post.be = s.be)
+    (hg : GlobalsKept ["heap_ptr"] s post) : WorldTypedWith post S Nd := by
+  have hglob : ∀ nm : String, ofString nm ≠ ofString "heap_ptr" → globN post nm = globN s nm := by
+    intro nm hne
+    unfold globN
+    rw [← hg (ofString nm) (by simp [hne])]
+  apply world_typed_heap_transport_g10 ha hap hh (hglob "scratch_ptr" (by decide))
+    ?_ hm hbe (heap_step_fixed_objects_g10 ha hap hw hm hbe hg) hw
+  intro g hmem
+  apply hglob
+  revert g hmem
+  decide
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
