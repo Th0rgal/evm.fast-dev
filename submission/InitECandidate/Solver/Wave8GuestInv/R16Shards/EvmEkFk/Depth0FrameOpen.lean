@@ -8321,4 +8321,23 @@ theorem protected_word_after_htab_exit {F : Type}
   · exact allocated_le_2pow64 hAs.2 ha
   · exact ⟨Nat.le_refl _, Nat.le_refl _⟩
 
+/-- Fixed-object typing supplies allocation and separation for root words. -/
+theorem fixed_word_after_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (a : Nat) (i : Ivl)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hi : i ∈ fixedObjects s)
+    (hin : Inside (a, 8) i.1 (i.1 + i.2)) (hal : a % 8 = 0)
+    (hx : HtabExit s post) : memW post a = memW s a := by
+  have hiPos : i.2 ≠ 0 := by unfold Inside at hin; omega
+  have hai := ((hW.2.2.1.1 i hi).resolve_left hiPos).1
+  have ha : Allocated s (a, 8) := by
+    rcases hai with hai | hai
+    · left; unfold Inside at hai hin ⊢; omega
+    · right; unfold Inside at hai hin ⊢; omega
+  apply protected_word_after_htab_exit a hAs (hW.1.2.1 _ ht).1 ha hal
+  · intro j hj
+    have hd := Disj.flip (((hW.1.2.1 _ ht).2 j hj).2 i hi)
+    apply InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.disj_of_inside_left hin hd
+  · exact hx
+
 end HeadStore
