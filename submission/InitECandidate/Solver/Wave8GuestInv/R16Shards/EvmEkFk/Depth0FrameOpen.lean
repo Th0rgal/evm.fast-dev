@@ -8674,4 +8674,37 @@ theorem get_code_access_tail_of_preloads {F : Type}
     rw [htl'']
     simp [evalHOLExact, st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
 
+/-- World typing separates each typed-record word from key-buffer writes. -/
+theorem typed_record_word_key_separation {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (g : String) (sz k : Nat) (hg : (g,sz) ∈ typedRecords)
+    (hn : globN s g ≠ 0) (hsk : globN s "sk_buf" ≠ 0) (hk : k + 8 ≤ sz) :
+    globN s g + k + 8 ≤ 2 ^ 64 ∧
+      Disj (globN s g + k, 8) (globN s "sk_buf", 52) := by
+  have hi : (globN s g, sz) ∈ worldTypedIvls s S Nd := by
+    unfold worldTypedIvls
+    simp only [List.mem_append]
+    exact Or.inl (Or.inl (Or.inl (Or.inl (Or.inr (List.mem_map.2 ⟨(g,sz), hg, by simp [hn]⟩)))))
+  have hf : (globN s g, sz) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.2
+    refine ⟨(g,sz), ?_, ?_⟩
+    · exact (show ∀ r ∈ typedRecords, r ∈ globalBuffers by decide) _ hg
+    · simp [hn]
+  have hbound : globN s g + sz ≤ 2 ^ 64 := by
+    rcases hW.2.2.1.1 _ hf with hz | ⟨ha, _⟩
+    · dsimp at hz; omega
+    · exact allocated_le_2pow64 hA.2 ha
+  have hd := bufferRegion_disj_le hW ("sk_buf",64) (by decide) (by decide) 52 (by decide) _ hi
+  have hd' : Disj (globN s g, sz) (globN s "sk_buf",52) := by
+    simpa [bufferRegion, hsk] using Disj.flip hd
+  refine ⟨by omega, ?_⟩
+  unfold Disj at hd' ⊢
+  dsimp only at hd' ⊢
+  omega
+
 end HeadStore
