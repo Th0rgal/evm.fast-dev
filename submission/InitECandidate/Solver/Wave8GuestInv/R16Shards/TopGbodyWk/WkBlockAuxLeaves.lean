@@ -11348,4 +11348,54 @@ theorem wk_add_balance_change :
     WorldKeeps WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
       (ofString "add_balance_change") := WkBal.wk_add_balance_change
 
+theorem worldKeepsSc_of_scratch_kept {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)} {fn : MlS}
+    (h : WorldKeeps P R gw keep NoExtra fn) (hsp : ofString "scratch_ptr" ∉ gw.map ofString) :
+    WorldKeepsSc P R gw keep NoExtra fn := by
+  obtain ⟨params, body, ret, hl, hb⟩ := h
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hp hex hnt hres
+  have hs := hb s hc hp hex hnt hres
+  refine ⟨hs, ?_⟩
+  have hg := hs.2.2.1 (ofString "scratch_ptr") hsp
+  exact Nat.le_of_eq (globN_eq_of_lookup hg)
+
+theorem wk_add_nonce_change :
+    WorldKeeps WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_nonce_change") := WkBal.wk_add_nonce_change
+
+theorem wk_add_code_change :
+    WorldKeeps WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_code_change") := WkBal.wk_add_code_change
+
+theorem wk_add_storage_write :
+    WorldKeeps WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_storage_write") := WkBal.wk_add_storage_write
+
+theorem wkSc_add_balance_change :
+    WorldKeepsSc WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_balance_change") :=
+  worldKeepsSc_of_scratch_kept wk_add_balance_change (by decide)
+
+theorem wkSc_add_nonce_change :
+    WorldKeepsSc WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_nonce_change") :=
+  worldKeepsSc_of_scratch_kept wk_add_nonce_change (by decide)
+
+theorem wkSc_add_code_change :
+    WorldKeepsSc WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_code_change") :=
+  worldKeepsSc_of_scratch_kept wk_add_code_change (by decide)
+
+theorem wkSc_add_storage_write :
+    WorldKeepsSc WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_storage_write") :=
+  worldKeepsSc_of_scratch_kept wk_add_storage_write (by decide)
+
+theorem wkSc_bal_remove_change :
+    WorldKeepsSc BalChangeArg (fun _ => []) [] stdKeep NoExtra
+      (ofString "bal_remove_change") :=
+  worldKeepsSc_of_scratch_kept wk_bal_remove_change (by decide)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
