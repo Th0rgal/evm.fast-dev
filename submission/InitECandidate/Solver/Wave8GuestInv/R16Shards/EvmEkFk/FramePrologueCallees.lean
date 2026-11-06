@@ -11400,6 +11400,58 @@ theorem precompile_sha256_allocated_tail {F : Type}
     exact lt_of_le_of_lt (le_trans hfresh.2 hl) hc64
   exact precompile_sha256_tail_step next pad stp out len ptr hc hav hp hs hn ho hbound hpb hob
 
+theorem precompile_sha256_alloc_tail_step {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad stp out len : BitVec 64) (ptr : ExpHOL 64)
+    (hi : EvmInv s)
+    (hhp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word out)))
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hpad : pad.toNat ≠ 0) (hst : stp.toNat ≠ 0)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word len)))
+    (hbound : len.toNat+64 < 2^64) :
+    let tail : ProgHOL 64 := .seq
+      (.call (some (none,none)) (ofString "sha256") [ptr,.var .local (ofString "n"),.var .local (ofString "out")])
+      (.seq (.store (.op .add [.var .global (ofString "ev"),.const 120]) (.var .local (ofString "out")))
+        (.seq (.store (.op .add [.var .global (ofString "ev"),.const 128]) (.const 32)) (.return (.const 0))))
+    Resumes (evaluateHOLFiniteState s (.decCall (ofString "out") .one (ofString "alloc") [.const 32] tail)).1 →
+    EvmStepCC frameStartGw s
+      (evaluateHOLFiniteState s (.decCall (ofString "out") .one (ofString "alloc") [.const 32] tail)).2 := by
+  intro tail hr
+  obtain ⟨next,ho,hh,hwords,hstep,hres,hstate,hm,hb,hl⟩ :=
+    transfer_decCall_alloc_exact_spec s (ofString "out") tail out 32 (by simp) hi hhp hr
+  have hpn : next.globals.lookup (ofString "sha_pad") = some (.val (.word pad)) := by
+    rw [←hstep.1.2.2.1 _ (by decide)]; exact hp
+  have hsn : next.globals.lookup (ofString "sha_st") = some (.val (.word stp)) := by
+    rw [←hstep.1.2.2.1 _ (by decide)]; exact hs
+  have hnn : next.locals.lookup (ofString "n") = some (.val (.word len)) := by
+    rw [hl _ (by decide)]; exact hn
+  have fresh : Inside (out.toNat,32) (globN s "heap_ptr") (globN next "heap_ptr") := by
+    change globN s "heap_ptr" ≤ out.toNat ∧ out.toNat+32 ≤ globN next "heap_ptr"
+    rw [hh]
+    simp [globN,hhp]
+  have hrn : Resumes (evaluateHOLFiniteState next tail).1 := hres ▸ hr
+  have hc := precompile_sha256_allocated_tail pad stp out len ptr hi hstep hm hb fresh
+    hstep.1.1.1.1.code hpn hsn hpad hst hnn ho hbound
+    (by intro ht; exact EvmFrameSpecs.not_resumes_timeOut (ht ▸ hrn))
+    (Or.inr (Or.inr (Or.inr hrn)))
+  have hs' : EvmStepCC frameStartGw s next := precompile_step_weaken
+    (by intro k hk; simp only [List.map_cons,List.map_nil,List.mem_singleton] at hk
+        subst k; simp [frameStartGw]) hstep
+  have both : EvmStepCC frameStartGw s (evaluateHOLFiniteState next tail).2 :=
+    ⟨⟨hc.1.1,le_trans hs'.1.2.1 hc.1.2.1,
+      fun k hk => (hs'.1.2.2.1 k hk).trans (hc.1.2.2.1 k hk),
+      hc.1.2.2.2.trans hs'.1.2.2.2⟩,
+      by
+        intro ec hec
+        obtain ⟨a,b,c,d⟩ := hs'.2 ec hec
+        obtain ⟨a',b',c',d'⟩ := hc.2 ec (hs'.1.2.2.2.symm ▸ hec)
+        exact ⟨a'.trans a,b'.trans b,c'.trans c,d'.trans d⟩⟩
+  change EvmStepCC frameStartGw s (evaluateHOLFiniteState s
+    (.decCall (ofString "out") .one (ofString "alloc") [.const (BitVec.ofNat 64 32)] tail)).2
+  rw [hstate]
+  exact ⟨⟨localsFree_evmInv _ _ _ both.1.1,both.1.2.1,both.1.2.2.1,
+    (evmChain_with_locals _ _ _).trans both.1.2.2.2⟩,both.2⟩
+
 theorem precompile_identity_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (args : List (ExpHOL 64)) (n : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
