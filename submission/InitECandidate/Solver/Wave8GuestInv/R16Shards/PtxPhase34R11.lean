@@ -19287,4 +19287,51 @@ theorem htab_del_tx_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open private callee_param_two_r16 from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Lift deletion's fixed frame to a concrete ignored call with local table argument. -/
+theorem htab_del_local_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl)
+    (t : BitVec 64) (key : ExpHOL 64)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (ht : t.toNat ∈ S)
+    (hlt : s.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_del")
+      [.var .local (ofString "t"), key]) = (none, post)) : IvlUnhit s post b := by
+  classical
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases ha : evalListHOLFinite s [.var .local (ofString "t"), key] with _ | values
+  · rw [ha] at hr; cases hr
+  · simp only [ha] at hr
+    rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_del") values with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr
+      split at hr
+      · cases hr
+      · obtain ⟨v1, _, he1, _, hc_t, _⟩ := callee_param_two_r16 s (ofString "htab_del")
+          (ofString "t") (ofString "key") .one .one _ _
+          (by rw [hA.1.code]; exact EvmEkFk.lookup_htab_del_r16)
+          _ _ values body callee ret ha hl
+        have hv : v1 = .val (.word t) := by simpa [evalAt, evalHOLExact, hlt] using he1.symm
+        have hm : locN (callEntryStateHOLFinite s callee) "t" ∈ S := by
+          simpa [locN, callEntryStateHOLFinite, hc_t, hv] using ht
+        rcases hc : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, p⟩
+        rw [hc] at hr
+        cases r with
+        | none => cases hr
+        | some r =>
+          cases r <;> try (simp at hr)
+          rename_i v
+          split at hr
+          · have hu := htab_del_fixed_frame s p values body callee ret v S Nd b hA hT hm hb hbpos hl hc
+            have hp := (Prod.mk.inj hr).2
+            rw [← hp]
+            exact hu
+          · cases hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
