@@ -8266,4 +8266,33 @@ theorem protected_db_after_access_execution {F : Type}
     (access_argWF_of_world s S t callee hAs hW ht hloc) values v hl hb
   exact protected_db_after_access_call db t callee hAs hW h hdb ht hne hloc hx
 
+/-- Resume witness-code lookup after concrete access-table execution. -/
+theorem witness_return_after_access_execution {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db hash : BitVec 64) (t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (h : CodeDbPayloadStrong s S db.toNat) (hdb : db.toNat ∈ S) (ht : t ∈ S)
+    (hne : db.toNat ≠ t) (hloc : locN (callEntryStateHOLFinite s callee) "t" = t)
+    (hc : s.code = originalRuntimeCode) (values : List (ValueHOL 64)) (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "htab_set") values =
+      some (sourceFnBody Guest.Software.guestFn_htab_set, callee, .one))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (sourceFnBody Guest.Software.guestFn_htab_set) = (some (.returned v), post))
+    (hcode : post.code = originalRuntimeCode)
+    (hshape : post.eshapes.lookup (ofString "StateErr") = some .one)
+    (hload : evalHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (hhash : s.locals.lookup (ofString "code_hash") = some (.val (.word hash))) :
+    Ret {post with locals := s.locals}
+      (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+        [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  obtain ⟨hAp, hw, he⟩ := protected_db_after_access_execution db.toNat t callee
+    hAs hW h hdb ht hne hloc hc values v hl hb
+  apply get_code_ws_fallback_return_entry_strong {post with locals := s.locals} db hash
+    hcode hshape hAp ?_ hhash hw he
+  rw [evalHOLFinite_eq_toExact] at hload ⊢
+  exact hload
+
 end HeadStore

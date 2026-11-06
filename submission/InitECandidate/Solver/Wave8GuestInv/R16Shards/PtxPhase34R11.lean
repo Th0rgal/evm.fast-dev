@@ -15985,4 +15985,33 @@ theorem get_account_optional_restored_worldStep {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Account scratch-buffer writes preserve the transaction environment. -/
+theorem wsAcct_step_txWorld {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hs : WorldStep (bufRegions EvmEkFk.wsAcctBufs) ["heap_ptr", "scratch_ptr"]
+      R10Shards.P26_P28.stdKeep NoExtra s none post)
+    (hl : post.locals = s.locals) :
+    TxWorld post ∧ ∃ S' Nd', WorldTypedWith post S' Nd' := by
+  have hd := validBufList_disj EvmEkFk.validBufList_wsAcctBufs hT
+  obtain ⟨S', Nd', _, hT', _⟩ := hs.2.2.2.2 S Nd hT hd
+  have hz : ∀ i ∈ bufRegions EvmEkFk.wsAcctBufs s, i.2 = 0 → i.1 % 8 = 0 := by
+    intro i hi
+    obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hi
+    apply PtxP1.bufferRegion_zero_aligned
+    simp only [EvmEkFk.wsAcctBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
+    rcases hp with rfl | rfl | rfl <;> decide
+  have he := txEnv_preserved_by_worldStep hs (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp [R10Shards.P26_P28.stdKeep])
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+    (fun i hi => hd i hi _ (PtxP1.bo_mem_typed hW.2.bo_nz))
+    (bo_words hT.2.2.1 hW.2.bo_nz).2.1 hz hW.2 (locals := post.locals) (by rw [hl])
+  exact ⟨⟨PtxP1.worldOK_of_parts hs.1 hT', he⟩, S', Nd', hT'⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
