@@ -12315,4 +12315,36 @@ theorem alloc_return_buffer_bounds_g10 {F : Type}
   rw [← hpn]
   exact hi.1.2.2.2.2.2.2.1
 
+theorem epsA_alloc_buffer_g10 :
+    EvmPreservingSpecA (fun _ => True)
+      (fun s v post => post.memory = s.memory ∧
+        ∃ p : BitVec 64, v = .val (.word p) ∧ p.toNat = globN s "heap_ptr" ∧
+          p.toNat % 8 = 0 ∧ p.toNat + locN s "n" ≤ globN post "heap_ptr")
+      (ofString "alloc") := by
+  obtain ⟨params, body, rs, hl, hs⟩ := epsA_alloc_g10
+  rw [GuestTrapAndLookup.lookup_alloc] at hl
+  cases hl
+  refine ⟨_, _, _, GuestTrapAndLookup.lookup_alloc, ?_⟩
+  intro F s hc hi hw hp hlookup hnt
+  have h := hs s hc hi hw hp hlookup hnt
+  refine ⟨fun v hv => ?_, h.2⟩
+  obtain ⟨hiw, hch, hR, hm, p, hvp, hpn⟩ := h.1 v hv
+  obtain ⟨vals, hl⟩ := hlookup
+  have hlen : ∃ v0, vals = [v0] := by
+    have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
+      originalRuntimeCode.lookup (ofString "alloc") vals _ _ _ hl
+    simp only [Flapjack.lookupCodeHOLExact, GuestTrapAndLookup.lookup_alloc] at hx
+    rcases vals with _ | ⟨v0, _ | _⟩ <;> simp at hx
+    exact ⟨v0, rfl⟩
+  obtain ⟨v0, rfl⟩ := hlen
+  obtain ⟨_, _, n, rfl, hn⟩ := one_word_arg_lookup GuestTrapAndLookup.lookup_alloc hl
+  obtain ⟨p0, hp0⟩ := hi.1.2.2.2.2.2.2.2.2.2 "heap_ptr" (by decide)
+  change s.globals.lookup (ofString "heap_ptr") = some (.val (.word p0)) at hp0
+  have hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) =
+      (some (.returned v), (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).2) := by
+    exact Prod.ext hv rfl
+  obtain ⟨hv0, hp0n, hal, hb, _, _⟩ := alloc_return_buffer_bounds_g10 s p0 n hi hc hp0 hn v _ hr
+  refine ⟨hiw, hch, hR, hm, p0, hv0, hp0n, hal, ?_⟩
+  simpa only [locN, hn] using hb
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
