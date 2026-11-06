@@ -17127,4 +17127,35 @@ theorem op_log_no_growth_world_witness_g09 {F : Type}
   exact op_log_append_world_witness_g09 hA hinv hfresh
     (op_log_list_writes_owned_g09 hm) heff
 
+/-- Concrete in-place stores preserve the invariant's typed world without a supplied cell premise. -/
+theorem op_log_no_growth_store_world_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S : List Nat) (head : Ivl)
+    (l p n log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S) (hm : head ∈ evmChain s)
+    (hheader : memW s (head.1 + 88) = l.toNat)
+    (hbuffer : (frameLogs s head).1 = p.toNat)
+    (hroom : 8 * n.toNat + 8 ≤ (frameLogs s head).2)
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hl : l.toNat + 24 ≤ 2^64) (hp : p.toNat + 8 * n.toNat + 8 ≤ 2^64) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    ∃ Nd, WorldTypedWith s S Nd ∧ SameTypedCells s post S Nd ∧
+      (∀ ec ∈ evmChain s, FrameWF s S ec) ∧
+      ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj ∧
+      IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd) := by
+  dsimp only
+  apply op_log_no_growth_world_witness_g09 (fresh := []) hA hinv hm (by simp)
+  have heff := log_no_growth_final_effect_g09 s l p n log hA.1.memaddrs hd8 hdslot hl hp
+  apply heff.mono
+  intro i hi
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with rfl | rfl
+  · refine ⟨(memW s (head.1 + 88), 24), by simp, ?_, ?_⟩
+    · dsimp only; rw [hheader]; omega
+    · dsimp only; rw [hheader]; omega
+  · refine ⟨frameLogs s head, by simp, ?_, ?_⟩
+    · dsimp only; rw [hbuffer]; omega
+    · dsimp only; rw [hbuffer]; omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
