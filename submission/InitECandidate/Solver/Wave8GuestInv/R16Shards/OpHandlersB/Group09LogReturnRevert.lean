@@ -17743,4 +17743,33 @@ theorem op_log_fresh_disj_chain_messages_g09 {F : Type}
   · exact Or.inr (Or.inr (Or.inl (le_trans hm.2 hlo)))
   · exact Or.inr (Or.inr (Or.inr (le_trans hhi (le_trans hlim (le_trans hsp hm.1)))))
 
+/-- World ownership contains only empty intervals or currently allocated regions. -/
+theorem op_log_world_owned_allocated_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) {i : Ivl} (hi : i ∈ worldOwned s S Nd) :
+    i.2 = 0 ∨ Allocated s i := by
+  unfold worldOwned at hi
+  rcases List.mem_append.1 hi with hi | hi
+  · rcases List.mem_append.1 hi with hi | hi
+    · obtain ⟨t, ht, hfp⟩ := List.mem_flatMap.1 hi
+      exact Or.inr (((hWT.1.2.1 t ht).2 i hfp).1)
+    · rcases hWT.2.2.1.1 i hi with hz | ⟨ha, _⟩
+      · exact Or.inl hz
+      · exact Or.inr ha
+  · apply worldTypedIvls_allocated hWT
+    unfold InitECandidate.Solver.Wave8Contracts.M23.worldTypedIvls
+    exact List.mem_append_right _ hi
+
+/-- Fresh allocation bounds discharge full world ownership separation, including tries. -/
+theorem op_log_fresh_disj_world_owned_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {fresh : Ivl}
+    (hWT : WorldTypedWith s S Nd)
+    (hlo : globN s "heap_ptr" ≤ fresh.1)
+    (hhi : fresh.1 + fresh.2 ≤ globN s "scratch_ptr") :
+    ∀ i ∈ worldOwned s S Nd, Disj fresh i := by
+  intro i hi
+  rcases op_log_world_owned_allocated_g09 hWT hi with hz | ha
+  · exact Or.inr (Or.inl hz)
+  · exact op_log_fresh_disj_allocated_g09 hlo hhi ha
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
