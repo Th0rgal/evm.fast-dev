@@ -16162,4 +16162,70 @@ theorem phase2_htabExit_ts8_callEntry_message_tables {F : Type}
     (by change Inside (locN pre "m", 176) InitE.sourceBase (globN s "heap_ptr"); rw [hmt]; exact hin)
     hmt.symm hbe hts hn (hpt.trans ht) hxp
 
+/-- Pre-state insertion preserves a private witness in an arbitrary saved caller environment. -/
+theorem phase2_htab_set_bs72_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64))
+    (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const 72]), key, value])
+      (fun r s => r = none → PtxMessageTables {s with locals := saved} aa ak) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ := hp.2.1
+  have hw0 := (worldTypedWith_with_locals s saved s.clock S Nd).mp hw
+  obtain ⟨v1, _, _, he1, _, _, hct, _, _⟩ := R16WkAcctWs.callee_param_three s
+    (ofString "htab_set") (ofString "t") (ofString "key") (ofString "value")
+    .one .one .one _ _ (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set)
+    _ _ _ vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw, hbs⟩ := R16WkAcctWs.evalAt_loadG_nz s hp.1.1 "bs" 72
+    (by decide) v1 he1
+  have ht : locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s "bs" + 72) := by
+    simp [locN, callEntryStateHOLFinite, hct, htw]
+  have hn := FunSpec.at_lookup EvmFrameSpecs.nz_htab_set s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1) (by rw [hr]; simp)
+  rw [hr] at hn
+  have hnz : memW s (globN s "bs" + 72) ≠ 0 := by
+    rw [← ht]; exact hn (Or.inl ⟨v, rfl⟩)
+  have hmem := (R16WkAcctWs.nonValueSlot_bs72 s S hw0.1 hbs hnz).1
+  have harg : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1, ?_, ?_⟩
+    · rw [ht]
+      exact (htabWF_with_locals s callee (s.clock - 1) _).mpr (hw0.1.2.1 _ hmem).1
+    · rw [ht]
+      exact fun i hi => ((hw0.1.2.1 _ hmem).2 i hi).1
+  have hx := FunSpec.at_lookup htab_set_spec s hc vs body callee ret hl harg (by rw [hr]; simp)
+  rw [hr] at hx
+  have hbe := (PanRunBounded.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).2.2.1
+  rw [hr] at hbe
+  exact phase2_htabExit_bs72_callEntry_message_tables {s with locals := saved} post callee
+    ((arenaReady_with_locals s saved s.clock).mpr hp.1)
+    ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ hp.2.2 hbe hbs hnz ht (hx v rfl)
+
+/-- Compose the complete pre-state-read body while retaining the outer caller's tables. -/
+theorem phase2_record_pre_state_read_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat) :
+    Hoare (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read)
+      (fun r s => (∃ v, r = some (.returned v)) →
+        PtxMessageTables {s with locals := saved} aa ak) := by
+  change Hoare _ (.seq (.call (some (none, none)) (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+      .var .local (ofString "addr"), .const 1]) (.return (.const 0))) _
+  apply Hoare.seq (R := fun s => PtxMessageTables {s with locals := saved} aa ak)
+  · refine ⟨fun s hc hp hn => ⟨?_, ?_⟩⟩
+    · exact (phase2_htab_set_bs72_saved_tables saved aa ak
+        (.var .local (ofString "addr")) (.const 1)).run s hc hp hn
+    · intro _ hr
+      obtain ⟨v, hv⟩ := hr
+      exact (phase2_call0_ne_returned s (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+          .var .local (ofString "addr"), .const 1] v hv).elim
+  · refine ⟨fun s hc hp hn hr => ?_⟩
+    simpa [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact,
+      emptyLocalsHOLFinite] using hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

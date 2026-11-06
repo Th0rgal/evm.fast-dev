@@ -8214,4 +8214,56 @@ theorem protected_db_after_access_call {F : Type}
     (WkBal.htabWF_with_locals post _ _ db).2 hw, ?_⟩
   exact hp
 
+/-- Extract the access-table exit contract from its installed concrete body. -/
+theorem access_set_exit_of_execution {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (harg : HtabArgWF s)
+    (values : List (ValueHOL 64)) (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "htab_set") values =
+      some (sourceFnBody Guest.Software.guestFn_htab_set, s.locals, .one))
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_set) =
+      (some (.returned v), post)) : HtabExit s post := by
+  obtain ⟨params, body, ret, hlookup, hspec⟩ := SoloHtabSet.htab_set_spec_proof
+  have heq : ([(ofString "t", ShapeHOL.one), (ofString "key", ShapeHOL.one),
+      (ofString "value", ShapeHOL.one)], sourceFnBody Guest.Software.guestFn_htab_set, ShapeHOL.one) =
+      (params, body, ret) := Option.some.inj (lookup_htab_set.symm.trans hlookup)
+  rcases Prod.mk.inj heq with ⟨_, heq⟩
+  rcases Prod.mk.inj heq with ⟨hbody, hret⟩
+  subst body ret
+  have hx := hspec s hc harg ⟨values, hl⟩ (by rw [hb]; simp) v (by rw [hb])
+  simpa only [hb] using hx
+
+/-- World allocation and typing discharge the concrete access-call arguments. -/
+theorem access_argWF_of_world {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S : List Nat) (t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S) (ht : t ∈ S)
+    (hloc : locN (callEntryStateHOLFinite s callee) "t" = t) :
+    HtabArgWF (callEntryStateHOLFinite s callee) := by
+  refine ⟨localsFree_arenaReady s _ _ hAs, ?_, ?_⟩
+  · rw [hloc]
+    exact (WkBal.htabWF_with_locals s _ _ t).2 (hW.1.2.1 t ht).1
+  · rw [hloc]
+    intro i hi
+    exact ((hW.1.2.1 t ht).2 i hi).1
+
+/-- Protected database facts follow from the concrete installed access-table
+execution, rather than an assumed exit contract. -/
+theorem protected_db_after_access_execution {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (h : CodeDbPayloadStrong s S db) (hdb : db ∈ S) (ht : t ∈ S)
+    (hne : db ≠ t) (hloc : locN (callEntryStateHOLFinite s callee) "t" = t)
+    (hc : s.code = originalRuntimeCode) (values : List (ValueHOL 64)) (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "htab_set") values =
+      some (sourceFnBody Guest.Software.guestFn_htab_set, callee, .one))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (sourceFnBody Guest.Software.guestFn_htab_set) = (some (.returned v), post)) :
+    let resumed := {post with locals := s.locals}
+    ArenaReady resumed ∧ HtabWF resumed db ∧ NodeDbEntriesStrong resumed db := by
+  have hx := access_set_exit_of_execution (callEntryStateHOLFinite s callee) post hc
+    (access_argWF_of_world s S t callee hAs hW ht hloc) values v hl hb
+  exact protected_db_after_access_call db t callee hAs hW h hdb ht hne hloc hx
+
 end HeadStore
