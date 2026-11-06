@@ -8278,8 +8278,7 @@ theorem witness_return_after_access_execution {F : Type}
       some (sourceFnBody Guest.Software.guestFn_htab_set, callee, .one))
     (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
       (sourceFnBody Guest.Software.guestFn_htab_set) = (some (.returned v), post))
-    (hcode : post.code = originalRuntimeCode)
-    (hshape : post.eshapes.lookup (ofString "StateErr") = some .one)
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
     (hload : evalHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
       (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
     (hhash : s.locals.lookup (ofString "code_hash") = some (.val (.word hash))) :
@@ -8290,8 +8289,14 @@ theorem witness_return_after_access_execution {F : Type}
         v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
   obtain ⟨hAp, hw, he⟩ := protected_db_after_access_execution db.toNat t callee
     hAs hW h hdb ht hne hloc hc values v hl hb
+  have hm := PanRunBounded.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) (sourceFnBody Guest.Software.guestFn_htab_set)
+  rw [hb] at hm
+  have hcode : post.code = originalRuntimeCode := hm.1.trans hc
+  have hshape' : post.eshapes.lookup (ofString "StateErr") = some .one := by
+    rw [hm.2.2.2.2]; exact hshape
   apply get_code_ws_fallback_return_entry_strong {post with locals := s.locals} db hash
-    hcode hshape hAp ?_ hhash hw he
+    hcode hshape' hAp ?_ hhash hw he
   rw [evalHOLFinite_eq_toExact] at hload ⊢
   exact hload
 
