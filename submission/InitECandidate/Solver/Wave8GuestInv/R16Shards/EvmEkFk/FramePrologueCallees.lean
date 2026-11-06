@@ -11152,6 +11152,59 @@ theorem precompile_fresh_output_avoid {F : Type}
     obtain ⟨ec,hec,rfl⟩ := List.mem_map.mp hl
     exact hf ec hec j hjl
 
+theorem precompile_sha256_allocated_avoid {F : Type}
+    {s allocated : PanSemStateFiniteExact 64 F} (pad stp out : BitVec 64)
+    (hi : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s allocated)
+    (hm : allocated.memory = s.memory) (hb : allocated.be = s.be)
+    (hfresh : Inside (out.toNat,32) (globN s "heap_ptr") (globN allocated "heap_ptr"))
+    (hp : allocated.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : allocated.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hpad : pad.toNat ≠ 0) (hst : stp.toNat ≠ 0) :
+    Wave8Contracts.M23.EvmAvoids
+      (fun {_} _ => [(pad.toNat,128),(stp.toNat,64),(out.toNat,32)]) allocated := by
+  obtain ⟨ha,S,hat⟩ := (evmInv_iff_at s).1 hi
+  obtain ⟨Nd,htr,hatn⟩ := hat.2.2.2.2.2.2.2.2.2.1
+  have hout : ∀ a : BitVec 64, ¬ s.memaddrs a → allocated.memory a = s.memory a := by
+    intro a _; rw [hm]
+  have hbyte : ∀ b : Nat, b < 2^64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN allocated "heap_ptr") → memB allocated b = memB s b := by
+    intro b _ _; unfold memB; rw [hm,hb]
+  obtain ⟨hat',htr',hatn'⟩ := transfer_fixed_witness_of_accumulated_frame hi hat htr hatn hstep hb hout hbyte
+  have hwt : WorldTypedWith s S Nd := ⟨hat.1.1,hat.1.2.1,hat.1.2.2.1,htr⟩
+  obtain ⟨hw,hf,_⟩ := transfer_fresh_disjoint_of_accumulated_frame hi hstep hwt hb hout hbyte (Or.inr hfresh)
+  have wt' : WorldTypedWith allocated S Nd := ⟨hat'.1.1,hat'.1.2.1,hat'.1.2.2.1,htr'⟩
+  have hbuf : ∀ gn : String × Nat, gn ∈ globalBuffers →
+      gn.1 ∉ typedRecords.map Prod.fst →
+      ∀ j ∈ worldTypedIvls allocated S Nd ++ ((evmChain allocated).map (frameObjects allocated)).flatten,
+      Disj (bufferRegion allocated gn) j := by
+    intro gn hg hu j hj
+    rcases List.mem_append.mp hj with hj|hj
+    · exact bufferRegion_disj_le wt' gn hg hu gn.2 le_rfl j hj
+    · obtain ⟨l,hl,hjl⟩ := List.mem_flatten.mp hj
+      obtain ⟨ec,hec,rfl⟩ := List.mem_map.mp hl
+      have hfix : bufferRegion allocated gn ∈ fixedObjects allocated := by
+        unfold fixedObjects
+        apply List.mem_append.mpr; left
+        apply List.mem_append.mpr; left
+        apply List.mem_append.mpr; left
+        exact List.mem_map.mpr ⟨gn,hg,rfl⟩
+      exact ((hat'.2.2.2.2.2.2.2.2.1 ec hec j hjl).2 _ hfix).flip
+  have hp' : bufferRegion allocated ("sha_pad",128) = (pad.toNat,128) := by
+    simp [bufferRegion,globN,hp,hpad]
+  have hs' : bufferRegion allocated ("sha_st",64) = (stp.toNat,64) := by
+    simp [bufferRegion,globN,hs,hst]
+  refine ⟨hstep.1.1.1,S,hat',Nd,htr',?_⟩
+  intro i him j hjm
+  simp only [List.mem_cons,List.not_mem_nil,or_false] at him
+  rcases him with rfl|rfl|rfl
+  · rw [←hp']; exact hbuf ("sha_pad",128) (by decide) (by decide) j hjm
+  · rw [←hs']; exact hbuf ("sha_st",64) (by decide) (by decide) j hjm
+  · rcases List.mem_append.mp hjm with hj|hj
+    · exact hw j (worldTypedIvls_sub_worldOwned allocated S Nd j hj)
+    · obtain ⟨l,hl,hjl⟩ := List.mem_flatten.mp hj
+      obtain ⟨ec,hec,rfl⟩ := List.mem_map.mp hl
+      exact hf ec hec j hjl
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
