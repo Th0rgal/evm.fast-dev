@@ -14709,4 +14709,52 @@ theorem encode_receipt_body_heapByteEff {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.lookupCode_four_words WkBlockTxEnc.receiptKeccakIvls
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- The concrete receipt call preserves both block-output backing pointers. -/
+theorem encode_receipt_backing (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4ReceiptReady s) (hb : TxBacking s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs") :
+    TxBacking post := by
+  have hl' := hl
+  rw [hc] at hl'
+  have hbr : body = GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_encode_receipt ∧
+      ret = .comb [.one, .one] := by
+    have hx := lookupCodeHOLFinite_eq_some originalRuntimeCode.lookup
+      (ofString "encode_receipt") vs body callee ret hl'
+    simp only [lookupCodeHOLExact, WkBlockTxEnc.lookup_encode_receipt] at hx
+    split at hx <;> simp_all
+  have hbody := hbr.1
+  have hl'' := hl'
+  rw [hbr.1, hbr.2] at hl''
+  obtain ⟨tx, succeeded, gas, logs, _, _, hsu, hgas, hlogs⟩ :=
+    WkBlockTxEnc.lookupCode_four_words (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) WkBlockTxEnc.lookup_encode_receipt hl''
+  have hlogN : locN (callEntryStateHOLFinite s callee) "logs" = logs.toNat := by
+    simp [locN, callEntryStateHOLFinite, hlogs]
+  have hL : LogsListOK (callEntryStateHOLFinite s callee) logs.toNat := by
+    rw [← hlogN, hg]
+    exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
+  have hD : LogsDisjFixed (callEntryStateHOLFinite s callee) logs.toNat := by
+    rw [← hlogN, hg]; exact hp.2.2.1
+  have he := encode_receipt_body_heapByteEff (callEntryStateHOLFinite s callee) post
+    logs gas succeeded v (PtxP1.worldOK_callEntry hp.1.1.1 callee).1 hlogs hgas hsu hL hD
+    (by rw [← hbody]; exact hr)
+  apply encode_receipt_backing_of_heapByteEff h s vs body callee ret v post hc hp hb hl hr hg
+  change WkBlockTxEnc.HeapByteEff (callEntryStateHOLFinite s callee) post
+    (WkBlockTxEnc.receiptKeccakIvls (callEntryStateHOLFinite s callee)) ["heap_ptr"]
+  exact he
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
