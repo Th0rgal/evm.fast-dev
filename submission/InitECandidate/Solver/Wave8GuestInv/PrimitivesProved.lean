@@ -87,6 +87,7 @@ import InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.DecodeTransaction
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeTransaction
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.RecoverSender
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -176,7 +177,7 @@ theorem primitives : Primitives where
   «ro_heap_mark» := R10Ports.ro_heap_mark
   «wk_mpt_new» := R13Shards.WkShard01.«wk_mpt_new»
   «rt_mpt_new» := R13Shards.WkShard01.«rt_mpt_new»
-  «mk_mpt_set» := «mk_mpt_set»
+  «mk_mpt_set» := R16Shards.MptC10C12.«mk_mpt_set»
   «wk_rlp_encode_word» := Merged.wk_rlp_encode_word
   «gbody_build_mpt_indexed» := «gbody_build_mpt_indexed»
   «fb_nodedb_lookup» := Merged.fb_nodedb_lookup
