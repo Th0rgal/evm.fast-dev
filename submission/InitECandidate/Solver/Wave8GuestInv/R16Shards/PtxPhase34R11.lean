@@ -14276,4 +14276,45 @@ theorem receipt_status_advance_continuation_frame {F : Type}
     simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hnw]
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- A word-local scope transports the heap frame through its returning body
+and through restoration of the caller's local binding. -/
+theorem receipt_dec_word_continuation_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (name : MlS) (e : ExpHOL 64)
+    (tail : ProgHOL 64) (v : ValueHOL 64)
+    (hcont : ∀ (w : BitVec 64) (final : PanSemStateFiniteExact 64 F),
+      evalAt mid e = some (.val (.word w)) →
+      HeapByteEff s (setVarHOLFinite name (.val (.word w)) mid) R gw →
+      evaluateHOLFiniteState (setVarHOLFinite name (.val (.word w)) mid) tail =
+        (some (.returned v), final) → HeapByteEff s final R gw)
+    (hr : evaluateHOLFiniteState mid (.dec name .one e tail) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  rw [evaluateHOLFiniteState_dec_total] at hr
+  dsimp only at hr
+  split at hr
+  · cases hr
+  · rename_i value hev
+    split at hr
+    · rename_i hshape
+      have hw : ∃ w : BitVec 64, value = .val (.word w) := by
+        cases value with
+        | val z => cases z with
+          | word w => exact ⟨w, rfl⟩
+        | _ => simp [shapeOfHOLExact, shapeEqHOL] at hshape
+      obtain ⟨w, rfl⟩ := hw
+      rcases hb : evaluateHOLFiniteState (setVarHOLFinite name (.val (.word w)) mid) tail with
+        ⟨r, final⟩
+      rw [hb] at hr
+      have hf := hcont w final hev (he.locals_clock _ _)
+        (by rw [← (Prod.mk.inj hr).1]; exact hb)
+      have hp := (Prod.mk.inj hr).2.symm
+      rw [hp]
+      exact hf.locals_clock _ _
+    · cases hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
