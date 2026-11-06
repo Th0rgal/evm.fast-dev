@@ -10705,6 +10705,60 @@ theorem precompile_sha256_blocks_padding_effect {F : Type}
       (by rw [hgn,hgm]; exact hp) hrem (by rw [hgn,hgm]; exact hs)
       (by rw [hln _ (by decide),hlm _ (by decide)]; exact ho) hremb hpad hob hntn hrn
 
+open R10Shards.P26_P28 in
+theorem precompile_sha256_body_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad stp out len : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (ho : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hbound : len.toNat + 64 < 2^64) (hpad : pad.toNat + 128 ≤ heapEnd)
+    (hob : out.toNat + 32 < 2^64)
+    (hnt : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256)).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256)).1 = none ∨
+      Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256)).1) :
+    ByteEff s (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256)).2
+      [(pad.toNat,128),(stp.toNat,64),(out.toNat,32)] := by
+  change ByteEff s (evaluateHOLFiniteState s (.seq
+    (.call (some (none,none)) (ofString "sha256_state_init") [.var .global (ofString "sha_st")]) _)).2 _
+  have he := precompile_sha256_init_call_effect s stp (.var .global (ofString "sha_st")) hc hi
+    (by simp [evalHOLFinite, evalHOLExact, hs])
+  refine precompile_byteEff_seq_resumes s _ _ _ hnt hr (fun _ _ => he.mono ?_) ?_
+  · intro i hi hpos
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact ⟨_, by simp, le_rfl, le_rfl⟩
+  · intro m run hntm hrm
+    have hloc := precompile_call0_locals_on_flow s (ofString "sha256_state_init")
+      [.var .global (ofString "sha_st")] (by rw [run])
+    rw [run] at he hloc
+    refine precompile_byteEff_dec_resumes m _ _ _ _ _ hntm hrm ?_
+    intro val hval hntb hrb
+    change some (.val (.word (0 : BitVec 64))) = some val at hval
+    injection hval with hval
+    subst val
+    apply precompile_sha256_blocks_padding_effect
+      (setVarHOLFinite (ofString "i") (.val (.word 0)) m) pad stp out len
+    · exact he.code.trans hc
+    · exact guestInv_setVar _ _ m (guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi)
+    · change m.globals.lookup _ = _
+      rw [he.globals]; exact hp
+    · change m.globals.lookup _ = _
+      rw [he.globals]; exact hs
+    · simp only [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "i" ≠ ofString "out" by decide, if_false]
+      rw [hloc]; exact ho
+    · simp only [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "i" ≠ ofString "len" by decide, if_false]
+      rw [hloc]; exact hl
+    · exact ⟨0, by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE], by simp⟩
+    · exact hbound
+    · exact hpad
+    · exact hob
+    · exact hntb
+    · exact hrb
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
