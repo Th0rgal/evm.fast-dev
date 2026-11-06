@@ -8857,6 +8857,27 @@ theorem pre_identity_body_step :
   simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
     show ofString "w" ≠ ofString "n" by decide] using hn
 
+theorem lookup_pre_identity :
+    originalRuntimeCode.lookup (ofString "pre_identity") =
+      some ([], sourceFnBody Guest.Software.guestFn_pre_identity, .one) :=
+  lookup_of_guestAst_getElem 823 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_pre_identity) rfl
+
+theorem ek_cc_pre_identity :
+    EvmKeeps EvmInv frameStartGw (ofString "pre_identity") ∧
+      ChainCellsKept EvmInv (ofString "pre_identity") := by
+  constructor
+  · refine ⟨_, _, _, lookup_pre_identity, ?_⟩
+    intro F s hcode hi hex hnt hres
+    exact (pre_identity_body_step s hcode hi hnt (Or.inr (Or.inr (Or.inr hres)))).1
+  · refine ⟨_, _, _, lookup_pre_identity, ?_⟩
+    intro F s hcode hi hex hnt hres
+    exact (pre_identity_body_step s hcode hi hnt (Or.inr (Or.inr (Or.inr hres)))).2
+
+theorem pre_identity_call_step :
+    EvmProgStep frameStartGw (.call (some (none, none)) (ofString "pre_identity") []) :=
+  precompile_step_call0 ek_cc_pre_identity.1 ek_cc_pre_identity.2 []
+
 theorem run_precompile_body_step_of_dispatch (h : PrecompileDispatchSpecs) :
     EvmProgStep frameStartGw (sourceFnBody Guest.Software.guestFn_run_precompile) := by
   dsimp only [sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_run_precompile,
