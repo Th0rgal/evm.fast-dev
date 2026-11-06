@@ -10499,6 +10499,43 @@ theorem precompile_sha256_blocks_body_control {F : Type}
       simpa only [run] using hn
     · exact hc
 
+theorem precompile_sha256_blocks_normal_remainder {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len : BitVec 64)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : ∃ i : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word i)) ∧ i.toNat ≤ len.toNat)
+    (hbound : len.toNat + 64 < 2^64) :
+    let loop := ProgHOL.while
+      (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"), .const 64]))
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64])))
+    (evaluateHOLFiniteState s loop).1 = none →
+    let post := (evaluateHOLFiniteState s loop).2
+    post.locals.lookup (ofString "len") = some (.val (.word len)) ∧
+      ∃ i : BitVec 64, post.locals.lookup (ofString "i") = some (.val (.word i)) ∧
+        i.toNat ≤ len.toNat ∧ len.toNat-i.toNat < 64 := by
+  dsimp only
+  intro hr
+  let P := fun (t : PanSemStateFiniteExact 64 F) =>
+    t.locals.lookup (ofString "len") = some (.val (.word len)) ∧
+    ∃ i : BitVec 64, t.locals.lookup (ofString "i") = some (.val (.word i)) ∧ i.toNat ≤ len.toNat
+  have he := precompile_while_normal_exit P _ _ ?_ ?_ s ⟨hl,hx⟩ hr
+  · obtain ⟨⟨hlp,i,hip,hib⟩, hguard⟩ := he
+    exact ⟨hlp, i, hip, hib, precompile_sha256_blocks_exit_remainder _ len i hlp hip hib hbound hguard⟩
+  · intro t ht
+    exact ht
+  · intro t ht ha
+    obtain ⟨hlt,i,hit,hib⟩ := ht
+    refine ⟨(precompile_sha256_blocks_body_control t).1, ?_⟩
+    intro hflow
+    rcases hflow with hflow|hflow
+    · have hb := precompile_sha256_blocks_active_bound t len i hlt hit hib hbound ha
+      obtain ⟨hln,hin,hbn⟩ := precompile_sha256_blocks_body_index t len i hlt hit hb hflow
+      exact ⟨hln,i+64,hin,hbn⟩
+    · exact False.elim ((precompile_sha256_blocks_body_control t).2 hflow)
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
