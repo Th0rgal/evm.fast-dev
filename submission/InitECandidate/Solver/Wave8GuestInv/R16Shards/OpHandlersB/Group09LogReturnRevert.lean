@@ -17577,4 +17577,59 @@ theorem op_log_no_growth_execution_of_owned_log_g09 {F : Type}
     (op_log_no_growth_tail_record_protection_g09 l p n cap hA hinv hcons hl hm0 hm16 hlt)
     hclock he hlg hde hme hd0 hd16 hm0w hm8w hm16w hne hHM
 
+/-- In-place append derives header/buffer separation from input object ownership. -/
+theorem op_log_no_growth_execution_of_new_ownership_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (head : Ivl) (tail : List Ivl) (S : List Nat)
+    (e l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8))
+    (hnewMsg : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls s log.toNat,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hnew : (logOwnedIvls s log.toNat).Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls s log.toNat))
+    (hnewWorld : ∀ Nd, WorldTypedWith s S Nd →
+      IvlsDisj (logOwnedIvls s log.toNat) (worldOwned s S Nd))
+    (hclock : s.clock ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hm0w : s.memory l = .word p) (hm8w : s.memory (l + 8#64) = .word n)
+    (hm16w : s.memory (l + 16#64) = .word cap)
+    (hne : l ≠ l + 8#64) (hHM : HeadMemAligned s) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append)
+    out.1 = some (.returned (.val (.word 0))) ∧
+      EvmInv out.2 ∧ evmR out.2 = evmR s ∧ HeadMemAligned out.2 := by
+  have hm : head ∈ evmChain s := by rw [hcons]; exact List.mem_cons_self
+  obtain ⟨_, _, hFW, hpw, _⟩ := op_log_old_ownership_g09 hinv
+  have hpwh : (frameObjects s head).Pairwise Disj := by
+    rw [hcons, List.map_cons, List.flatten_cons, List.pairwise_append] at hpw
+    exact hpw.1
+  obtain ⟨hd0, hd8, hd16, hdslot⟩ := op_log_no_growth_store_domains_g09 l p n cap
+    (hFW head hm) hl hm0 hm16 hlt
+  have hp := hpwh
+  unfold frameObjects at hp
+  have hp0 := (List.pairwise_cons.1 hp).2
+  have hp1 := (List.pairwise_cons.1 hp0).2
+  have hp2 := (List.pairwise_cons.1 hp1).2
+  have hp3 := (List.pairwise_cons.1 hp2).2
+  have hd := (List.pairwise_cons.1 hp3).1 (frameLogs s head) (by simp)
+  rw [hl] at hd
+  have hd' := R11Shards.Disj.symm hd
+  simp only [frameLogs, hl, hm0, hm16] at hd'
+  have hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24) := by
+    unfold Disj at hd' ⊢
+    dsimp only at hd' ⊢
+    rcases hd' with hz | hz | hz | hz <;> omega
+  exact op_log_no_growth_execution_of_owned_log_g09 s head tail S e l p n cap log
+    hA hinv hcons hl hn hm0 hm16 hnonnull hlt hdisj hlog hdheader hdbuffer
+    hnewMsg hnew hnewOld hnewWorld hclock he hlg hde hme hm0w hm8w hm16w hne hHM
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

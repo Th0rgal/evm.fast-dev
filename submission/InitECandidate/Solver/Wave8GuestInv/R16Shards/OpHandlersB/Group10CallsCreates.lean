@@ -12594,4 +12594,47 @@ theorem heap_step_world_typed_g10 {F : Type}
   revert g hmem
   decide
 
+theorem heap_step_frame_objects_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hm : post.memory = s.memory)
+    (hg : GlobalsKept ["heap_ptr"] s post) (ec : Ivl) :
+    frameObjects post ec = frameObjects s ec := by
+  have he : globN post "vm_system_address" = globN s "vm_system_address" := by
+    unfold globN
+    rw [← hg (ofString "vm_system_address") (by decide)]
+  simp only [frameObjects, frameLogs, frameRet, frameLogObjects, logOwnedIvls,
+    logRecordIvls, memW, hm, he]
+  rfl
+
+theorem heap_step_world_ivls_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (ha : ArenaReady s) (hap : ArenaReady post) (hw : WorldTypedWith s S Nd)
+    (hm : post.memory = s.memory) (hbe : post.be = s.be)
+    (hg : GlobalsKept ["heap_ptr"] s post) :
+    worldTypedIvls post S Nd = worldTypedIvls s S Nd := by
+  have hcell : SameTypedCells s post S Nd := by
+    refine ⟨hbe, hap.1.memaddrs.trans ha.1.memaddrs.symm, ha.1.memaddrs, ?_, ?_, ?_⟩
+    · intros; rw [hm]
+    · intros; rw [hm]
+    · intros; unfold memB; rw [hm, hbe]
+  have hglob : ∀ nm : String, ofString nm ≠ ofString "heap_ptr" → globN post nm = globN s nm := by
+    intro nm hne
+    unfold globN
+    rw [← hg (ofString nm) (by simp [hne])]
+  have ht : S.flatMap (htabFootprint post) = S.flatMap (htabFootprint s) := by
+    have hf : htabFootprint post = htabFootprint s := by
+      funext t
+      simp only [htabFootprint, hdr, memW, hm]
+    rw [hf]
+  unfold worldTypedIvls
+  rw [ht, nodeExtents_eq hw.2.2.2.1 hcell,
+    blockOutObjects_eq ha.2 hw.2.2.1 hcell (hglob "bo" (by decide)),
+    balObjects_eq ha.2 hw.1 hw.2.2.1 hcell (hglob "bal_accounts" (by decide)),
+    hglob "journal" (by decide), hglob "journal_cap" (by decide)]
+  congr 5
+  apply List.map_congr_left
+  intro r hr
+  have hne : ofString r.1 ≠ ofString "heap_ptr" := by revert r hr; decide
+  rw [hglob r.1 hne]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

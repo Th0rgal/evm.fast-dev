@@ -9590,7 +9590,8 @@ theorem gbody_process_transaction_strong_of_cuts
     InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural] using
     (hb (F := F) s hc hp)
 
-open PtxP34 in
+section
+open PtxP34
 /-- Transaction composition now needs only the prefix and local push contracts. -/
 theorem gbody_process_transaction_strong_of_h12_slots
     (h : PtxCallees) (hwk : PtxP34.PmcStrong)
@@ -9615,6 +9616,8 @@ theorem gbody_process_transaction_strong_of_h12_slots
   apply gbody_process_transaction_strong_of_cuts h hwk h12
   intro tail b ht F s hc hp
   exact ptxPhase4_cut_strong_of_slots h hlogs R hreceipt hstore ht s hc hp.1
+
+end
 
 /-- The complete transaction bound, with the remaining backing contract explicit.
 `BoListArg` and `TxReadyStrong` constrain list headers but do not assert that
@@ -20047,6 +20050,93 @@ theorem jdel_ts32_call0_header_words {F : Type}
           split at hr
           · have hu := jdel_ts32_args_header_words s p S Nd table key tw vs body callee ret v
               hW hT het hts htw ha hl hc
+            have hp := (Prod.mk.inj hr).2
+            rw [← hp]
+            exact hu
+          · cases hr
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+theorem destroy_storage_delete_tail_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (tw : BitVec 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hout : s.locals.lookup (ofString "outer") = some (.val (.word tw)))
+    (hts : globN s "ts" ≠ 0) (htw : tw.toNat = memW s (globN s "ts" + 32))
+    (hr : evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "jdel")
+        [.var .local (ofString "outer"), .var .local (ofString "addr")])
+        (.return (.const 0#64))) = (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨mid, hm, ht⟩ := seq_call0_ret_inv hr
+  have hh := jdel_ts32_call0_header_words s mid S Nd (.var .local (ofString "outer"))
+    (.var .local (ofString "addr")) tw hW hT (by simpa [evalAt, evalHOLExact] using hout) hts htw hm
+  have hp : post.memory = mid.memory := by
+    rw [evaluateHOLFiniteState_return] at ht
+    simp [evalHOLExact] at ht
+    split at ht <;> simp_all [emptyLocalsHOLFinite]
+    rw [← ht.2]
+  simpa only [memW, hp] using hh
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+
+theorem htab_set_args_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (table key value : ExpHOL 64) (tw : BitVec 64)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (het : evalAt s table = some (.val (.word tw))) (htS : tw.toNat ∈ S)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [table, key, value] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨v1, _, _, he1, _, _, ht, _, _⟩ := R16WkAcctWs.callee_param_three s (ofString "htab_set")
+    (ofString "t") (ofString "key") (ofString "value") .one .one .one _ _
+    (by rw [hW.1.1.1.code]; exact EvmFrameSpecs.lookup_htab_set) table key value vs body callee ret ha hl
+  have hv1 : v1 = .val (.word tw) := Option.some.inj (he1.symm.trans het)
+  subst v1
+  apply htab_set_tx_header_words s post vs body callee ret rv S Nd hW hT ?_ hl hr
+  simpa [locN, callEntryStateHOLFinite, ht] using htS
+
+theorem htab_set_call0_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (table key value : ExpHOL 64) (tw : BitVec 64) (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (het : evalAt s table = some (.val (.word tw))) (htS : tw.toNat ∈ S)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set") [table, key, value]) =
+      (none, post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  classical
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases ha : evalListHOLFinite s [table, key, value] with _ | vs
+  · rw [ha] at hr; cases hr
+  · simp only [ha] at hr
+    rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set") vs with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr
+      split at hr
+      · cases hr
+      · rcases hc : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, p⟩
+        rw [hc] at hr
+        cases r with
+        | none => cases hr
+        | some r =>
+          cases r <;> try (simp at hr)
+          rename_i v
+          split at hr
+          · have hu := htab_set_args_header_words s p S Nd table key value tw vs body callee ret v
+              hW hT het htS ha hl hc
             have hp := (Prod.mk.inj hr).2
             rw [← hp]
             exact hu
