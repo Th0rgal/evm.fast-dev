@@ -14009,6 +14009,69 @@ theorem phase2_htabExit_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
     unfold CellHits
     rcases hdis with hz | hz | hl | hr <;> dsimp at * <;> omega
 
+/-- An insertion cannot modify the footprint of a different jointly typed table. -/
+theorem phase2_htabExit_other_table_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    {u : Nat} (hu : u ∈ S) (hne : u ≠ locN s "t")
+    {i : Ivl} (hi : i ∈ htabFootprint s u) : IvlUnhit s post i := by
+  have hui := (hw.1.2.1 u hu).1.1 i hi
+  apply phase2_htabExit_unhit hs hx ⟨hui.2.1, hui.2.2.1⟩
+    ((hw.1.2.1 u hu).2 i hi).1
+  · intro j hj
+    exact ((hw.1.2.1 _ ht).1.1 j hj).2.1
+  · intro j hj
+    exact hw.1.2.2.1 u hu (locN s "t") ht hne i hi j hj
+
+/-- Warming a different table preserves every header word of a private table. -/
+theorem phase2_htabExit_other_table_header {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    {u : Nat} (hu : u ∈ S) (hne : u ≠ locN s "t")
+    (k : Nat) (hk : k < 11) : hdr post u k = hdr s u k := by
+  have hi : (u, 88) ∈ htabFootprint s u := by simp [htabFootprint]
+  have hf := (hw.1.2.1 u hu).1.1 (u, 88) hi
+  have hb := (ivl_allocated_bound hs.2 ((hw.1.2.1 u hu).2 (u, 88) hi).1).2
+  have he := phase2_htabExit_other_table_unhit hs hw ht hx hu hne hi
+  unfold hdr
+  apply memW_eq_of_ivlUnhit he
+  · have ha := hf.2.1
+    omega
+  · exact hb
+  · constructor <;> omega
+
+/-- The transaction warming table is distinct from both private message tables. -/
+theorem phase2_message_tables_ne_ts8 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (ht : PtxMessageTables s aa ak) (hts : globN s "ts" ≠ 0)
+    (hn : memW s (globN s "ts" + 8) ≠ 0) :
+    aa ≠ memW s (globN s "ts" + 8) ∧ ak ≠ memW s (globN s "ts" + 8) := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := ht
+  have hm := R16WkAcctWs.mem_worldRoleSlots_recRole s "ts" 8 "ts+8" hts hn
+    (by simp [recRoles, hts])
+  exact ⟨Ne.symm (haf _ (List.mem_append_left _ hm)),
+    Ne.symm (hkf _ (List.mem_append_left _ hm))⟩
+
+/-- A warming insertion preserves the key lengths of both message access tables. -/
+theorem phase2_htabExit_message_table_headers {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (hm : PtxMessageTables s aa ak)
+    (hts : globN s "ts" ≠ 0) (hn : memW s (globN s "ts" + 8) ≠ 0)
+    (ht : locN s "t" = memW s (globN s "ts" + 8))
+    (hx : HtabExit s post) : hdr post aa 0 = 20 ∧ hdr post ak 0 = 52 := by
+  have hne := phase2_message_tables_ne_ts8 hm hts hn
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := hm
+  have hmem : locN s "t" ∈ S := by
+    rw [ht]
+    exact (hw.1.2.2.2.2.2.1 8 (by simp [tsTableSlots]) hts).resolve_left hn
+  constructor
+  · exact (phase2_htabExit_other_table_header hs hw hmem hx ha
+      (by rw [ht]; exact hne.1) 0 (by decide)).trans hal
+  · exact (phase2_htabExit_other_table_header hs hw hmem hx hk
+      (by rw [ht]; exact hne.2) 0 (by decide)).trans hkl
+
 /-- World table typing discharges the footprint separation for fixed headers. -/
 theorem phase2_htabExit_fixed_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
@@ -15169,5 +15232,104 @@ theorem phase2_message_initialized_ready {ι F : Type}
     (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s := by
   exact phase2_message_ready_backing_shapes hp.1.1.1 ht hp.1.2 hp.2.1
     hp.2.2.1 hp.2.2.2.1 hp.2.2.2.2
+
+open R10Shards.P26_P28 in
+/-- Insertion into the non-value transaction table preserves all world and journal roles. -/
+theorem phase2_htabExit_ts8_roles {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hts : globN s "ts" ≠ 0) (hn : memW s (globN s "ts" + 8) ≠ 0)
+    (ht : locN s "t" = memW s (globN s "ts" + 8)) (hx : HtabExit s post) :
+    worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
+  have hnv := R16WkAcctWs.nonValueSlot_ts8 s S hw.1 hts hn
+  simp only [show (8 : BitVec 64).toNat = 8 by decide] at hnv
+  rw [← ht] at hnv
+  have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
+    intro g hg
+    have hne : ofString g ≠ ofString "heap_ptr" := by revert g hg; decide
+    exact R16Shards.globN_eq_of_lookup (hx.2.2.2.2.2.2.2 _ (by simpa using hne))
+  have hu : ∀ i ∈ fixedObjects s, i.2 ≠ 0 → IvlUnhit s post i := by
+    intro i hi hpos
+    have hf := (hw.2.2.1.1 i hi).resolve_left hpos
+    have hal : ∀ j ∈ htabFootprint s (locN s "t"), j.1 % 8 = 0 ∧ j.2 % 8 = 0 := by
+      intro j hj
+      have hjw := ((hw.1.2.1 _ hnv.1).1.1 j hj).2
+      exact ⟨hjw.1, hjw.2.1⟩
+    have hfresh : (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0 := by
+      have ha := hs.2.2.2.2.2.2.1
+      have hb := hx.1.2.2.2.2.2.2.1
+      omega
+    exact R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hpos hx.2.2.2.2.2.2.1
+      hal ⟨hs.2.2.2.2.2.2.1, hfresh⟩
+      (fun j hj => disj_symm (((hw.1.2.1 _ hnv.1).2 j hj).2 i hi))
+      (R16WkAcctWs.disj_fresh_of_zero_or_allocated hs.2 hx.1.2 hx.2.2.2.2.1 (Or.inr hf.1))
+  have hur : ∀ (g : String) (n : Nat), (g, n) ∈ typedRecords → n ≠ 0 →
+      globN s g ≠ 0 → IvlUnhit s post (globN s g, n) := by
+    intro g n hg hn hg0
+    apply hu _ _ hn
+    simpa [hg0] using typedRecord_mem_fixedObjects s hg
+  have huts := hur "ts" 72 (by decide) (by decide)
+  have hujr : globN s "journal_cap" ≠ 0 →
+      IvlUnhit s post (globN s "journal", 32 * globN s "journal_cap") := by
+    intro h
+    apply hu _ _ (by dsimp; omega)
+    simp [fixedObjects, h]
+  have hsp : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    R16Shards.globN_eq_of_lookup (hx.2.2.2.2.2.2.2 _ (by decide))
+  have hag : AllocatorGrows s post := ⟨hx.2.2.2.2.1, hsp.le⟩
+  have hjr := journalRoleSlots_eq_of_unhit hs.1 hx.1.1 hs.2 hag
+    (fun (x : Nat) (hm : x ∈ S) => hm) hw.2.1 hw.2.2.1 hcore huts hujr
+  refine ⟨?_, hjr.1⟩
+  apply R16WkAcctWs.worldRoleSlots_eq_of_unhit_except hs.2 hw.1 hw.2.2.1 hcore
+    (fun u hu hne i hi => phase2_htabExit_other_table_unhit hs hw hnv.1 hx hu hne hi)
+    ⟨hnv.2.1, hnv.2.2.1, hnv.2.2.2.1, hnv.2.2.2.2.1⟩
+    (hur "ws" 40 (by decide) (by decide))
+    (hur "bs" 80 (by decide) (by decide)) huts
+    (fun i hi hn => hu i (by simp only [fixedObjects]; exact List.mem_append_right _ hi) hn)
+  have hlow : ∀ a : Nat, a + 8 ≤ InitE.sourceBase → memW post a = memW s a := by
+    intro a ha
+    have hal : a < 2 ^ 64 := by
+      have : InitE.sourceBase < 2 ^ 64 := by decide
+      omega
+    have hm := hx.2.2.2.2.2.2.1 (BitVec.ofNat 64 a)
+      (fun j hj hh => ?_) (fun hh => ?_)
+    · unfold memW; rw [hm]
+    · obtain ⟨h1, _⟩ := hh
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hal] at h1
+      have hlo := ((hw.1.2.1 _ hnv.1).1.1 j hj).1.1
+      omega
+    · obtain ⟨h1, _⟩ := hh
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hal] at h1
+      have hlo := hs.2.1
+      dsimp at h1
+      omega
+  exact ⟨hlow 0 (by decide), hlow 8 (by decide), hlow 16 (by decide)⟩
+
+/-- Warming the transaction table retains the complete private-table witness. -/
+theorem phase2_htabExit_ts8_message_tables {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (hm : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hl : locN post "m" = locN s "m") (hbe : post.be = s.be)
+    (hts : globN s "ts" ≠ 0) (hn : memW s (globN s "ts" + 8) ≠ 0)
+    (ht : locN s "t" = memW s (globN s "ts" + 8))
+    (hx : HtabExit s post) : PtxMessageTables post aa ak := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := hm
+  have hm : PtxMessageTables s aa ak := ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩
+  have hroles := phase2_htabExit_ts8_roles hs hw hts hn ht hx
+  have hheaders := phase2_htabExit_message_table_headers hs hm hts hn ht hx
+  apply phase2_message_tables_world_step s post hm hin hl hroles.1 hroles.2
+    (hheaders.1.trans hal.symm) (hheaders.2.trans hkl.symm)
+  have hstep := R16WkAcctWs.worldStepSc_of_htabExit_nonValue
+    (r := none) (gw := ["heap_ptr"])
+    ⟨hs, S, (worldTyped_iff_with s S).mpr ⟨Nd, hw⟩⟩ hbe hx.2.2.2.2.2.2.2
+    hx.2.2.2.2.2.2.2
+    (t0 := locN s "t") (fun S hT => by
+      rw [ht]
+      exact R16WkAcctWs.nonValueSlot_ts8 s S hT hts hn)
+    hx.1 hx.2.1 hx.2.2.1 hx.2.2.2.2.1 hx.2.2.2.2.2.1 hx.2.2.2.2.2.2.1
+  intro S Nd hw
+  obtain ⟨S', Nd', hsub, hw', hg, _⟩ := hstep.1.2.2.2.2 S Nd hw
+    (by simp [R16WkAcctWs.bufRegions, IvlsDisj])
+  exact ⟨S', Nd', hsub, hw', hg⟩
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

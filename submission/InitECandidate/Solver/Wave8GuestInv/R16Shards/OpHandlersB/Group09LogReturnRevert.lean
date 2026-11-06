@@ -13393,4 +13393,59 @@ theorem frameWF_of_log_no_growth_g09 {F : Type}
   · rw [hbuffer]
     exact (wordsOK_congr_of_dom_g09 hdom).2 hwords_old
 
+/-- Frame object disjointness separates every existing log record from both
+in-place append writes. The insertion cell lies within the unchanged capacity. -/
+theorem log_no_growth_old_record_separation_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {ec : Ivl} {S : List Nat}
+    (l p n cap : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hp : memW s l.toNat = p.toNat)
+    (hc : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat) :
+    ∀ x ∈ ([(l.toNat + 8, 8), (p.toNat + 8 * n.toNat, 8)] : List Ivl),
+      ∀ i, i < n.toNat → Disj x (memW s (p.toNat + 8 * i), 40) := by
+  intro x hx i hi
+  have hi' : i < memW s (memW s (ec.1 + 88) + 8) := by rwa [hl, hn]
+  have hheap : globN s "heap_ptr" ≤ 2 ^ 64 := by
+    have hh := hA.2.2.1
+    rw [R11Shards.heapLimit_val] at hh
+    omega
+  obtain ⟨_, _, hdH⟩ := log_records_of_frame_pairwise_g09 hFW hpw hheap
+    (by rwa [hl]) i hi'
+  simp only [hl, hp] at hdH
+  have hdB : Disj (frameLogs s ec) (memW s (p.toNat + 8 * i), 40) := by
+    unfold frameObjects at hpw
+    have htail := (List.pairwise_cons.1 hpw).2
+    have htail := (List.pairwise_cons.1 htail).2
+    have htail := (List.pairwise_cons.1 htail).2
+    have htail := (List.pairwise_cons.1 htail).2
+    have htail := (List.pairwise_cons.1 htail).2
+    apply (List.pairwise_cons.1 htail).1
+    apply List.mem_cons_of_mem
+    simp only [List.append]
+    have hm : (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40) ∈ frameLogObjects s ec := by
+      unfold frameLogObjects
+      apply List.mem_flatMap.2
+      refine ⟨i, List.mem_range.2 hi', ?_⟩
+      exact List.mem_filter.2 ⟨by simp [logRecordIvls], by simp⟩
+    simpa only [hl, hp] using hm
+  unfold frameLogs at hdB
+  simp only [hl, hp, hc] at hdB
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+  rcases hx with rfl | rfl
+  · have hd := R11Shards.Disj.symm hdH
+    rcases hd with hz | hz | hleft | hright
+    · cases hz
+    · exact Or.inr (Or.inl hz)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+    · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
+  · rcases hdB with hz | hz | hleft | hright
+    · dsimp only at hz; omega
+    · exact Or.inr (Or.inl hz)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+    · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
