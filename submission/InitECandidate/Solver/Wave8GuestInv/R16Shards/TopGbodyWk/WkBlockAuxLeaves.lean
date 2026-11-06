@@ -8,6 +8,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.SetLstNew
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkBalAddChanges
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkIdxStateInit
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkGetCode
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_has
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_item
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.RlpHelpers
@@ -11732,5 +11733,84 @@ theorem progWStep_builderBody {B : BufList} {gw : List String}
   unfold builderBody
   exact progWStep_dec (progWStep_dec (progWStep_dec (progWStep_dec
     (progWStep_seq hB hgw haccounts hstorage))))
+
+abbrev builderBufs : BufList :=
+  [("bal_key_buf", 64), ("keccak_pad", 136), ("keccak_st", 200),
+   ("mpt_nib_scratch", 64), ("sk_buf", 52)]
+
+theorem validBufList_builder : ValidBufList builderBufs := by
+  intro p hp
+  simp only [builderBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
+  rcases hp with rfl | rfl | rfl | rfl | rfl
+  · exact ⟨64, by decide, by decide, by decide⟩
+  · exact ⟨136, by decide, by decide, by decide⟩
+  · exact ⟨200, by decide, by decide, by decide⟩
+  · exact ⟨64, by decide, by decide, by decide⟩
+  · exact ⟨64, by decide, by decide, by decide⟩
+
+theorem worldKeepsSc_mono_bufs {B1 B2 : BufList} {gw1 gw2 : List String} {fn : MlS}
+    (hB : ∀ p ∈ B1, p ∈ B2) (hgw : ∀ g ∈ gw1, g ∈ gw2)
+    (hf : WorldKeepsSc WorldOK (bufRegions B1) gw1 stdKeep NoExtra fn) :
+    WorldKeepsSc WorldOK (bufRegions B2) gw2 stdKeep NoExtra fn := by
+  obtain ⟨ps, body, ret, hl, hb⟩ := hf
+  exact ⟨ps, body, ret, hl, fun s hc hW hex hnt hres =>
+    (hb s hc hW hex hnt hres).mono_bufs hB hgw⟩
+
+theorem progWStep_builderAccountLoop_closed :
+    ProgWStep builderBufs ["heap_ptr", "scratch_ptr"] builderAccountLoop := by
+  have hB := validBufList_builder
+  have hgw : SafeStepGlobals ["heap_ptr", "scratch_ptr"] := by
+    intro g hg; simp only [List.mem_cons, List.not_mem_nil, or_false] at hg
+    rcases hg with rfl | rfl <;> simp
+  have hitem := worldKeepsSc_mono_bufs (B2 := builderBufs)
+    (gw2 := ["heap_ptr", "scratch_ptr"]) (by simp) (by simp) wkSc_htab_item
+  have heq := worldKeepsSc_mono_bufs (B2 := builderBufs)
+    (gw2 := ["heap_ptr", "scratch_ptr"]) (by simp) (by simp)
+    (worldKeepsSc_of_readOnly EvmFrameSpecs.ro_u256_eq)
+  have hmem := worldKeepsSc_mono_bufs (B2 := builderBufs)
+    (gw2 := ["heap_ptr", "scratch_ptr"]) (by simp) (by simp)
+    (worldKeepsSc_of_readOnly EvmFrameSpecs.ro_memeq)
+  have hget := worldKeepsSc_mono_bufs (B2 := builderBufs)
+    (gw2 := ["heap_ptr", "scratch_ptr"]) (by simp [builderBufs]) (by simp)
+    R16WkAcctWs.wkSc_get_code
+  have hidx := worldKeepsSc_mono_bufs (B2 := builderBufs)
+    (gw2 := ["heap_ptr", "scratch_ptr"]) (by simp [WkBalStateInit.idxBufs, builderBufs])
+    (fun _ h => h) wkSc_idx_start_account
+  apply progWStep_builderAccountLoop hB hgw hitem
+  apply progWStep_builderAccountEntry hB hgw hidx
+  apply progWStep_builderAccountChanges hB hgw heq hmem hget
+  · exact worldKeepsSc_mono_bufs (B1 := []) (by simp) (by simp) wkSc_add_balance_change
+  · exact worldKeepsSc_mono_bufs (B1 := []) (by simp) (by simp) wkSc_add_nonce_change
+  · exact worldKeepsSc_mono_bufs (B1 := []) (by simp) (by simp) wkSc_add_code_change
+
+theorem progWStep_builderBody_of_idx_storage
+    (hidx : WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "idx_start_storage")) :
+    ProgWStep builderBufs ["heap_ptr", "scratch_ptr"] builderBody := by
+  have hB := validBufList_builder
+  have hgw : SafeStepGlobals ["heap_ptr", "scratch_ptr"] := by
+    intro g hg; simp only [List.mem_cons, List.not_mem_nil, or_false] at hg
+    rcases hg with rfl | rfl <;> simp
+  apply progWStep_builderBody hB hgw progWStep_builderAccountLoop_closed
+  apply progWStep_builderStorageSuffix hB hgw
+  · exact worldKeepsSc_mono_bufs (by simp) (by simp) wkSc_htab_item
+  · exact hidx
+  · exact worldKeepsSc_mono_bufs (by simp) (by simp)
+      (worldKeepsSc_of_readOnly EvmFrameSpecs.ro_u256_eq)
+  · exact worldKeepsSc_mono_bufs (B1 := []) (by simp) (by simp) wkSc_add_storage_write
+  · exact worldKeepsSc_mono_bufs (B1 := []) (by simp) (by simp) wkSc_remove_storage_write
+
+theorem wkSc_update_builder_from_tx_of_idx_storage
+    (hidx : WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "idx_start_storage")) :
+    WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "update_builder_from_tx") := by
+  have hl : originalRuntimeCode.lookup (ofString "update_builder_from_tx") =
+      some (sourceFunctionEntry Guest.Software.guestFn_update_builder_from_tx).2 :=
+    originalRuntimeCode_lookup_of_guestAst_getElem 427 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_update_builder_from_tx) rfl
+  apply worldKeepsSc_of_progWStep hl
+  change ProgWStep builderBufs ["heap_ptr", "scratch_ptr"] builderBody
+  exact progWStep_builderBody_of_idx_storage hidx
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
