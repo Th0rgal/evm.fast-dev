@@ -10848,4 +10848,35 @@ theorem eval_merge_storage_suffix_loaded {F : Type} (s : PanSemStateFiniteExact 
   simp only [he]
   exact het
 
+theorem eval_merge_storage_suffix_nonzero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hb : memW s (globN s "bs" + 32) ≠ 0)
+    (hnt : (evaluateHOLFiniteState s mergeStorageSuffix).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageSuffix).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeStorageSuffix).1 (evaluateHOLFiniteState s mergeStorageSuffix).2 := by
+  have hf := hfr
+  rw [mergeStorageSuffix_eq, evaluateHOLFiniteState_dec_total] at hf
+  dsimp only at hf
+  split at hf
+  · exact absurd hf not_flowingOrResumes_error
+  · rename_i v he
+    have heo : evalAt s (.load .one (.op .add [.var .global (ofString "ts"), .const 32#64])) = some v := he
+    obtain ⟨ow, rfl, how, hts⟩ := evalAt_loadG_nz s hW.1.1 "ts" 32#64 (by decide) _ heo
+    simp only [shapeOfHOLExact, shapeEqHOL, ↓reduceIte] at hf
+    rw [evaluateHOLFiniteState_dec_total] at hf
+    dsimp only at hf
+    split at hf
+    · exact absurd hf not_flowingOrResumes_error
+    · rename_i v he
+      have het : evalAt s (.load .one (.op .add [.var .global (ofString "bs"), .const 32#64])) = some v := by
+        change evalAt (setVarHOLFinite (ofString "outer") (.val (.word ow)) s) _ = some v at he
+        simp [evalAt, evalHOLExact, evalListHOLExact, setVarHOLFinite] at he ⊢
+        split at he <;> try contradiction
+        rename_i heq
+        simp only [heq]
+        exact he
+      obtain ⟨tw, rfl, htw, hbs⟩ := evalAt_loadG_nz s hW.1.1 "bs" 32#64 (by decide) _ het
+      exact eval_merge_storage_suffix_loaded s tw ow hc hW heo het (by simpa [htw] using hb) hnt hfr
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
