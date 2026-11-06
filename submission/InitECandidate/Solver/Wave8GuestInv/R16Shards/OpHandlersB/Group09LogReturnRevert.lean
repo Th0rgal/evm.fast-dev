@@ -17359,4 +17359,31 @@ theorem op_log_growth_copy_stores_world_g09 {F : Type}
     simp [frameObjects, hl]
   · exact hc.trans hs'
 
+/-- Frame word validity supplies every concrete in-place append store address. -/
+theorem op_log_no_growth_store_domains_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {head : Ivl}
+    (l p n cap : BitVec 64) (hFW : FrameWF s S head)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) :
+    s.memaddrs l ∧ s.memaddrs (l + 8#64) ∧ s.memaddrs (l + 16#64) ∧
+      s.memaddrs (p + n * 8#64) := by
+  have hh := (hFW.1 (memW s (head.1 + 88), 24) (by simp)).2
+  rw [hl] at hh
+  have hb := hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  change WordsOK s (frameLogs s head) at hb
+  simp only [frameLogs, hl, hm0, hm16] at hb
+  have h0 := (hh.2.2 0 (by dsimp only; decide)).choose_spec.1
+  have h8 := (hh.2.2 1 (by dsimp only; decide)).choose_spec.1
+  have h16 := (hh.2.2 2 (by dsimp only; decide)).choose_spec.1
+  have hs := (hb.2.2 n.toNat (by dsimp only; omega)).choose_spec.1
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · simpa using h0
+  · convert h8 using 1 <;> simp [BitVec.ofNat_add]
+  · convert h16 using 1 <;> simp [BitVec.ofNat_add]
+  · convert hs using 1
+    apply BitVec.eq_of_toNat_eq
+    simp [BitVec.toNat_add, BitVec.toNat_mul, Nat.mul_comm, Nat.add_mod, Nat.mul_mod]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
