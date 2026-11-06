@@ -17883,4 +17883,30 @@ theorem worldStepSc_return_restore {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Preserve relations on all nonlocal state fields across declaration replacement. -/
+theorem dec_return_replace_state_rel {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {nm : MlS} {init : ExpHOL 64}
+    {body : ProgHOL 64} {rv : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.dec nm .one init body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (P : PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hc : ∀ (entry mid : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry body = (some (.returned rv), mid) →
+      ∃ mid', evaluateHOLFiniteState entry body' = (some (.returned rv'), mid') ∧
+        P mid.emptyLocalsHOLFinite mid'.emptyLocalsHOLFinite) :
+    ∃ post', evaluateHOLFiniteState s (.dec nm .one init body') = (some (.returned rv'), post') ∧
+      P post.emptyLocalsHOLFinite post'.emptyLocalsHOLFinite := by
+  obtain ⟨w, he, mid, hb, hout⟩ := dec_ret_inv h
+  obtain ⟨mid', hb', hP⟩ := hc _ _ hb
+  refine ⟨{mid' with locals := HolFiniteMapExact.resVarEq mid'.locals (nm, s.locals.lookup nm)}, ?_, ?_⟩
+  · rw [evaluateHOLFiniteState_dec_total]
+    simp [he, shapeEqHOL, shapeOfHOLExact, hb']
+  · rw [hout]
+    exact hP
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
