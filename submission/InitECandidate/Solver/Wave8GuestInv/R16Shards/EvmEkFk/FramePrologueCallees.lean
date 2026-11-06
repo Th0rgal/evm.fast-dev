@@ -10328,6 +10328,35 @@ theorem precompile_sha256_blocks_active_bound {F : Type}
     simp [h] at hv
     exact False.elim (hn hv.symm)
 
+theorem precompile_sha256_blocks_increment {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len i : BitVec 64)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hb : i.toNat + 64 ≤ len.toNat) :
+    let post := (evaluateHOLFiniteState s
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64]))).2
+    post.locals.lookup (ofString "len") = some (.val (.word len)) ∧
+    post.locals.lookup (ofString "i") = some (.val (.word (i+64))) ∧
+    (i+64).toNat ≤ len.toNat := by
+  have hv : isValidValueHOLExact s.toExact .local (ofString "i")
+      (.val (.word (i+64#64))) = true := by
+    simp [isValidValueHOLExact, lookupKvarHOLExact, hx, shapeOfHOLExact, shapeEqHOL]
+  have ha : (i+(64 : BitVec 64)).toNat = i.toNat+64 := by
+    rw [BitVec.toNat_add]
+    change (i.toNat+64) % 2^64 = i.toNat+64
+    exact Nat.mod_eq_of_lt (lt_of_le_of_lt hb len.isLt)
+  dsimp only
+  constructor
+  · simp [evaluateHOLFiniteState_assign, evalHOLExact, evalListHOLExact, hx,
+      valueIsWord, valueWord, wordOpHOL, wordOp, hv, setKvarHOLFinite, setVarHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE, hl,
+      show ofString "i" ≠ ofString "len" by decide]
+  · constructor
+    · simp [evaluateHOLFiniteState_assign, evalHOLExact, evalListHOLExact, hx,
+        valueIsWord, valueWord, wordOpHOL, wordOp, hv, setKvarHOLFinite, setVarHOLFinite,
+        HolFiniteMapExact.lookup_update, FUPDATE]
+    · exact ha ▸ hb
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
