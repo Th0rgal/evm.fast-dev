@@ -19334,4 +19334,41 @@ theorem htab_del_local_fixed_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Compose a journal-prefix backing frame with concrete deletion and return. -/
+theorem journal_delete_tail_header_words {F : Type}
+    (s mid post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (t : BitVec 64) (key result : ExpHOL 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (ht : t.toNat ∈ S)
+    (hlt : mid.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hfr : ∀ k ∈ ([40, 72] : List Nat), IvlUnhit s mid (memW s (globN s "bo" + k), 24))
+    (hr : evaluateHOLFiniteState mid (.seq (.call (some (none, none)) (ofString "htab_del")
+      [.var .local (ofString "t"), key]) (.return result)) =
+        (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨S', Nd', hsub, hT', _⟩ := hw.1.2.2.2.2 S Nd hT (by
+    intro i hi; simp [bufRegions] at hi)
+  obtain ⟨out, hc, hr⟩ := seq_call0_ret_inv hr
+  have hm := return_memory_eq hr
+  intro k hk
+  have hf := htab_del_local_fixed_frame mid out S' Nd'
+    (memW s (globN s "bo" + k), 24) t key hw.1.1 hT'
+    (journal_worldStep_header_fixed hW hw k hk) (by simp) (hsub _ ht) hlt hc
+  have hu : IvlUnhit s out (memW s (globN s "bo" + k), 24) := by
+    intro a ha hit
+    exact (hf a ha hit).trans (hfr k hk a ha hit)
+  have hb := txWorld_header_fixed hW k hk
+  have ha := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  have he := memW_eq_of_ivlUnhit hu ha.2.1 (ivl_allocated_bound hW.1.1.2 ha.1).2
+    ⟨le_rfl, by dsimp; omega⟩
+  simpa only [memW, hm] using he
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
