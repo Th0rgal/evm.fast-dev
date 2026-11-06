@@ -15345,4 +15345,25 @@ theorem ws_get_account_optional_tx_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- The missing-account allocation branch preserves transaction backing words. -/
+theorem acct_empty_tx_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "acct_empty") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  apply tx_header_words_of_fixed_frame hW hT
+  intro b hb hn
+  have hf := (hT.2.2.1.1 b hb).resolve_left hn
+  exact (acct_empty_allocated_frame s post vs body callee ret v b hW.1.1
+    hf.1 hf.2.1 hf.2.2.1 hl hr).2
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
