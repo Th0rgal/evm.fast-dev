@@ -15036,4 +15036,30 @@ theorem op_log_data_cost_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
     simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
   · exact hcont
 
+/-- Both concrete data-cost branches compose with gas charging; overflow
+closes immediately and the ordinary branch supplies a positive cost. -/
+theorem op_log_data_cost_branch_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (base lo hi : BitVec 64) (P : PanSemStateFiniteExact 64 F → Prop)
+    (cont : ProgHOL 64)
+    (hpres : ∀ t post cost, LocFrame t post → P t →
+      P (setVarHOLFinite (ofString "cost") (.val (.word cost)) {post with locals := t.locals}))
+    (hcont : HandlerRun s0 (fun t => P t ∧ ∃ cost : BitVec 64,
+      t.locals.lookup (ofString "cost") = some (.val (.word cost)) ∧ 0 < cost.toNat) false
+      (.seq (.call (some (none, none)) (ofString "charge_gas")
+        [.var .local (ofString "cost")]) cont)) :
+    HandlerRun s0 (fun t => P t ∧
+      t.locals.lookup (ofString "cost") = some (.val (.word base)) ∧ 0 < base.toNat ∧
+      t.locals.lookup (ofString "dc") = some (.rStruct [.val (.word lo), .val (.word hi)])) false
+      (.seq (.ite (.cmp .notEqual (.rfield 1 (.var .local (ofString "dc"))) (.const 0))
+        (.assign .local (ofString "cost") (.const 18446744073709551615#64))
+        (.call (some (some (.local, ofString "cost"), none)) (ofString "add_sat")
+          [.var .local (ofString "cost"), .rfield 0 (.var .local (ofString "dc"))]))
+        (.seq (.call (some (none, none)) (ofString "charge_gas")
+          [.var .local (ofString "cost")]) cont)) := by
+  apply HandlerRun.seq_ite_unit
+  · intro t w he hn s hc hInv hlen hR hP hnt
+    exact op_log_overflow_assign_charge_g09 s0 cont s hc hInv hlen hR trivial hnt
+  · intro t he
+    exact op_log_data_cost_step_g09 s0 base lo hi P _ hpres hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
