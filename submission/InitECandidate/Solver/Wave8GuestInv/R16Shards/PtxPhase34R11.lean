@@ -16832,4 +16832,33 @@ theorem journal_alloc_decCall_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Compose the concrete journal allocation and key copy while retaining the narrow effect. -/
+theorem journal_alloc_copy_prefix_effect {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {jrec : Ivl} (p n : BitVec 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : cur.locals.lookup (ofString "klen") = some (.val (.word n)))
+    (hr : evaluateHOLFiniteState cur
+      (.decCall (ofString "kc") .one (ofString "alloc") [.var .local (ofString "klen")]
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "kc"), .var .local (ofString "key"), .var .local (ofString "klen")]) tail)) =
+      (some (.returned rv), out)) :
+    ∃ mid u, WorldEff s mid [jrec] [] ["heap_ptr"] ∧
+      mid.locals = cur.locals.update (ofString "kc", .val (.word p)) ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨allocated, u, ha, hlo, hhi, hl, ht, hm⟩ := journal_alloc_decCall_effect p n _ rv heff hp hn hr
+  obtain ⟨mid, hcopy, htail⟩ := seq_call0_ret_inv ht
+  have hkc : allocated.locals.lookup (ofString "kc") = some (.val (.word p)) := by
+    simp [hl, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hklen : allocated.locals.lookup (ofString "klen") = some (.val (.word n)) := by
+    simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, hn, show ofString "kc" ≠ ofString "klen" by decide]
+  have he := journal_key_copy_effect p n ha hkc hklen hlo hhi hcopy
+  exact ⟨mid, u, he, (ignored_call_fall_locals _ _ _ _ hcopy).1.trans hl, htail, hm⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
