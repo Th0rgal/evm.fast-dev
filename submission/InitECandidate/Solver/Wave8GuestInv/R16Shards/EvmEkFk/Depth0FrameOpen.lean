@@ -8385,4 +8385,34 @@ theorem ws_code_root_after_access_call_exit {F : Type}
   · exact hws
   · exact hx
 
+/-- Lift preservation of a root word and its addressing global to expression
+evaluation, including the load's memory-domain test. -/
+theorem global_load_preserved {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (g : String) (k : BitVec 64) (v : ValueHOL 64)
+    (hg : post.globals.lookup (ofString g) = s.globals.lookup (ofString g))
+    (hd : post.memaddrs = s.memaddrs)
+    (hm : memW post (globN s g + k.toNat) = memW s (globN s g + k.toNat))
+    (he : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString g), .const k])) = some v) :
+    evalHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString g), .const k])) = some v := by
+  simp only [evalHOLFinite_eq_toExact] at he ⊢
+  simp [evalHOLExact, evalListHOLExact] at he ⊢
+  rcases hlookup : s.globals.lookup (ofString g) with _ | gv
+  · simp [hlookup] at he
+  · rcases gv with ⟨⟨w⟩⟩ | _ | _
+    · have hadd : BitVec.ofNat 64 (w.toNat + k.toNat) = w + k := by rw [BitVec.add_def]
+      have hmem : post.memory (w + k) = s.memory (w + k) := by
+        simp only [memW, globN, hlookup, hadd] at hm
+        cases hpost : post.memory (w + k) with
+        | word wp =>
+          cases hs : s.memory (w + k) with
+          | word ws =>
+            simp only [hpost, hs] at hm
+            rw [BitVec.eq_of_toNat_eq hm]
+      simpa [hg, hlookup, valueIsWord, valueWord, wordOpHOL, wordOp,
+        memLoadHOLExact, hd, hmem] using he
+    · simp [hlookup, valueIsWord] at he
+    · simp [hlookup, valueIsWord] at he
+
 end HeadStore
