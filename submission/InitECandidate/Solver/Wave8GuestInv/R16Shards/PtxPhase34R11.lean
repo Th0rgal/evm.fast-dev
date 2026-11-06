@@ -20248,4 +20248,24 @@ theorem htab_set_ts24_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Storage iteration's item lookup restores every nonlocal field. -/
+theorem htab_item_restored_state {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (hG : GuestInv s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_item") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) = {s with clock := post.clock} := by
+  have hs := PtxP1.funSpec_at_lookup EvmEkFk.ro_htab_item s hG.code vs body callee ret hl
+    (guestInv_callEntry s callee hG) (by rw [hr]; simp)
+  rw [hr] at hs
+  have he := hs (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  rw [he]
+  rfl
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
