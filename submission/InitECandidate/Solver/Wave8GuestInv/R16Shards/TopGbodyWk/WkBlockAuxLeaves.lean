@@ -11426,4 +11426,98 @@ theorem wkSc_process_withdrawals_of_builder
   wkSc_process_withdrawals_of_incorporate
     (wkSc_incorporate_tx_into_block_of_steps hbuilder wkSc_merge_tx_into_block)
 
+def builderStorageEntry : ProgHOL 64 :=
+  .decCall (ofString "pre_v") (.comb [.one, .one, .one, .one]) (ofString "idx_start_storage")
+    [.rfield 1 (.var .local (ofString "s2")), .rfield 1 (.var .local (ofString "e"))]
+    (.dec (ofString "post_v") (.comb [.one, .one, .one, .one])
+      (.load (.comb [.one, .one, .one, .one]) (.rfield 2 (.var .local (ofString "e"))))
+      (.decCall (ofString "eq2") .one (ofString "u256_eq")
+        [.var .local (ofString "pre_v"), .var .local (ofString "post_v")]
+        (.ite (.cmp .equal (.var .local (ofString "eq2")) (.const 0#64))
+          (.call (some (none, none)) (ofString "add_storage_write")
+            [.rfield 1 (.var .local (ofString "s2")), .rfield 1 (.var .local (ofString "e")),
+             .var .local (ofString "idx"), .var .local (ofString "post_v")])
+          (.call (some (none, none)) (ofString "remove_storage_write")
+            [.rfield 1 (.var .local (ofString "s2")), .rfield 1 (.var .local (ofString "e")),
+             .var .local (ofString "idx")]))))
+
+theorem progWStep_builderStorageEntry {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hidx : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "idx_start_storage"))
+    (heq : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "u256_eq"))
+    (hwrite : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_storage_write"))
+    (hremove : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "remove_storage_write")) :
+    ProgWStep B gw builderStorageEntry := by
+  unfold builderStorageEntry
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hidx
+  apply progWStep_dec
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) heq
+  exact progWStep_ite
+    (progWStep_call0 (fun _ h => h) (fun _ h => h) hwrite)
+    (progWStep_call0 (fun _ h => h) (fun _ h => h) hremove)
+
+def builderStorageInner : ProgHOL 64 :=
+  .while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "icap")))
+    (.decCall (ofString "e") (.comb [.one, .one, .one]) (ofString "htab_item")
+      [.var .local (ofString "inner"), .var .local (ofString "j")]
+      (.seq (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "e"))) (.const 0#64))
+        builderStorageEntry .skip)
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1#64]))))
+
+def builderStorageOuter : ProgHOL 64 :=
+  .while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+    (.decCall (ofString "s2") (.comb [.one, .one, .one]) (ofString "htab_item")
+      [.var .local (ofString "outer"), .var .local (ofString "i")]
+      (.seq (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s2"))) (.const 0#64))
+        (.dec (ofString "inner") .one (.rfield 2 (.var .local (ofString "s2")))
+          (.dec (ofString "icap") .one
+            (.load .one (.op .add [.var .local (ofString "inner"), .const 24#64]))
+            (.dec (ofString "j") .one (.const 0#64) builderStorageInner))) .skip)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1#64]))))
+
+theorem progWStep_builderStorageOuter {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hitem : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "htab_item"))
+    (hentry : ProgWStep B gw builderStorageEntry) :
+    ProgWStep B gw builderStorageOuter := by
+  have hinner : ProgWStep B gw builderStorageInner := by
+    unfold builderStorageInner
+    apply progWStep_while hB hgw
+    apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hitem
+    exact progWStep_seq hB hgw (progWStep_ite hentry (progWStep_skip _ _))
+      (progWStep_assign_local _ _ _ _)
+  unfold builderStorageOuter
+  apply progWStep_while hB hgw
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hitem
+  apply progWStep_seq hB hgw
+  · apply progWStep_ite
+    · exact progWStep_dec (progWStep_dec (progWStep_dec hinner))
+    · exact progWStep_skip _ _
+  · exact progWStep_assign_local _ _ _ _
+
+def builderStorageSuffix : ProgHOL 64 :=
+  .dec (ofString "outer") .one
+    (.load .one (.op .add [.var .global (ofString "ts"), .const 32#64]))
+    (.seq (.assign .local (ofString "cap")
+      (.load .one (.op .add [.var .local (ofString "outer"), .const 24#64])))
+      (.seq (.assign .local (ofString "i") (.const 0#64))
+        (.seq builderStorageOuter (.return (.const 0#64)))))
+
+theorem progWStep_builderStorageSuffix {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hitem : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "htab_item"))
+    (hidx : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "idx_start_storage"))
+    (heq : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "u256_eq"))
+    (hwrite : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_storage_write"))
+    (hremove : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "remove_storage_write")) :
+    ProgWStep B gw builderStorageSuffix := by
+  unfold builderStorageSuffix
+  apply progWStep_dec
+  apply progWStep_seq hB hgw (progWStep_assign_local _ _ _ _)
+  apply progWStep_seq hB hgw (progWStep_assign_local _ _ _ _)
+  exact progWStep_seq hB hgw
+    (progWStep_builderStorageOuter hB hgw hitem
+      (progWStep_builderStorageEntry hB hgw hidx heq hwrite hremove))
+    (progWStep_return _ _ _)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
