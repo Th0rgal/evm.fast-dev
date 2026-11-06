@@ -16030,4 +16030,74 @@ theorem op_log_no_growth_head_frame_g09 {F : Type}
     hl hn hm0 hm16 hnonnull hlt hcount hl_bound hp_bound hdisj hd8 hdslot
     hec hecHeader hecBuffer hlog hdheader hdbuffer hmsg
 
+/-- Assemble in-place append validity from pre-state frames and suspended-frame readback. -/
+theorem op_log_no_growth_invariant_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (head : Ivl) (tail : List Ivl) (S Nd : List Nat)
+    (l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hFW : ∀ ec ∈ evmChain s, FrameWF s S ec)
+    (hpw : (frameObjects s head).Pairwise Disj)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hl_bound : l.toNat + 24 ≤ 2^64)
+    (hp_bound : p.toNat + 8 * n.toNat + 8 ≤ 2^64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hec : head.1 + 280 ≤ 2^64)
+    (hecHeader : Disj (head.1, 280) (l.toNat, 24))
+    (hecBuffer : Disj (head.1, 280) (p.toNat, 8 * n.toNat + 8))
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8))
+    (hnewMsg : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls s log.toNat,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hold : ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj)
+    (hnew : (logOwnedIvls s log.toNat).Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls s log.toNat))
+    (holdWorld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd))
+    (hnewWorld : IvlsDisj (logOwnedIvls s log.toNat) (worldOwned s S Nd)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    SameTypedCells s post S Nd →
+    (∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → memW post (ec.1 + k) = memW s (ec.1 + k)) →
+    (∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 → memW post (ec.2 + k) = memW s (ec.2 + k)) →
+    (∀ ec ∈ tail, ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k)) →
+    (∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8 * i)) →
+    (∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k) =
+        memW s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k)) →
+    EvmInvAt post S := by
+  dsimp only
+  intro hcell hfields hcont hheader hslots hrecords
+  let post := {s with memory := fun a =>
+    if a = p + n * 8#64 then .word log
+    else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+  have hAp : ArenaReady post :=
+    ⟨⟨hA.1.code, hA.1.memaddrs, hA.1.shMemaddrs, hA.1.baseAddr⟩,
+      arenaOK_congr rfl hA.2⟩
+  have hchain : evmChain post = evmChain s := log_chain_of_cont_readback_g09 rfl rfl hcont
+  have htailMem : ∀ ec ∈ tail, ec ∈ evmChain s := by
+    intro ec he; rw [hcons]; exact List.mem_cons_of_mem _ he
+  have hheadMem : head ∈ evmChain s := by rw [hcons]; exact List.mem_cons_self
+  have htail : ∀ ec ∈ tail, frameObjects post ec = frameObjects s ec := by
+    intro ec he
+    exact (log_no_growth_tail_objects_congr_g09 (s := s) (post := post) rfl
+      (hfields ec (htailMem ec he)) (hheader ec he) (hslots ec he) (hrecords ec he)).1
+  obtain ⟨hhwf, hhobj⟩ := op_log_no_growth_head_frame_g09 s head tail S Nd l p n cap log
+    hA (hFW head hheadMem) hWT hpw hcons hl hn hm0 hm16 hnonnull hlt
+    hl_bound hp_bound hdisj hd8 hdslot hec hecHeader hecBuffer hlog hdheader hdbuffer
+    (hnewMsg head hheadMem) hcell hchain htail
+  exact evmInvAt_of_log_owned_frames_g09 hA hAp hinv hWT hcell rfl rfl hchain hcons
+    hhobj hhwf hFW (fun ec he => hnewMsg ec (htailMem ec he))
+    hfields hcont hheader hslots hrecords hold hnew hnewOld holdWorld hnewWorld
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
