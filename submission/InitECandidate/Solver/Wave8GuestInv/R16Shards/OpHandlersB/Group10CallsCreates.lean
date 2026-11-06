@@ -12409,4 +12409,28 @@ theorem salt_buffer_disj_headers_g10 {F : Type}
     rw [hloc]
     omega
 
+theorem salt_write_head_alignment_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hi : EvmInv s) (hw : Group10.HeadMemChainWF s) (hs : SaltBufferLocal_g10 s)
+    (hch : evmChain post = evmChain s)
+    (heff : ByteRegionEffect s post [(locN s "salt", 32)]) :
+    Group10.HeadMemChainWF post := by
+  apply headMemChainWF_of_byteRegionEffect hi hw hch heff
+  · intro i hi
+    simp only [List.mem_singleton] at hi
+    subst i
+    obtain ⟨p, hp, hal, _⟩ := hs
+    simpa only [locN, hp] using hal
+  · intro ec hec i hi'
+    simp only [List.mem_singleton] at hi'
+    subst i
+    obtain ⟨he, hc⟩ := salt_buffer_disj_headers_g10 s hi hs ec hec
+    constructor
+    · right
+      unfold Disj at he ⊢
+      rcases he with h | h | h | h <;> simp_all
+    · right
+      unfold Disj at hc ⊢
+      rcases hc with h | h | h | h <;> simp_all
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
