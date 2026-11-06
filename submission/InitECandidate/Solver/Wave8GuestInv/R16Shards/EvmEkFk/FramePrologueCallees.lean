@@ -9445,6 +9445,65 @@ theorem precompile_sha256_padding_byte_effect {F : Type}
   simp [evalHOLExact, evalListHOLExact, hp, hr, valueIsWord, valueWord,
     wordOpHOL, wordOp]
 
+theorem precompile_sha256_padding_zero_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hnt : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memzero")
+      [.var .global (ofString "sha_pad"), .const 128])).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memzero")
+      [.var .global (ofString "sha_pad"), .const 128])).1 = none ∨
+      Resumes (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memzero")
+      [.var .global (ofString "sha_pad"), .const 128])).1) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "memzero")
+        [.var .global (ofString "sha_pad"), .const 128])).2 [(pad.toNat,128)] := by
+  apply R10Shards.P26_P28.call0_byteEff R10Shards.P26_P28.funByteEff_memzero s _ _ hc hi ?_ hnt hr
+  intro vals hv r hr hpos
+  simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hp] at hv
+  subst vals
+  simp only [List.getElem?_cons_zero, List.getElem?_cons_succ, Option.getD_some,
+    R10Shards.P26_P28.valWordNat, BitVec.toNat_ofNat, Nat.reducePow, Nat.reduceMod, List.mem_singleton] at hr
+  subst r
+  exact ⟨(pad.toNat,128), List.mem_singleton.mpr rfl, le_rfl, le_rfl⟩
+
+theorem precompile_sha256_padding_copy_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad rem : BitVec 64) (src : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hrem : s.locals.lookup (ofString "rem") = some (.val (.word rem)))
+    (hb : rem.toNat < 64)
+    (hnt : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memcpy")
+      [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")])).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memcpy")
+      [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")])).1 = none ∨
+      Resumes (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memcpy")
+      [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")])).1) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")])).2 [(pad.toNat,128)] := by
+  apply R10Shards.P26_P28.call0_byteEff R10Shards.P26_P28.funByteEff_memcpy s _ _ hc hi ?_ hnt hr
+  intro vals hv r hr hpos
+  simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hp, hrem] at hv
+  split at hv
+  · rename_i v vs hv1 hv2
+    injection hv1 with hv1
+    subst v
+    injection hv with hv
+    subst vals
+    split at hv2
+    · rename_i v vs hsrc htail
+      injection hv2 with hv2
+      injection htail with htail
+      rw [← hv2, ← htail] at hr
+      simp only [List.getElem?_cons_zero, List.getElem?_cons_succ, Option.getD_some,
+        R10Shards.P26_P28.valWordNat, List.mem_singleton] at hr
+      subst r
+      refine ⟨(pad.toNat,128), List.mem_singleton.mpr rfl, le_rfl, ?_⟩
+      omega
+    · simp at hv2
+  · simp at hv
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
