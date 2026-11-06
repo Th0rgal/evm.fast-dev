@@ -15589,4 +15589,12 @@ theorem op_log_header_stores_step_g09 {F : Type}
   exact hcont _ hc hwi (by rw [hchain]; exact hl) (by rw [hR]; exact hr)
     he rfl rfl hHM hnt
 
+/-- Reassociate concrete sequences without altering finite evaluation. -/
+theorem evaluate_seq_assoc_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b c : ProgHOL 64) :
+    evaluateHOLFiniteState s (.seq (.seq a b) c) = evaluateHOLFiniteState s (.seq a (.seq b c)) := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_seq_line780]
+  rcases h : evaluateHOLFiniteState s a with ⟨r, post⟩
+  cases r <;> simp [h, evaluateHOLFiniteState_seq_line780]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
