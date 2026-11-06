@@ -15069,6 +15069,32 @@ private theorem heapByteEff_of_dec_word_vh {F : Type}
   rw [if_pos hsh]
   exact hb.locals_clock _ (evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) body).2.clock
 
+/-- The `pl := *(si+0)`, `raw := *(pl+0)` prefix of `payload_header` preserves a
+`HeapByteEff` established for the remaining body. -/
+private theorem heapByteEff_payload_prefix {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {plw raww : BitVec 64}
+    {rest : ProgHOL 64} {Rl : List Ivl} {gw : List String}
+    (hev_pl : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "si"), .const 0#64])) =
+      some (.val (.word plw)))
+    (hev_raw : @evalHOLExact 64 F _
+      (setVarHOLFinite (ofString "pl") (.val (.word plw)) s).toExact
+      (fun a => Classical.propDecidable ((setVarHOLFinite (ofString "pl") (.val (.word plw)) s).memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "pl"), .const 0#64])) =
+      some (.val (.word raww)))
+    (hb : WkBlockTxEnc.HeapByteEff s0
+      (evaluateHOLFiniteState
+        (setVarHOLFinite (ofString "raw") (.val (.word raww))
+          (setVarHOLFinite (ofString "pl") (.val (.word plw)) s)) rest).2 Rl gw) :
+    WkBlockTxEnc.HeapByteEff s0
+      (evaluateHOLFiniteState s
+        (.dec (ofString "pl") .one
+          (.load .one (.op .add [.var .local (ofString "si"), .const 0#64]))
+          (.dec (ofString "raw") .one
+            (.load .one (.op .add [.var .local (ofString "pl"), .const 0#64])) rest))).2 Rl gw := by
+  exact heapByteEff_of_dec_word_vh hev_pl
+    (heapByteEff_of_dec_word_vh hev_raw hb)
+
 /-- Entry scratch regions of `payload_header` (the `R` component of its `C08` contract). -/
 private def phR : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl :=
   fun s =>
