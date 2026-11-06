@@ -6529,4 +6529,201 @@ theorem nodedb_lookup_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
   obtain ⟨f, c, n, hv, hn, hf, _⟩ := nodedb_lookup_code_tail_cases st hAst found ptr hr hrecord w hw
   exact ⟨f, c, n, hv, hn, hf⟩
 
+theorem lookup_nodedb_lookup_local :
+    originalRuntimeCode.lookup (ofString "nodedb_lookup") =
+      some ([(ofString "db", .one), (ofString "hash", .one)],
+        sourceFnBody Guest.Software.guestFn_nodedb_lookup, .comb [.one, .one, .one]) :=
+  lookup_of_guestAst_getElem 254 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_nodedb_lookup) rfl
+
+theorem nodedb_lookup_call_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (db hash : BitVec 64) (hcode : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hW : HtabWF s db.toNat) (hentries : NodeDbEntriesStrong s db.toNat)
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "nodedb_lookup")
+      [.val (.word db), .val (.word hash)] = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    post.eshapes = s.eshapes ∧ ∃ found code code_n : BitVec 64,
+      v = .rStruct [.val (.word found), .val (.word code), .val (.word code_n)] ∧
+      (found ≠ 0 → code_n.toNat < 2 ^ 40) := by
+  obtain ⟨hbody, hd⟩ := lookupCodeHOLFinite_param_at s.code.lookup (ofString "nodedb_lookup") []
+    (ofString "db") .one [(ofString "hash", .one)] _ (.comb [.one, .one, .one])
+    (by intro p hp; simp at hp; rw [hp]; decide)
+    (by rw [hcode]; exact lookup_nodedb_lookup_local) (vpre := []) (by simp) hl
+  obtain ⟨_, hh⟩ := lookupCodeHOLFinite_param_at s.code.lookup (ofString "nodedb_lookup")
+    [(ofString "db", .one)] (ofString "hash") .one [] _ (.comb [.one, .one, .one])
+    (by simp) (by rw [hcode]; exact lookup_nodedb_lookup_local)
+    (vpre := [.val (.word db)]) (by simp) hl
+  subst body
+  let ce := callEntryStateHOLFinite s callee
+  have hAce : ArenaReady ce := localsFree_arenaReady s _ _ hA
+  have hWce : HtabWF ce db.toNat := (WkBal.htabWF_with_locals s _ _ _).2 hW
+  have he : NodeDbEntriesStrong ce db.toNat := by
+    simpa [NodeDbEntriesStrong, ce, callEntryStateHOLFinite, htabValues, hdr, nodeF, memW,
+      WordsOK, WordAt, globN] using hentries
+  obtain ⟨f, c, n, hv, hn, _⟩ := nodedb_lookup_return_strong ce db hash hcode hAce hd hh hWce he v
+    (congrArg Prod.fst hb)
+  refine ⟨?_, f, c, n, hv, fun _ => hn⟩
+  have hm := PanRunBounded.evaluateHOLFiniteState_metadata ce (sourceFnBody Guest.Software.guestFn_nodedb_lookup)
+  rw [hb] at hm
+  exact hm.2.2.2.2
+
+/-- At each reached lookup, the database argument names a well-formed table
+whose live payloads are heap-contained code records. -/
+def WsCodeLookupStrong {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ArenaReady s ∧ ∀ values,
+    evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "ws"), .const 16]),
+        .var .local (ofString "code_hash")] = some values →
+    ∃ db hash : BitVec 64, values = [.val (.word db), .val (.word hash)] ∧
+      HtabWF s db.toNat ∧ NodeDbEntriesStrong s db.toNat
+
+/-- Full code retrieval with the exact strengthened payload invariant exposed
+at the zero-comparison continuation. -/
+theorem ws_get_code_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode)
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hstrong : ∀ values body callee ret post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned (.val (.word 0))), post) →
+      WsCodeLookupStrong (setVarHOLFinite (ofString "eq") (.val (.word 0)) {post with locals := s.locals})) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ws_get_code)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply ws_get_code_return_of_nodedb
+  intro values body callee ret post ha hl hb
+  let st := setVarHOLFinite (ofString "eq") (.val (.word 0)) {post with locals := s.locals}
+  obtain ⟨hA, hargs⟩ := hstrong values body callee ret post ha hl hb
+  have hm := PanRunBounded.evaluateHOLFiniteState_metadata (callEntryStateHOLFinite s callee) body
+  rw [hb] at hm
+  have hstcode : st.code = originalRuntimeCode := hm.1.trans hcode
+  have hstshape : st.eshapes.lookup (ofString "StateErr") = some .one := by
+    change post.eshapes.lookup _ = _
+    rw [hm.2.2.2.2]; exact hshape
+  refine ⟨hstshape, ?_⟩
+  intro values' body' callee' ret' v' post' ha' hl' hb'
+  obtain ⟨db, hash, hv, hW, he⟩ := hargs values' ha'
+  subst values'
+  exact nodedb_lookup_call_return_strong st db hash hstcode hA hW he _ _ _ _ _ hl' hb'
+
+/-- Entry-state form of the strong code lookup contract. The read-only hash
+comparison transports the table and payload invariant to the lookup. -/
+theorem ws_get_code_return_entry_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode)
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hentry : WsCodeLookupStrong s) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ws_get_code)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply ws_get_code_return_strong s hcode hshape
+  intro values body callee ret post ha hl hb
+  have hl' := hl
+  rw [hcode] at hl'
+  have hframe := R16WkAcctWs.evaluate_roProgR16 R16WkAcctWs.wsGetCodeCallees
+    R16WkAcctWs.wsGetCodeCallees_good body
+    (R16WkAcctWs.wsGetCodeCallees_good _ (by decide) values body callee ret hl')
+    (callEntryStateHOLFinite s callee) hcode
+  rw [hb] at hframe
+  have hp : post = {s with locals := post.locals, clock := post.clock} := by
+    simpa [R16WkAcctWs.LocFrameR16, callEntryStateHOLFinite] using hframe
+  let st := setVarHOLFinite (ofString "eq") (.val (.word (0 : BitVec 64))) {post with locals := s.locals}
+  change WsCodeLookupStrong st
+  have hs : st = {s with locals := st.locals, clock := st.clock} := by
+    dsimp only [st, setVarHOLFinite]; rw [hp]
+  refine ⟨?_, ?_⟩
+  · rw [hs]; exact localsFree_arenaReady s _ _ hentry.1
+  · intro vs hvs
+    have hs' : st = setVarHOLFinite (ofString "eq") (.val (.word (0 : BitVec 64)))
+        {s with clock := post.clock} := by
+      dsimp only [st]
+      conv_lhs => rw [hp]
+    rw [hs'] at hvs
+    have heval : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.load .one (.op .add [.var .global (ofString "ws"), .const 16]),
+          .var .local (ofString "code_hash")] = some vs := by
+      have he : evalListHOLFinite
+          (setVarHOLFinite (ofString "eq") (.val (.word (0 : BitVec 64))) {s with clock := post.clock})
+          (h := fun a => Classical.propDecidable (s.memaddrs a))
+          [.load .one (.op .add [.var .global (ofString "ws"), .const 16]),
+            .var .local (ofString "code_hash")] =
+          evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+          [.load .one (.op .add [.var .global (ofString "ws"), .const 16]),
+            .var .local (ofString "code_hash")] := by
+        simp (config := {decide := true}) [evalListHOLFinite, evalListHOLExact, evalHOLExact,
+          setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+      exact he ▸ hvs
+    obtain ⟨db, hash, hv, hW, he⟩ := hentry.2 vs heval
+    refine ⟨db, hash, hv, ?_, ?_⟩
+    · rw [hs]; exact (WkBal.htabWF_with_locals s _ _ _).2 hW
+    · rw [hs]
+      simpa [NodeDbEntriesStrong, htabValues, hdr, nodeF, memW, WordsOK, WordAt, globN] using he
+
+/-- Word-level entry facts suffice to establish the strong lookup predicate. -/
+theorem wsCodeLookupStrong_of_words {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (db hash : BitVec 64) (hA : ArenaReady s)
+    (hdb : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hW : HtabWF s db.toNat) (he : NodeDbEntriesStrong s db.toNat) : WsCodeLookupStrong s := by
+  refine ⟨hA, ?_⟩
+  intro values hv
+  have hv' : values = [.val (.word db), .val (.word hash)] := by
+    unfold evalHOLFinite at hdb
+    simp only [evalListHOLFinite, evalListHOLExact] at hv
+    rw [hdb] at hv
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, hh] using hv.symm
+  exact ⟨db, hash, hv', hW, he⟩
+
+theorem lookup_ws_get_code_local :
+    originalRuntimeCode.lookup (ofString "ws_get_code") =
+      some ([(ofString "code_hash", .one)], sourceFnBody Guest.Software.guestFn_ws_get_code,
+        .comb [.one, .one]) :=
+  lookup_of_guestAst_getElem 370 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_ws_get_code) rfl
+
+/-- The entry-state result is available directly at a concrete caller lookup. -/
+theorem ws_get_code_call_return_entry_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (values : List (ValueHOL 64)) (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode)
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hentry : WsCodeLookupStrong (callEntryStateHOLFinite s callee))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_code") values = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40 := by
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "ws_get_code")
+    _ _ body _ ret values callee (by rw [hcode]; exact lookup_ws_get_code_local) hl
+  subst body
+  exact ws_get_code_return_entry_strong (callEntryStateHOLFinite s callee) hcode hshape hentry v
+    (congrArg Prod.fst hb)
+
+/-- Bounded code words and the original dispatch anchor survive the actual
+`ws_get_code` return epilogue and caller-local restoration. -/
+theorem ws_get_code_resume_bounded (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (name : MlS) (hne : name ≠ ofString "msg") (args : List (ExpHOL 64))
+    (hentry : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) values body callee ret,
+      s.code = originalRuntimeCode → D0Pre gw hp G ch s →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "ws_get_code") values = some (body, callee, ret) →
+      s.eshapes.lookup (ofString "StateErr") = some .one ∧
+        WsCodeLookupStrong (callEntryStateHOLFinite s callee)) :
+    DecCallResumeOn (D0Pre gw hp G ch)
+      (fun s => D0Pre gw hp G ch s ∧ ∃ code code_n : BitVec 64,
+        s.locals.lookup name = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+        code_n.toNat < 2 ^ 40) name (ofString "ws_get_code") args := by
+  intro F s values body callee ret v post hc hP ha hl hb
+  have hD := ws_get_code_resume_step gw hp G ch name hne args s values body callee ret v post
+    hc hP ha hl hb
+  obtain ⟨hs, he⟩ := hentry s values body callee ret hc hP ha hl
+  obtain ⟨code, code_n, hv, hn⟩ := ws_get_code_call_return_entry_strong s body callee ret
+    values v post hc hs he hl hb
+  refine ⟨hD, code, code_n, ?_, hn⟩
+  simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hv]
+
 end HeadStore
