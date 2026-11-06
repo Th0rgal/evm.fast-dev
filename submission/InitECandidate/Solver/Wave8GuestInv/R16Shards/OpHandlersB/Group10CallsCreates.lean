@@ -12072,4 +12072,50 @@ theorem create_prefix_through_extend_g10 {F : Type} (s0 : PanSemStateFiniteExact
   · intro t hi hp; exact hp.2
   · exact extend_memory_sequence_g10 s0 true _ hcont
 
+theorem memoryExpansionLocal_heap_update_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (q : BitVec 64)
+    (hp : MemoryExpansionLocal_g10 s) :
+    MemoryExpansionLocal_g10 {s with globals := s.globals.update (ofString "heap_ptr", .val (.word q))} := by
+  apply memoryExpansionLocal_transport_g10 hp rfl
+  · simp [globN, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "heap_ptr" ≠ ofString "ev" by decide]
+  · rfl
+
+theorem alloc_return_frame_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p n : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hple : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    v = .val (.word p) ∧ post.memory = s.memory ∧
+      post.globals = s.globals.update (ofString "heap_ptr", .val (.word ((p + (n + 7)) &&& (0 - 8)))) := by
+  have h := M13.evaluate_alloc_body_general s p n hc hple hp hn v
+  rw [hr] at h
+  obtain ⟨hv, hg, hm, _⟩ := h rfl
+  exact ⟨hv, hm, hg⟩
+
+theorem memoryExpansionLocal_alloc_binding_g10 {F : Type}
+    (caller : PanSemStateFiniteExact 64 F) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (p n : BitVec 64) (hc : caller.code = originalRuntimeCode)
+    (hple : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat)
+    (hp : caller.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : callee.lookup (ofString "n") = some (.val (.word n)))
+    (hexpand : MemoryExpansionLocal_g10 caller) (name : MlS) (hne : name ≠ ofString "x")
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite caller callee)
+      (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    MemoryExpansionLocal_g10 (setVarHOLFinite name v {post with locals := caller.locals}) := by
+  obtain ⟨_, hm, hg⟩ := alloc_return_frame_g10 (callEntryStateHOLFinite caller callee) p n hc hple hp hn v post hr
+  apply memoryExpansionLocal_transport_g10 hexpand
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne]
+  · change globN post "ev" = globN caller "ev"
+    simp [globN, hg, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "heap_ptr" ≠ ofString "ev" by decide]
+  · change memW post _ = memW caller _
+    unfold memW
+    rw [hm]
+    rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
