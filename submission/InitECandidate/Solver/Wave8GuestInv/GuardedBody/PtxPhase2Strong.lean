@@ -18252,4 +18252,46 @@ theorem phase2_ct_fresh_disjoint_allocated {F : Type}
     have hsep : heapLimit ≤ InitE.scratchStart := by decide
     exact Or.inr (Or.inr (Or.inl (by have := hs.1; dsimp at *; omega)))
 
+/-- Updating only the heap pointer does not change typed-world intervals. -/
+theorem phase2_typed_intervals_heap_only {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hm : post.memory = s.memory)
+    (hg : ∀ g : String, ofString g ≠ ofString "heap_ptr" → globN post g = globN s g) :
+    worldTypedIvls post S Nd = worldTypedIvls s S Nd := by
+  have htab : htabFootprint post = htabFootprint s := by
+    funext t; simp only [htabFootprint, hdr, memW, hm]
+  have hrec : ∀ gn ∈ typedRecords, globN post gn.1 = globN s gn.1 := by
+    intro gn hgn
+    apply hg
+    simp only [typedRecords, List.mem_cons, List.not_mem_nil, or_false] at hgn
+    rcases hgn with rfl | rfl | rfl | rfl <;> decide
+  have hmap : (typedRecords.map fun gn => (globN post gn.1, if globN post gn.1 = 0 then 0 else gn.2)) =
+      (typedRecords.map fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) := by
+    apply List.map_congr_left
+    intro gn hgn; rw [hrec gn hgn]
+  simp only [worldTypedIvls, htab, hmap, hdr, memW, hm, nodeExtents,
+    blockOutObjects, balObjects, balRecords, lstObjects, htabValues, nodeF, nodeIvl, nodePath]
+  simp only [hg "journal" (by decide), hg "journal_cap" (by decide),
+    hg "bo" (by decide), hg "bal_accounts" (by decide)]
+  rfl
+
+/-- Concrete allocation leaves the typed intervals of a fixed witness unchanged. -/
+theorem phase2_alloc_typed_intervals (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (hc : s.code = originalRuntimeCode) (hp : WorldOK s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post))
+    (S Nd : List Nat) : worldTypedIvls post S Nd = worldTypedIvls s S Nd := by
+  apply phase2_typed_intervals_heap_only s post S Nd
+    (phase2_alloc_memory s vs body callee ret v post hc hp hl he)
+  have hh := PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp callee) (by rw [he]; simp)
+  rw [he] at hh
+  have step := hh (Or.inl ⟨v, rfl⟩)
+  intro g hg
+  have hne : ofString g ∉ (["heap_ptr"] : List String).map ofString := by
+    simpa only [List.map_cons, List.map_nil, List.mem_cons, List.not_mem_nil, or_false] using hg
+  exact R16Shards.globN_eq_of_lookup (step.2.2.1 (ofString g) hne)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

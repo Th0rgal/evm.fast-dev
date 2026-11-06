@@ -18727,4 +18727,172 @@ theorem jset_body_ts16_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Lift transaction-table preservation through installed jset lookup and call entry. -/
+theorem jset_call_ts16_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (j n cap p tw kw : BitVec 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : callee.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : callee.lookup (ofString "key") = some (.val (.word kw)))
+    (hts : globN s "ts" ≠ 0) (htw : tw.toNat = memW s (globN s "ts" + 16))
+    (htn : tw.toNat ≠ 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "jset") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have hi : callee.lookup (ofString "index") = none := by
+    have hl' := hl
+    rw [hW.1.1.1.code] at hl'
+    unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hl'
+    split at hl'
+    · cases hl'
+    · rename_i eb el es raw
+      simp only [lookupCodeHOLExact, EvmEkFk.lookup_jset] at raw
+      split at raw
+      · cases raw
+        cases hl'
+        change List.foldl _ (fun _ => none)
+          ([(ofString "t"), (ofString "key"), (ofString "value")].zip vs) (ofString "index") = none
+        cases vs with
+        | nil => rfl
+        | cons a rest =>
+          cases rest with
+          | nil => rfl
+          | cons b rest =>
+            cases rest with
+            | nil => rfl
+            | cons c rest => rfl
+      · cases raw
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "jset") _ _ body _ ret vs callee EvmEkFk.lookup_jset
+    (by rwa [← hW.1.1.1.code])
+  subst body
+  have he : TxEnv (callEntryStateHOLFinite s callee) := by
+    refine ⟨hW.2.bo_nz, hW.2.bo24, hW.2.bo32, hW.2.bo40, hW.2.bo72, ?_, hW.2.jcap_nz⟩
+    have hi' : locN (callEntryStateHOLFinite s callee) "index" = 0 := by
+      simp [locN, callEntryStateHOLFinite, hi]
+    rw [hi']
+    exact Nat.lt_of_le_of_lt (Nat.zero_le _) hW.2.idx_lt
+  exact jset_body_ts16_header_words (callEntryStateHOLFinite s callee) post S Nd j n cap p tw kw rv
+    ⟨(WkBal.worldOK_with_locals s callee (s.clock - 1)).2 hW.1, he⟩
+    ((R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).2 hT)
+    hj hn hc hp ht hk hts htw htn hr
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+open private callee_param_two_r16
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Successful jset execution rules out a null table through its initial lookup. -/
+theorem jset_body_table_nonzero {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (tw kw : BitVec 64) (rv : ValueHOL 64)
+    (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_jset) =
+      (some (.returned rv), post)) : tw.toNat ≠ 0 := by
+  change evaluateHOLFiniteState s (.decCall _ _ (ofString "htab_get") _ _) = _ at hr
+  obtain ⟨vs, body, callee, ret, old, cp, u, ha, hl, hb, _, _⟩ := dec_call_return_inv_args hr
+  have hcode := hW.1.1.code
+  have hbody := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "htab_get")
+    _ _ body _ ret vs callee EvmFrameSpecs.lookup_htab_get (by rwa [← hcode])
+  obtain ⟨v1, v2, he1, he2, hct, hck⟩ := callee_param_two_r16 s (ofString "htab_get")
+    (ofString "t") (ofString "key") .one .one _ _
+    (by rw [hcode]; exact EvmFrameSpecs.lookup_htab_get)
+    (.var .local (ofString "t")) (.var .local (ofString "key")) _ _ callee ret ha hl
+  have hv1 : v1 = .val (.word tw) := by simpa [evalHOLExact, ht] using he1.symm
+  have hv2 : v2 = .val (.word kw) := by simpa [evalHOLExact, hk] using he2.symm
+  subst v1 v2
+  have hn := WkBal.htab_get_t_nonzero (callEntryStateHOLFinite s callee) tw kw
+    (guestInv_callEntry s callee hW.1.1) hct hck old (by rw [← hbody, hb])
+  intro hz
+  apply hn
+  apply BitVec.eq_of_toNat_eq
+  exact hz
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Successful installed jset calls preserve headers without a separate table
+nonzero premise: the initial lookup supplies it. -/
+theorem jset_call_ts16_return_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (j n cap p tw kw : BitVec 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : callee.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : callee.lookup (ofString "key") = some (.val (.word kw)))
+    (hts : globN s "ts" ≠ 0) (htw : tw.toNat = memW s (globN s "ts" + 16))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "jset") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "jset") _ _ body _ ret vs callee EvmEkFk.lookup_jset
+    (by rwa [← hW.1.1.1.code])
+  have hnz := jset_body_table_nonzero (callEntryStateHOLFinite s callee) post tw kw rv
+    ((WkBal.worldOK_with_locals s callee (s.clock - 1)).2 hW.1) ht hk
+    (by rw [hbdy] at hr; exact hr)
+  exact jset_call_ts16_header_words s post S Nd vs body callee ret j n cap p tw kw rv
+    hW hT hj hn hc hp ht hk hts htw hnz hl hr
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs
+
+/-- Allocation-only effects preserve the nested block-output header words. -/
+theorem worldEff_allocation_header_words {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {gw : List String}
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (he : WorldEff s post [] [] gw) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  apply tx_header_words_of_fixed_frame hW hT
+  intro b hb hn
+  have hf := (hT.2.2.1.1 b hb).resolve_left hn
+  exact (worldEff_allocated_frame b hW.1.1.2 he hf.1 hf.2.1 hf.2.2.1).2
+
+/-- The copied-account balance update preserves the original backing words,
+including the preceding allocation and read-only arithmetic effects. -/
+theorem fresh_account_balance_store_header_words {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (bw : BitVec 64) (value : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (he : WorldEff s cur [] [] ["heap_ptr"])
+    (ha : cur.locals.lookup (ofString "a") = some (.val (.word bw)))
+    (hv : cur.locals.lookup (ofString "nb") = some value)
+    (hlo : globN s "heap_ptr" ≤ bw.toNat) (hhi : bw.toNat + 56 ≤ heapLimit)
+    (hflat : (flattenHOL value).length = 4)
+    (hr : evaluateHOLFiniteState cur
+      (.store (.op .add [.var .local (ofString "a"), .const 8])
+        (.var .local (ofString "nb"))) = (none, post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have he' := fresh_account_balance_store_effect bw value he ha hv hlo hhi hflat
+  rw [hr] at he'
+  exact worldEff_allocation_header_words hW hT he'
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
