@@ -8360,4 +8360,29 @@ theorem ws_code_root_after_htab_exit {F : Type}
   · omega
   · exact hx
 
+/-- Restore the caller's witness root after the access-call exit, including
+the unchanged global used to address the root slot. -/
+theorem ws_code_root_after_access_call_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S) (ht : t ∈ S)
+    (hloc : locN (callEntryStateHOLFinite s callee) "t" = t)
+    (hws : globN s "ws" ≠ 0)
+    (hx : HtabExit (callEntryStateHOLFinite s callee) post) :
+    globN post "ws" = globN s "ws" ∧
+    memW post (globN post "ws" + 16) = memW s (globN s "ws" + 16) := by
+  have hg := hx.2.2.2.2.2.2.2 (ofString "ws") (by decide)
+  have hglob : globN post "ws" = globN s "ws" := by
+    unfold globN
+    rw [← hg]
+    rfl
+  refine ⟨hglob, ?_⟩
+  rw [hglob]
+  apply ws_code_root_after_htab_exit
+    (s := callEntryStateHOLFinite s callee) (S := S)
+    (localsFree_arenaReady s _ _ hAs) ((worldTyped_with_locals s _ _ S).2 hW)
+  · rw [hloc]; exact ht
+  · exact hws
+  · exact hx
+
 end HeadStore
