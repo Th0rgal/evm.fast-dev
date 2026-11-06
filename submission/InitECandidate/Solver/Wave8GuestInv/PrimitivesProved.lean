@@ -526,7 +526,7 @@ theorem primitives : Primitives where
   «ro_check_gas_limit» := R10Ports.ro_check_gas_limit
   «wk_header_hash» := R16Shards.HeaderHashRecover.«wk_header_hash_inside»
   «wk_is_valid_versioned_hashes» := R16Shards.HeaderHashRecover.«wk_is_valid_versioned_hashes»
-  «wk_nodedb_build» := «wk_nodedb_build»
+  «wk_nodedb_build» := InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.wk_nodedb_build
   «wk_payload_header» := «wk_payload_header»
   «wk_state_init» := «wk_state_init»
   «wk_validate_header» := «wk_validate_header»
