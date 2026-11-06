@@ -16387,4 +16387,27 @@ theorem blockOut_disj_journal {F : Type} {s : PanSemStateFiniteExact 64 F} {b : 
 
 end PtxP34
 
+namespace PtxP34
+open EvmEkFk R10Shards.P26_P28
+
+/-- The narrow append footprint cannot hit a block-output backing object. -/
+theorem journal_append_blockOut_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (b : Ivl) (n : Nat)
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hn : n < globN s "journal_cap")
+    (hcell : ∀ x : BitVec 64, post.memory x ≠ s.memory x →
+      CellHitsPos x.toNat (globN s "journal" + 32 * n, 32) ∨
+      CellHitsPos x.toNat (freeGap s) ∨ CellHitsPos x.toNat (heapFree s)) :
+    IvlUnhit s post b := by
+  have hd := blockOut_disj_journal hfix hb (by omega)
+  have hi : Inside (globN s "journal" + 32 * n, 32) (globN s "journal")
+      (globN s "journal" + 32 * globN s "journal_cap") := by
+    dsimp [Inside]
+    omega
+  exact journal_append_allocated_frame s post b _ hA hal hb1 hb2
+    (disj_of_inside_left hi hd.flip).flip hcell
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
