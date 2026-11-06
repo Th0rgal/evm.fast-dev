@@ -12594,4 +12594,16 @@ theorem heap_step_world_typed_g10 {F : Type}
   revert g hmem
   decide
 
+theorem heap_step_frame_objects_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hm : post.memory = s.memory)
+    (hg : GlobalsKept ["heap_ptr"] s post) (ec : Ivl) :
+    frameObjects post ec = frameObjects s ec := by
+  have he : globN post "vm_system_address" = globN s "vm_system_address" := by
+    unfold globN
+    rw [← hg (ofString "vm_system_address") (by decide)]
+  simp only [frameObjects, frameLogs, frameRet, frameLogObjects, logOwnedIvls,
+    logRecordIvls, memW, hm, he]
+  rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
