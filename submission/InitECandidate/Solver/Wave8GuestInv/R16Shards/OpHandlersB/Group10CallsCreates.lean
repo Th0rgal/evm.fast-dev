@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.StateAccountOps
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.CalldataloadSpecs
 
 set_option Elab.async false
 set_option autoImplicit false
@@ -12224,5 +12225,37 @@ theorem alloc_return_aligned_g10 {F : Type}
     have hne : ofString "heap_ptr" ≠ k := by intro he; subst k; exact hk (by simp)
     rw [hg]
     simp [HolFiniteMapExact.lookup_update, FUPDATE, hne]
+
+theorem epsA_alloc_g10 :
+    EvmPreservingSpecA (fun _ => True)
+      (fun s v post => post.memory = s.memory ∧
+        ∃ p : BitVec 64, v = .val (.word p) ∧ p.toNat = globN s "heap_ptr")
+      (ofString "alloc") := by
+  refine ⟨_, _, _, GuestTrapAndLookup.lookup_alloc, ?_⟩
+  intro F s hc hi hw _ ⟨vals, hl⟩ _
+  have hlen : ∃ v0, vals = [v0] := by
+    have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
+      originalRuntimeCode.lookup (ofString "alloc") vals _ _ _ hl
+    simp only [Flapjack.lookupCodeHOLExact, GuestTrapAndLookup.lookup_alloc] at hx
+    rcases vals with _ | ⟨v0, _ | _⟩ <;> simp at hx
+    exact ⟨v0, rfl⟩
+  obtain ⟨v0, rfl⟩ := hlen
+  obtain ⟨_, _, n, rfl, hn⟩ := one_word_arg_lookup GuestTrapAndLookup.lookup_alloc hl
+  obtain ⟨p, hp⟩ := hi.1.2.2.2.2.2.2.2.2.2 "heap_ptr" (by decide)
+  change s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)) at hp
+  have hpn : p.toNat = globN s "heap_ptr" := by simp [globN, hp]
+  have hple : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat := by
+    rw [hpn]; exact hi.1.2.2.1
+  dsimp only
+  rcases hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) with ⟨r, post⟩
+  refine ⟨fun v hv => ?_, fun herr => ?_⟩
+  · have hrun : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) =
+        (some (.returned v), post) := by rw [hr]; exact congrArg (fun r => (r, post)) hv
+    obtain ⟨hip, hwp, hch, hR⟩ := alloc_return_aligned_g10 s p n hi hw hc hp hn v post hrun
+    obtain ⟨hvret, hm, _⟩ := alloc_return_frame_g10 s p n hc hple hp hn v post hrun
+    exact ⟨⟨hip, hwp⟩, hch, le_of_eq hR, hm, p, hvret, hpn⟩
+  · have hno := OpHandlers.alloc_body_no_evmErr s hc
+    rw [hr] at hno
+    exact False.elim (hno herr)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

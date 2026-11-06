@@ -11832,4 +11832,24 @@ theorem wkSc_process_withdrawals_of_idx_storage
   · cases hk
   · exact ⟨_, by simp [stdKeep], hk⟩
 
+theorem wkSc_idx_start_storage_of_decode_witness
+    {ExtraGuard : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat → Prop}
+    (hdw : WkBalStateInit.DecodeWitnessToMptSpec @ExtraGuard)
+    (hdb : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      WorldOK s → globN s "ws" ≠ 0 → ExtraGuard s (memW s (globN s "ws"))) :
+    WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "idx_start_storage") :=
+  worldKeepsSc_mono_bufs (by simp [WkBalStateInit.idxBufs, builderBufs]) (fun _ h => h)
+    (WkBalStateInit.wkSc_idx_start_storage_of_ws_storage_trie
+      (WkBalStateInit.wkSc_ws_storage_trie_idxBufs_of_decode_witness hdw hdb))
+
+theorem wkSc_process_withdrawals_of_decode_witness
+    {ExtraGuard : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat → Prop}
+    (hdw : WkBalStateInit.DecodeWitnessToMptSpec @ExtraGuard)
+    (hdb : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      WorldOK s → globN s "ws" ≠ 0 → ExtraGuard s (memW s (globN s "ws"))) :
+    WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "process_withdrawals") :=
+  wkSc_process_withdrawals_of_idx_storage (wkSc_idx_start_storage_of_decode_witness hdw hdb)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
