@@ -14006,4 +14006,48 @@ theorem log_no_growth_tail_objects_congr_g09 {F : Type}
     hfields 40 (by omega), hfields 88 (by omega), hfields 144 (by omega),
     hfields 216 (by omega), hb, hlogs]
 
+/-- Separation of suspended-frame records, log headers, buffers and live log
+records from the append writes establishes unchanged tail object ownership. -/
+theorem log_no_growth_tail_objects_of_separation_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ec : Ivl) (l p n log : BitVec 64)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hprotected : ∀ o ∈ ([(ec.1, 280), (memW s (ec.1 + 88), 24),
+        (memW s (memW s (ec.1 + 88)),
+          8 * memW s (memW s (ec.1 + 88) + 8))] : List Ivl),
+      o.1 + o.2 ≤ 2 ^ 64 ∧ Disj o (l.toNat, 24) ∧
+        Disj o (p.toNat, 8 * n.toNat + 8))
+    (hrecords : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let o := (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40)
+      o.1 + o.2 ≤ 2 ^ 64 ∧ Disj o (l.toNat, 24) ∧
+        Disj o (p.toNat, 8 * n.toNat + 8)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    frameObjects post ec = frameObjects s ec ∧ frameLogs post ec = frameLogs s ec := by
+  dsimp only
+  have hf := hprotected (ec.1, 280) (by simp)
+  have hh := hprotected (memW s (ec.1 + 88), 24) (by simp)
+  have hb := hprotected (memW s (memW s (ec.1 + 88)),
+    8 * memW s (memW s (ec.1 + 88) + 8)) (by simp)
+  apply log_no_growth_tail_objects_congr_g09 (s := s) (ec := ec)
+    (post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}) rfl
+    (log_no_growth_protected_words_g09 s l p n log (ec.1, 280) hl hp hf.1 hf.2.1 hf.2.2)
+    (log_no_growth_protected_words_g09 s l p n log (memW s (ec.1 + 88), 24)
+      hl hp hh.1 hh.2.1 hh.2.2)
+  · intro i hi
+    exact log_no_growth_protected_words_g09 s l p n log
+      (memW s (memW s (ec.1 + 88)), 8 * memW s (memW s (ec.1 + 88) + 8))
+      hl hp hb.1 hb.2.1 hb.2.2 (8 * i) (by omega)
+  · intro i hi k hk
+    have hr := hrecords i hi
+    have hkbound : k + 8 ≤ 40 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+    exact log_no_growth_protected_words_g09 s l p n log
+      (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40)
+      hl hp hr.1 hr.2.1 hr.2.2 k hkbound
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
