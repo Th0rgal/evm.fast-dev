@@ -14757,4 +14757,17 @@ theorem encode_receipt_backing (h : PtxCallees) {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Receipt encoding and the remaining stable-copy prefix are now concrete;
+only the credit call's strengthened preservation contract remains. -/
+theorem phase4BackingPrefix_of_credit (h : PtxCallees)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t)) :
+    Phase4BackingPrefix :=
+  phase4BackingPrefix_of_credit_encode h hcredit (encode_receipt_backing h)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
