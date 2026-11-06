@@ -6774,4 +6774,39 @@ theorem hoare_ws_get_code_dispatch_direct (gw : List String) (hp : Nat)
   exact (hoare_prepare_dispatch_direct gw hp G ch code code_n hn hsub).run
     s hc ⟨hD, hv⟩ hnt hr
 
+/-- Both cache-hit branches of `get_code` load a bounded two-word code record. -/
+theorem get_code_cache_record_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (found ptr : BitVec 64)
+    (hwlocal : s.locals.lookup (ofString "w") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]))
+    (hw : WordsOK s (ptr.toNat, 16))
+    (hin : Inside (memW s ptr.toNat, memW s (ptr.toNat + 8)) sourceBase (globN s "heap_ptr")) :
+    Ret s (.return (.rstruct [
+      .load .one (.rfield 1 (.var .local (ofString "w"))),
+      .load .one (.op .add [.rfield 1 (.var .local (ofString "w")), .const 8])]))
+      (fun v post => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  obtain ⟨code, code_n, hc, hn, hb⟩ := dispatch_code_record_words hA hw hin
+  have hd0 := (hw.2.2 0 (by omega)).choose_spec.1
+  have hd8 := (hw.2.2 1 (by omega)).choose_spec.1
+  simp only [Nat.mul_zero, Nat.add_zero] at hd0
+  simp only [Nat.mul_one] at hd8
+  have hc' : s.memory ptr = .word code := by simpa using hc
+  have hd0' : s.memaddrs ptr := by simpa using hd0
+  have haddr : ptr + 8#64 = BitVec.ofNat 64 (ptr.toNat + 8) := by
+    rw [BitVec.ofNat_add]; simp
+  have he : ev s (.rstruct [
+      .load .one (.rfield 1 (.var .local (ofString "w"))),
+      .load .one (.op .add [.rfield 1 (.var .local (ofString "w")), .const 8])]) =
+      some (.rStruct [.val (.word code), .val (.word code_n)]) := by
+    simp [ev, evalHOLExact, evalListHOLExact, hwlocal, memLoadHOLExact,
+      isWfShapeExactHOL, wordOpHOL, wordOp, valueIsWord, valueWord,
+      haddr, hd0', hd8, hc', hn]
+  apply Ret.ret
+  intro v hv
+  rw [he] at hv
+  cases hv
+  exact ⟨code, code_n, rfl, hb, rfl⟩
+
 end HeadStore
