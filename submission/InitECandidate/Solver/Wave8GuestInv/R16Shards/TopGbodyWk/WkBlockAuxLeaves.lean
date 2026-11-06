@@ -8810,4 +8810,23 @@ theorem merge_set_world_typed {F : Type}
     (merge_set_fixed_typed hA hW ht he hbs ht0 htbs).2,
     merge_set_tries_typed hA hW ht he hbe hbs ht0 htbs⟩
 
+/-- Outer insertion preserves the existential world invariant using the same
+table and node witnesses. -/
+theorem merge_set_world_ok {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {t inner : Nat}
+    (hW : WorldOK s)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbe : post.be = s.be)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32))
+    (howned : ∀ S Nd, WorldTypedWith s S Nd → t ∈ S ∧ inner ∈ S)
+    (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    WorldOK post := by
+  obtain ⟨S, htyped⟩ := hW.2
+  obtain ⟨Nd, htyped⟩ := (WkBal.worldTyped_iff_with s S).1 htyped
+  obtain ⟨ht, hi⟩ := howned S Nd htyped
+  refine ⟨he.1, S, (WkBal.worldTyped_iff_with post S).2 ⟨Nd, ?_⟩⟩
+  exact merge_set_world_typed hW.1 htyped ht he hbe hbs ht0 htbs hi hk hf hv
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
