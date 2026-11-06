@@ -19203,4 +19203,39 @@ theorem acct_is_empty_continuation_cut {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Isolate the concrete destruction obligation from the conditional and return. -/
+theorem conditional_destroy_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (cond e : ExpHOL 64)
+    (args : List (ExpHOL 64)) (v : ValueHOL 64)
+    (hd : ∀ mid, evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "destroy_account") args) = (none, mid) →
+      ∀ k ∈ ([40, 72] : List Nat),
+        memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)))
+    (hr : evaluateHOLFiniteState s
+      (.seq (.ite cond (.call (some (none, none)) (ofString "destroy_account") args) .skip)
+        (.return e)) = (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hr
+  split at hr
+  · split at hr
+    · have hm := return_memory_eq (by simpa only [evaluateHOLFiniteState_skip] using hr)
+      intro k hk
+      simp only [memW, hm]
+    · have hh : evaluateHOLFiniteState s
+          (.seq (.call (some (none, none)) (ofString "destroy_account") args) (.return e)) =
+          (some (.returned v), post) := by
+        rw [evaluateHOLFiniteState_seq_line780]
+        exact hr
+      obtain ⟨mid, hc, ht⟩ := seq_call0_ret_inv hh
+      have hm := return_memory_eq ht
+      intro k hk
+      simpa only [memW, hm] using hd mid hc k hk
+  · cases hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
