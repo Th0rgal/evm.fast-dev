@@ -8795,6 +8795,24 @@ theorem precompile_store_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [evaluateHOLFiniteState_store]
   split <;> (try split) <;> (try split) <;> rfl
 
+theorem precompile_sha256_state_init_effect {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : BitVec 64) (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "stp") = some (.val (.word p))) :
+    R10Shards.P26_P28.ByteEff s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_state_init)).2
+      [(p.toNat, 64)] := by
+  exact (R10Shards.P26_P28.checkWordStoresLocal_sound (ofString "stp") 64 (by decide) []
+    (sourceFnBody Guest.Software.guestFn_sha256_state_init) rfl s p hc hi hp (by simp)).1
+
+theorem precompile_sha256_block_effect {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : BitVec 64) (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "stp") = some (.val (.word p))) :
+    R10Shards.P26_P28.ByteEff s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_block)).2
+      [(p.toNat, 64)] := by
+  exact (R10Shards.P26_P28.checkWordStoresLocal_sound (ofString "stp") 64 (by decide) []
+    (sourceFnBody Guest.Software.guestFn_sha256_block) rfl s p hc hi hp (by simp)).1
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
