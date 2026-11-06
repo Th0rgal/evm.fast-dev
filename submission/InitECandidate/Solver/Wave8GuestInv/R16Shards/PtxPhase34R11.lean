@@ -16635,4 +16635,131 @@ theorem journal_four_stores_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private seq_assign_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The journal-counter increment preserves memory and locals before the tail. -/
+theorem journal_counter_tail_frame {F : Type}
+    {cur out : PanSemStateFiniteExact 64 F} (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.assign .global (ofString "journal_n")
+        (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail) =
+      (some (.returned rv), out)) :
+    ∃ mid, mid.memory = cur.memory ∧ mid.locals = cur.locals ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨mid, hass, htail⟩ := seq_assign_ret_inv hr
+  refine ⟨mid, ?_, ?_, htail⟩ <;>
+    (rw [evaluateHOLFiniteState_assign] at hass
+     split at hass
+     · cases hass
+     · split at hass
+       · cases hass; rfl
+       · cases hass)
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Carry the journal's narrow backing frame past the counter increment into the tail. -/
+theorem journal_counter_backing_resume {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {b : Ivl} {n : Nat}
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hn : n < globN s "journal_cap")
+    (heff : WorldEff s cur [(globN s "journal" + 32 * n, 32)] [] ["heap_ptr"])
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.assign .global (ofString "journal_n")
+        (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail) =
+      (some (.returned rv), out)) :
+    ∃ mid, IvlUnhit s mid b ∧ mid.locals = cur.locals ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨mid, hm, hl, ht⟩ := journal_counter_tail_frame tail rv hr
+  refine ⟨mid, ?_, hl, ht⟩
+  have hf := journal_worldEff_blockOut_frame hA hfix hb hal hb1 hb2 hn heff
+  intro x hx hh
+  rw [hm]
+  exact hf x hx hh
+
+end PtxP34
+
+namespace PtxP34
+
+/-- The concrete record writes and counter increment preserve backing before the tail. -/
+theorem journal_stores_counter_backing_resume {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {b : Ivl} (n : Nat)
+    (r t kc f0 f1 : BitVec 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hn : n < globN s "journal_cap") (hrnat : r.toNat = globN s "journal" + 32 * n)
+    (heff : WorldEff s cur [(r.toNat, 32)] [] ["heap_ptr"])
+    (hrloc : cur.locals.lookup (ofString "r") = some (.val (.word r)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hk : cur.locals.lookup (ofString "kc") = some (.val (.word kc)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hbound : r.toNat + 32 < 2 ^ 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.store (.var .local (ofString "r")) (.var .local (ofString "t")))
+        (.seq (.store (.op .add [.var .local (ofString "r"), .const 8#64]) (.var .local (ofString "kc")))
+          (.seq (.store (.op .add [.var .local (ofString "r"), .const 16#64]) (.rfield 0 (.var .local (ofString "old"))))
+            (.seq (.store (.op .add [.var .local (ofString "r"), .const 24#64]) (.rfield 1 (.var .local (ofString "old"))))
+              (.seq (.assign .global (ofString "journal_n") (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail))))) =
+      (some (.returned rv), out)) :
+    ∃ mid, IvlUnhit s mid b ∧ mid.locals = cur.locals ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨stored, hs, hl, hrest⟩ := journal_four_stores_effect r t kc f0 f1 _ rv heff hrloc ht hk hold hbound hr
+  rw [hrnat] at hs
+  obtain ⟨mid, hf, hl', htail⟩ := journal_counter_backing_resume tail rv hA hfix hb hal hb1 hb2 hn hs hrest
+  exact ⟨mid, hf, hl'.trans hl, htail⟩
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.HeapPotential
+
+/-- Allocation establishes the fresh destination bounds needed by the journal key copy. -/
+theorem journal_alloc_copy_bounds {F : Type}
+    {s cur next : PanSemStateFiniteExact 64 F} {jrec : Ivl} (p n : BitVec 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hc1 : ¬ ((cMax - p).toNat < n.toNat))
+    (hc2 : ¬ (cMax.toNat < ((p + (n + 7)) &&& ((0 : BitVec 64) - 8)).toNat))
+    (hnext : next = {cur with
+      globals := cur.globals.update (ofString "heap_ptr", .val (.word ((p + (n + 7)) &&& ((0 : BitVec 64) - 8)))),
+      locals := next.locals, clock := next.clock}) :
+    WorldEff s next [jrec] [] ["heap_ptr"] ∧
+      globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + n.toNat ≤ heapLimit := by
+  obtain ⟨he, _, _, _, hlo, hadd, hlim, _⟩ := worldEff_alloc_step heff (by simp) hp hc1 hc2 hnext
+  refine ⟨he, hlo, ?_⟩
+  omega
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup InitECandidate.Solver.HeapPotential
+
+/-- Successful allocator execution supplies the journal copy bounds and narrow effect. -/
+theorem journal_alloc_body_effect {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} {jrec : Ivl} (p n : BitVec 64) (v : ValueHOL 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : cur.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hr : evaluateHOLFiniteState cur (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    v = .val (.word p) ∧ WorldEff s post [jrec] [] ["heap_ptr"] ∧
+      globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + n.toNat ≤ heapLimit := by
+  have hs := R13.alloc_body_resumes cur p heff.code hp (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at hs
+  obtain ⟨n', hn', hv, hc1, hc2, hpost⟩ := hs
+  have he : n' = n := by rw [hn] at hn'; injection hn' with h; injection h with h; injection h with h; exact h.symm
+  subst n'
+  have hv' : v = .val (.word p) := by injection hv with h; injection h
+  have hnext : post = {cur with
+      globals := cur.globals.update (ofString "heap_ptr", .val (.word ((p + (n + 7)) &&& ((0 : BitVec 64) - 8)))),
+      locals := post.locals, clock := post.clock} := by
+    dsimp only at hpost
+    rw [hpost]
+  exact ⟨hv', journal_alloc_copy_bounds p n heff hp hc1 hc2 hnext⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

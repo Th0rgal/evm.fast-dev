@@ -8803,4 +8803,192 @@ theorem get_code_return_of_invariant {F : Type}
     (fun st v k h => hbind st "w" v k (by simp) h) hentry htail _
     (hbind s "eq" (.val (.word 0)) post.clock (by simp) hp)
 
+/-- Concrete entry facts for all three bounded-code retrieval branches. -/
+structure GetCodeEntryStrong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db hash tw : BitVec 64) : Prop where
+  arena : ArenaReady s
+  world : WorldTypedWith s S Nd
+  db_mem : db.toNat ∈ S
+  table_mem : tw.toNat ∈ S
+  distinct : db.toNat ≠ tw.toNat
+  payload : CodeDbPayloadStrong s S db.toNat
+  code : s.code = originalRuntimeCode
+  fit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64
+  key_nonzero : globN s "sk_buf" ≠ 0
+  shape : s.eshapes.lookup (ofString "StateErr") = some .one
+  ws_nonzero : globN s "ws" ≠ 0
+  ts_nonzero : globN s "ts" ≠ 0
+  hash_local : s.locals.lookup (ofString "code_hash") = some (.val (.word hash))
+  ws_load : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+    (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db))
+  ts_load : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+    (.load .one (.op .add [.var .global (ofString "ts"), .const 40])) = some (.val (.word tw))
+  first : CodeCacheLookupStrong s "ts"
+  second : CodeCacheLookupStrong s "bs"
+
+theorem GetCodeEntryStrong.bind {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {db hash tw : BitVec 64} (h : GetCodeEntryStrong s S Nd db hash tw)
+    (name : String) (v : ValueHOL 64) (k : Nat) (hn : name ∈ (["eq","w"] : List String)) :
+    GetCodeEntryStrong (setVarHOLFinite (ofString name) v {s with clock := k}) S Nd db hash tw := by
+  have hfirst : CodeCacheLookupStrong (setVarHOLFinite (ofString name) v {s with clock := k}) "ts" := by
+    rcases (by simpa using hn : name = "eq" ∨ name = "w") with rfl | rfl
+    · exact codeCacheLookupStrong_set_eq s "ts" v k h.first
+    · exact codeCacheLookupStrong_set_w s "ts" v k h.first
+  have hsecond : CodeCacheLookupStrong (setVarHOLFinite (ofString name) v {s with clock := k}) "bs" := by
+    rcases (by simpa using hn : name = "eq" ∨ name = "w") with rfl | rfl
+    · exact codeCacheLookupStrong_set_eq s "bs" v k h.second
+    · exact codeCacheLookupStrong_set_w s "bs" v k h.second
+  refine ⟨localsFree_arenaReady s _ _ h.arena, ?_, h.db_mem, h.table_mem, h.distinct,
+    h.payload, h.code, h.fit, h.key_nonzero, h.shape, h.ws_nonzero, h.ts_nonzero, ?_, ?_, ?_, hfirst, hsecond⟩
+  · have hw := h.world
+    unfold WorldTypedWith at hw ⊢
+    refine ⟨?_, hw.2.1, hw.2.2.1, hw.2.2.2⟩
+    simpa only [setVarHOLFinite, tablesTyped_with_locals] using hw.1
+  · rcases (by simpa using hn : name = "eq" ∨ name = "w") with rfl | rfl
+    all_goals simpa (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using h.hash_local
+  · exact global_load_preserved s _ "ws" 16 _ rfl rfl rfl h.ws_load
+  · exact global_load_preserved s _ "ts" 40 _ rfl rfl rfl h.ts_load
+
+/-- Full bounded-code return from concrete world, payload, and root facts. -/
+theorem get_code_return_entry_world_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db hash tw : BitVec 64) (h : GetCodeEntryStrong s S Nd db hash tw) :
+    Ret s (sourceFnBody Guest.Software.guestFn_get_code) (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply get_code_return_of_invariant (fun st => GetCodeEntryStrong st S Nd db hash tw)
+    (fun _ name v k hn h => h.bind name v k hn)
+    (fun _ h => ⟨h.code,h.first,h.second⟩) ?_ s h
+  intro st h
+  exact get_code_access_tail_of_world_preloads st S Nd db hash tw h.arena h.world h.db_mem h.table_mem
+    h.distinct h.payload h.code h.fit h.key_nonzero h.shape h.ws_nonzero h.ts_nonzero h.hash_local h.ws_load h.ts_load
+
+/-- Lift the concrete strong entry proof through the installed code call. -/
+theorem get_code_call_return_entry_world_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db hash tw : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (h : GetCodeEntryStrong (callEntryStateHOLFinite s callee) S Nd db hash tw)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_code") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40 := by
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "get_code")
+    _ _ body _ ret values callee (by rw [hc]; exact R16WkAcctWs.lookup_get_code) hl
+  subst body
+  exact get_code_return_entry_world_strong _ S Nd db hash tw h v (congrArg Prod.fst hb)
+
+/-- Forward the bounded code-call result through the external-code suffix. -/
+theorem ext_code_tail_of_world_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hentry : ∀ values body callee ret,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+          .var .local (ofString "addr")] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "get_code") values = some (body,callee,ret) →
+      ∃ S Nd db hash tw, GetCodeEntryStrong (callEntryStateHOLFinite s callee) S Nd db hash tw) :
+    Ret s (.decCall (ofString "c") (.comb [.one,.one]) (ofString "get_code")
+      [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+        .var .local (ofString "addr")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  obtain ⟨S,Nd,db,hash,tw,h⟩ := hentry values body callee ret ha hl
+  obtain ⟨code,code_n,hv,hn⟩ := get_code_call_return_entry_world_strong s values body callee ret v post
+    S Nd db hash tw hc h hl hb
+  subst v
+  have hlocal : (setVarHOLFinite (ofString "c")
+      (.rStruct [.val (.word code), .val (.word code_n)]) {post with locals := s.locals}).locals.lookup
+      (ofString "c") = some (.rStruct [.val (.word code), .val (.word code_n)]) := by
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  intro w hw
+  obtain ⟨hv,hn,_⟩ := ext_code_of_tail_return _ code code_n hlocal hn w hw
+  exact ⟨code,code_n,hv,hn⟩
+
+/-- Strong world payloads supply the cache lookup's live-record invariant. -/
+theorem code_cache_entry_of_world_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (owner : String) (db hash : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S)
+    (ho : owner = "ts" ∨ owner = "bs") (hn : globN s owner ≠ 0)
+    (hdb : db.toNat = memW s (globN s owner + 48)) (hm : db.toNat ∈ S)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (getCodeCacheArgs owner) = some [.val (.word db), .val (.word hash)]) :
+    CodeCacheLookupStrong s owner := by
+  refine ⟨hA, db, hash, ha, (hW.1.1.2.1 _ hm).1, ?_⟩
+  have hp := hW.2 owner 48 (by rcases ho with rfl | rfl <;> simp) hn
+  rw [← hdb] at hp
+  exact hp.1
+
+/-- Actual witness/access roots obtain membership, distinction, and payload typing. -/
+theorem fallback_payload_of_world_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (db tw : BitVec 64) (hW : WorldTypedCodeStrong s S)
+    (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hdb : db.toNat = memW s (globN s "ws" + 16))
+    (ht : tw.toNat = memW s (globN s "ts" + 40))
+    (hdn : db.toNat ≠ 0) (htn : tw.toNat ≠ 0) :
+    db.toNat ∈ S ∧ tw.toNat ∈ S ∧ db.toNat ≠ tw.toNat ∧ CodeDbPayloadStrong s S db.toNat := by
+  have hd := fallback_code_roots_distinct s S hW.1 hws hts (by rwa [← hdb]) (by rwa [← ht])
+  rw [← hdb, ← ht] at hd
+  refine ⟨hd.1, hd.2.1, hd.2.2, ?_⟩
+  rw [hdb]
+  exact hW.2 "ws" 16 (by simp) hws
+
+/-- Nonzero cache roots are members of the world's typed table set. -/
+theorem code_cache_root_mem {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (owner : String) (hW : WorldTyped s S)
+    (ho : owner = "ts" ∨ owner = "bs") (hn : globN s owner ≠ 0)
+    (hd : memW s (globN s owner + 48) ≠ 0) :
+    memW s (globN s owner + 48) ∈ S := by
+  rcases ho with rfl | rfl
+  · have hr := hW.1.2.2.2.2.2.1 48 (by decide) hn
+    rcases hr with hz | hm
+    · exact (hd hz).elim
+    · exact hm
+  · have hr := hW.1.2.2.2.2.1 48 (by decide) hn
+    rcases hr with hz | hm
+    · exact (hd hz).elim
+    · exact hm
+
+theorem code_cache_entry_of_world_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (owner : String) (db hash : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S)
+    (ho : owner = "ts" ∨ owner = "bs") (hn : globN s owner ≠ 0)
+    (hdb : db.toNat = memW s (globN s owner + 48)) (hd : db.toNat ≠ 0)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (getCodeCacheArgs owner) = some [.val (.word db), .val (.word hash)]) :
+    CodeCacheLookupStrong s owner := by
+  apply code_cache_entry_of_world_strong s S owner db hash hA hW ho hn hdb _ ha
+  rw [hdb]
+  exact code_cache_root_mem s S owner hW.1 ho hn (by rwa [← hdb])
+
+/-- Assemble the full code entry invariant from strong world typing and concrete roots. -/
+theorem get_code_entry_of_strong_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db hash tw : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S) (hWT : WorldTypedWith s S Nd)
+    (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hsk : globN s "sk_buf" ≠ 0) (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hdb : db.toNat = memW s (globN s "ws" + 16))
+    (ht : tw.toNat = memW s (globN s "ts" + 40)) (hdn : db.toNat ≠ 0) (htn : tw.toNat ≠ 0)
+    (hwl : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (htl : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ts"), .const 40])) = some (.val (.word tw)))
+    (hcache : ∀ owner, owner = "ts" ∨ owner = "bs" →
+      globN s owner ≠ 0 ∧ ∃ root : BitVec 64,
+      root.toNat = memW s (globN s owner + 48) ∧ root.toNat ≠ 0 ∧
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (getCodeCacheArgs owner) = some [.val (.word root), .val (.word hash)]) :
+    GetCodeEntryStrong s S Nd db hash tw := by
+  obtain ⟨hmdb,hmt,hne,hp⟩ := fallback_payload_of_world_strong s S db tw hW hws hts hdb ht hdn htn
+  have cache : ∀ owner, owner = "ts" ∨ owner = "bs" → CodeCacheLookupStrong s owner := by
+    intro owner ho
+    obtain ⟨hn,root,hr,hrn,ha⟩ := hcache owner ho
+    exact code_cache_entry_of_world_roots s S owner root hash hA hW ho hn hr hrn ha
+  exact ⟨hA,hWT,hmdb,hmt,hne,hp,hc,hfit,hsk,hs,hws,hts,hh,hwl,htl,
+    cache "ts" (Or.inl rfl),cache "bs" (Or.inr rfl)⟩
+
 end HeadStore

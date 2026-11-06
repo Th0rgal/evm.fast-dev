@@ -14703,4 +14703,100 @@ theorem op_log_shaped_prefix_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
       · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
     · exact HandlerRun.seq_ite_raise_skip (fun _ _ _ hP => hP) hcont
 
+/-- Saturating the popped size establishes the exact n operand while
+preserving the bounded log parameters and aligned head. -/
+theorem op_log_sat_size_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (nt : BitVec 64) (start size : ValueHOL 64)
+    (hsize : shapeEqHOL (shapeOfHOLExact size) (.comb [.one, .one, .one, .one]) = true)
+    (cont : ProgHOL 64)
+    (hcont : HandlerRun s0 (fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word (satWordG09 size)))) false cont) :
+    HandlerRun s0 (fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size) false
+      (.decCall (ofString "n") .one (ofString "sat_word") [.var .local (ofString "size")] cont) := by
+  have hlookup : originalRuntimeCode.lookup (ofString "sat_word") =
+      some ([(ofString "v", .comb [.one, .one, .one, .one])],
+        sourceFnBody Guest.Software.guestFn_sat_word, .one) :=
+    lookup_of_guestAst_getElem 440 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sat_word) rfl
+  apply HandlerRun.decCall (Q := fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word (satWordG09 size)))) eps_sat_word_exact_g09
+  · intro t values body callee ret hc hInv hP hargs hl
+    have hev : evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a))
+        [.var .local (ofString "size")] = some [size] := by
+      simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hP.2.2.2.2]
+    rw [hev] at hargs
+    injection hargs with hvs
+    subst hvs
+    have hl' := hl
+    rw [hc] at hl'
+    have hcal := (one_u256_arg_lookup_g09 hlookup hl').2.2
+    obtain ⟨a,b,c,d,rfl⟩ := shapeEq_comb4_iff size hsize
+    exact ⟨a,b,c,d,hcal⟩
+  · intro t values body callee ret v post hInv hP hargs hl hPost hchain hQc
+    have hev : evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a))
+        [.var .local (ofString "size")] = some [size] := by
+      simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hP.2.2.2.2]
+    rw [hev] at hargs
+    injection hargs with hvs
+    subst hvs
+    have hcal := (one_u256_arg_lookup_g09 hlookup hl).2.2
+    have hv := hQc.2 size hcal
+    subst hv
+    have hHM : HeadMemAligned post := by
+      rw [hQc.1]
+      exact hP.1
+    refine ⟨hHM, ?_, hP.2.2.1, ?_, ?_, ?_⟩
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "n" ≠ ofString "ntopics")] using hP.2.1
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "n" ≠ ofString "start")] using hP.2.2.2.1
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "n" ≠ ofString "size")] using hP.2.2.2.2
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · exact hcont
+
+/-- The memory-cost call establishes the aligned expansion operand while
+preserving the log parameters needed by the gas and allocation stages. -/
+theorem op_log_memory_cost_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (nt : BitVec 64) (start size : ValueHOL 64) (n : BitVec 64) (cont : ProgHOL 64)
+    (hcont : HandlerRun s0 (fun t => (HeadMemAligned t ∧ XCostAligned t) ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word n))) false cont) :
+    HandlerRun s0 (fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word n))) false
+      (.decCall (ofString "x") (.comb [.one, .one]) (ofString "extend_memory_cost1")
+        [.var .local (ofString "start"), .var .local (ofString "size")] cont) := by
+  apply HandlerRun.decCall (Q := fun t => (HeadMemAligned t ∧ XCostAligned t) ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word n))) eps_extend_memory_cost1_bounds
+  · intros; trivial
+  · intro t values body callee ret v post hInv hP hargs hl hPost hchain hQc
+    obtain ⟨hlf, cw, ebw, rfl, heb⟩ := hQc
+    refine ⟨xCostAligned_of_cost1 hP.1 hlf rfl rfl heb, ?_, hP.2.2.1, ?_, ?_, ?_⟩
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "x" ≠ ofString "ntopics")] using hP.2.1
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "x" ≠ ofString "start")] using hP.2.2.2.1
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "x" ≠ ofString "size")] using hP.2.2.2.2.1
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "x" ≠ ofString "n")] using hP.2.2.2.2.2
+  · exact hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

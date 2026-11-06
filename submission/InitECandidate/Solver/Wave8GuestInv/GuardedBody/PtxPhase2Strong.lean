@@ -16864,4 +16864,41 @@ theorem phase2_htab_set_ts8_message_scalar_backing_tables
   rw [he] at ht
   exact ht
 
+/-- Account lookup retains the complete initialized message suffix. -/
+theorem phase2_get_account_message_suffix (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    (hshape : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n) :
+    DecCallResumeOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (PtxMessageSuffixReady buffers contents names aa ak) name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨hp, ht⟩ := phase2_message_initialized_tables_iff_suffix.mpr hp
+  apply phase2_message_initialized_tables_iff_suffix.mp
+  exact ⟨phase2_get_account_message_initialized h buffers contents names aa ak name args hm hi hn hshape
+    s vs body callee ret v post hc hp ha hl hr,
+    phase2_get_account_resume_message_tables aa ak name hm args
+      s vs body callee ret v post hc ⟨hp.1.1.1.1.1, ht, hp.1.1.1.2.2.2.1⟩ ha hl hr⟩
+
+/-- Account lookup composes with the complete message suffix at its original clock cost. -/
+theorem phase2_get_account_message_suffix_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    (hshape : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (.decCall name .one (ofString "get_account") args tail) (K.get_account + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := PtxMessageSuffixReady buffers contents names aa ak) h.fb_get_account
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · exact phase2_get_account_message_suffix h buffers contents names aa ak name args hm hi hn hshape
+  · exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
