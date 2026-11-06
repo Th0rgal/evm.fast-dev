@@ -17306,4 +17306,57 @@ theorem op_log_no_growth_execution_from_store_world_g09 {F : Type}
     hA hA.1.code hclock he hlg hde hme hd0 hd8 hd16 hm0w hm8w hm16w hlt hne hdslot hHM
     hi hfields hcont
 
+/-- The growing copy followed by all four append stores preserves the input typed world. -/
+theorem op_log_growth_copy_stores_world_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (S : List Nat) (head : Ivl)
+    (l p n cap q log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S) (hm : head ∈ evmChain s)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hfresh : globN s "heap_ptr" ≤ p.toNat)
+    (hq : q.toNat ≤ globN s "scratch_ptr")
+    (hslot : p.toNat + 8 * n.toNat + 8 ≤ q.toNat)
+    (heff : ByteRegionEffect s copy [(p.toNat, q.toNat - p.toNat)])
+    (hd0 : copy.memaddrs l) (hd8 : copy.memaddrs (l + 8#64))
+    (hd16 : copy.memaddrs (l + 16#64)) (hds : copy.memaddrs (p + n * 8#64))
+    (hlb : l.toNat + 24 ≤ 2^64) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then HolWordLab.word p else copy.memory a}
+    ∃ Nd, WorldTypedWith s S Nd ∧ SameTypedCells s post S Nd ∧
+      (∀ ec ∈ evmChain s, FrameWF s S ec) ∧
+      ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj ∧
+      IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd) := by
+  dsimp only
+  let writes : List Ivl := [(p.toNat, q.toNat - p.toNat), (l.toNat, 24)]
+  have hc : ByteRegionEffect s copy writes := heff.mono (by
+    intro i hi
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact ⟨_, by simp [writes], le_refl _, le_refl _⟩)
+  have hs := log_growth_final_effect_g09 copy l p n cap log
+    (heff.memaddrs.trans hA.1.memaddrs) hd0 hd8 hd16 hds hlb (by have := q.isLt; omega)
+  have hs' : ByteRegionEffect copy _ writes := hs.mono (by
+    intro i hi
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl
+    · exact ⟨(l.toNat, 24), by simp [writes], le_refl _, le_refl _⟩
+    · refine ⟨(p.toNat, q.toNat - p.toNat), by simp [writes], le_refl _, ?_⟩
+      dsimp only
+      omega)
+  apply op_log_append_world_witness_g09 (fresh := [(p.toNat, q.toNat - p.toNat)])
+    (headerWrites := [(l.toNat, 24)]) hA hinv
+  · intro x hx
+    simp only [List.mem_singleton] at hx
+    subst x
+    exact ⟨hfresh, by dsimp only; omega⟩
+  · intro x hx
+    simp only [List.mem_singleton] at hx
+    subst x
+    apply List.mem_flatten.2
+    refine ⟨frameObjects s head, List.mem_map.2 ⟨head, hm, rfl⟩, ?_⟩
+    simp [frameObjects, hl]
+  · exact hc.trans hs'
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
