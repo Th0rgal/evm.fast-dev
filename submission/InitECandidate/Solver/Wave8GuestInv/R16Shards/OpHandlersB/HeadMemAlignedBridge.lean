@@ -14666,6 +14666,31 @@ theorem fcNac_ne0_eq {F : Type} (t : PanSemStateFiniteExact 64 F)
   have hw1 : (if wnac ≠ 0#64 then (1#64 : BitVec 64) else 0#64) ≠ 0 := by simp [hwne]
   rw [if_neg hw1]
 
+theorem fcSeq_none_split {F : Type} {st post : PanSemStateFiniteExact 64 F}
+    {p q : ProgHOL 64}
+    (h : evaluateHOLFiniteState st (.seq p q) = (none, post)) :
+    ∃ m, evaluateHOLFiniteState st p = (none, m) ∧
+      evaluateHOLFiniteState m q = (none, post) := by
+  rw [evaluateHOLFiniteState_seq_line780] at h
+  dsimp only at h
+  rcases hp : (evaluateHOLFiniteState st p).1 with _ | r
+  · refine ⟨(evaluateHOLFiniteState st p).2, ?_, ?_⟩
+    · exact Prod.ext hp rfl
+    · rw [hp] at h; exact h
+  · rw [hp] at h
+    have hfst := congrArg Prod.fst h
+    rw [hp] at hfst
+    exact absurd hfst (by simp)
+
+theorem fcSeq_timeOut_first {F : Type} (st : PanSemStateFiniteExact 64 F) (p q : ProgHOL 64)
+    (h : (evaluateHOLFiniteState st p).1 = some .timeOut) :
+    (evaluateHOLFiniteState st (.seq p q)).1 = some .timeOut := by
+  rw [evaluateHOLFiniteState_seq_line780]
+  dsimp only
+  rw [h]
+  dsimp only
+  exact h
+
 end FcNoEvmErr
 
 
