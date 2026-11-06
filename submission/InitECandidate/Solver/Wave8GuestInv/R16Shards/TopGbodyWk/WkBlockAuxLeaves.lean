@@ -10170,4 +10170,50 @@ theorem eval_merge_set_then_union_ts_kept {F : Type}
     rw [he] at hn
     contradiction
 
+/-- Lift a transaction-root frame through fresh inner-table allocation. -/
+theorem eval_merge_new_then_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s) (hts : globN s "ts" ≠ 0)
+    (hcont : ∀ mid : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState s (.call (some (some (.local, ofString "binner"), none))
+        (ofString "htab_new") [.const 32#64, .const 8#64]) = (none, mid) →
+      WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s none mid →
+      (evaluateHOLFiniteState mid p).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState mid p).1 →
+      globN (evaluateHOLFiniteState mid p).2 "ts" = globN mid "ts" ∧
+        memW (evaluateHOLFiniteState mid p).2
+          (globN (evaluateHOLFiniteState mid p).2 "ts" + 32) = memW mid (globN mid "ts" + 32))
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none))
+        (ofString "htab_new") [.const 32#64, .const 8#64]) p)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none))
+        (ofString "htab_new") [.const 32#64, .const 8#64]) p)).1) :
+    let post := (evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none))
+        (ofString "htab_new") [.const 32#64, .const 8#64]) p)).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  dsimp only
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases he : evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) with ⟨r, mid⟩
+  simp only [he] at hnt hfr ⊢
+  have hflow : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])).1 := by
+    rw [he]
+    cases r with
+    | none => exact Or.inl rfl
+    | some r => exact hfr
+  have hn := merge_new_call_flow_none s (ofString "binner") 32#64 8#64 hc hflow
+  rw [he] at hn
+  cases hn
+  have hs := merge_new_call_worldStep s (ofString "binner") 32#64 8#64
+    hW (by decide) (by decide) hflow
+  rw [he] at hs
+  exact merge_ts_outer_kept_trans (merge_heap_ts_outer_kept hts hs.1)
+    (hcont mid he hs hnt hfr)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
