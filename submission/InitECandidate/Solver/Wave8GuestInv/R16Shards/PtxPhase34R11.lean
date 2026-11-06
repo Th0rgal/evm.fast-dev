@@ -17423,4 +17423,24 @@ theorem journal_append_replace_tail {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- A returning journal block can be cut immediately before its original tail. -/
+theorem journal_append_cut_return {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out)) :
+    ∃ cut, evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut) := by
+  apply journal_append_replace_tail s out jn jc trapCode e16 tail _ rv _ hcode hjn hjc hr
+  intro entry u hu
+  refine ⟨entry.emptyLocalsHOLFinite, ?_⟩
+  simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
