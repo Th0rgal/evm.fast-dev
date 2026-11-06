@@ -8106,4 +8106,193 @@ theorem world_and_payload_of_sk_make {F : Type}
   exact ⟨hAp, hWp, codeDbPayloadStrong_of_sk_make db h hc hma hfit v hb hAs hAp
     (hp db hdb).1 (fun t ht => (hp t ht).2) hfixed⟩
 
+/-- World buffer separation discharges the last typed-cell frame premise
+for the concrete key-builder execution. -/
+theorem world_and_payload_after_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} (db : Nat)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hW : WorldTyped s S) (hdb : db ∈ S) (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post)) :
+    ArenaReady post ∧ WorldTypedWith post S Nd ∧ CodeDbPayloadStrong post S db := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, hnz, _⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  apply world_and_payload_of_sk_make db hAs hWT hW hdb h hc hma hfit v hb
+  intro i hi
+  have hd := bufferRegion_disj_le hWT ("sk_buf", 64) (by decide) (by decide) 52 (by decide) i hi
+  have hd' := Disj.flip hd
+  simpa [bufferRegion, hnz] using hd'
+
+/-- Strong payload typing is independent of caller locals and fuel. -/
+theorem codeDbPayloadStrong_with_locals_clock {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S : List Nat) (db : Nat)
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    CodeDbPayloadStrong {s with locals := L, clock := k} S db ↔ CodeDbPayloadStrong s S db := by
+  rfl
+
+theorem worldTypedCodeStrong_with_locals_clock {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S : List Nat)
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    WorldTypedCodeStrong {s with locals := L, clock := k} S ↔ WorldTypedCodeStrong s S := by
+  simp only [WorldTypedCodeStrong, worldTyped_with_locals]
+  rfl
+
+/-- Both fallback mutations preserve code entries using only the original
+world typing and the concrete table-exit contract. -/
+theorem code_entries_after_key_and_access_world {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} (db : Nat)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hdb : db ∈ S) (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), mid))
+    (ht : locN mid "t" ∈ S) (hne : db ≠ locN mid "t")
+    (hx : HtabExit mid post) : NodeDbEntriesStrong post db := by
+  have hW : WorldTyped s S := ⟨hWT.1, hWT.2.1, hWT.2.2.1, Nd, hWT.2.2.2⟩
+  obtain ⟨hAm, hWm, hm⟩ := world_and_payload_after_sk_make db hAs hWT hW hdb h hc hma hfit v hb
+  have hworld : WorldTyped mid S := ⟨hWm.1, hWm.2.1, hWm.2.2.1, Nd, hWm.2.2.2⟩
+  exact codeDbPayloadStrong_entries_of_separated_htab_exit db hm hAm hworld hdb ht hne hx
+
+/-- Concrete `sk_make` lookup, callee entry, and restoration of the caller
+all preserve the world and protected payload facts used by the fallback. -/
+theorem world_and_payload_after_sk_call {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} (db : Nat)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hdb : db ∈ S) (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "sk_make") values = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "k") v {post with locals := s.locals}
+    ArenaReady resumed ∧ WorldTyped resumed S ∧ CodeDbPayloadStrong resumed S db := by
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "sk_make")
+    _ _ _ _ _ values callee (by rw [hc]; exact lookup_sk_make) hl
+  subst body
+  have hW : WorldTyped s S := ⟨hWT.1, hWT.2.1, hWT.2.2.1, Nd, hWT.2.2.2⟩
+  have hWe : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd := by
+    unfold WorldTypedWith callEntryStateHOLFinite
+    simp only [tablesTyped_with_locals]
+    exact hWT
+  have hworldEntry : WorldTyped (callEntryStateHOLFinite s callee) S :=
+    (worldTyped_with_locals s _ _ S).2 hW
+  obtain ⟨hAp, hWp, hp⟩ := world_and_payload_after_sk_make db
+    (localsFree_arenaReady s _ _ hAs) hWe hworldEntry hdb h hc hma hfit v hb
+  have hworld : WorldTyped post S := ⟨hWp.1, hWp.2.1, hWp.2.2.1, Nd, hWp.2.2.2⟩
+  exact ⟨localsFree_arenaReady post _ _ hAp,
+    (worldTyped_with_locals post _ _ S).2 hworld, hp⟩
+
+/-- Transport through access-table callee entry and caller restoration,
+retaining all database facts required by the resumed witness lookup. -/
+theorem protected_db_after_access_call {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (h : CodeDbPayloadStrong s S db) (hdb : db ∈ S) (ht : t ∈ S)
+    (hne : db ≠ t) (hloc : locN (callEntryStateHOLFinite s callee) "t" = t)
+    (hx : HtabExit (callEntryStateHOLFinite s callee) post) :
+    let resumed := {post with locals := s.locals}
+    ArenaReady resumed ∧ HtabWF resumed db ∧ NodeDbEntriesStrong resumed db := by
+  let ent := callEntryStateHOLFinite s callee
+  have hAe : ArenaReady ent := localsFree_arenaReady s _ _ hAs
+  have hWe : WorldTyped ent S := (worldTyped_with_locals s _ _ S).2 hW
+  have he : CodeDbPayloadStrong ent S db := h
+  have hte : locN ent "t" ∈ S := by rw [hloc]; exact ht
+  have hne' : db ≠ locN ent "t" := by rw [hloc]; exact hne
+  have hp := codeDbPayloadStrong_entries_of_separated_htab_exit db he hAe hWe hdb hte hne' hx
+  have hw := htabWF_of_separated_htab_exit db hAe hWe hdb hte hne' hx
+  refine ⟨localsFree_arenaReady post _ _ hx.1,
+    (WkBal.htabWF_with_locals post _ _ db).2 hw, ?_⟩
+  exact hp
+
+/-- Extract the access-table exit contract from its installed concrete body. -/
+theorem access_set_exit_of_execution {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (harg : HtabArgWF s)
+    (values : List (ValueHOL 64)) (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "htab_set") values =
+      some (sourceFnBody Guest.Software.guestFn_htab_set, s.locals, .one))
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_set) =
+      (some (.returned v), post)) : HtabExit s post := by
+  obtain ⟨params, body, ret, hlookup, hspec⟩ := SoloHtabSet.htab_set_spec_proof
+  have heq : ([(ofString "t", ShapeHOL.one), (ofString "key", ShapeHOL.one),
+      (ofString "value", ShapeHOL.one)], sourceFnBody Guest.Software.guestFn_htab_set, ShapeHOL.one) =
+      (params, body, ret) := Option.some.inj (lookup_htab_set.symm.trans hlookup)
+  rcases Prod.mk.inj heq with ⟨_, heq⟩
+  rcases Prod.mk.inj heq with ⟨hbody, hret⟩
+  subst body ret
+  have hx := hspec s hc harg ⟨values, hl⟩ (by rw [hb]; simp) v (by rw [hb])
+  simpa only [hb] using hx
+
+/-- World allocation and typing discharge the concrete access-call arguments. -/
+theorem access_argWF_of_world {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S : List Nat) (t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S) (ht : t ∈ S)
+    (hloc : locN (callEntryStateHOLFinite s callee) "t" = t) :
+    HtabArgWF (callEntryStateHOLFinite s callee) := by
+  refine ⟨localsFree_arenaReady s _ _ hAs, ?_, ?_⟩
+  · rw [hloc]
+    exact (WkBal.htabWF_with_locals s _ _ t).2 (hW.1.2.1 t ht).1
+  · rw [hloc]
+    intro i hi
+    exact ((hW.1.2.1 t ht).2 i hi).1
+
+/-- Protected database facts follow from the concrete installed access-table
+execution, rather than an assumed exit contract. -/
+theorem protected_db_after_access_execution {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (h : CodeDbPayloadStrong s S db) (hdb : db ∈ S) (ht : t ∈ S)
+    (hne : db ≠ t) (hloc : locN (callEntryStateHOLFinite s callee) "t" = t)
+    (hc : s.code = originalRuntimeCode) (values : List (ValueHOL 64)) (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "htab_set") values =
+      some (sourceFnBody Guest.Software.guestFn_htab_set, callee, .one))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (sourceFnBody Guest.Software.guestFn_htab_set) = (some (.returned v), post)) :
+    let resumed := {post with locals := s.locals}
+    ArenaReady resumed ∧ HtabWF resumed db ∧ NodeDbEntriesStrong resumed db := by
+  have hx := access_set_exit_of_execution (callEntryStateHOLFinite s callee) post hc
+    (access_argWF_of_world s S t callee hAs hW ht hloc) values v hl hb
+  exact protected_db_after_access_call db t callee hAs hW h hdb ht hne hloc hx
+
+/-- Resume witness-code lookup after concrete access-table execution. -/
+theorem witness_return_after_access_execution {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db hash : BitVec 64) (t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (h : CodeDbPayloadStrong s S db.toNat) (hdb : db.toNat ∈ S) (ht : t ∈ S)
+    (hne : db.toNat ≠ t) (hloc : locN (callEntryStateHOLFinite s callee) "t" = t)
+    (hc : s.code = originalRuntimeCode) (values : List (ValueHOL 64)) (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "htab_set") values =
+      some (sourceFnBody Guest.Software.guestFn_htab_set, callee, .one))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (sourceFnBody Guest.Software.guestFn_htab_set) = (some (.returned v), post))
+    (hcode : post.code = originalRuntimeCode)
+    (hshape : post.eshapes.lookup (ofString "StateErr") = some .one)
+    (hload : evalHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (hhash : s.locals.lookup (ofString "code_hash") = some (.val (.word hash))) :
+    Ret {post with locals := s.locals}
+      (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+        [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  obtain ⟨hAp, hw, he⟩ := protected_db_after_access_execution db.toNat t callee
+    hAs hW h hdb ht hne hloc hc values v hl hb
+  apply get_code_ws_fallback_return_entry_strong {post with locals := s.locals} db hash
+    hcode hshape hAp ?_ hhash hw he
+  rw [evalHOLFinite_eq_toExact] at hload ⊢
+  exact hload
+
 end HeadStore

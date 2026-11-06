@@ -8800,6 +8800,211 @@ theorem precompile_store_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [evaluateHOLFiniteState_store]
   split <;> (try split) <;> (try split) <;> rfl
 
+theorem precompile_sha256_state_init_effect {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : BitVec 64) (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "stp") = some (.val (.word p))) :
+    R10Shards.P26_P28.ByteEff s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_state_init)).2
+      [(p.toNat, 64)] := by
+  exact (R10Shards.P26_P28.checkWordStoresLocal_sound (ofString "stp") 64 (by decide) []
+    (sourceFnBody Guest.Software.guestFn_sha256_state_init) rfl s p hc hi hp (by simp)).1
+
+theorem precompile_sha256_block_effect {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : BitVec 64) (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "stp") = some (.val (.word p))) :
+    R10Shards.P26_P28.ByteEff s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_block)).2
+      [(p.toNat, 64)] := by
+  exact (R10Shards.P26_P28.checkWordStoresLocal_sound (ofString "stp") 64 (by decide) []
+    (sourceFnBody Guest.Software.guestFn_sha256_block) rfl s p hc hi hp (by simp)).1
+
+theorem precompile_byteEff_to_region {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {Rl : List Ivl}
+    (h : R10Shards.P26_P28.ByteEff s post Rl) :
+    InitECandidate.Solver.Wave8Contracts.M23.ByteRegionEffect s post Rl := by
+  refine ⟨h.code, h.memaddrs, h.shMemaddrs, h.baseAddr, h.be, h.globals, ?_, ?_, ?_⟩
+  · intro a ha
+    by_contra hn
+    exact ha (h.out_dom a hn)
+  · intro a ha
+    by_contra hn
+    obtain ⟨i, hi, hh⟩ := h.cell_frame a hn
+    exact ha i hi hh.2
+  · intro b hb hn
+    by_contra he
+    obtain ⟨i, hi, hh⟩ := h.byte_frame b hb he
+    exact hn i hi hh
+
+theorem precompile_sha256_state_init_region {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : BitVec 64) (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "stp") = some (.val (.word p))) :
+    InitECandidate.Solver.Wave8Contracts.M23.ByteRegionEffect s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_state_init)).2
+      [(p.toNat, 64)] :=
+  precompile_byteEff_to_region (precompile_sha256_state_init_effect s p hc hi hp)
+
+theorem precompile_sha256_block_region {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : BitVec 64) (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "stp") = some (.val (.word p))) :
+    InitECandidate.Solver.Wave8Contracts.M23.ByteRegionEffect s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_block)).2
+      [(p.toNat, 64)] :=
+  precompile_byteEff_to_region (precompile_sha256_block_effect s p hc hi hp)
+
+theorem precompile_funByteEff_sha256_state_init :
+    R10Shards.P26_P28.FunByteEff (ofString "sha256_state_init")
+      (fun vals _ => [(R10Shards.P26_P28.valWordNat (vals[0]?.getD (.rStruct [])), 64)]) := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256_state_init") =
+      some ([(ofString "stp", .one)], sourceFnBody Guest.Software.guestFn_sha256_state_init, .one) :=
+    lookup_of_guestAst_getElem 92 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256_state_init) rfl
+  refine ⟨_, _, _, hl, ?_⟩
+  intro F s vals hc hi hlook hnt hres
+  obtain ⟨p, rfl, hp⟩ := R10Shards.P26_P28.lookupCode_one_word hl hlook
+  exact precompile_sha256_state_init_effect s p hc hi hp
+
+theorem precompile_funByteEff_sha256_block :
+    R10Shards.P26_P28.FunByteEff (ofString "sha256_block")
+      (fun vals _ => [(R10Shards.P26_P28.valWordNat (vals[0]?.getD (.rStruct [])), 64)]) := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256_block") =
+      some ([(ofString "stp", .one), (ofString "blk", .one)],
+        sourceFnBody Guest.Software.guestFn_sha256_block, .one) :=
+    lookup_of_guestAst_getElem 93 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256_block) rfl
+  refine ⟨_, _, _, hl, ?_⟩
+  intro F s vals hc hi hlook hnt hres
+  obtain ⟨p, b, rfl, hp, hb⟩ := R10Shards.P26_P28.lookupCode_two_words (by decide) hl hlook
+  exact precompile_sha256_block_effect s p hc hi hp
+
+theorem precompile_byteEff_while_inv {F : Type}
+    (P : PanSemStateFiniteExact 64 F → Prop) (cond : ExpHOL 64) (body : ProgHOL 64)
+    (Rl : List Ivl)
+    (hdec : ∀ s, P s → P (decClockHOLFinite s))
+    (hb : ∀ (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode → GuestInv s → P s →
+      R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s body).2 Rl ∧
+      ((evaluateHOLFiniteState s body).1 = none ∨
+        (evaluateHOLFiniteState s body).1 = some .continue →
+        P (evaluateHOLFiniteState s body).2))
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (hi : GuestInv s) (hp : P s) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s (.while cond body)).2 Rl := by
+  rw [evaluateHOLFiniteState_while_total]
+  split
+  · split
+    · split
+      · exact (R10Shards.P26_P28.ByteEff.refl s Rl).locals_clock _ s.clock
+      · dsimp only
+        rw [fixClockHOLFinite_evaluateState]
+        have hgd : GuestInv (decClockHOLFinite s) := guestInv_congr (s := s) rfl rfl rfl rfl hi
+        obtain ⟨he, hP⟩ := hb (decClockHOLFinite s) hc hgd (hdec s hp)
+        have rem := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+        rcases run : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r, mid⟩
+        rw [run] at he hP rem
+        have hlt : mid.clock < s.clock := by change mid.clock ≤ s.clock - 1 at rem; omega
+        have heff : R10Shards.P26_P28.ByteEff s mid Rl :=
+          ((R10Shards.P26_P28.ByteEff.refl s Rl).locals_clock _ _).trans he
+        have hgm : GuestInv mid := guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hi
+        cases r with
+        | none => exact heff.trans (precompile_byteEff_while_inv P cond body Rl hdec hb
+            mid (heff.code.trans hc) hgm (hP (Or.inl rfl)))
+        | some r =>
+          cases r with
+          | «continue» => exact heff.trans (precompile_byteEff_while_inv P cond body Rl hdec hb
+              mid (heff.code.trans hc) hgm (hP (Or.inr rfl)))
+          | _ => exact heff
+    · exact R10Shards.P26_P28.ByteEff.refl s Rl
+  · exact R10Shards.P26_P28.ByteEff.refl s Rl
+termination_by s.clock
+
+theorem precompile_byteEff_while_guard_inv {F : Type}
+    (P : PanSemStateFiniteExact 64 F → Prop) (cond : ExpHOL 64) (body : ProgHOL 64)
+    (Rl : List Ivl)
+    (hdec : ∀ s, P s → P (decClockHOLFinite s))
+    (hb : ∀ (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode → GuestInv s → P s →
+      LoopActive cond s →
+      R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s body).2 Rl ∧
+      ((evaluateHOLFiniteState s body).1 = none ∨
+        (evaluateHOLFiniteState s body).1 = some .continue →
+        P (evaluateHOLFiniteState s body).2))
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (hi : GuestInv s) (hp : P s) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s (.while cond body)).2 Rl := by
+  rw [evaluateHOLFiniteState_while_total]
+  split
+  · split
+    · split
+      · exact (R10Shards.P26_P28.ByteEff.refl s Rl).locals_clock _ s.clock
+      · dsimp only
+        rw [fixClockHOLFinite_evaluateState]
+        have hgd : GuestInv (decClockHOLFinite s) := guestInv_congr (s := s) rfl rfl rfl rfl hi
+        have hguard : LoopActive cond (decClockHOLFinite s) :=
+          loopActive_decClock ⟨_, by assumption, by assumption⟩
+        obtain ⟨he, hP⟩ := hb (decClockHOLFinite s) hc hgd (hdec s hp) hguard
+        have rem := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+        rcases run : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r, mid⟩
+        rw [run] at he hP rem
+        have hlt : mid.clock < s.clock := by change mid.clock ≤ s.clock - 1 at rem; omega
+        have heff : R10Shards.P26_P28.ByteEff s mid Rl :=
+          ((R10Shards.P26_P28.ByteEff.refl s Rl).locals_clock _ _).trans he
+        have hgm : GuestInv mid := guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hi
+        cases r with
+        | none => exact heff.trans (precompile_byteEff_while_guard_inv P cond body Rl hdec hb
+            mid (heff.code.trans hc) hgm (hP (Or.inl rfl)))
+        | some r =>
+          cases r with
+          | «continue» => exact heff.trans (precompile_byteEff_while_guard_inv P cond body Rl hdec hb
+              mid (heff.code.trans hc) hgm (hP (Or.inr rfl)))
+          | _ => exact heff
+    · exact R10Shards.P26_P28.ByteEff.refl s Rl
+  · exact R10Shards.P26_P28.ByteEff.refl s Rl
+termination_by s.clock
+
+theorem precompile_sha256_finish_store_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (out i : BitVec 64) (value : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hout : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hindex : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hib : i.toNat < 8) (hob : out.toNat + 32 < 2^64)
+    (hnt : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "st_be32")
+      [.op .add [.var .local (ofString "out"),
+        .panop .mul [.var .local (ofString "i"), .const 4]], value])).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "st_be32")
+      [.op .add [.var .local (ofString "out"),
+        .panop .mul [.var .local (ofString "i"), .const 4]], value])).1 = none ∨
+      Resumes (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "st_be32")
+      [.op .add [.var .local (ofString "out"),
+        .panop .mul [.var .local (ofString "i"), .const 4]], value])).1) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "st_be32")
+        [.op .add [.var .local (ofString "out"),
+          .panop .mul [.var .local (ofString "i"), .const 4]], value])).2 [(out.toNat,32)] := by
+  apply R10Shards.P26_P28.call0_byteEff R10Shards.P26_P28.funByteEff_st_be32 s _ _ hc hi ?_ hnt hr
+  intro vals hvals region hregion hpos
+  have hm : (i * (4 : BitVec 64)).toNat = i.toNat * 4 := by
+    rw [BitVec.toNat_mul]
+    change (i.toNat * 4) % 2^64 = i.toNat * 4
+    exact Nat.mod_eq_of_lt (by omega)
+  have ha : (out + i * (4 : BitVec 64)).toNat = out.toNat + i.toNat * 4 := by
+    rw [BitVec.toNat_add, hm]
+    exact Nat.mod_eq_of_lt (by omega)
+  simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hout, hindex,
+    valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL] at hvals
+  split at hvals
+  · rename_i v vs hv hvs
+    injection hvals with hvls
+    subst vals
+    injection hv with hv
+    subst v
+    simp only [List.getElem?_cons_zero, Option.getD_some, R10Shards.P26_P28.valWordNat,
+      List.mem_singleton] at hregion
+    subst region
+    refine ⟨(out.toNat,32), List.mem_singleton.mpr rfl, ?_, ?_⟩
+    · change out.toNat ≤ (out + i * (4 : BitVec 64)).toNat
+      rw [ha]; omega
+    · change (out + i * (4 : BitVec 64)).toNat + 4 ≤ out.toNat + 32
+      rw [ha]; omega
+  · simp at hvals
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)

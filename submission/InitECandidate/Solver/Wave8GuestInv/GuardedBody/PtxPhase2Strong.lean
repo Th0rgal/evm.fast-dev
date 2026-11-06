@@ -16036,4 +16036,196 @@ theorem phase2_record_pre_state_read_message_tables {F : Type}
     rw [he] at hn
     exact (hn (congrArg Prod.fst hr)).elim
 
+/-- Read-only cache queries preserve private tables and their message allocation guard. -/
+theorem phase2_resume_ro_message_tables {fname name : MlS}
+    (hro : ReadOnlyFn fname) (hm : name ≠ ofString "m")
+    (aa ak : Nat) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+      Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+        Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr")) name fname args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  have he := hr (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  have hrestore : ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) =
+      {s with locals := s.locals, clock := post.clock} := by rw [he]; rfl
+  rw [hrestore]
+  have hlm : (s.locals.update (name, v)).lookup (ofString "m") =
+      s.locals.lookup (ofString "m") := by
+    simp [HolFiniteMapExact.update, FUPDATE, hm]
+  refine ⟨(arenaReady_with_locals s _ post.clock).mpr hp.1,
+    phase2_message_tables_with_locals s _ post.clock hp.2.1 hlm, ?_⟩
+  change Inside (locN {s with locals := s.locals.update (name, v), clock := post.clock} "m", 176)
+    InitE.sourceBase (globN s "heap_ptr")
+  rw [locN_congr s _ post.clock "m" hlm]
+  exact hp.2.2
+
+/-- The private-table witness depends on a local environment only through its message pointer. -/
+theorem phase2_message_tables_with_locN {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
+    (clock : Nat) {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    (hm : locN {s with locals := locals, clock := clock} "m" = locN s "m") :
+    PtxMessageTables {s with locals := locals, clock := clock} aa ak := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := ht
+  refine ⟨S, Nd, (worldTypedWith_with_locals s locals clock S Nd).mpr hw,
+    ha, hk, hal, hkl, haf, hkf, ?_⟩
+  rw [hm]
+  exact hd
+
+/-- A return clears locals but preserves the witness once the caller environment is restored. -/
+theorem phase2_return_message_tables {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (e : ExpHOL 64)
+    {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    {v : ValueHOL 64} {post : PanSemStateFiniteExact 64 F}
+    (hr : evaluateHOLFiniteState s (.return e) = (some (.returned v), post)) :
+    PtxMessageTables {post with locals := s.locals} aa ak := by
+  simp only [evaluateHOLFiniteState_return] at hr
+  split at hr
+  · cases hr
+  · split at hr
+    · obtain ⟨_, rfl⟩ := Prod.mk.inj hr
+      exact ht
+    · cases hr
+
+/-- Pre-state insertion transports an outer message witness even when callee locals omit it. -/
+theorem phase2_htabExit_bs72_callEntry_message_tables {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hs : ArenaReady s) {aa ak : Nat} (hm : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hbe : post.be = s.be) (hbs : globN s "bs" ≠ 0)
+    (hn : memW s (globN s "bs" + 72) ≠ 0)
+    (ht : locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s "bs" + 72))
+    (hx : HtabExit (callEntryStateHOLFinite s callee) post) :
+    PtxMessageTables {post with locals := s.locals} aa ak := by
+  let pre := {s with locals := s.locals.update (ofString "t",
+      .val (.word (BitVec.ofNat 64 (locN (callEntryStateHOLFinite s callee) "t"))))}
+  have htlt : locN (callEntryStateHOLFinite s callee) "t" < 2 ^ 64 := by
+    unfold locN
+    split <;> simp_all
+    exact BitVec.isLt _
+  have hpt : locN pre "t" = locN (callEntryStateHOLFinite s callee) "t" := by
+    change (BitVec.ofNat 64 (locN (callEntryStateHOLFinite s callee) "t")).toNat = _
+    exact Nat.mod_eq_of_lt htlt
+  have hmp : pre.locals.lookup (ofString "m") = s.locals.lookup (ofString "m") := by
+    simp [pre, HolFiniteMapExact.update, FUPDATE, show ofString "t" ≠ ofString "m" by decide]
+  have hmt : locN pre "m" = locN s "m" := locN_congr s pre.locals s.clock "m" hmp
+  have hxp : HtabExit pre {post with locals := s.locals} := by
+    change ArenaReady _ ∧ HtabWF _ _ ∧ _
+    refine ⟨(arenaReady_with_locals post s.locals post.clock).mpr hx.1,
+      (htabWF_with_locals post s.locals post.clock _).mpr (hpt.symm ▸ hx.2.1), ?_⟩
+    change hdr post (locN pre "t") 0 = hdr s (locN pre "t") 0 ∧ _
+    rw [hpt]
+    exact hx.2.2
+  apply phase2_htabExit_bs72_message_tables (s := pre) (post := {post with locals := s.locals})
+    ((arenaReady_with_locals s pre.locals s.clock).mpr hs)
+    (phase2_message_tables_with_locals s pre.locals s.clock hm hmp)
+    (by change Inside (locN pre "m", 176) InitE.sourceBase (globN s "heap_ptr"); rw [hmt]; exact hin)
+    hmt.symm hbe hbs hn (hpt.trans ht) hxp
+
+/-- Transaction warming retains outer private tables across a callee-local boundary. -/
+theorem phase2_htabExit_ts8_callEntry_message_tables {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hs : ArenaReady s) {aa ak : Nat} (hm : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hbe : post.be = s.be) (hts : globN s "ts" ≠ 0)
+    (hn : memW s (globN s "ts" + 8) ≠ 0)
+    (ht : locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s "ts" + 8))
+    (hx : HtabExit (callEntryStateHOLFinite s callee) post) :
+    PtxMessageTables {post with locals := s.locals} aa ak := by
+  let pre := {s with locals := s.locals.update (ofString "t",
+      .val (.word (BitVec.ofNat 64 (locN (callEntryStateHOLFinite s callee) "t"))))}
+  have htlt : locN (callEntryStateHOLFinite s callee) "t" < 2 ^ 64 := by
+    unfold locN
+    split <;> simp_all
+    exact BitVec.isLt _
+  have hpt : locN pre "t" = locN (callEntryStateHOLFinite s callee) "t" := by
+    change (BitVec.ofNat 64 (locN (callEntryStateHOLFinite s callee) "t")).toNat = _
+    exact Nat.mod_eq_of_lt htlt
+  have hmp : pre.locals.lookup (ofString "m") = s.locals.lookup (ofString "m") := by
+    simp [pre, HolFiniteMapExact.update, FUPDATE, show ofString "t" ≠ ofString "m" by decide]
+  have hmt : locN pre "m" = locN s "m" := locN_congr s pre.locals s.clock "m" hmp
+  have hxp : HtabExit pre {post with locals := s.locals} := by
+    change ArenaReady _ ∧ HtabWF _ _ ∧ _
+    refine ⟨(arenaReady_with_locals post s.locals post.clock).mpr hx.1,
+      (htabWF_with_locals post s.locals post.clock _).mpr (hpt.symm ▸ hx.2.1), ?_⟩
+    change hdr post (locN pre "t") 0 = hdr s (locN pre "t") 0 ∧ _
+    rw [hpt]
+    exact hx.2.2
+  apply phase2_htabExit_ts8_message_tables (s := pre) (post := {post with locals := s.locals})
+    ((arenaReady_with_locals s pre.locals s.clock).mpr hs)
+    (phase2_message_tables_with_locals s pre.locals s.clock hm hmp)
+    (by change Inside (locN pre "m", 176) InitE.sourceBase (globN s "heap_ptr"); rw [hmt]; exact hin)
+    hmt.symm hbe hts hn (hpt.trans ht) hxp
+
+/-- Pre-state insertion preserves a private witness in an arbitrary saved caller environment. -/
+theorem phase2_htab_set_bs72_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64))
+    (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const 72]), key, value])
+      (fun r s => r = none → PtxMessageTables {s with locals := saved} aa ak) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ := hp.2.1
+  have hw0 := (worldTypedWith_with_locals s saved s.clock S Nd).mp hw
+  obtain ⟨v1, _, _, he1, _, _, hct, _, _⟩ := R16WkAcctWs.callee_param_three s
+    (ofString "htab_set") (ofString "t") (ofString "key") (ofString "value")
+    .one .one .one _ _ (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set)
+    _ _ _ vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw, hbs⟩ := R16WkAcctWs.evalAt_loadG_nz s hp.1.1 "bs" 72
+    (by decide) v1 he1
+  have ht : locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s "bs" + 72) := by
+    simp [locN, callEntryStateHOLFinite, hct, htw]
+  have hn := FunSpec.at_lookup EvmFrameSpecs.nz_htab_set s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1) (by rw [hr]; simp)
+  rw [hr] at hn
+  have hnz : memW s (globN s "bs" + 72) ≠ 0 := by
+    rw [← ht]; exact hn (Or.inl ⟨v, rfl⟩)
+  have hmem := (R16WkAcctWs.nonValueSlot_bs72 s S hw0.1 hbs hnz).1
+  have harg : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1, ?_, ?_⟩
+    · rw [ht]
+      exact (htabWF_with_locals s callee (s.clock - 1) _).mpr (hw0.1.2.1 _ hmem).1
+    · rw [ht]
+      exact fun i hi => ((hw0.1.2.1 _ hmem).2 i hi).1
+  have hx := FunSpec.at_lookup htab_set_spec s hc vs body callee ret hl harg (by rw [hr]; simp)
+  rw [hr] at hx
+  have hbe := (PanRunBounded.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).2.2.1
+  rw [hr] at hbe
+  exact phase2_htabExit_bs72_callEntry_message_tables {s with locals := saved} post callee
+    ((arenaReady_with_locals s saved s.clock).mpr hp.1)
+    ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ hp.2.2 hbe hbs hnz ht (hx v rfl)
+
+/-- Compose the complete pre-state-read body while retaining the outer caller's tables. -/
+theorem phase2_record_pre_state_read_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat) :
+    Hoare (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read)
+      (fun r s => (∃ v, r = some (.returned v)) →
+        PtxMessageTables {s with locals := saved} aa ak) := by
+  change Hoare _ (.seq (.call (some (none, none)) (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+      .var .local (ofString "addr"), .const 1]) (.return (.const 0))) _
+  apply Hoare.seq (R := fun s => PtxMessageTables {s with locals := saved} aa ak)
+  · refine ⟨fun s hc hp hn => ⟨?_, ?_⟩⟩
+    · exact (phase2_htab_set_bs72_saved_tables saved aa ak
+        (.var .local (ofString "addr")) (.const 1)).run s hc hp hn
+    · intro _ hr
+      obtain ⟨v, hv⟩ := hr
+      exact (phase2_call0_ne_returned s (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+          .var .local (ofString "addr"), .const 1] v hv).elim
+  · refine ⟨fun s hc hp hn hr => ?_⟩
+    simpa [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact,
+      emptyLocalsHOLFinite] using hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
