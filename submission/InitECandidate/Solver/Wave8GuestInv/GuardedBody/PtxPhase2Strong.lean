@@ -14977,4 +14977,26 @@ theorem phase2_htab_set_ts8_message_world_backing
     s hc hp hnt hr
   exact ⟨h.1.1.1, h.1.1.2.1, h.2⟩
 
+/-- Transaction-table warming composes with a backing-aware message continuation. -/
+theorem phase2_htab_set_ts8_message_scalar_backing_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (key value : ExpHOL 64)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value]) tail)
+      (K.htab_set + 1 + b) := by
+  intro F s hc hp
+  refine seq_bound_trans
+    (P := fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+    (Q := fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+    ?_ ?_ ht s hc hp
+  · apply TerminatingProgBoundedOn.call_on h.fb_htab_set none _
+    intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · exact phase2_htab_set_ts8_message_scalar_backing buffers contents names key value
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
