@@ -15267,4 +15267,31 @@ theorem tx_header_words_of_fixed_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03
+
+/-- The installed trie/decode callee preserves separated old allocations. -/
+theorem ws_get_account_optional_call_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (b : Ivl)
+    (hA : ArenaReady s)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hB : ∀ g ∈ wsBufs, Disj b (bufferRegion s g))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_account_optional") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : Allocated post b ∧ IvlUnhit s post b := by
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "ws_get_account_optional") _ _ body _ ret vs callee
+    lookup_ws_get_account_optional_top (by rwa [← hA.1.code])
+  subst body
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (sourceFnBody Guest.Software.guestFn_ws_get_account_optional) = (some (.returned v), post) at hr
+  exact ws_get_account_optional_allocated_frame (callEntryStateHOLFinite s callee) post b v
+    ((arenaReady_with_locals s callee (s.clock - 1)).2 hA) hb hb1 hb2 hB hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
