@@ -15364,4 +15364,155 @@ theorem fcPoppedChild_dec_empty {F : Type}
       { st with locals := st.locals.update (ofString "empty", v), clock := st.clock } := rfl
   rw [hst']
   exact fcPoppedChild_locals_clock h _ st.clock
+
+/-- Rung 19: kind-2 error-branch walk composite.  From the popped-child and
+branch-state bundles at the kind-2 entry state `s`, with the `evm_empty`
+word, a nonzero child status word at `child+160` and the rollback call not
+timing out at the dec-extended state, the `fcBranches` evaluation peels the
+`.dec "empty"` head and the error-side branch test and reduces to the
+post-rollback tail run from the rollback post state `m` (with the `empty`
+local shadow restored); `m` carries the branch-state bundle and the rollback
+post-facts, and a terminal rollback outcome propagates unchanged. -/
+theorem fcBranches_kind2_err_step {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S : List Nat} {w_emp : BitVec 64}
+    (hkind2 : BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64)
+    (hw_emp : s.globals.lookup (ofString "evm_empty") = some (.val (.word w_emp)))
+    (hstne : BitVec.ofNat 64 (memW s (globN s0 "ev" + 160)) ≠ 0#64)
+    (hBS : FcBranchState s0 s S)
+    (hPC : FcPoppedChild s0 s S)
+    (hnt : (evaluateHOLFiniteState (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        (.call (some (none, none)) (ofString "rollback_child_access")
+          [.var .local (ofString "child")])).1 ≠ some .timeOut) :
+    (∀ u, (evaluateHOLFiniteState (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        (.call (some (none, none)) (ofString "rollback_child_access")
+          [.var .local (ofString "child")])).1 ≠ some (.returned u)) ∧
+    ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState
+        (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        (.call (some (none, none)) (ofString "rollback_child_access")
+          [.var .local (ofString "child")])).1 ∧
+    ((evaluateHOLFiniteState (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        (.call (some (none, none)) (ofString "rollback_child_access")
+          [.var .local (ofString "child")])).1 = none →
+      ∃ m, m = (evaluateHOLFiniteState
+          (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+          (.call (some (none, none)) (ofString "rollback_child_access")
+            [.var .local (ofString "child")])).2 ∧
+        FcBranchState s0 m S ∧
+        m.locals = (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s).locals ∧
+        globN m "scratch_ptr" =
+          globN (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s) "scratch_ptr" ∧
+        globN m "ev" = globN (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s) "ev" ∧
+        evmChain m = evmChain (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s) ∧
+        OpDispatchSpec.evmR m =
+          OpDispatchSpec.evmR (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s) ∧
+        Inside (globN s0 "ev", 280) (globN m "scratch_ptr") scratchEnd ∧
+        WordsOK m (globN s0 "ev", 280) ∧
+        (∀ t ∈ S, ∀ i ∈ htabFootprint m t, Disj (globN s0 "ev", 280) i) ∧
+        (∀ j ∈ fixedObjects m, Disj (globN s0 "ev", 280) j) ∧
+        (∀ ec ∈ evmChain m, ∀ o ∈ frameObjects m ec, Disj (globN s0 "ev", 280) o) ∧
+        (∀ off : Nat, off + 8 ≤ 280 → off % 8 = 0 →
+          memW m (globN s0 "ev" + off) =
+            memW (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+              (globN s0 "ev" + off)) ∧
+        (∀ ec ∈ evmChain (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s),
+          memW m (ec.1 + 16) =
+            memW (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s) (ec.1 + 16) ∧
+          memW m (ec.1 + 40) =
+            memW (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s) (ec.1 + 40) ∧
+          memW m (ec.1 + 232) =
+            memW (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s) (ec.1 + 232)) ∧
+        evaluateHOLFiniteState s EvmEkFk.fcBranches =
+          ((evaluateHOLFiniteState m
+              (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                  [.var .local (ofString "child")])
+                (.seq (.ite (.cmp .notEqual
+                        (.var .local (ofString "new_account_charged")) (.const 0#64))
+                      (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                        [.const 183600#64])
+                      .skip)
+                  (.seq (.call (some (none, none)) (ofString "set_retdata")
+                      [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                       .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                    (.call (some (none, none)) (ofString "stack_push")
+                      [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))))).1,
+           {(evaluateHOLFiniteState m
+              (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                  [.var .local (ofString "child")])
+                (.seq (.ite (.cmp .notEqual
+                        (.var .local (ofString "new_account_charged")) (.const 0#64))
+                      (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                        [.const 183600#64])
+                      .skip)
+                  (.seq (.call (some (none, none)) (ofString "set_retdata")
+                      [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                       .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                    (.call (some (none, none)) (ofString "stack_push")
+                      [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))))).2 with
+            locals := HolFiniteMapExact.resVarEq
+              (evaluateHOLFiniteState m
+              (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                  [.var .local (ofString "child")])
+                (.seq (.ite (.cmp .notEqual
+                        (.var .local (ofString "new_account_charged")) (.const 0#64))
+                      (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                        [.const 183600#64])
+                      .skip)
+                  (.seq (.call (some (none, none)) (ofString "set_retdata")
+                      [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                       .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                    (.call (some (none, none)) (ofString "stack_push")
+                      [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))))).2.locals
+              (ofString "empty", s.locals.lookup (ofString "empty"))})) ∧
+    (∀ f, (evaluateHOLFiniteState (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        (.call (some (none, none)) (ofString "rollback_child_access")
+          [.var .local (ofString "child")])).1 = some f →
+      evaluateHOLFiniteState s EvmEkFk.fcBranches =
+        (some f, {(evaluateHOLFiniteState
+            (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+            (.call (some (none, none)) (ofString "rollback_child_access")
+              [.var .local (ofString "child")])).2 with
+          locals := HolFiniteMapExact.resVarEq
+            (evaluateHOLFiniteState
+              (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+              (.call (some (none, none)) (ofString "rollback_child_access")
+                [.var .local (ofString "child")])).2.locals
+            (ofString "empty", s.locals.lookup (ofString "empty"))})) := by
+  classical
+  have hBS' : FcBranchState s0
+      (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s) S :=
+    fcBranchState_dec_empty hBS
+  have hPC' : FcPoppedChild s0
+      (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s) S :=
+    fcPoppedChild_dec_empty hPC
+  have hbnd : globN s0 "ev" + 280 ≤ 2 ^ 64 := by
+    have hins := hPC'.child_scr.1
+    have hsc : scratchEnd = 2965299200 := rfl
+    simp only [Inside] at hins
+    omega
+  have hstne' : BitVec.ofNat 64
+      (memW (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        (globN s0 "ev" + 160)) ≠ 0#64 := hstne
+  obtain ⟨hnret, hnerr, hpost⟩ := fcRollback_of_popped hBS' hPC' hnt
+  refine ⟨hnret, hnerr, ?_, ?_⟩
+  · intro hfin
+    have hp := hpost hfin
+    dsimp only at hp
+    obtain ⟨hBSm, hlocm, hspm, hevm, hchm, hrm, hinsm, hwokm, hdht, hdfix, hdfo, hmemm, hfrm⟩ := hp
+    refine ⟨_, rfl, hBSm, hlocm, hspm, hevm, hchm, hrm, hinsm, hwokm, hdht, hdfix, hdfo, hmemm,
+      hfrm, ?_⟩
+    rw [fcBranches_kind2_dec_empty hBS.locals_ok hkind2 hw_emp,
+      fcChild160_ne0_eq (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        hBS'.locals_ok.child_lk hPC'.child_scr.2 hbnd hstne',
+      evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [hfin]
+  · intro f hf
+    rw [fcBranches_kind2_dec_empty hBS.locals_ok hkind2 hw_emp,
+      fcChild160_ne0_eq (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        hBS'.locals_ok.child_lk hPC'.child_scr.2 hbnd hstne',
+      evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [hf]
+    dsimp only
+    rw [hf]
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
