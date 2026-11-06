@@ -11631,4 +11631,296 @@ theorem logEntry_fresh_heap_transport_fc {F : Type}
       (hAp.1.memaddrs.trans hAs.1.memaddrs.symm) hhp hw,
     logOwnedIvls_transport_fc haddr hw, hw⟩
 
+theorem avoidsTries_fresh_heap_transport_fc {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ivls : List Ivl}
+    (hAs : ArenaReady s) (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt s S)
+    (hAp : ArenaReady post) (hbe : post.be = s.be)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg_kept : GlobalsKept ["heap_ptr"] s post)
+    (hout_dom : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") →
+        memB post b = memB s b)
+    (hav : AvoidsTries s S ivls) :
+    AvoidsTries post S ivls := by
+  obtain ⟨Nd, hTr, hdj⟩ := hav
+  have hWT : InitECandidate.Solver.Wave8Contracts.M23.WorldTypedWith s S Nd :=
+    ⟨hInv.1.1, hInv.1.2.1, hInv.1.2.2.1, hTr⟩
+  have hdom_eq : post.memaddrs = s.memaddrs := hAp.1.memaddrs.trans hAs.1.memaddrs.symm
+  have hglob_nonHeap : ∀ nm : String, ofString nm ≠ ofString "heap_ptr" → globN post nm = globN s nm := by
+    intro nm hne
+    exact InitECandidate.Solver.Wave8Contracts.M08.globN_eq_of_lookup
+      (hg_kept (ofString nm) (by simp [hne]))
+  have hsc : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by
+    rw [hglob_nonHeap "scratch_ptr" (by decide)]
+  have hcg : ∀ g ∈ InitECandidate.Solver.Wave8Contracts.M23.coreWorldGlobals,
+      globN post g = globN s g := by
+    intro g hg
+    have hne : ofString g ≠ ofString "heap_ptr" := by revert g hg; decide
+    exact hglob_nonHeap g hne
+  have hcell : InitECandidate.Solver.Wave8Contracts.M23.SameTypedCells s post S Nd := by
+    have hwti_disj : ∀ i ∈ InitECandidate.Solver.Wave8Contracts.M23.worldTypedIvls s S Nd,
+        Disj i (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
+      intro i hi
+      exact disj_fresh_of_zero_or_allocated_fc hAs.2 hAp.2 hhp
+        (InitECandidate.Solver.Wave8Contracts.M23.worldTypedIvls_allocated hWT hi)
+    refine ⟨hbe, hdom_eq, hAs.1.memaddrs, ?_, ?_, ?_⟩
+    · intro a hna
+      apply hout_dom a
+      rwa [hAs.1.memaddrs]
+    · intro a ha ha8 ⟨i, hi, ha1, ha2⟩
+      by_cases hdom : ordinaryDomain (BitVec.ofNat 64 a)
+      · have hord := (InitECandidate.Solver.Wave8Contracts.M23.ordinaryDomain_iff (BitVec.ofNat 64 a)).mp hdom
+        have hbit : (BitVec.ofNat 64 a).toNat = a := Nat.mod_eq_of_lt ha
+        have hhe : heapEnd < 2 ^ 64 := by rw [R11Shards.heapEnd_val]; decide
+        have ha_bound : a + 8 < 2 ^ 64 := by rw [hbit] at hord; omega
+        have hw : memW post a = memW s a := by
+          apply (R13SoloHtabSet.memW_eq_iff_memB (a₁ := a) (a₂ := a) hbe ha8 ha8 ha_bound ha_bound).2
+          intro k hk
+          apply hbyte (a + k) (by omega)
+          intro ⟨hb1, hb2⟩
+          rcases hwti_disj i hi with hd | hd | hd | hd
+          · omega
+          · dsimp only at hd; omega
+          · dsimp only at hd; omega
+          · dsimp only at hd; omega
+        cases hp : post.memory (BitVec.ofNat 64 a) with
+        | word wp =>
+          cases hs : s.memory (BitVec.ofNat 64 a) with
+          | word ws =>
+            simp only [memW, hp, hs] at hw
+            exact congrArg HolWordLab.word (BitVec.eq_of_toNat_eq hw)
+      · apply hout_dom _ (by rwa [hAs.1.memaddrs])
+    · intro b hb ⟨i, hi, hb1, hb2⟩
+      apply hbyte b hb
+      intro ⟨h1, h2⟩
+      rcases hwti_disj i hi with hd | hd | hd | hd
+      · omega
+      · dsimp only at hd; omega
+      · dsimp only at hd; omega
+      · dsimp only at hd; omega
+  have hfeq : fixedObjects post = fixedObjects s := by
+    unfold fixedObjects
+    rw [InitECandidate.Solver.Wave8Contracts.M23.blockOutObjects_eq hAs.2 hWT.2.2.1 hcell
+          (hglob_nonHeap "bo" (by decide)),
+        InitECandidate.Solver.Wave8Contracts.M23.balObjects_eq hAs.2 hWT.1 hWT.2.2.1 hcell
+          (hglob_nonHeap "bal_accounts" (by decide)),
+        hglob_nonHeap "journal" (by decide),
+        hglob_nonHeap "journal_cap" (by decide)]
+    congr 3
+    apply List.map_congr_left
+    intro gn hgn
+    have hne : ofString gn.1 ≠ ofString "heap_ptr" := by revert gn hgn; decide
+    rw [hglob_nonHeap gn.1 hne]
+  have hFT_post := InitECandidate.Solver.Wave8Contracts.M23.fixedTyped_of_eq hAp hWT.2.2.1 hhp hsc hfeq
+  obtain ⟨hWT_post, _⟩ := InitECandidate.Solver.Wave8Contracts.M23.worldTypedWith_congr_w1
+    hAs hAp hhp hsc hcg hcell hWT
+    ⟨hFT_post, fun o ho => Or.inl (by rw [← hfeq]; exact ho)⟩
+  refine ⟨Nd, hWT_post.2.2.2, fun o ho j hj => ?_⟩
+  rw [InitECandidate.Solver.Wave8Contracts.M23.nodeExtents_eq hTr.1 hcell] at hj
+  exact hdj o ho j hj
+
+theorem logOwnedIvls_avoidsTries_fresh_heap_fc {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {log : Nat}
+    (hAs : ArenaReady s) (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt s S)
+    (hAp : ArenaReady post) (hbe : post.be = s.be)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg_kept : GlobalsKept ["heap_ptr"] s post)
+    (hout_dom : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") →
+        memB post b = memB s b)
+    (hlog_ok : LogEntryOK s log)
+    (hav : AvoidsTries s S (logOwnedIvls s log)) :
+    AvoidsTries post S (logOwnedIvls post log) := by
+  have haddr : globN post "vm_system_address" = globN s "vm_system_address" :=
+    InitECandidate.Solver.Wave8Contracts.M08.globN_eq_of_lookup
+      (hg_kept (ofString "vm_system_address") (by decide))
+  obtain ⟨_, hown_eq, _⟩ := logEntry_fresh_heap_transport_fc hAs hAp hbe hhp haddr hbyte hlog_ok
+  rw [hown_eq]
+  exact avoidsTries_fresh_heap_transport_fc hAs hInv hAp hbe hhp hg_kept hout_dom hbyte hav
+
+theorem fresh_heap_ivl_props_fc {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {p sz : Nat}
+    (hAs : ArenaReady s) (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt s S)
+    (hAp : ArenaReady post) (hbe : post.be = s.be)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg_kept : GlobalsKept ["heap_ptr"] s post)
+    (hout_dom : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") →
+        memB post b = memB s b)
+    (hin_fresh : Inside (p, sz) (globN s "heap_ptr") (globN post "heap_ptr")) :
+    Inside (p, sz) sourceBase (globN post "heap_ptr") ∧
+    (∀ ec ∈ evmChain post, ∀ o ∈ frameObjects post ec, Disj (p, sz) o) ∧
+    (∀ t ∈ S, ∀ o ∈ htabFootprint post t, Disj (p, sz) o) ∧
+    (∀ o ∈ fixedObjects post, Disj (p, sz) o) ∧
+    AvoidsTries post S [(p, sz)] ∧
+    (∀ ec ∈ evmChain post, Disj (memW post (ec.1 + 112), 176) (p, sz)) := by
+  obtain ⟨_, hch_p, _⟩ := OpHandlersB.evmInvAt_of_fresh_heap_step
+    hAs hInv hAp hbe hhp hg_kept hout_dom hbyte
+  have hglob_nonHeap : ∀ nm : String, ofString nm ≠ ofString "heap_ptr" → globN post nm = globN s nm := by
+    intro nm hne
+    exact InitECandidate.Solver.Wave8Contracts.M08.globN_eq_of_lookup
+      (hg_kept (ofString nm) (by simp [hne]))
+  have hdom_eq : post.memaddrs = s.memaddrs := hAp.1.memaddrs.trans hAs.1.memaddrs.symm
+  have hsc : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by
+    rw [hglob_nonHeap "scratch_ptr" (by decide)]
+  have hcg : ∀ g ∈ InitECandidate.Solver.Wave8Contracts.M23.coreWorldGlobals,
+      globN post g = globN s g := by
+    intro g hg
+    have hne : ofString g ≠ ofString "heap_ptr" := by revert g hg; decide
+    exact hglob_nonHeap g hne
+  obtain ⟨Nd_s, hTr_s, _⟩ := hInv.2.2.2.2.2.2.2.2.2.1
+  have hWT_s : InitECandidate.Solver.Wave8Contracts.M23.WorldTypedWith s S Nd_s :=
+    ⟨hInv.1.1, hInv.1.2.1, hInv.1.2.2.1, hTr_s⟩
+  have hcell : InitECandidate.Solver.Wave8Contracts.M23.SameTypedCells s post S Nd_s := by
+    have hwti_disj : ∀ i ∈ InitECandidate.Solver.Wave8Contracts.M23.worldTypedIvls s S Nd_s,
+        Disj i (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
+      intro i hi
+      exact disj_fresh_of_zero_or_allocated_fc hAs.2 hAp.2 hhp
+        (InitECandidate.Solver.Wave8Contracts.M23.worldTypedIvls_allocated hWT_s hi)
+    refine ⟨hbe, hdom_eq, hAs.1.memaddrs, ?_, ?_, ?_⟩
+    · intro a hna; apply hout_dom a; rwa [hAs.1.memaddrs]
+    · intro a ha ha8 ⟨i, hi, ha1, ha2⟩
+      by_cases hdom : ordinaryDomain (BitVec.ofNat 64 a)
+      · have hord := (InitECandidate.Solver.Wave8Contracts.M23.ordinaryDomain_iff (BitVec.ofNat 64 a)).mp hdom
+        have hbit : (BitVec.ofNat 64 a).toNat = a := Nat.mod_eq_of_lt ha
+        have hhe : heapEnd < 2 ^ 64 := by rw [R11Shards.heapEnd_val]; decide
+        have ha_bound : a + 8 < 2 ^ 64 := by rw [hbit] at hord; omega
+        have hw : memW post a = memW s a := by
+          apply (R13SoloHtabSet.memW_eq_iff_memB (a₁ := a) (a₂ := a) hbe ha8 ha8 ha_bound ha_bound).2
+          intro k hk
+          apply hbyte (a + k) (by omega)
+          intro ⟨hb1, hb2⟩
+          rcases hwti_disj i hi with hd | hd | hd | hd
+          · omega
+          · dsimp only at hd; omega
+          · dsimp only at hd; omega
+          · dsimp only at hd; omega
+        cases hp : post.memory (BitVec.ofNat 64 a) with
+        | word wp =>
+          cases hs : s.memory (BitVec.ofNat 64 a) with
+          | word ws =>
+            simp only [memW, hp, hs] at hw
+            exact congrArg HolWordLab.word (BitVec.eq_of_toNat_eq hw)
+      · apply hout_dom _ (by rwa [hAs.1.memaddrs])
+    · intro b hb ⟨i, hi, hb1, hb2⟩
+      apply hbyte b hb
+      intro ⟨h1, h2⟩
+      rcases hwti_disj i hi with hd | hd | hd | hd
+      · omega
+      · dsimp only at hd; omega
+      · dsimp only at hd; omega
+      · dsimp only at hd; omega
+  have hfeq : fixedObjects post = fixedObjects s := by
+    unfold fixedObjects
+    rw [InitECandidate.Solver.Wave8Contracts.M23.blockOutObjects_eq hAs.2 hWT_s.2.2.1 hcell
+          (hglob_nonHeap "bo" (by decide)),
+        InitECandidate.Solver.Wave8Contracts.M23.balObjects_eq hAs.2 hWT_s.1 hWT_s.2.2.1 hcell
+          (hglob_nonHeap "bal_accounts" (by decide)),
+        hglob_nonHeap "journal" (by decide),
+        hglob_nonHeap "journal_cap" (by decide)]
+    congr 3
+    apply List.map_congr_left
+    intro gn hgn
+    have hne : ofString gn.1 ≠ ofString "heap_ptr" := by revert gn hgn; decide
+    rw [hglob_nonHeap gn.1 hne]
+  have hFT_post := InitECandidate.Solver.Wave8Contracts.M23.fixedTyped_of_eq hAp hWT_s.2.2.1 hhp hsc hfeq
+  obtain ⟨hWT_post, _⟩ := InitECandidate.Solver.Wave8Contracts.M23.worldTypedWith_congr_w1
+    hAs hAp hhp hsc hcg hcell hWT_s
+    ⟨hFT_post, fun o ho => Or.inl (by rw [← hfeq]; exact ho)⟩
+  have hfp_eq : ∀ t ∈ S, htabFootprint post t = htabFootprint s t :=
+    fun t ht => InitECandidate.Solver.Wave8Contracts.M23.htabFootprint_eq hcell ht (hWT_s.1.2.1 t ht).1
+  have hdj_alloc_s : ∀ o : Ivl, o.2 = 0 ∨ Allocated s o → Disj (p, sz) o := by
+    intro o ho
+    exact disj_symm_fc (InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_right
+      (by rw [Nat.add_sub_of_le hhp]; exact hin_fresh)
+      (disj_fresh_of_zero_or_allocated_fc hAs.2 hAp.2 hhp ho))
+  have hhe_lt : heapEnd < 2 ^ 64 := by rw [R11Shards.heapEnd_val]; decide
+  have hu_fo : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, o.1 + o.2 < 2 ^ 64 →
+      M08IvlUnhitFc s post o := by
+    intro ec hec o ho hob
+    exact ivlUnhit_of_fresh_heap_bytes_fc hbe hhp hbyte hob
+      (disj_fresh_of_frameObject_fc hAs.2 hAp.2 hhp (hInv.2.2.2.2.1 ec hec) ho)
+  have hrec_eq : ∀ ec ∈ evmChain s,
+      (∀ k, k + 8 ≤ 280 → k % 8 = 0 → memW post (ec.1 + k) = memW s (ec.1 + k)) ∧
+      (∀ k, k + 8 ≤ 24 → k % 8 = 0 → memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k)) := by
+    intro ec hec
+    have hFW := hInv.2.2.2.2.1 ec hec
+    have hse_lt : scratchEnd < 2 ^ 64 := by rw [R11Shards.scratchEnd_val]; decide
+    have hb1 : ec.1 + 280 < 2 ^ 64 := by
+      have h := (hFW.1 (ec.1, 280) (by simp)).1.2; dsimp only at h; omega
+    have hb88 : memW s (ec.1 + 88) + 24 < 2 ^ 64 := by
+      have h := (hFW.1 (memW s (ec.1 + 88), 24) (by simp)).1.2; dsimp only at h; omega
+    have he1_8 : ec.1 % 8 = 0 := (hFW.1 (ec.1, 280) (by simp)).2.1
+    have he88_8 : (memW s (ec.1 + 88)) % 8 = 0 := (hFW.1 (memW s (ec.1 + 88), 24) (by simp)).2.1
+    refine ⟨fun k hk hk8 => InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit
+              (hu_fo ec hec (ec.1, 280) (by simp [frameObjects]) hb1)
+              (by omega) (by omega) ⟨by omega, by omega⟩,
+            fun k hk hk8 => InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit
+              (hu_fo ec hec (memW s (ec.1 + 88), 24) (by simp [frameObjects]) hb88)
+              (by omega) (by omega) ⟨by omega, by omega⟩⟩
+  have hfo_eq : ∀ ec ∈ evmChain s, frameObjects post ec = frameObjects s ec := by
+    intro ec hec
+    have hFW := hInv.2.2.2.2.1 ec hec
+    obtain ⟨he_eq, h88_eq⟩ := hrec_eq ec hec
+    have hl0 : memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) := by
+      simpa using h88_eq 0 (by omega) (by omega)
+    have hl8 : memW post (memW s (ec.1 + 88) + 8) = memW s (memW s (ec.1 + 88) + 8) :=
+      h88_eq 8 (by omega) (by omega)
+    have hl16 : memW post (memW s (ec.1 + 88) + 16) = memW s (memW s (ec.1 + 88) + 16) :=
+      h88_eq 16 (by omega) (by omega)
+    have harr_eq : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+        memW post (memW s (memW s (ec.1 + 88)) + 8 * i) = memW s (memW s (memW s (ec.1 + 88)) + 8 * i) := by
+      intro i hi
+      have hfl_in : frameLogs s ec ∈ frameObjects s ec := by simp [frameObjects]
+      have hlen_le := hFW.2.2.2.2.2.2.2.2.2.2.2.1
+      have hfl_b : (frameLogs s ec).1 + (frameLogs s ec).2 < 2 ^ 64 := by
+        rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.1 with ⟨_, h2⟩ | ⟨_, h2⟩
+        · have hh := hAs.2.2.1; rw [R11Shards.heapLimit_val] at hh; omega
+        · have hs := R11Shards.scratchEnd_val; omega
+      have hfl_8 : (memW s (memW s (ec.1 + 88))) % 8 = 0 := hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.1.1
+      exact InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit
+        (hu_fo ec hec _ hfl_in hfl_b)
+        (by unfold frameLogs at hfl_b; omega) (by omega)
+        ⟨by unfold frameLogs; omega, by unfold frameLogs; omega⟩
+    have hflo_eq : frameLogObjects post ec = frameLogObjects s ec := by
+      unfold frameLogObjects; dsimp only
+      rw [he_eq 88 (by omega) (by omega), hl8]
+      apply List.flatMap_congr; intro i hi; rw [List.mem_range] at hi
+      rw [hl0, harr_eq i hi]
+      rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1 with hz | ⟨_, _, _, _, hent⟩
+      · have he88_in := (hFW.1 (memW s (ec.1 + 88), 24) (by simp)).1.1
+        have h1 := hAs.2.2.2.1; have h2 := hAs.2.2.2.2.1
+        rw [R11Shards.scratchStart_val] at h1; dsimp only at he88_in; omega
+      · exact (logEntry_fresh_heap_transport_fc hAs hAp hbe hhp
+          (hglob_nonHeap "vm_system_address" (by decide)) hbyte (hent i hi).2).2.1
+    unfold frameObjects frameLogs frameRet
+    rw [he_eq 8 (by omega) (by omega), he_eq 232 (by omega) (by omega),
+        he_eq 24 (by omega) (by omega), he_eq 40 (by omega) (by omega),
+        he_eq 88 (by omega) (by omega), hl0, hl16,
+        he_eq 216 (by omega) (by omega), he_eq 144 (by omega) (by omega), hflo_eq]
+  refine ⟨⟨le_trans hAs.2.1 hin_fresh.1, hin_fresh.2⟩, ?_, ?_, ?_, ?_, ?_⟩
+  · intro ec hec o ho
+    rw [hch_p] at hec; rw [hfo_eq ec hec] at ho
+    exact disj_symm_fc (InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_right
+      (by rw [Nat.add_sub_of_le hhp]; exact hin_fresh)
+      (disj_fresh_of_frameObject_fc hAs.2 hAp.2 hhp (hInv.2.2.2.2.1 ec hec) ho))
+  · intro t ht o ho
+    rw [hfp_eq t ht] at ho
+    exact hdj_alloc_s o (Or.inr ((hWT_s.1.2.1 t ht).2 o ho).1)
+  · intro o ho
+    rw [hfeq] at ho
+    exact hdj_alloc_s o ((hWT_s.2.2.1.1 o ho).imp id And.left)
+  · refine ⟨Nd_s, hWT_post.2.2.2, fun x hx j hj => ?_⟩
+    rw [List.mem_singleton] at hx; subst hx
+    rw [InitECandidate.Solver.Wave8Contracts.M23.nodeExtents_eq hTr_s.1 hcell] at hj
+    exact hdj_alloc_s j (InitECandidate.Solver.Wave8Contracts.M23.worldTypedIvls_allocated hWT_s
+      (by simp [InitECandidate.Solver.Wave8Contracts.M23.worldTypedIvls, hj]))
+  · intro ec hec
+    rw [hch_p] at hec
+    rw [(hrec_eq ec hec).1 112 (by omega) (by omega)]
+    exact disj_symm_fc (hdj_alloc_s _ (Or.inr (hInv.2.2.2.2.1 ec hec).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
