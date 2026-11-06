@@ -10516,4 +10516,34 @@ theorem eval_assign_local_ts_kept {F : Type} (s : PanSemStateFiniteExact 64 F)
   · exact ⟨rfl, rfl⟩
   · split <;> exact ⟨rfl, rfl⟩
 
+/-- Advancing the cursor retains the guarded merge's transaction frame. -/
+theorem eval_merge_occupied_then_increment_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32)) (hts : globN s "ts" ≠ 0)
+    (hnt : (evaluateHOLFiniteState s mergeOccupiedThenIncrement).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeOccupiedThenIncrement).1) :
+    let post := (evaluateHOLFiniteState s mergeOccupiedThenIncrement).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  dsimp only
+  unfold mergeOccupiedThenIncrement at hnt hfr ⊢
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases he : evaluateHOLFiniteState s mergeOccupiedInner with ⟨r, mid⟩
+  simp only [he] at hnt hfr ⊢
+  have hntb : (evaluateHOLFiniteState s mergeOccupiedInner).1 ≠ some .timeOut := by
+    rw [he]; rintro rfl; exact hnt rfl
+  have hfrb : FlowingOrResumes (evaluateHOLFiniteState s mergeOccupiedInner).1 := by
+    rw [he]; cases r with
+    | none => exact Or.inl rfl
+    | some r => exact hfr
+  have hs := eval_merge_occupied_inner_ts_kept s tw f0 kw vw hc hW ht hk hbs ht0 htbs hts hntb hfrb
+  rw [he] at hs
+  cases r with
+  | none => exact merge_ts_outer_kept_trans hs (eval_assign_local_ts_kept mid _ _)
+  | some r => exact hs
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
