@@ -12745,6 +12745,32 @@ theorem precompile_sha256_allocated_tail_unconditional {F : Type}
   exact precompile_sha256_allocated_tail pad stp out len ptr hi hstep hm hb hfresh hc
     hp hs hn ho hbound hnt hflow
 
+theorem precompile_sha256_alloc_tail_step_unconditional {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad stp out len : BitVec 64) (ptr : ExpHOL 64)
+    (hi : EvmInv s)
+    (hhp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word out)))
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word len))) :
+    let tail : ProgHOL 64 := .seq
+      (.call (some (none,none)) (ofString "sha256") [ptr,.var .local (ofString "n"),.var .local (ofString "out")])
+      (.seq (.store (.op .add [.var .global (ofString "ev"),.const 120]) (.var .local (ofString "out")))
+        (.seq (.store (.op .add [.var .global (ofString "ev"),.const 128]) (.const 32)) (.return (.const 0))))
+    Resumes (evaluateHOLFiniteState s (.decCall (ofString "out") .one (ofString "alloc") [.const 32] tail)).1 →
+    EvmStepCC frameStartGw s
+      (evaluateHOLFiniteState s (.decCall (ofString "out") .one (ofString "alloc") [.const 32] tail)).2 := by
+  intro tail hr
+  obtain ⟨next,ho,hh,hwords,hstep,hres,hstate,hm,hb,hl⟩ :=
+    transfer_decCall_alloc_exact_spec s (ofString "out") tail out 32 (by simp) hi hhp hr
+  have hnn : next.locals.lookup (ofString "n") = some (.val (.word len)) := by
+    rw [hl _ (by decide)]; exact hn
+  have hrn : Resumes (evaluateHOLFiniteState next tail).1 := hres ▸ hr
+  have hbound := precompile_sha256_call_input_bound next len ptr
+    (.var .local (ofString "n")) (.var .local (ofString "out")) hstep.1.1.1.1.code
+    (by simp [evalHOLFinite,evalHOLExact,hnn])
+    (precompile_seq_flows_left next _ _ (Or.inr (Or.inr (Or.inr hrn))))
+  exact precompile_sha256_alloc_tail_step s pad stp out len ptr hi hhp hp hs hn hbound hr
+
 theorem pre_sha256_body_step_of_input_bound {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
     (hbound : ∀ msg : ValueHOL 64, @evalHOLExact 64 F _ s.toExact
