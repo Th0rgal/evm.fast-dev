@@ -12142,4 +12142,55 @@ theorem aligned_heap_growth_g10 {F : Type}
   simp only [memW, hm]
   trivial
 
+theorem aligned_heap_update_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (q : BitVec 64)
+    (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (hlo : globN s "heap_ptr" ≤ q.toNat)
+    (hhi : q.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat)
+    (hal : q.toNat % 8 = 0) :
+    let post := {s with globals := s.globals.update (ofString "heap_ptr", .val (.word q))}
+    EvmInv post ∧ Group10.HeadMemChainWF post ∧ evmChain post = evmChain s ∧
+      OpDispatchSpec.evmR post = OpDispatchSpec.evmR s := by
+  let post := {s with globals := s.globals.update (ofString "heap_ptr", .val (.word q))}
+  have hq : globN post "heap_ptr" = q.toNat := by simp [post, globN, FUPDATE]
+  have hfp : globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := by
+    simp [post, globN, FUPDATE, show ofString "heap_ptr" ≠ ofString "frame_mem_ptr" by decide]
+  have hsp : globN post "scratch_ptr" = globN s "scratch_ptr" := by
+    simp [post, globN, FUPDATE, show ofString "heap_ptr" ≠ ofString "scratch_ptr" by decide]
+  have ha : ArenaReady post := by
+    refine ⟨guestInv_congr (s := s) rfl rfl rfl rfl hi.1.1, ?_⟩
+    obtain ⟨h1,h2,h3,h4,h5,h6,h7,h8,h9⟩ := hi.1.2
+    unfold ArenaOK
+    rw [hq, hfp, hsp]
+    exact ⟨le_trans h1 hlo, hhi, h3, h4, h5, hal, h7, h8,
+      globalsWord_update (ofString "heap_ptr") q rfl h9⟩
+  have hg : GlobalsKept ["heap_ptr"] s post := by
+    intro k hk
+    have hne : ofString "heap_ptr" ≠ k := by intro he; subst k; exact hk (by simp)
+    simp [post, HolFiniteMapExact.lookup_update, FUPDATE, hne]
+  exact aligned_heap_growth_g10 hi hw ha rfl (by rw [hq]; exact hlo) hg rfl
+
+theorem alloc_return_aligned_heap_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p n : BitVec 64)
+    (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (hc : s.code = originalRuntimeCode)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    let updated := {s with globals := post.globals}
+    EvmInv updated ∧ Group10.HeadMemChainWF updated ∧ evmChain updated = evmChain s ∧
+      OpDispatchSpec.evmR updated = OpDispatchSpec.evmR s := by
+  have hpn : globN s "heap_ptr" = p.toNat := by unfold globN; rw [hp]
+  have hple : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat := by
+    rw [← hpn]; exact hi.1.2.2.1
+  have h := M13.evaluate_alloc_body_general s p n hc hple hp hn v
+  rw [hr] at h
+  obtain ⟨_, hg, _, hlo, hhi, hal⟩ := h rfl
+  dsimp only
+  rw [hg]
+  apply aligned_heap_update_g10 s _ hi hw ?_ hhi hal
+  rw [hpn]
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
