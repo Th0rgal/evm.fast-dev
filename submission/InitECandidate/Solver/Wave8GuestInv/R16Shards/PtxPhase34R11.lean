@@ -17668,4 +17668,87 @@ theorem journal_cut_world_entry {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Relate both output memories when replacing a declaration continuation. -/
+theorem dec_return_replace_memory_rel {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {nm : MlS} {init : ExpHOL 64}
+    {body : ProgHOL 64} {rv : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.dec nm .one init body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → (BitVec 64 → HolWordLab 64) → Prop)
+    (hc : ∀ (entry mid : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry body = (some (.returned rv), mid) →
+      ∃ mid', evaluateHOLFiniteState entry body' = (some (.returned rv'), mid') ∧ P mid.memory mid'.memory) :
+    ∃ post', evaluateHOLFiniteState s (.dec nm .one init body') = (some (.returned rv'), post') ∧ P post.memory post'.memory := by
+  obtain ⟨w, he, mid, hb, hout⟩ := dec_ret_inv h
+  obtain ⟨mid', hb', hP⟩ := hc _ _ hb
+  refine ⟨{mid' with locals := HolFiniteMapExact.resVarEq mid'.locals (nm, s.locals.lookup nm)}, ?_, ?_⟩
+  · rw [evaluateHOLFiniteState_dec_total]
+    simp [he, shapeEqHOL, shapeOfHOLExact, hb']
+  · simpa only [hout] using hP
+
+theorem seq_return_replace_memory_rel {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {pre body : ProgHOL 64} {rv : ValueHOL 64}
+    (hp : evaluateHOLFiniteState s pre = (none, mid))
+    (h : evaluateHOLFiniteState s (.seq pre body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → (BitVec 64 → HolWordLab 64) → Prop)
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry body = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry body' = (some (.returned rv'), u') ∧ P u.memory u'.memory) :
+    ∃ post', evaluateHOLFiniteState s (.seq pre body') = (some (.returned rv'), post') ∧ P post.memory post'.memory := by
+  rw [evaluateHOLFiniteState_seq_line780, hp] at h ⊢
+  exact hc mid post h
+
+/-- Relate original and replacement memories across declared-call local restoration. -/
+theorem decCall_return_replace_memory_rel {F : Type}
+    {s out : PanSemStateFiniteExact 64 F} {x fname : MlS} {sh : ShapeHOL}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64} {v : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (some (.returned v), out))
+    (cont' : ProgHOL 64) (v' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → (BitVec 64 → HolWordLab 64) → Prop)
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F), evaluateHOLFiniteState entry cont = (some (.returned v), u) →
+      ∃ u', evaluateHOLFiniteState entry cont' = (some (.returned v'), u') ∧ P u.memory u'.memory) :
+    ∃ out', evaluateHOLFiniteState s (.decCall x sh fname args cont') = (some (.returned v'), out') ∧ P out.memory out'.memory := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h ⊢
+  split at h
+  · simp at h
+  · rename_i valuesOpt values ha
+    split at h
+    · simp at h
+    · rename_i bodyOpt body callee ret hl
+      split at h
+      · simp at h
+      · rename_i hclock
+        simp only [hclock, ↓reduceIte]
+        dsimp only at h ⊢
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => simp at h
+        | some r =>
+          cases r <;> try simp at h
+          rename_i rv
+          dsimp only at h ⊢
+          split at h
+          · rename_i hshape
+            simp only [hshape]
+            rcases ht : evaluateHOLFiniteState (setVarHOLFinite x rv {post with locals := s.locals}) cont with ⟨rc, u⟩
+            rw [ht] at h
+            cases rc with
+            | none => simp at h
+            | some r =>
+              cases r <;> try simp at h
+              rename_i w
+              obtain ⟨rfl, hout⟩ := h
+              obtain ⟨u', hu, hP⟩ := hc _ _ ht
+              rw [hu]
+              refine ⟨_, rfl, ?_⟩
+              simpa only [← hout] using hP
+          · simp at h
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
