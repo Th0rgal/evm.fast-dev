@@ -11158,6 +11158,32 @@ theorem precompile_sha256_call_evmStepCC {F : Type}
   exact precompile_chain_cells_of_disjoint_byteEff hat he
     (fun i hi j hj => hd i hi j (List.mem_append_right _ hj))
 
+theorem precompile_global_buffer_bound {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (hi : EvmInv s)
+    (gn : String × Nat) (hg : gn ∈ globalBuffers)
+    (p : BitVec 64) (hp : s.globals.lookup (ofString gn.1) = some (.val (.word p)))
+    (hnz : p.toNat ≠ 0) (hn : gn.2 ≠ 0) :
+    p.toNat + gn.2 ≤ heapEnd := by
+  obtain ⟨ha,S,hat⟩ := (evmInv_iff_at s).1 hi
+  have hf : bufferRegion s gn ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append.mpr; left
+    apply List.mem_append.mpr; left
+    apply List.mem_append.mpr; left
+    exact List.mem_map.mpr ⟨gn,hg,rfl⟩
+  have hfix := hat.1.2.2.1.1 _ hf
+  have heq : bufferRegion s gn = (p.toNat,gn.2) := by
+    simp [bufferRegion,globN,hp,hnz]
+  rw [heq] at hfix
+  rcases hfix with hz|⟨ha',_⟩
+  · exact absurd hz hn
+  · rcases ha' with hh|hs
+    · have lim := ha.2.2.1
+      have hlim : heapLimit ≤ heapEnd := by decide
+      exact le_trans hh.2 (le_trans lim hlim)
+    · have hlim : scratchEnd ≤ heapEnd := by decide
+      exact le_trans hs.2 hlim
+
 theorem precompile_sha256_buffers_avoid {F : Type}
     (s : PanSemStateFiniteExact 64 F) (pad stp : BitVec 64)
     (hi : EvmInv s)
