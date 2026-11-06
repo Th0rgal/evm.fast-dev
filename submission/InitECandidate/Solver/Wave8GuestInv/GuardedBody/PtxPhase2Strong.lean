@@ -17855,4 +17855,41 @@ theorem phase2_message_empty8_call_final_bound (h : PtxCallees) {ι : Type} [Non
   exact phase2_message_call_stores_final_bound h buffers contents ["empty", "aa", "ak"] aa ak
     (by simp) (by simp) (by simp) ht
 
+/-- Contract-address computation frames buffers disjoint from its output and scratch. -/
+theorem phase2_compute_contract_address_live_buffer (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat)
+    (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "compute_contract_address") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hnt : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK s) (hw : WorldTypedWith s S Nd)
+    (hb : PtxLiveBufferAt s S Nd buffer contents)
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "out", 20),
+      (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+      (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)] (worldTypedIvls s S Nd))
+    (hf : ∀ region ∈ [(locN (callEntryStateHOLFinite s callee) "out", 20),
+      (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+      (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)], Disj buffer region) :
+    ∃ S' Nd', WorldTypedWith post S' Nd' ∧ PtxLiveBufferAt post S' Nd' buffer contents := by
+  have hh := PtxP1.funSpec_at_lookup h.wk_compute_contract_address s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp callee) (by rw [he]; exact hnt)
+  rw [he] at hh
+  have step := hh hr
+  obtain ⟨S', Nd', _, hw', hg, hframe, _⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hd
+  refine ⟨S', Nd', hw', ?_⟩
+  apply phase2_live_buffer_step (callEntryStateHOLFinite s callee) post S Nd S' Nd'
+    buffer contents _ hb hp.1.2
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw)
+    step.2.1 hg hframe hf
+  intro region hm hz
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+  rcases hm with rfl | rfl | rfl
+  · simp at hz
+  · simp at hz; simp [hz]
+  · simp at hz; simp [hz]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
