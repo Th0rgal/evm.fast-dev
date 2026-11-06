@@ -8813,6 +8813,39 @@ theorem precompile_sha256_block_effect {F : Type} (s : PanSemStateFiniteExact 64
   exact (R10Shards.P26_P28.checkWordStoresLocal_sound (ofString "stp") 64 (by decide) []
     (sourceFnBody Guest.Software.guestFn_sha256_block) rfl s p hc hi hp (by simp)).1
 
+theorem precompile_byteEff_to_region {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {Rl : List Ivl}
+    (h : R10Shards.P26_P28.ByteEff s post Rl) :
+    InitECandidate.Solver.Wave8Contracts.M23.ByteRegionEffect s post Rl := by
+  refine ⟨h.code, h.memaddrs, h.shMemaddrs, h.baseAddr, h.be, h.globals, ?_, ?_, ?_⟩
+  · intro a ha
+    by_contra hn
+    exact ha (h.out_dom a hn)
+  · intro a ha
+    by_contra hn
+    obtain ⟨i, hi, hh⟩ := h.cell_frame a hn
+    exact ha i hi hh.2
+  · intro b hb hn
+    by_contra he
+    obtain ⟨i, hi, hh⟩ := h.byte_frame b hb he
+    exact hn i hi hh
+
+theorem precompile_sha256_state_init_region {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : BitVec 64) (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "stp") = some (.val (.word p))) :
+    InitECandidate.Solver.Wave8Contracts.M23.ByteRegionEffect s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_state_init)).2
+      [(p.toNat, 64)] :=
+  precompile_byteEff_to_region (precompile_sha256_state_init_effect s p hc hi hp)
+
+theorem precompile_sha256_block_region {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : BitVec 64) (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "stp") = some (.val (.word p))) :
+    InitECandidate.Solver.Wave8Contracts.M23.ByteRegionEffect s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_block)).2
+      [(p.toNat, 64)] :=
+  precompile_byteEff_to_region (precompile_sha256_block_effect s p hc hi hp)
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
