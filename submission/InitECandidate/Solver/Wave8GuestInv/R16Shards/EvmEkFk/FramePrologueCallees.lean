@@ -8295,6 +8295,100 @@ theorem precompile_store_output_step (off : Nat) (hoff : off = 120 ∨ off = 128
       (by rw [hp]) (by rw [hp]) hmem
     exact le_of_eq (precompile_output_fields_gas_eq hInv hmem)
 
+/-- Gas charging preserves all cells outside its two gas counters, including on errors. -/
+theorem precompile_charge_gas_memory {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (evw amtw : BitVec 64)
+    (hev : s.globals.lookup (ofString "ev") = some (.val (.word evw)))
+    (hamt : s.locals.lookup (ofString "amount") = some (.val (.word amtw))) :
+    ∀ x : BitVec 64, x ≠ evw + 64 → x ≠ evw + 184 →
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_charge_gas)).2.memory x = s.memory x := by
+  intro x h64 h184
+  change x ≠ evw + 64#64 at h64
+  change x ≠ evw + 184#64 at h184
+  have hbody : sourceFnBody Guest.Software.guestFn_charge_gas =
+      .dec (ofString "gl") .one (.load .one (.op .add [.var .global (ofString "ev"), .const 64]))
+        (.seq
+          (.ite (.cmp .lower (.var .local (ofString "gl")) (.var .local (ofString "amount")))
+            (.raise (ofString "EvmErr") (.const 4)) .skip)
+          (.seq
+            (.store (.op .add [.var .global (ofString "ev"), .const 64])
+              (.op .sub [.var .local (ofString "gl"), .var .local (ofString "amount")]))
+            (.seq
+              (.store (.op .add [.var .global (ofString "ev"), .const 184])
+                (.op .add [.load .one (.op .add [.var .global (ofString "ev"), .const 184]),
+                  .var .local (ofString "amount")]))
+              (.return (.const 0))))) := rfl
+  rw [hbody, evaluateHOLFiniteState_dec_total]
+  dsimp only
+  split
+  · rfl
+  · rename_i glv hgl
+    obtain ⟨glw, rfl⟩ := EvmFrameSpecs.word_of_load_one s _ glv hgl
+    simp only [shapeOfHOLExact, shapeEqHOL, ↓reduceIte]
+    let s1 := setVarHOLFinite (ofString "gl") (.val (.word glw)) s
+    have hcmp : @evalHOLExact 64 F _ s1.toExact (fun a => Classical.propDecidable (s1.memaddrs a))
+        (.cmp .lower (.var .local (ofString "gl")) (.var .local (ofString "amount"))) =
+        some (.val (.word (if glw < amtw then 1 else 0))) := by
+      simp [s1, evalHOLExact, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "gl" ≠ ofString "amount" by decide, hamt,
+        Compiler.Encoders.Asm.wordCmpHOL]
+    change (match evaluateHOLFiniteState s1 _ with
+      | (r, post) => (r, {post with locals := (post.locals.resVarEq
+          (ofString "gl", s.locals.lookup (ofString "gl")))})).2.memory x = s.memory x
+    rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite, hcmp]
+    by_cases hlt : glw < amtw
+    · simp only [hlt, ↓reduceIte, show (1 : BitVec 64) ≠ 0 by decide]
+      rw [evaluateHOLFiniteState_raise]
+      cases hs : s1.eshapes.lookup (ofString "EvmErr") <;>
+        simp [evalHOLExact, hs, shapeOfHOLExact, emptyLocalsHOLFinite] <;>
+        (first | rfl | (split_ifs <;> rfl))
+    · simp only [hlt, ↓reduceIte, evaluateHOLFiniteState_skip]
+      have hev1 : s1.globals.lookup (ofString "ev") = some (.val (.word evw)) := hev
+      have hgl1 : s1.locals.lookup (ofString "gl") = some (.val (.word glw)) := by
+        simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+      have hamt1 : s1.locals.lookup (ofString "amount") = some (.val (.word amtw)) := by
+        simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+          show ofString "gl" ≠ ofString "amount" by decide, hamt]
+      dsimp only [s1, setVarHOLFinite] at *
+      rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store]
+      simp only [evalHOLExact, evalListHOLExact, hev1, hgl1, hamt1,
+        wordOpHOL, wordOp, valueIsWord, valueWord, List.all, List.map,
+        Option.map, Bool.and_self, ↓reduceIte, List.foldr, BitVec.add_zero,
+        BitVec.sub_zero, flattenHOL, panMemStoresHOL, panMemStoreHOL,
+        BitVec.add_zero]
+      by_cases hd64 : s.memaddrs (evw + 64)
+      · simp only [show (64 + 0 : BitVec 64) = 64 by decide, hd64, ↓reduceIte]
+        rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store]
+        simp [evalHOLExact, evalListHOLExact, hev, hamt,
+          HolFiniteMapExact.lookup_update, FUPDATE,
+          show ofString "gl" ≠ ofString "amount" by decide,
+          wordOpHOL, wordOp, valueIsWord, valueWord, memLoadHOLExact,
+          flattenHOL, panMemStoresHOL, panMemStoreHOL, h64, h184,
+          evaluateHOLFiniteState_return, emptyLocalsHOLFinite]
+        by_cases hd184 : s.memaddrs (evw + 184)
+        · change s.memaddrs (evw + 184#64) at hd184
+          simp only [hd184, ↓reduceIte]
+          cases hw : s.memory (evw + 184#64) with
+          | word w =>
+            simp [hw, valueWord, flattenHOL, panMemStoresHOL, panMemStoreHOL,
+              hd184, h64, h184, shapeOfHOLExact, sizeOfShapeWithContextHOL]
+        · change ¬s.memaddrs (evw + 184#64) at hd184
+          simp [hd184, h64]
+      · simp only [show (64 + 0 : BitVec 64) = 64 by decide, hd64, ↓reduceIte]
+
+theorem precompile_charge_gas_chain_cells {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hInv : EvmInv s) (amtw : BitVec 64)
+    (hamt : s.locals.lookup (ofString "amount") = some (.val (.word amtw))) :
+    ChainCellsAgree s (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_charge_gas)).2 := by
+  obtain ⟨hb, _, ⟨evw, hev, hevn⟩, _, _⟩ := R11Shards.evm_head_globals hInv
+  apply precompile_chain_cells_of_head_update hInv
+  intro x hx
+  apply precompile_charge_gas_memory s evw amtw hev hamt x
+  · have hn := hx (globN s "ev" + 64) (by simp [R11Shards.headAllowedOffsets])
+    simpa [← hevn, BitVec.ofNat_add, BitVec.ofNat_toNat] using hn
+  · have hn := hx (globN s "ev" + 184) (by simp [R11Shards.headAllowedOffsets])
+    simpa [← hevn, BitVec.ofNat_add, BitVec.ofNat_toNat] using hn
+
 private theorem dispatch_step_trans {F : Type} {s mid post : PanSemStateFiniteExact 64 F}
     (h1 : EvmStepCC frameStartGw s mid) (h2 : EvmStepCC frameStartGw mid post) :
     EvmStepCC frameStartGw s post := by

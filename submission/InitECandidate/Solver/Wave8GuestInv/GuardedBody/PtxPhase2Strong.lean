@@ -15428,4 +15428,122 @@ theorem phase2_htab_set_ts8_message_suffix_bound (h : PtxCallees)
     exact guestInv_callEntry s callee hp.1.1.1.1.1
   · exact phase2_htab_set_ts8_message_suffix buffers contents names aa ak key value
 
+/-- Newly allocated role targets cannot alias either existing private access table. -/
+theorem phase2_message_tables_fresh_roles {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (ht : PtxMessageTables s aa ak)
+    (hr : ∀ a ∈ worldRoleSlots post ++ journalRoleSlots post,
+      (∃ b ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 = b.1) ∨
+        (globN s "heap_ptr" ≤ a.1 ∧ a.1 < heapLimit)) :
+    (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ aa) ∧
+    (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ ak) := by
+  obtain ⟨S, Nd, hw, ha, hk, _, _, haf, hkf, _⟩ := ht
+  have hbound : ∀ u ∈ S, u < globN s "heap_ptr" ∨ heapLimit ≤ u := by
+    intro u hu
+    have hi : (u, 88) ∈ htabFootprint s u := by simp [htabFootprint]
+    have hb := ((hw.1.2.1 u hu).2 (u, 88) hi).1
+    rcases hb with hb | hb
+    · have hb := hb.2
+      dsimp at hb
+      exact Or.inl (by omega)
+    · have hlo := hs.2.2.2.1
+      have hsp := hs.2.2.2.2.1
+      have hsep : heapLimit ≤ InitE.scratchStart := by decide
+      exact Or.inr (by dsimp [Inside] at *; omega)
+  constructor
+  · intro a ham heq
+    rcases hr a ham with ⟨b, hb, he⟩ | hf
+    · exact haf b hb (he.symm.trans heq)
+    · have := hbound aa ha
+      omega
+  · intro a ha heq
+    rcases hr a ha with ⟨b, hb, he⟩ | hf
+    · exact hkf b hb (he.symm.trans heq)
+    · have := hbound ak hk
+      omega
+
+/-- World growth may introduce fresh roles while preserving the private-table witness. -/
+theorem phase2_message_tables_world_step_fresh_roles {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) {aa ak : Nat}
+    (ha : ArenaReady s) (ht : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hm : locN post "m" = locN s "m")
+    (hr : ∀ a ∈ worldRoleSlots post ++ journalRoleSlots post,
+      (∃ b ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 = b.1) ∨
+        (globN s "heap_ptr" ≤ a.1 ∧ a.1 < heapLimit))
+    (haa : hdr post aa 0 = hdr s aa 0) (hak : hdr post ak 0 = hdr s ak 0)
+    (hs : ∀ S Nd, WorldTypedWith s S Nd →
+      ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+        OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd')) :
+    PtxMessageTables post aa ak := by
+  have hf := phase2_message_tables_fresh_roles ha ht hr
+  exact phase2_message_tables_world_step_roles s post ht hin hm hf.1 hf.2 haa hak hs
+
+/-- A fresh-only effect preserves every existing table header outside its buffers. -/
+theorem phase2_worldEff_table_header {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {B : List (String × Nat)} {gw : List String}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (he : WorldEff s post [] B gw) {u : Nat} (hu : u ∈ S)
+    (hB : ∀ b ∈ B, Disj (u, 88) (bufferRegion s b))
+    (k : Nat) (hk : k < 11) : hdr post u k = hdr s u k := by
+  have hi : (u, 88) ∈ htabFootprint s u := by simp [htabFootprint]
+  have hf := (hw.1.2.1 u hu).1.1 (u, 88) hi
+  have ha := ((hw.1.2.1 u hu).2 (u, 88) hi).1
+  have heq := phase2_worldEff_allocated_unhit he hs ⟨hf.2.1, by norm_num⟩ ha
+    (by simp) hB
+  unfold hdr
+  apply memW_eq_of_ivlUnhit heq
+  · have h8 := hf.2.1
+    omega
+  · exact (ivl_allocated_bound hs.2 ha).2
+  · constructor <;> omega
+
+/-- Fresh-only effects preserve both access-table key lengths. -/
+theorem phase2_worldEff_message_table_headers {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {B : List (String × Nat)} {gw : List String}
+    {aa ak : Nat} (hs : ArenaReady s) (ht : PtxMessageTables s aa ak)
+    (he : WorldEff s post [] B gw)
+    (ha : ∀ b ∈ B, Disj (aa, 88) (bufferRegion s b))
+    (hk : ∀ b ∈ B, Disj (ak, 88) (bufferRegion s b)) :
+    hdr post aa 0 = 20 ∧ hdr post ak 0 = 52 := by
+  obtain ⟨S, Nd, hw, ham, hkm, hal, hkl, _⟩ := ht
+  exact ⟨(phase2_worldEff_table_header hs hw he ham ha 0 (by decide)).trans hal,
+    (phase2_worldEff_table_header hs hw he hkm hk 0 (by decide)).trans hkl⟩
+
+/-- Untyped world buffers are disjoint from every jointly typed table header. -/
+theorem phase2_table_header_disj_buffer {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hw : WorldTypedWith s S Nd) {u : Nat} (hu : u ∈ S)
+    (b : String × Nat) (hb : b ∈ globalBuffers)
+    (hnt : b.1 ∉ typedRecords.map Prod.fst) :
+    Disj (u, 88) (bufferRegion s b) := by
+  apply disj_symm
+  apply R10Shards.P26_P28.untypedBuf_disj_worldTypedIvls hw b hb hnt
+  simp only [worldTypedIvls, List.mem_append]
+  left; left; left; left; left
+  exact List.mem_flatMap.mpr ⟨u, hu, by simp [htabFootprint]⟩
+
+/-- The concrete world-state lookup preserves both private access-table key lengths. -/
+theorem phase2_ws_get_account_optional_table_headers {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (ha : ArenaReady s) {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    (hnt : (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    let post := (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2
+    hdr post aa 0 = 20 ∧ hdr post ak 0 = 52 := by
+  have he := worldEff_ws_get_account_optional s s ha.2
+    (WorldEff.refl s [] wsBufs wsGw ha hc) hnt hr
+  apply phase2_worldEff_message_table_headers ha ht he
+  all_goals
+    intro b hb
+    obtain ⟨S, Nd, hw, ham, hkm, _⟩ := ht
+    apply phase2_table_header_disj_buffer hw (by assumption) b
+    · simp only [wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hb
+      rcases hb with rfl | rfl | rfl <;> decide
+    · simp only [wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hb
+      rcases hb with rfl | rfl | rfl <;> decide
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

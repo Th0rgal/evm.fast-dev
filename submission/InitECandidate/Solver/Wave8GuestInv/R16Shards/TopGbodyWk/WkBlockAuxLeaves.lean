@@ -9131,4 +9131,55 @@ theorem eval_merge_new_continuation {F : Type}
     (hcont post iw (hm.trans hc) (hs.worldOK_bufs (by intro p hp; simp at hp) hW)
       hi hl hk hf hnt hfr)
 
+/-- Insertion needs the fresh inner table only in the caller-selected typings. -/
+theorem merge_set_worldStepIn {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {t inner : Nat} {S Nd : List Nat}
+    (hA : ArenaReady s) (hw : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbe : post.be = s.be)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32))
+    (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    WorldStepIn (fun _ => [t, inner]) (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post ∧
+      globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by
+  have hsp : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "scratch_ptr") (by decide))
+  refine ⟨⟨he.1, he.2.2.2.2.1, he.2.2.2.2.2.2.2, ?_, ?_⟩, by rw [hsp]⟩
+  · intro rec hrec hn k hks _
+    have hrec_sz : ∃ sz, (rec.1, sz) ∈ typedRecords ∧
+        ofString rec.1 ≠ ofString "heap_ptr" ∧ k % 8 = 0 ∧ k + 8 ≤ sz := by
+      simp only [stdKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+      rcases hrec with rfl | rfl | rfl | rfl
+      · refine ⟨40, by decide, by decide, ?_⟩; simp at hks; omega
+      · refine ⟨80, by decide, by decide, ?_⟩; simp at hks; omega
+      · refine ⟨72, by decide, by decide, ?_⟩; simp at hks; omega
+      · refine ⟨88, by decide, by decide, ?_⟩; simp at hks; omega
+    obtain ⟨sz, hrec, hg, hk8, hbound⟩ := hrec_sz
+    have hh := merge_set_record_word_kept hA hw ht he rec.1 sz k hrec hg hn hk8 hbound
+    rwa [globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString rec.1)
+      (by simpa using hg))] at hh
+  · intro S' Nd' hw' howned _
+    have ht' : t ∈ S' := howned t (by simp)
+    have hi' : inner ∈ S' := howned inner (by simp)
+    refine ⟨S', Nd', fun _ h => h,
+      merge_set_world_typed hA hw' ht' he hbe hbs ht0 htbs hi' hk hf hv,
+      merge_set_owned_grows hA hw' ht' he hbe hbs ht0 htbs, ?_, trivial⟩
+    intro a hkeep hfree
+    apply he.2.2.2.2.2.2.1 a
+    · intro j hj hh
+      apply hkeep j _ hh
+      apply List.mem_append_left
+      apply List.mem_append_left
+      exact List.mem_append_left _ (List.mem_append_left _
+        (List.mem_flatMap.2 ⟨t, ht', hj⟩))
+    · intro hh
+      apply hfree
+      have hpmax := he.1.2.2.1
+      obtain ⟨h1, h2⟩ := hh
+      unfold heapFree CellHits at *
+      dsimp at h1 h2 ⊢
+      omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
