@@ -14009,6 +14009,69 @@ theorem phase2_htabExit_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
     unfold CellHits
     rcases hdis with hz | hz | hl | hr <;> dsimp at * <;> omega
 
+/-- An insertion cannot modify the footprint of a different jointly typed table. -/
+theorem phase2_htabExit_other_table_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    {u : Nat} (hu : u ∈ S) (hne : u ≠ locN s "t")
+    {i : Ivl} (hi : i ∈ htabFootprint s u) : IvlUnhit s post i := by
+  have hui := (hw.1.2.1 u hu).1.1 i hi
+  apply phase2_htabExit_unhit hs hx ⟨hui.2.1, hui.2.2.1⟩
+    ((hw.1.2.1 u hu).2 i hi).1
+  · intro j hj
+    exact ((hw.1.2.1 _ ht).1.1 j hj).2.1
+  · intro j hj
+    exact hw.1.2.2.1 u hu (locN s "t") ht hne i hi j hj
+
+/-- Warming a different table preserves every header word of a private table. -/
+theorem phase2_htabExit_other_table_header {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    {u : Nat} (hu : u ∈ S) (hne : u ≠ locN s "t")
+    (k : Nat) (hk : k < 11) : hdr post u k = hdr s u k := by
+  have hi : (u, 88) ∈ htabFootprint s u := by simp [htabFootprint]
+  have hf := (hw.1.2.1 u hu).1.1 (u, 88) hi
+  have hb := (ivl_allocated_bound hs.2 ((hw.1.2.1 u hu).2 (u, 88) hi).1).2
+  have he := phase2_htabExit_other_table_unhit hs hw ht hx hu hne hi
+  unfold hdr
+  apply memW_eq_of_ivlUnhit he
+  · have ha := hf.2.1
+    omega
+  · exact hb
+  · constructor <;> omega
+
+/-- The transaction warming table is distinct from both private message tables. -/
+theorem phase2_message_tables_ne_ts8 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (ht : PtxMessageTables s aa ak) (hts : globN s "ts" ≠ 0)
+    (hn : memW s (globN s "ts" + 8) ≠ 0) :
+    aa ≠ memW s (globN s "ts" + 8) ∧ ak ≠ memW s (globN s "ts" + 8) := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := ht
+  have hm := R16WkAcctWs.mem_worldRoleSlots_recRole s "ts" 8 "ts+8" hts hn
+    (by simp [recRoles, hts])
+  exact ⟨Ne.symm (haf _ (List.mem_append_left _ hm)),
+    Ne.symm (hkf _ (List.mem_append_left _ hm))⟩
+
+/-- A warming insertion preserves the key lengths of both message access tables. -/
+theorem phase2_htabExit_message_table_headers {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (hm : PtxMessageTables s aa ak)
+    (hts : globN s "ts" ≠ 0) (hn : memW s (globN s "ts" + 8) ≠ 0)
+    (ht : locN s "t" = memW s (globN s "ts" + 8))
+    (hx : HtabExit s post) : hdr post aa 0 = 20 ∧ hdr post ak 0 = 52 := by
+  have hne := phase2_message_tables_ne_ts8 hm hts hn
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := hm
+  have hmem : locN s "t" ∈ S := by
+    rw [ht]
+    exact (hw.1.2.2.2.2.2.1 8 (by simp [tsTableSlots]) hts).resolve_left hn
+  constructor
+  · exact (phase2_htabExit_other_table_header hs hw hmem hx ha
+      (by rw [ht]; exact hne.1) 0 (by decide)).trans hal
+  · exact (phase2_htabExit_other_table_header hs hw hmem hx hk
+      (by rw [ht]; exact hne.2) 0 (by decide)).trans hkl
+
 /-- World table typing discharges the footprint separation for fixed headers. -/
 theorem phase2_htabExit_fixed_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
