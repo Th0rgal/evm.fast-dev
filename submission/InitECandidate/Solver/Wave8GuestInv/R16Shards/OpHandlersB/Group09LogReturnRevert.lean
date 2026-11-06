@@ -17725,4 +17725,22 @@ theorem op_log_detached_chain_ownership_g09 {F : Type}
         x (by simp) o ho)
   exact ⟨hpw, fun o ho x hx => R11Shards.Disj.symm (hd x hx o ho)⟩
 
+/-- Fresh heap intervals avoid every allocated message of the original chain. -/
+theorem op_log_fresh_disj_chain_messages_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {fresh : Ivl}
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hlo : globN s "heap_ptr" ≤ fresh.1)
+    (hhi : fresh.1 + fresh.2 ≤ heapLimit) :
+    ∀ ec ∈ evmChain s, Disj (memW s (ec.1 + 112), 176) fresh := by
+  obtain ⟨_, _, hFW, _, _⟩ := op_log_old_ownership_g09 hinv
+  intro ec hec
+  have hm := (hFW ec hec).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  have hlim : heapLimit ≤ scratchStart := by
+    rw [R11Shards.heapLimit_val, R11Shards.scratchStart_val]
+  have hsp : scratchStart ≤ globN s "scratch_ptr" :=
+    le_trans hA.2.2.2.1 hA.2.2.2.2.1
+  rcases hm with hm | hm
+  · exact Or.inr (Or.inr (Or.inl (le_trans hm.2 hlo)))
+  · exact Or.inr (Or.inr (Or.inr (le_trans hhi (le_trans hlim (le_trans hsp hm.1)))))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
