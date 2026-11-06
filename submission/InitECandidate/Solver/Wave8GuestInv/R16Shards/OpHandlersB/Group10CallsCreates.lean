@@ -12577,4 +12577,111 @@ theorem heap_step_fixed_objects_g10 {F : Type}
   have hne : ofString gn.1 ≠ ofString "heap_ptr" := by revert gn hgn; decide
   rw [hglob gn.1 hne]
 
+theorem heap_step_world_typed_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (ha : ArenaReady s) (hap : ArenaReady post) (hw : WorldTypedWith s S Nd)
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hm : post.memory = s.memory) (hbe : post.be = s.be)
+    (hg : GlobalsKept ["heap_ptr"] s post) : WorldTypedWith post S Nd := by
+  have hglob : ∀ nm : String, ofString nm ≠ ofString "heap_ptr" → globN post nm = globN s nm := by
+    intro nm hne
+    unfold globN
+    rw [← hg (ofString nm) (by simp [hne])]
+  apply world_typed_heap_transport_g10 ha hap hh (hglob "scratch_ptr" (by decide))
+    ?_ hm hbe (heap_step_fixed_objects_g10 ha hap hw hm hbe hg) hw
+  intro g hmem
+  apply hglob
+  revert g hmem
+  decide
+
+theorem heap_step_frame_objects_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hm : post.memory = s.memory)
+    (hg : GlobalsKept ["heap_ptr"] s post) (ec : Ivl) :
+    frameObjects post ec = frameObjects s ec := by
+  have he : globN post "vm_system_address" = globN s "vm_system_address" := by
+    unfold globN
+    rw [← hg (ofString "vm_system_address") (by decide)]
+  simp only [frameObjects, frameLogs, frameRet, frameLogObjects, logOwnedIvls,
+    logRecordIvls, memW, hm, he]
+  rfl
+
+theorem heap_step_world_ivls_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (ha : ArenaReady s) (hap : ArenaReady post) (hw : WorldTypedWith s S Nd)
+    (hm : post.memory = s.memory) (hbe : post.be = s.be)
+    (hg : GlobalsKept ["heap_ptr"] s post) :
+    worldTypedIvls post S Nd = worldTypedIvls s S Nd := by
+  have hcell : SameTypedCells s post S Nd := by
+    refine ⟨hbe, hap.1.memaddrs.trans ha.1.memaddrs.symm, ha.1.memaddrs, ?_, ?_, ?_⟩
+    · intros; rw [hm]
+    · intros; rw [hm]
+    · intros; unfold memB; rw [hm, hbe]
+  have hglob : ∀ nm : String, ofString nm ≠ ofString "heap_ptr" → globN post nm = globN s nm := by
+    intro nm hne
+    unfold globN
+    rw [← hg (ofString nm) (by simp [hne])]
+  have ht : S.flatMap (htabFootprint post) = S.flatMap (htabFootprint s) := by
+    have hf : htabFootprint post = htabFootprint s := by
+      funext t
+      simp only [htabFootprint, hdr, memW, hm]
+    rw [hf]
+  unfold worldTypedIvls
+  rw [ht, nodeExtents_eq hw.2.2.2.1 hcell,
+    blockOutObjects_eq ha.2 hw.2.2.1 hcell (hglob "bo" (by decide)),
+    balObjects_eq ha.2 hw.1 hw.2.2.1 hcell (hglob "bal_accounts" (by decide)),
+    hglob "journal" (by decide), hglob "journal_cap" (by decide)]
+  congr 5
+  apply List.map_congr_left
+  intro r hr
+  have hne : ofString r.1 ≠ ofString "heap_ptr" := by revert r hr; decide
+  rw [hglob r.1 hne]
+
+theorem heap_step_evm_avoids_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (os : List Ivl)
+    (hav : EvmAvoids (fun _ => os) s) (hap : ArenaReady post)
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hm : post.memory = s.memory) (hbe : post.be = s.be)
+    (hg : GlobalsKept ["heap_ptr"] s post) : EvmAvoids (fun _ => os) post := by
+  obtain ⟨ha, S, hi, Nd, htr, hd⟩ := hav
+  have hw : WorldTypedWith s S Nd := ⟨hi.1.1, hi.1.2.1, hi.1.2.2.1, htr⟩
+  have hwp := heap_step_world_typed_g10 ha hap hw hh hm hbe hg
+  obtain ⟨hip, hch, _⟩ := evmInvAt_of_fresh_heap_step ha hi hap hbe hh hg
+    (by intro a hn; rw [hm])
+    (by intro b hb hn; unfold memB; rw [hm, hbe])
+  refine ⟨hap, S, hip, Nd, hwp.2.2.2, ?_⟩
+  have hfo : frameObjects post = frameObjects s := by
+    funext ec
+    exact heap_step_frame_objects_g10 hm hg ec
+  simpa only [heap_step_world_ivls_g10 ha hap hw hm hbe hg, hch, hfo] using hd
+
+theorem alloc_return_avoids_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p n : BitVec 64)
+    (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (hc : s.code = originalRuntimeCode)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    EvmAvoids (fun _ => [(p.toNat, n.toNat)]) post := by
+  have hav := alloc_return_prestate_avoids_g10 s p n hi hc hp hn v post hr
+  have ha := (alloc_return_aligned_g10 s p n hi hw hc hp hn v post hr).1.1
+  have hpn : globN s "heap_ptr" = p.toNat := by unfold globN; rw [hp]
+  have hple : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat := by
+    rw [← hpn]; exact hi.1.2.2.1
+  have h := M13.evaluate_alloc_body_general s p n hc hple hp hn v
+  rw [hr] at h
+  obtain ⟨_, hg, hm, hlo, _, _⟩ := h rfl
+  have hbe := R16Shards.evaluate_be_eq s (sourceFnBody Guest.Software.guestFn_alloc)
+  rw [hr] at hbe
+  apply heap_step_evm_avoids_g10 _ hav ha ?_ hm hbe ?_
+  · unfold globN
+    rw [hg, hp]
+    simp only [HolFiniteMapExact.lookup_update, FUPDATE, beq_self_eq_true, ite_true]
+    omega
+  · intro k hk
+    have hne : ofString "heap_ptr" ≠ k := by intro he; subst k; exact hk (by simp)
+    rw [hg]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, hne]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

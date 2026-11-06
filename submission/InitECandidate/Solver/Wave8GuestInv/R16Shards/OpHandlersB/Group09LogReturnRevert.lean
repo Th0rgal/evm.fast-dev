@@ -17496,4 +17496,316 @@ theorem op_log_no_growth_tail_list_protection_g09 {F : Type}
       dsimp only at hd ⊢
       rcases hd with hd | hd | hd | hd <;> omega
 
+/-- Every enumerated record interval is an exclusive frame object, including null-list views. -/
+theorem op_log_record_is_frame_object_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {ec : Ivl} {i : Nat}
+    (hi : i < memW s (memW s (ec.1 + 88) + 8)) :
+    (memW s (memW s (memW s (ec.1 + 88)) + 8*i), 40) ∈ frameObjects s ec := by
+  apply List.mem_append_right
+  unfold frameLogObjects
+  apply List.mem_flatMap.2
+  refine ⟨i, List.mem_range.2 hi, ?_⟩
+  apply List.mem_filter.2
+  exact ⟨by simp [logRecordIvls], by simp⟩
+
+/-- Suspended record bounds and separation follow directly from frame-object ownership. -/
+theorem op_log_no_growth_tail_record_protection_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {head : Ivl} {tail : List Ivl}
+    (l p n cap : BitVec 64) (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) :
+    ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let o := (memW s (memW s (memW s (ec.1 + 88)) + 8*i), 40)
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8*n.toNat + 8) := by
+  obtain ⟨_, _, hFW, _, _⟩ := op_log_old_ownership_g09 hinv
+  intro ec hec i hi
+  have hmem : ec ∈ evmChain s := by rw [hcons]; exact List.mem_cons_of_mem _ hec
+  have ho := op_log_record_is_frame_object_g09 hi
+  have hb := (frameWF_bounds hA.2 (hFW ec hmem)).2.2.2 _ ho
+  have hd := op_log_no_growth_tail_object_protection_g09 l p n cap hinv hcons hl hm0 hm16 hlt ec hec _ ho
+  refine ⟨?_, hd⟩
+  rcases hb with hz | hb
+  · contradiction
+  · exact hb
+
+/-- In-place execution derives all old-state protection and store domains from the invariant. -/
+theorem op_log_no_growth_execution_of_owned_log_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (head : Ivl) (tail : List Ivl) (S : List Nat)
+    (e l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8))
+    (hnewMsg : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls s log.toNat,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hnew : (logOwnedIvls s log.toNat).Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls s log.toNat))
+    (hnewWorld : ∀ Nd, WorldTypedWith s S Nd →
+      IvlsDisj (logOwnedIvls s log.toNat) (worldOwned s S Nd))
+    (hclock : s.clock ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hm0w : s.memory l = .word p) (hm8w : s.memory (l + 8#64) = .word n)
+    (hm16w : s.memory (l + 16#64) = .word cap)
+    (hne : l ≠ l + 8#64) (hHM : HeadMemAligned s) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append)
+    out.1 = some (.returned (.val (.word 0))) ∧
+      EvmInv out.2 ∧ evmR out.2 = evmR s ∧ HeadMemAligned out.2 := by
+  have hm : head ∈ evmChain s := by rw [hcons]; exact List.mem_cons_self
+  obtain ⟨_, _, hFW, hpw, _⟩ := op_log_old_ownership_g09 hinv
+  have hpwh : (frameObjects s head).Pairwise Disj := by
+    rw [hcons, List.map_cons, List.flatten_cons, List.pairwise_append] at hpw
+    exact hpw.1
+  obtain ⟨hd0, hd8, hd16, hdslot⟩ := op_log_no_growth_store_domains_g09 l p n cap
+    (hFW head hm) hl hm0 hm16 hlt
+  exact op_log_no_growth_execution_from_store_world_g09 s head tail S e l p n cap log
+    hA hinv hpwh hcons hl hn hm0 hm16 hnonnull hlt hdisj hd8 hdslot hlog hdheader
+    hdbuffer hnewMsg hnew hnewOld hnewWorld
+    (op_log_no_growth_frame_protection_g09 l p n cap hA hinv hcons hl hm0 hm16 hlt)
+    (op_log_no_growth_tail_list_protection_g09 l p n cap hA hinv hcons hl hm0 hm16 hlt)
+    (op_log_no_growth_tail_record_protection_g09 l p n cap hA hinv hcons hl hm0 hm16 hlt)
+    hclock he hlg hde hme hd0 hd16 hm0w hm8w hm16w hne hHM
+
+/-- In-place append derives header/buffer separation from input object ownership. -/
+theorem op_log_no_growth_execution_of_new_ownership_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (head : Ivl) (tail : List Ivl) (S : List Nat)
+    (e l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8))
+    (hnewMsg : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls s log.toNat,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hnew : (logOwnedIvls s log.toNat).Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls s log.toNat))
+    (hnewWorld : ∀ Nd, WorldTypedWith s S Nd →
+      IvlsDisj (logOwnedIvls s log.toNat) (worldOwned s S Nd))
+    (hclock : s.clock ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hm0w : s.memory l = .word p) (hm8w : s.memory (l + 8#64) = .word n)
+    (hm16w : s.memory (l + 16#64) = .word cap)
+    (hne : l ≠ l + 8#64) (hHM : HeadMemAligned s) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append)
+    out.1 = some (.returned (.val (.word 0))) ∧
+      EvmInv out.2 ∧ evmR out.2 = evmR s ∧ HeadMemAligned out.2 := by
+  have hm : head ∈ evmChain s := by rw [hcons]; exact List.mem_cons_self
+  obtain ⟨_, _, hFW, hpw, _⟩ := op_log_old_ownership_g09 hinv
+  have hpwh : (frameObjects s head).Pairwise Disj := by
+    rw [hcons, List.map_cons, List.flatten_cons, List.pairwise_append] at hpw
+    exact hpw.1
+  obtain ⟨hd0, hd8, hd16, hdslot⟩ := op_log_no_growth_store_domains_g09 l p n cap
+    (hFW head hm) hl hm0 hm16 hlt
+  have hp := hpwh
+  unfold frameObjects at hp
+  have hp0 := (List.pairwise_cons.1 hp).2
+  have hp1 := (List.pairwise_cons.1 hp0).2
+  have hp2 := (List.pairwise_cons.1 hp1).2
+  have hp3 := (List.pairwise_cons.1 hp2).2
+  have hd := (List.pairwise_cons.1 hp3).1 (frameLogs s head) (by simp)
+  rw [hl] at hd
+  have hd' := R11Shards.Disj.symm hd
+  simp only [frameLogs, hl, hm0, hm16] at hd'
+  have hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24) := by
+    unfold Disj at hd' ⊢
+    dsimp only at hd' ⊢
+    rcases hd' with hz | hz | hz | hz <;> omega
+  exact op_log_no_growth_execution_of_owned_log_g09 s head tail S e l p n cap log
+    hA hinv hcons hl hn hm0 hm16 hnonnull hlt hdisj hlog hdheader hdbuffer
+    hnewMsg hnew hnewOld hnewWorld hclock he hlg hde hme hm0w hm8w hm16w hne hHM
+
+/-- New log ownership supplies record/write separation for concrete in-place execution. -/
+theorem op_log_no_growth_execution_of_log_ownership_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (head : Ivl) (tail : List Ivl) (S : List Nat)
+    (e l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hlog : LogEntryOK s log.toNat)
+    (hnewMsg : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls s log.toNat,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hnew : (logOwnedIvls s log.toNat).Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls s log.toNat))
+    (hnewWorld : ∀ Nd, WorldTypedWith s S Nd →
+      IvlsDisj (logOwnedIvls s log.toNat) (worldOwned s S Nd))
+    (hclock : s.clock ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hm0w : s.memory l = .word p) (hm8w : s.memory (l + 8#64) = .word n)
+    (hm16w : s.memory (l + 16#64) = .word cap)
+    (hHM : HeadMemAligned s) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append)
+    out.1 = some (.returned (.val (.word 0))) ∧
+      EvmInv out.2 ∧ evmR out.2 = evmR s ∧ HeadMemAligned out.2 := by
+  have hm : head ∈ evmChain s := by rw [hcons]; exact List.mem_cons_self
+  have hrecord : (log.toNat, 40) ∈ logOwnedIvls s log.toNat := by
+    apply List.mem_filter.2
+    exact ⟨by simp [logRecordIvls], by simp⟩
+  have hsep : ∀ o ∈ frameObjects s head, Disj (log.toNat, 40) o := by
+    intro o ho
+    exact R11Shards.Disj.symm (hnewOld o
+      (List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨head, hm, rfl⟩, ho⟩) _ hrecord)
+  have hdheader := hsep (l.toNat, 24) (by simp [frameObjects, hl])
+  have hdbuffer : Disj (log.toNat, 40) (p.toNat, 8*n.toNat + 8) := by
+    have hd := hsep (frameLogs s head) (by simp [frameObjects])
+    simp only [frameLogs, hl, hm0, hm16] at hd
+    unfold Disj at hd ⊢
+    dsimp only at hd ⊢
+    rcases hd with hz | hz | hz | hz <;> omega
+  have hne : l ≠ l + 8#64 := by
+    intro heq
+    have hn := congrArg BitVec.toNat heq
+    have hb := l.isLt
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat] at hn
+    omega
+  exact op_log_no_growth_execution_of_new_ownership_g09 s head tail S e l p n cap log
+    hA hinv hcons hl hn hm0 hm16 hnonnull hlt hlog hdheader hdbuffer
+    hnewMsg hnew hnewOld hnewWorld hclock he hlg hde hme hm0w hm8w hm16w hne hHM
+
+/-- Fresh heap bounds separate an allocation from every object of the old chain. -/
+theorem op_log_fresh_disj_chain_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {fresh : Ivl}
+    (hA : ArenaReady s) (hFW : ∀ ec ∈ evmChain s, FrameWF s S ec)
+    (hlo : globN s "heap_ptr" ≤ fresh.1)
+    (hhi : fresh.1 + fresh.2 ≤ heapLimit) :
+    IvlsDisj [fresh] ((evmChain s).map (frameObjects s)).flatten := by
+  intro x hx o ho
+  simp only [List.mem_singleton] at hx
+  subst x
+  obtain ⟨os, hos, ho⟩ := List.mem_flatten.1 ho
+  obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hos
+  have hd := frameObject_disj_fresh_heap_g09 hA.2 hhi (hFW ec hec) ho
+  unfold Disj
+  rcases hd with hz | hr | hl
+  · exact Or.inr (Or.inl hz)
+  · exact Or.inr (Or.inr (Or.inl hr))
+  · exact Or.inr (Or.inr (Or.inr (le_trans hl hlo)))
+
+/-- A fresh detached record's allocation intervals provide all old-chain exclusions. -/
+theorem op_log_detached_chain_ownership_g09 {F : Type}
+    {s record : PanSemStateFiniteExact 64 F} {S : List Nat}
+    {log address topics data nt size : Nat}
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (h0 : memW record log = address) (h8 : memW record (log + 8) = topics)
+    (h16 : memW record (log + 16) = nt) (h24 : memW record (log + 24) = data)
+    (h32 : memW record (log + 32) = size)
+    (ht : topics + 32 * nt ≤ log) (hl : log + 40 ≤ address) (ha : address + 20 ≤ data)
+    (hfresh : ∀ x ∈ ([(log, 40), (address, 20), (topics, 32*nt), (data, size)] : List Ivl),
+      globN s "heap_ptr" ≤ x.1 ∧ x.1 + x.2 ≤ heapLimit) :
+    (logOwnedIvls record log).Pairwise Disj ∧
+      IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls record log) := by
+  obtain ⟨_, _, hFW, _, _⟩ := op_log_old_ownership_g09 hinv
+  obtain ⟨hpw, hd⟩ := op_log_detached_ownership_g09 h0 h8 h16 h24 h32 ht hl ha
+    (objects := ((evmChain s).map (frameObjects s)).flatten) (by
+      intro x hx o ho
+      exact op_log_fresh_disj_chain_g09 hA hFW (hfresh x hx).1 (hfresh x hx).2
+        x (by simp) o ho)
+  exact ⟨hpw, fun o ho x hx => R11Shards.Disj.symm (hd x hx o ho)⟩
+
+/-- Fresh heap intervals avoid every allocated message of the original chain. -/
+theorem op_log_fresh_disj_chain_messages_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {fresh : Ivl}
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hlo : globN s "heap_ptr" ≤ fresh.1)
+    (hhi : fresh.1 + fresh.2 ≤ heapLimit) :
+    ∀ ec ∈ evmChain s, Disj (memW s (ec.1 + 112), 176) fresh := by
+  obtain ⟨_, _, hFW, _, _⟩ := op_log_old_ownership_g09 hinv
+  intro ec hec
+  have hm := (hFW ec hec).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  have hlim : heapLimit ≤ scratchStart := by
+    rw [R11Shards.heapLimit_val, R11Shards.scratchStart_val]
+  have hsp : scratchStart ≤ globN s "scratch_ptr" :=
+    le_trans hA.2.2.2.1 hA.2.2.2.2.1
+  rcases hm with hm | hm
+  · exact Or.inr (Or.inr (Or.inl (le_trans hm.2 hlo)))
+  · exact Or.inr (Or.inr (Or.inr (le_trans hhi (le_trans hlim (le_trans hsp hm.1)))))
+
+/-- World ownership contains only empty intervals or currently allocated regions. -/
+theorem op_log_world_owned_allocated_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) {i : Ivl} (hi : i ∈ worldOwned s S Nd) :
+    i.2 = 0 ∨ Allocated s i := by
+  unfold worldOwned at hi
+  rcases List.mem_append.1 hi with hi | hi
+  · rcases List.mem_append.1 hi with hi | hi
+    · obtain ⟨t, ht, hfp⟩ := List.mem_flatMap.1 hi
+      exact Or.inr (((hWT.1.2.1 t ht).2 i hfp).1)
+    · rcases hWT.2.2.1.1 i hi with hz | ⟨ha, _⟩
+      · exact Or.inl hz
+      · exact Or.inr ha
+  · apply worldTypedIvls_allocated hWT
+    unfold InitECandidate.Solver.Wave8Contracts.M23.worldTypedIvls
+    exact List.mem_append_right _ hi
+
+/-- Fresh allocation bounds discharge full world ownership separation, including tries. -/
+theorem op_log_fresh_disj_world_owned_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {fresh : Ivl}
+    (hWT : WorldTypedWith s S Nd)
+    (hlo : globN s "heap_ptr" ≤ fresh.1)
+    (hhi : fresh.1 + fresh.2 ≤ globN s "scratch_ptr") :
+    ∀ i ∈ worldOwned s S Nd, Disj fresh i := by
+  intro i hi
+  rcases op_log_world_owned_allocated_g09 hWT hi with hz | ha
+  · exact Or.inr (Or.inl hz)
+  · exact op_log_fresh_disj_allocated_g09 hlo hhi ha
+
+/-- Allocation layout supplies the complete detached log ownership package against the old state. -/
+theorem op_log_detached_ownership_package_g09 {F : Type}
+    {s record : PanSemStateFiniteExact 64 F} {S : List Nat}
+    {log address topics data nt size : Nat}
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (h0 : memW record log = address) (h8 : memW record (log + 8) = topics)
+    (h16 : memW record (log + 16) = nt) (h24 : memW record (log + 24) = data)
+    (h32 : memW record (log + 32) = size)
+    (ht : topics + 32 * nt ≤ log) (hl : log + 40 ≤ address) (ha : address + 20 ≤ data)
+    (hfresh : ∀ x ∈ ([(log, 40), (address, 20), (topics, 32*nt), (data, size)] : List Ivl),
+      globN s "heap_ptr" ≤ x.1 ∧ x.1 + x.2 ≤ heapLimit) :
+    (logOwnedIvls record log).Pairwise Disj ∧
+      IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls record log) ∧
+      (∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls record log,
+        Disj (memW s (ec.1 + 112), 176) o) ∧
+      (∀ Nd, WorldTypedWith s S Nd →
+        IvlsDisj (logOwnedIvls record log) (worldOwned s S Nd)) := by
+  obtain ⟨hpw, hchain⟩ := op_log_detached_chain_ownership_g09
+    hA hinv h0 h8 h16 h24 h32 ht hl ha hfresh
+  have hmem : ∀ o ∈ logOwnedIvls record log,
+      o ∈ ([(log, 40), (address, 20), (topics, 32*nt), (data, size)] : List Ivl) := by
+    intro o ho
+    have ho' := (List.mem_filter.1 ho).1
+    simpa only [logRecordIvls, h0, h8, h16, h24, h32] using ho'
+  refine ⟨hpw, hchain, ?_, ?_⟩
+  · intro ec hec o ho
+    exact op_log_fresh_disj_chain_messages_g09 hA hinv
+      (hfresh o (hmem o ho)).1 (hfresh o (hmem o ho)).2 ec hec
+  · intro Nd hWT o ho i hi
+    have hlim : heapLimit ≤ scratchStart := by
+      rw [R11Shards.heapLimit_val, R11Shards.scratchStart_val]
+    have hsp : scratchStart ≤ globN s "scratch_ptr" :=
+      le_trans hA.2.2.2.1 hA.2.2.2.2.1
+    exact op_log_fresh_disj_world_owned_g09 hWT (hfresh o (hmem o ho)).1
+      (le_trans (hfresh o (hmem o ho)).2 (le_trans hlim hsp)) i hi
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
