@@ -15053,6 +15053,83 @@ private theorem worldStep_store_fresh {F : Type}
     exact hnb (base, sz) (by simp) ⟨by omega, by omega⟩
   rw [hal_eq]
 
+/-- Lift a `HeapByteEff` across `.dec x .one e body` when `e` evaluates to a word. -/
+private theorem heapByteEff_of_dec_word_vh {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {x : MlS} {e : ExpHOL 64} {w : BitVec 64}
+    {body : ProgHOL 64} {Rl : List Ivl} {gw : List String}
+    (hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e =
+      some (.val (.word w)))
+    (hb : WkBlockTxEnc.HeapByteEff s0
+      (evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) body).2 Rl gw) :
+    WkBlockTxEnc.HeapByteEff s0 (evaluateHOLFiniteState s (.dec x .one e body)).2 Rl gw := by
+  rw [evaluateHOLFiniteState_dec_total]
+  dsimp only; rw [hev]; dsimp only
+  have hsh : shapeEqHOL .one (shapeOfHOLExact (.val (.word w) : ValueHOL 64)) = true := by
+    simp [shapeOfHOLExact, shapeEqHOL]
+  rw [if_pos hsh]
+  exact hb.locals_clock _ (evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) body).2.clock
+
+/-- The `pl := *(si+0)`, `raw := *(pl+0)` prefix of `payload_header` preserves a
+`HeapByteEff` established for the remaining body. -/
+private theorem heapByteEff_payload_prefix {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {plw raww : BitVec 64}
+    {rest : ProgHOL 64} {Rl : List Ivl} {gw : List String}
+    (hev_pl : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "si"), .const 0#64])) =
+      some (.val (.word plw)))
+    (hev_raw : @evalHOLExact 64 F _
+      (setVarHOLFinite (ofString "pl") (.val (.word plw)) s).toExact
+      (fun a => Classical.propDecidable ((setVarHOLFinite (ofString "pl") (.val (.word plw)) s).memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "pl"), .const 0#64])) =
+      some (.val (.word raww)))
+    (hb : WkBlockTxEnc.HeapByteEff s0
+      (evaluateHOLFiniteState
+        (setVarHOLFinite (ofString "raw") (.val (.word raww))
+          (setVarHOLFinite (ofString "pl") (.val (.word plw)) s)) rest).2 Rl gw) :
+    WkBlockTxEnc.HeapByteEff s0
+      (evaluateHOLFiniteState s
+        (.dec (ofString "pl") .one
+          (.load .one (.op .add [.var .local (ofString "si"), .const 0#64]))
+          (.dec (ofString "raw") .one
+            (.load .one (.op .add [.var .local (ofString "pl"), .const 0#64])) rest))).2 Rl gw := by
+  exact heapByteEff_of_dec_word_vh hev_pl
+    (heapByteEff_of_dec_word_vh hev_raw hb)
+
+/-- Entry scratch regions of `payload_header` (the `R` component of its `C08` contract). -/
+private def phR : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl :=
+  fun s =>
+    [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+     (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+     (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40),
+     (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16),
+     (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128),
+     (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)]
+
+/-- Reduces `«wk_payload_header»` to a single `HeapByteEff` for the compiled body plus the
+return-typing fact.  Once the body effect is proved this is a one-line application. -/
+theorem «wk_payload_header_of_heapByteEff»
+    (hbody : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), InputReady s →
+      WkBlockTxEnc.HeapByteEff s
+        (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).2
+        (phR s) ["heap_ptr", "scratch_ptr", "wd_rlp_slices"])
+    (hQ : ∀ {F : Type} (s post : PanSemStateFiniteExact 64 F)
+      (r : Option (PanSemResultExact 64)) (S Nd : List Nat),
+      WorldTypedWith s S Nd → WorldTypedWith post S Nd →
+      worldOwned post S Nd = worldOwned s S Nd → RetHeader s r post S Nd) :
+    WorldKeeps InputReady phR ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
+      stdKeep RetHeader (ofString "payload_header") := by
+  refine ⟨[(ofString "si", .one)], sourceFnBody Guest.Software.guestFn_payload_header, .one,
+    lookup_payload_header, ?_⟩
+  intro F s hc hIR ⟨vals, hl⟩ hnt hres
+  exact PayloadWorldStepScratch.heapByteEff_to_worldStep_payload (R := phR)
+    (gw := ["heap_ptr", "scratch_ptr", "wd_rlp_slices"])
+    (B := []) (by intro gs hgs; cases hgs) (by intro g hg; simp only [List.mem_cons, List.not_mem_nil, or_false] at hg; rcases hg with rfl | rfl | rfl <;> simp)
+    (inputReady_worldOK s hIR) (hbody s hIR)
+    (fun S Nd hWT hWTp hown => hQ s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).2
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).1
+      S Nd hWT hWTp hown)
+
 /-- Cutover wrapper: the strong-guard htr export under a distinct name, ready to be
 renamed once `ContractParts/C08.lean` carries `HtrNewPayloadReady`. -/
 theorem «wk_htr_new_payload_request_cutover» :
