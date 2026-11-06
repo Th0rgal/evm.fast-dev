@@ -9437,4 +9437,129 @@ theorem protected_payload_words_of_world_frame {F : Type}
     rw [hm]
   exact ⟨hw p (by omega) (by omega),hw (p+8) (by omega) (by omega)⟩
 
+/-- Old protected payloads avoid objects contained in old objects or fresh heap. -/
+theorem protected_payload_disj_of_growth {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db p : Nat} {i : Ivl}
+    (he : CodeDbPayloadStrong s S db) (hp : p ∈ htabValues s db)
+    (hg : i = (0,0) ∨
+      (∃ j, ((∃ t ∈ S, j ∈ htabFootprint s t) ∨ j ∈ fixedObjects s) ∧
+        Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr")) :
+    Disj (p,16) i := by
+  obtain ⟨hi,_,ht,hf⟩ := he.2 p hp
+  rcases hg with rfl | ⟨j,hj,hij⟩ | hnew
+  · simp [Disj]
+  · have hd : Disj (p,16) j := by
+      rcases hj with ⟨t,ht',hj'⟩ | hj'
+      · exact ht t ht' j hj'
+      · exact hf j hj'
+    unfold Inside at hij
+    unfold Disj at hd ⊢
+    dsimp only at hd ⊢
+    rcases hd with hd | hd | hd | hd <;> omega
+  · unfold Inside at hnew hi
+    unfold Disj
+    dsimp only at hi ⊢
+    omega
+
+/-- Preserve protected code records while the typed table set and layout grow. -/
+theorem codeDbPayloadStrong_of_owned_growth {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S S' : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hv : htabValues post db = htabValues s db)
+    (hw : ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hg : ∀ i, ((∃ t ∈ S', i ∈ htabFootprint post t) ∨ i ∈ fixedObjects post) →
+      i = (0,0) ∨
+      (∃ j, ((∃ t ∈ S, j ∈ htabFootprint s t) ∨ j ∈ fixedObjects s) ∧
+        Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr")) :
+    CodeDbPayloadStrong post S' db := by
+  refine ⟨nodeDbEntriesStrong_of_preserved_payloads he.1 hAs hAp hhp hv hw,?_⟩
+  intro p hp
+  rw [hv] at hp
+  obtain ⟨hi,hb,_,_⟩ := he.2 p hp
+  refine ⟨⟨hi.1,le_trans hi.2 hhp⟩,hb,?_,?_⟩
+  · intro t ht i hi'
+    exact protected_payload_disj_of_growth he hp (hg i (Or.inl ⟨t,ht,hi'⟩))
+  · intro i hi'
+    exact protected_payload_disj_of_growth he hp (hg i (Or.inr hi'))
+
+/-- A relational outside-frame yields protected code-word preservation. -/
+theorem protected_payload_words_of_frameOutside {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat} {keep : List Ivl}
+    (he : CodeDbPayloadStrong s S db) (hA : ArenaReady s)
+    (hF : FrameOutside s post (keep ++ [freeGap s]) (heapFree s))
+    (hk : ∀ i ∈ keep, 0 < i.2 ∧
+      ((∃ t ∈ S, i ∈ htabFootprint s t) ∨ i ∈ fixedObjects s)) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  apply protected_payload_words_of_world_frame he hA
+  intro a hn
+  by_contra hc
+  apply hn
+  apply hF a
+  · intro i hi hit
+    rcases List.mem_append.1 hi with hi | hi
+    · obtain ⟨hp,hi'⟩ := hk i hi
+      exact hc (Or.inl ⟨i,hi',hp,hit⟩)
+    · have heq : i = freeGap s := by simpa using hi
+      subst i
+      exact hc (Or.inr (Or.inl hit))
+  · intro hit
+    exact hc (Or.inr (Or.inr hit))
+
+/-- Combine a relational write frame with growth of typed objects. -/
+theorem codeDbPayloadStrong_of_frame_and_growth {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S S' : List Nat} {db : Nat} {keep : List Ivl}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hv : htabValues post db = htabValues s db)
+    (hF : FrameOutside s post (keep ++ [freeGap s]) (heapFree s))
+    (hk : ∀ i ∈ keep, 0 < i.2 ∧
+      ((∃ t ∈ S, i ∈ htabFootprint s t) ∨ i ∈ fixedObjects s))
+    (hg : ∀ i, ((∃ t ∈ S', i ∈ htabFootprint post t) ∨ i ∈ fixedObjects post) →
+      i = (0,0) ∨
+      (∃ j, ((∃ t ∈ S, j ∈ htabFootprint s t) ∨ j ∈ fixedObjects s) ∧
+        Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr")) :
+    CodeDbPayloadStrong post S' db := by
+  exact codeDbPayloadStrong_of_owned_growth he hAs hAp hhp hv
+    (protected_payload_words_of_frameOutside he hAs hF hk) hg
+
+/-- A separated write frame protects code words independently of object categories. -/
+theorem protected_payload_words_of_disjoint_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat} {keep : List Ivl}
+    (he : CodeDbPayloadStrong s S db)
+    (hF : FrameOutside s post keep (heapFree s))
+    (hsep : ∀ p ∈ htabValues s db, ∀ i ∈ keep, 0 < i.2 ∧ Disj (p,16) i) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  intro p hp
+  obtain ⟨hin,hbound,_,_⟩ := he.2 p hp
+  have hw : ∀ a, p ≤ a → a+8 ≤ p+16 → memW post a = memW s a := by
+    intro a hlo hhi
+    have hb : a < 2^64 := by omega
+    have hn : (BitVec.ofNat 64 a).toNat = a := by
+      rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb]
+    unfold memW
+    rw [hF (BitVec.ofNat 64 a) (by
+      intro i hi hit
+      rw [hn] at hit
+      obtain ⟨hpos,hd⟩ := hsep p hp i hi
+      unfold CellHits at hit
+      unfold Disj at hd
+      dsimp only at hd
+      rcases hd with hd | hd | hd | hd <;> omega) (by
+      intro hit
+      rw [hn] at hit
+      have hi := hin.2
+      unfold CellHits heapFree at hit
+      dsimp only at hit hi
+      omega)]
+  exact ⟨hw p (by omega) (by omega),hw (p+8) (by omega) (by omega)⟩
+
 end HeadStore

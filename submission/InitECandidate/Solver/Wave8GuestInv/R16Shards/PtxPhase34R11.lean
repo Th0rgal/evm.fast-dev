@@ -17202,4 +17202,29 @@ theorem htab_set_local_return_fixed_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Transport entry table membership through the journal step and compose its backing frame. -/
+theorem journal_worldStep_table_tail_frame {F : Type}
+    (s mid post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl)
+    (t : BitVec 64) (key value result : ExpHOL 64) (rv : ValueHOL 64)
+    (hT : WorldTypedWith s S Nd)
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (hb : b ∈ fixedObjects mid) (hbpos : b.2 ≠ 0)
+    (ht : t.toNat ∈ S)
+    (hlt : mid.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hfr : IvlUnhit s mid b)
+    (hr : evaluateHOLFiniteState mid (.seq (.call (some (none, none)) (ofString "htab_set")
+      [.var .local (ofString "t"), key, value]) (.return result)) =
+        (some (.returned rv), post)) : IvlUnhit s post b := by
+  obtain ⟨S', Nd', hsub, hT', _⟩ := hw.1.2.2.2.2 S Nd hT (by
+    intro i hi; simp [bufRegions] at hi)
+  have hf := htab_set_local_return_fixed_frame mid post S' Nd' b t key value result rv
+    hw.1.1 hT' hb hbpos (hsub _ ht) hlt hr
+  intro a ha hit
+  exact (hf a ha hit).trans (hfr a ha hit)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

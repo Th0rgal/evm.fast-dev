@@ -17140,4 +17140,51 @@ theorem phase2_htab_set_aa_message_tables {ι : Type}
       exact hp.1.1.2.2.2.1)
     hmt.symm hbe (hpt.trans ht) hxp
 
+/-- Private-address insertion leaves all twenty-two message words unchanged. -/
+theorem phase2_htabExit_aa_message_fields {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (hm : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hal : locN s "m" % 8 = 0)
+    (hl : locN post "m" = locN s "m") (hbe : post.be = s.be)
+    (ht : locN s "t" = aa) (hx : HtabExit s post)
+    (k : Nat) (hk : k < 22) :
+    memW post (locN post "m" + 8 * k) = memW s (locN s "m" + 8 * k) := by
+  obtain ⟨S, Nd, hw, ha, _, _, _, haf, _, hd⟩ := hm
+  have hf := R16Shards.MptC10C12.worldTypedWith_htab_set_local_csr hs hw
+    (ht.symm ▸ ha) (ht.symm ▸ haf) hx hbe
+  have hu := (hf.2.2.2.2.2.2 (locN s "m", 176) (by intro h; omega) hin
+    (fun j hj => hd _ (by simp) j hj)).2.2
+  rw [hl]
+  apply memW_eq_of_ivlUnhit hu
+  · simpa [Nat.add_mod] using hal
+  · have hg : globN s "heap_ptr" < 2 ^ 64 := by
+      unfold globN
+      split
+      · exact BitVec.isLt _
+      · decide
+    have hi := hin.2
+    omega
+  · constructor <;> omega
+
+/-- Address warming jointly preserves tables, backing, and the message gas bound. -/
+theorem phase2_htabExit_aa_tables_backing_gas {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (he : TxEnv s) (hm : PtxMessageTables s aa ak)
+    (hb : R16Shards.TxBacking s)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hal : locN s "m" % 8 = 0)
+    (hg : memW s (locN s "m" + 40) < 2 ^ 63)
+    (hl : locN post "m" = locN s "m") (hbe : post.be = s.be)
+    (ht : locN s "t" = aa) (hx : HtabExit s post) :
+    PtxMessageTables post aa ak ∧ R16Shards.TxBacking post ∧
+      memW post (locN post "m" + 40) < 2 ^ 63 := by
+  refine ⟨phase2_htabExit_aa_message_tables hs hm hin hl hbe ht hx, ?_, ?_⟩
+  · obtain ⟨S, Nd, hw, ha, _⟩ := hm
+    exact phase2_htabExit_backing hs he hw (ht.symm ▸ ha) hb hx
+  · have hf := phase2_htabExit_aa_message_fields hs hm hin hal hl hbe ht hx 5 (by decide)
+    change memW post (locN post "m" + 40) = memW s (locN s "m" + 40) at hf
+    rw [hf]
+    exact hg
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
