@@ -7525,6 +7525,89 @@ private theorem csrW_hcallee_alloc {F : Type} {s cur : PanSemStateFiniteExact 64
       (fun k hk => (hent.gw_kept k hk).trans (hmono.gw_kept k hk)) (by decide)
   exact R16Shards.WorldEff.trans hent hmono (fun gs hgs => by simp at hgs) hbuf
 
+/-- Callee-side factory for `memcpy` (call0): its only effect is copying
+`vals[2]` bytes at `vals[0]`, so the caller's `WorldEff` transfers as soon as
+the write region is covered. -/
+private theorem csrW_hcallee_memcpy {F : Type} {s cur : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {B : List (String × Nat)} {gw : List String}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)} {vals : List (ValueHOL 64)}
+    (h : R16Shards.WorldEff s cur Rl B gw)
+    (hlk : PanSemStateFiniteExact.lookupCodeHOLFinite cur.code.lookup (ofString "memcpy") vals =
+      some (sourceFnBody Guest.Software.guestFn_memcpy, callee, .one))
+    (hsub : ∀ i ∈ [(InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03.valWordNat (vals[0]?.getD (.rStruct [])),
+      InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03.valWordNat (vals[2]?.getD (.rStruct [])))],
+      0 < i.2 →
+      (∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2) ∨
+      (∃ gs ∈ B, (bufferRegion s gs).1 ≤ i.1 ∧
+        i.1 + i.2 ≤ (bufferRegion s gs).1 + (bufferRegion s gs).2) ∨
+      (globN s "frame_mem_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ globN s "scratch_ptr") ∨
+      (globN s "heap_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ heapLimit))
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+      (sourceFnBody Guest.Software.guestFn_memcpy)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+      (sourceFnBody Guest.Software.guestFn_memcpy)).1) :
+    R16Shards.WorldEff s
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+        (sourceFnBody Guest.Software.guestFn_memcpy)).2 Rl B gw := by
+  have hent : R16Shards.WorldEff s (callEntryStateHOLFinite cur callee) Rl B gw :=
+    h.locals_clock callee (cur.clock - 1)
+  have hent_code : (callEntryStateHOLFinite cur callee).code = originalRuntimeCode := by
+    cases cur; simp [callEntryStateHOLFinite, h.code]
+  have hG : GuestInv (callEntryStateHOLFinite cur callee) :=
+    guestInv_callEntry cur callee h.arena.1
+  have hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "memcpy") vals =
+      some (sourceFnBody Guest.Software.guestFn_memcpy,
+        (callEntryStateHOLFinite cur callee).locals, .one) :=
+    by simpa only [h.code, callEntryStateHOLFinite] using hlk
+  obtain ⟨p0, b0, r0, hlookM, hspecM⟩ := funByteEff_memcpy
+  have hsame := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "memcpy")
+    p0 b0 (sourceFnBody Guest.Software.guestFn_memcpy) r0 .one vals callee hlookM hl
+  cases hsame
+  have hret_eq := lookupCodeHOLFinite_installed_return cur (ofString "memcpy")
+    p0 (sourceFnBody Guest.Software.guestFn_memcpy) (sourceFnBody Guest.Software.guestFn_memcpy)
+    r0 .one vals callee (by rw [h.code]; exact hlookM) hlk
+  cases hret_eq
+  have hbe := hspecM (callEntryStateHOLFinite cur callee) vals hent_code hG hl hnt hres
+  dsimp only at hbe
+  exact hent.of_byteEff
+    (InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03.ByteEff.mk hbe.code hbe.memaddrs
+      hbe.shMemaddrs hbe.baseAddr hbe.be hbe.globals hbe.eshapes hbe.out_dom hbe.cell_frame
+      hbe.byte_frame) hsub
+
+/-- Callee-side factory for `rlp_encode_bytes`: its byte writes stay inside the
+caller-reserved region holding `dst`. -/
+private theorem csrW_hcallee_rlp_encode_bytes {F : Type} {s cur : PanSemStateFiniteExact 64 F}
+    {dst0 src0 n0 : BitVec 64} {Rl : List Ivl}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)}
+    (h : R16Shards.WorldEff s cur Rl [] ["heap_ptr", "scratch_ptr"])
+    (hdst : (callEntryStateHOLFinite cur callee).locals.lookup (ofString "dst") = some (.val (.word dst0)))
+    (hsrc : (callEntryStateHOLFinite cur callee).locals.lookup (ofString "src") = some (.val (.word src0)))
+    (hn : (callEntryStateHOLFinite cur callee).locals.lookup (ofString "n") = some (.val (.word n0)))
+    (hn_le : n0.toNat ≤ 55)
+    (hin_ivl : ∃ ivl ∈ Rl, ivl.1 ≤ dst0.toNat ∧ dst0.toNat + (n0.toNat + 1) ≤ ivl.1 + ivl.2)
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+      (sourceFnBody Guest.Software.guestFn_rlp_encode_bytes)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+      (sourceFnBody Guest.Software.guestFn_rlp_encode_bytes)).1) :
+    R16Shards.WorldEff s
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+        (sourceFnBody Guest.Software.guestFn_rlp_encode_bytes)).2
+      Rl [] ["heap_ptr", "scratch_ptr"] := by
+  have hent : R16Shards.WorldEff s (callEntryStateHOLFinite cur callee) Rl [] ["heap_ptr", "scratch_ptr"] :=
+    h.locals_clock callee (cur.clock - 1)
+  have hent_code : (callEntryStateHOLFinite cur callee).code = originalRuntimeCode := by
+    cases cur; simp [callEntryStateHOLFinite, h.code]
+  have hG : GuestInv (callEntryStateHOLFinite cur callee) :=
+    guestInv_callEntry cur callee h.arena.1
+  obtain ⟨r, hrv, hlen1, hlen2, hdst_lt, hbe⟩ :=
+    eval_rlp_encode_bytes_bounded (callEntryStateHOLFinite cur callee) dst0 src0 n0 Rl
+      hent_code hG hdst hsrc hn hn_le hin_ivl hnt hres
+  exact hent.of_byteEff
+    (InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03.ByteEff.mk hbe.code hbe.memaddrs
+      hbe.shMemaddrs hbe.baseAddr hbe.be hbe.globals hbe.eshapes hbe.out_dom hbe.cell_frame
+      hbe.byte_frame)
+    (fun iv hiv _ => Or.inl ⟨iv, hiv, le_rfl, le_rfl⟩)
+
 end WkWalk
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
