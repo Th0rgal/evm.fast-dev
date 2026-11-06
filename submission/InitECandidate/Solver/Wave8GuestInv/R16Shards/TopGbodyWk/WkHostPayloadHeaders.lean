@@ -14939,4 +14939,26 @@ theorem indexed_large_loop_no_none {F : Type}
 
 end IndexedAllocationScratch
 
+/-- Forget the `WorldEff` scratch-buffer bookkeeping once its fresh-buffer regions are folded into
+the `HeapByteEff` frame. This is the bridge used by the frame-only `WorldOK` proofs: a `WorldEff`
+computed by the strong call lemmas yields a `HeapByteEff` over exactly the caller's output regions
+plus the scratch buffers. -/
+theorem worldEff_to_heapByteEff {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {B : List (String × Nat)} {gw : List String}
+    (h : WorldEff s post Rl B gw) :
+    WkBlockTxEnc.HeapByteEff s post (Rl ++ B.map (bufferRegion s)) gw := by
+  refine ⟨h.arena, h.memaddrs, h.hp_lo, h.fmp_eq, h.sp_hi, h.be, h.gw_kept, h.out_dom, ?_, ?_⟩
+  · intro a ha
+    rcases h.cell_frame a ha with ⟨i, hi, hc⟩ | ⟨gs, hgs, hc⟩ | hfg | hhf
+    · exact Or.inl ⟨i, List.mem_append_left _ hi, hc⟩
+    · exact Or.inl ⟨bufferRegion s gs, List.mem_append_right _ (List.mem_map.2 ⟨gs, hgs, rfl⟩), hc⟩
+    · exact Or.inr (Or.inl hfg)
+    · exact Or.inr (Or.inr hhf)
+  · intro b hb hne
+    rcases h.byte_frame b hb hne with ⟨i, hi, hc⟩ | ⟨gs, hgs, hc⟩ | hfg | hhf
+    · exact Or.inl ⟨i, List.mem_append_left _ hi, hc⟩
+    · exact Or.inl ⟨bufferRegion s gs, List.mem_append_right _ (List.mem_map.2 ⟨gs, hgs, rfl⟩), hc⟩
+    · exact Or.inr (Or.inl hfg)
+    · exact Or.inr (Or.inr hhf)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
