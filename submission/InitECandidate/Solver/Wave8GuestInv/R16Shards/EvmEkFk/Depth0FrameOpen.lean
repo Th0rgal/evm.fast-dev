@@ -8127,4 +8127,36 @@ theorem world_and_payload_after_sk_make {F : Type}
   have hd' := Disj.flip hd
   simpa [bufferRegion, hnz] using hd'
 
+/-- Strong payload typing is independent of caller locals and fuel. -/
+theorem codeDbPayloadStrong_with_locals_clock {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S : List Nat) (db : Nat)
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    CodeDbPayloadStrong {s with locals := L, clock := k} S db ↔ CodeDbPayloadStrong s S db := by
+  rfl
+
+theorem worldTypedCodeStrong_with_locals_clock {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S : List Nat)
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    WorldTypedCodeStrong {s with locals := L, clock := k} S ↔ WorldTypedCodeStrong s S := by
+  simp only [WorldTypedCodeStrong, worldTyped_with_locals]
+  rfl
+
+/-- Both fallback mutations preserve code entries using only the original
+world typing and the concrete table-exit contract. -/
+theorem code_entries_after_key_and_access_world {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} (db : Nat)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hdb : db ∈ S) (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), mid))
+    (ht : locN mid "t" ∈ S) (hne : db ≠ locN mid "t")
+    (hx : HtabExit mid post) : NodeDbEntriesStrong post db := by
+  have hW : WorldTyped s S := ⟨hWT.1, hWT.2.1, hWT.2.2.1, Nd, hWT.2.2.2⟩
+  obtain ⟨hAm, hWm, hm⟩ := world_and_payload_after_sk_make db hAs hWT hW hdb h hc hma hfit v hb
+  have hworld : WorldTyped mid S := ⟨hWm.1, hWm.2.1, hWm.2.2.1, Nd, hWm.2.2.2⟩
+  exact codeDbPayloadStrong_entries_of_separated_htab_exit db hm hAm hworld hdb ht hne hx
+
 end HeadStore
