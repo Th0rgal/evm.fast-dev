@@ -10274,4 +10274,206 @@ theorem eval_merge_new_set_then_union_ts_kept {F : Type}
     ht hk hi (hm.trans hc) hWm.1 hw' (List.mem_append_left _ (howned S Nd hw))
     (by simp) hbs ht0 htbs hkey hf (by rwa [hg]) hntm hfrm
 
+theorem eval_merge_fresh_inner_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32)) (hts : globN s "ts" ≠ 0)
+    (hnt : (evaluateHOLFiniteState s (.seq mergeFreshInner
+      (.call (some (none, none)) (ofString "htab_union_into")
+        [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))]))).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq mergeFreshInner
+      (.call (some (none, none)) (ofString "htab_union_into")
+        [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))]))).1) :
+    let post := (evaluateHOLFiniteState s (.seq mergeFreshInner
+      (.call (some (none, none)) (ofString "htab_union_into")
+        [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))]))).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  dsimp only
+  unfold mergeFreshInner at hnt hfr ⊢
+  rw [merge_eval_seq_assoc] at hnt hfr ⊢
+  apply eval_merge_new_set_then_union_ts_kept s _ _ _ tw kw hc hW ?_ ?_ hts hnt hfr
+  · intro S Nd hw
+    have hT := (WkBal.worldTyped_iff_with s S).2 ⟨Nd, hw⟩
+    have hr := hT.1.2.2.2.2.1 32 (by simp [bsTableSlots]) hbs
+    rw [← htbs] at hr
+    exact hr.resolve_left ht0
+  · intro mid iw hs _ _ hl
+    have htm := (hl (ofString "bouter") (by decide)).trans ht
+    have hkm := (hl (ofString "s") (by decide)).trans hk
+    have hgb : globN mid "bs" = globN s "bs" :=
+      globN_eq_of_lookup (hs.1.2.2.1 (ofString "bs") (by decide))
+    have hmem := hs.1.2.2.2.1 ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72])
+      (by simp [stdKeep]) hbs 32 (by simp) (by simp [bufRegions])
+    refine ⟨by simp [evalAt, evalHOLExact, htm], by simp [evalAt, evalHOLExact, hkm],
+      by rwa [hgb], ht0, ?_⟩
+    rw [hgb]
+    exact htbs.trans hmem.symm
+
+/-- Both lookup outcomes preserve the transaction root and outer-table field. -/
+theorem eval_merge_inner_branch_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw f0 kw vw m0 m1 : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hm : s.locals.lookup (ofString "m") = some (.rStruct [.val (.word m0), .val (.word m1)]))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hi : m0 ≠ 0 → m1.toNat ∈ htabValues s (memW s (globN s "bs" + 32)))
+    (hts : globN s "ts" ≠ 0)
+    (hnt : (evaluateHOLFiniteState s mergeInnerBranch).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeInnerBranch).1) :
+    let post := (evaluateHOLFiniteState s mergeInnerBranch).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  dsimp only
+  by_cases hz : m0 = 0
+  · subst m0
+    have hcond : evalAt s (.cmp .equal (.rfield 0 (.var .local (ofString "m"))) (.const 0#64)) =
+        some (.val (.word 1#64)) := by
+      simp [evalAt, evalHOLExact, hm, Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+    have heq : evaluateHOLFiniteState s mergeInnerBranch =
+        evaluateHOLFiniteState s (.seq mergeFreshInner
+          (.call (some (none, none)) (ofString "htab_union_into")
+            [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))])) := by
+      unfold mergeInnerBranch
+      rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+      dsimp only [evalAt] at hcond
+      rw [hcond]
+      simp only [show (1#64 : BitVec 64) ≠ 0 by decide, ↓reduceIte]
+      rw [evaluateHOLFiniteState_seq_line780]
+    rw [heq] at hnt hfr ⊢
+    exact eval_merge_fresh_inner_ts_kept s tw f0 kw vw hc hW ht hk hbs ht0 htbs hts hnt hfr
+  · exact merge_heap_ts_outer_kept hts
+      (eval_merge_hit_branch_heap s m0 m1 mergeFreshInner hc hW hbs
+        (by rwa [← htbs]) hm hz (hi hz) hnt hfr).1
+
+/-- A read-only declaration call transports a continuation's transaction frame. -/
+theorem eval_decCall_readOnly_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x fname : MlS)
+    (sh : ShapeHOL) (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (Q : ValueHOL 64 → Prop)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hf : ReadOnlyFn fname)
+    (hq : ∀ vs body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some vs →
+      lookupCodeHOLFinite s.code.lookup fname vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) → Q v)
+    (hcont : ∀ v ck, Q v →
+      let next := setVarHOLFinite x v { s with clock := ck }
+      (evaluateHOLFiniteState next cont).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState next cont).1 →
+      let post := (evaluateHOLFiniteState next cont).2
+      globN post "ts" = globN next "ts" ∧
+        memW post (globN post "ts" + 32) = memW next (globN next "ts" + 32))
+    (hnt : (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1) :
+    let post := (evaluateHOLFiniteState s (.decCall x sh fname args cont)).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  dsimp only
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hfr ⊢
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp only [ha] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [ha] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body, callee, ret⟩
+    · simp only [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        simp only [hr] at hnt hfr ⊢
+        have hnc : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 ≠ some .timeOut := by
+          rw [hr]; rintro rfl; exact hnt rfl
+        have hframe := FunSpec.at_lookup hf s hc vs body callee ret hl
+          (guestInv_callEntry s callee hW.1.1) hnc
+        rw [hr] at hframe
+        cases r with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some r =>
+          cases r with
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | timeOut => exact absurd rfl hnt
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hnt hfr ⊢
+            split at hnt
+            · rename_i hshape
+              rw [if_pos hshape] at hfr ⊢
+              have hp := hframe (Or.inl ⟨v, rfl⟩)
+              dsimp only at hp
+              have hp' : { post with locals := s.locals } = { s with clock := post.clock } := by
+                rw [hp]; rfl
+              rw [hp'] at hnt hfr ⊢
+              exact hcont v post.clock (hq vs body callee ret v post ha hl hr) hnt hfr
+            · rename_i hshape
+              rw [if_neg hshape] at hfr
+              exact absurd hfr not_flowingOrResumes_error
+          | exception e v =>
+            dsimp only at hfr ⊢
+            have hres : Resumes (some (.exception e v)) := by
+              rcases hfr with h | h | h | h <;> try simp at h
+              exact h
+            have hp := hframe hres
+            dsimp only at hp
+            rw [hp]
+            exact ⟨rfl, rfl⟩
+
+/-- Outer lookup and local initialization retain the inner branch's transaction frame. -/
+theorem eval_merge_get_inner_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32)) (hts : globN s "ts" ≠ 0)
+    (hnt : (evaluateHOLFiniteState s mergeGetInner).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeGetInner).1) :
+    let post := (evaluateHOLFiniteState s mergeGetInner).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  apply eval_decCall_readOnly_ts_kept s (ofString "m") _ _ _ _
+    (fun v => ∃ m0 m1 : BitVec 64, v = .rStruct [.val (.word m0), .val (.word m1)] ∧
+      (m0 ≠ 0 → m1.toNat ∈ htabValues s (memW s (globN s "bs" + 32))))
+    hc hW InitECandidate.Solver.Wave8Contracts.M15.ro_htab_get ?_ ?_ hnt hfr
+  · intro vs body callee ret v post ha hl hr
+    rw [hc] at hl
+    obtain ⟨rfl, rfl, t, k, rfl, htw, hkw⟩ :=
+      lookup_two_word_result (by decide) WkBal.lookup_htab_get hl
+    have he : evalAt s (.var .local (ofString "bouter")) = some (.val (.word t)) := by
+      obtain ⟨v1, rest, hh, hv⟩ := Wave8M19.Htab.evalList_cons_inv s _ _ ha
+      cases hh
+      exact hv
+    have he' : evalAt s (.var .local (ofString "bouter")) = some (.val (.word tw)) := by
+      simp [evalAt, evalHOLExact, ht]
+    rw [he'] at he
+    cases he
+    have hWc : WorldOK (callEntryStateHOLFinite s callee) :=
+      localsFree_worldOK s callee (s.clock - 1) hW
+    exact merge_outer_get_ret_in_values (callEntryStateHOLFinite s callee) tw k hc hWc hbs
+      ht0 htbs htw hkw v (congrArg Prod.fst hr)
+  · intro v ck hv
+    obtain ⟨m0, m1, rfl, hi⟩ := hv
+    dsimp only
+    intro hnt hfr
+    rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+    simp only [evalHOLExact, shapeOfHOLExact, shapeEqHOL, ↓reduceIte] at hnt hfr ⊢
+    let mid := setVarHOLFinite (ofString "binner") (.val (.word 0#64))
+      (setVarHOLFinite (ofString "m") (.rStruct [.val (.word m0), .val (.word m1)]) {s with clock := ck})
+    have hWm : WorldOK mid := localsFree_worldOK s _ _ hW
+    exact eval_merge_inner_branch_ts_kept mid tw f0 kw vw m0 m1 hc hWm
+      (by simpa [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "binner" ≠ ofString "bouter" by decide,
+        show ofString "m" ≠ ofString "bouter" by decide] using ht)
+      (by simpa [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "binner" ≠ ofString "s" by decide,
+        show ofString "m" ≠ ofString "s" by decide] using hk)
+      (by simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "binner" ≠ ofString "m" by decide])
+      hbs ht0 htbs hi hts hnt hfr
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

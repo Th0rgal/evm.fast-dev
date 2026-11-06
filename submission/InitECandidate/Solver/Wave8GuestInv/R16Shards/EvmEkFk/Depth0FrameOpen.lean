@@ -8554,4 +8554,124 @@ theorem access_set_then_witness_return {F : Type}
   exact witness_return_after_access_lookup db hash tw key (.val (.word 1)) body callee ret
     hAs hW h hdb ht hne hc v hl hb hs hws hload hh
 
+/-- Compose key construction, access update, and witness retrieval, deriving
+the intermediate arena/world/payload facts from the original state. -/
+theorem get_code_access_tail_of_key_facts {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (db hash tw : BitVec 64)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hdb : db.toNat ∈ S) (ht : tw.toNat ∈ S) (hne : db.toNat ≠ tw.toNat)
+    (h : CodeDbPayloadStrong s S db.toNat) (hc : s.code = originalRuntimeCode)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hfacts : ∀ values body callee ret v post,
+      lookupCodeHOLFinite s.code.lookup (ofString "sk_make") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      let st := setVarHOLFinite (ofString "k") v {post with locals := s.locals}
+      st.code = originalRuntimeCode ∧ st.eshapes.lookup (ofString "StateErr") = some .one ∧
+      globN st "ws" ≠ 0 ∧
+      evalHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)) ∧
+      st.locals.lookup (ofString "code_hash") = some (.val (.word hash)) ∧
+      evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 40]),
+          .var .local (ofString "k"), .const 1] = some [.val (.word tw), v, .val (.word 1)]) :
+    Ret s getCodeAccessTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  unfold getCodeAccessTail
+  apply Ret.decCall_gen
+  intro values body callee ret v post _ hl hb
+  obtain ⟨hA, hW, hp⟩ := world_and_payload_after_sk_call db.toNat hAs hWT hdb h hc
+    hAs.1.memaddrs hfit values body callee ret v hl hb
+  obtain ⟨hcode, hshape, hws, hload, hhash, hargs⟩ := hfacts values body callee ret v post hl hb
+  exact access_set_then_witness_return _ S db hash tw v hA hW hp hdb ht hne
+    hcode hshape hws hload hhash hargs
+
+/-- Expose the key call's concrete word result and byte effect at the caller. -/
+theorem sk_call_effect {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL) (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "sk_make") values = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat = globN s "sk_buf" ∧
+      EvmStepLemmas.ByteRegionEffect s post [(globN s "sk_buf", 52)] := by
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "sk_make")
+    _ _ _ _ _ values callee (by rw [hc]; exact lookup_sk_make) hl
+  subst body
+  obtain ⟨w, hr, hw, _, he⟩ := eval_sk_make_body_evm (callEntryStateHOLFinite s callee)
+    hc hma hfit (by rw [hb]; simp) (by rw [hb]; simp [Resumes])
+  rw [hb] at hr he
+  have hv : v = .val (.word w) := by simpa using hr
+  refine ⟨w, hv, hw, ?_⟩
+  exact ⟨he.code, he.memaddrs, he.shMemaddrs, he.baseAddr, he.be, he.globals,
+    he.out_dom, he.cell_frame, he.byte_frame⟩
+
+/-- A disjoint byte effect preserves a successful global-record word load. -/
+theorem global_load_after_byte_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {Rl : List Ivl}
+    (g : String) (k : BitVec 64) (v : ValueHOL 64)
+    (heff : EvmStepLemmas.ByteRegionEffect s post Rl)
+    (hfit : globN s g + k.toNat + 8 ≤ 2 ^ 64)
+    (hd : ∀ i ∈ Rl, Disj (globN s g + k.toNat, 8) i)
+    (he : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString g), .const k])) = some v) :
+    evalHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString g), .const k])) = some v := by
+  apply global_load_preserved s post g k v (by rw [heff.globals]) heff.memaddrs ?_ he
+  unfold memW
+  have hm := heff.cell_frame (BitVec.ofNat 64 (globN s g + k.toNat))
+  have hmem := hm (by
+    intro i hi hpos hhit
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)] at hhit
+    have hdis := hd i hi
+    unfold CellHits at hhit
+    rcases hdis with h | h | h | h <;> try dsimp only at h
+    all_goals omega)
+  rw [hmem]
+
+/-- Discharge key-call continuation facts from pre-call root-load evidence. -/
+theorem get_code_access_tail_of_preloads {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (db hash tw : BitVec 64)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hdb : db.toNat ∈ S) (ht : tw.toNat ∈ S) (hne : db.toNat ≠ tw.toNat)
+    (h : CodeDbPayloadStrong s S db.toNat) (hc : s.code = originalRuntimeCode)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hws : globN s "ws" ≠ 0)
+    (hhash : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hloads : ∀ g k w, (g = "ws" ∧ k = (16 : BitVec 64) ∧ w = db) ∨
+        (g = "ts" ∧ k = (40 : BitVec 64) ∧ w = tw) →
+      globN s g + k.toNat + 8 ≤ 2 ^ 64 ∧
+      Disj (globN s g + k.toNat, 8) (globN s "sk_buf", 52) ∧
+      evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString g), .const k])) = some (.val (.word w))) :
+    Ret s getCodeAccessTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  classical
+  apply get_code_access_tail_of_key_facts s S Nd db hash tw hAs hWT hdb ht hne h hc hfit
+  intro values body callee ret v post hl hb
+  obtain ⟨w, hv, hw, he⟩ := sk_call_effect hc hAs.1.memaddrs hfit values body callee ret v hl hb
+  have hm := evaluateHOLFiniteState_metadata (callEntryStateHOLFinite s callee) body
+  rw [hb] at hm
+  have hwsload := hloads "ws" 16 db (Or.inl ⟨rfl, rfl, rfl⟩)
+  have htsload := hloads "ts" 40 tw (Or.inr ⟨rfl, rfl, rfl⟩)
+  have hwl := global_load_after_byte_effect "ws" 16 (.val (.word db)) he hwsload.1
+    (by intro i hi; simp only [List.mem_singleton] at hi; subst i; exact hwsload.2.1) hwsload.2.2
+  have htl := global_load_after_byte_effect "ts" 40 (.val (.word tw)) he htsload.1
+    (by intro i hi; simp only [List.mem_singleton] at hi; subst i; exact htsload.2.1) htsload.2.2
+  let st := setVarHOLFinite (ofString "k") v {post with locals := s.locals}
+  have hwl' := global_load_preserved post st "ws" 16 (.val (.word db)) rfl rfl rfl hwl
+  have htl' := global_load_preserved post st "ts" 40 (.val (.word tw)) rfl rfl rfl htl
+  refine ⟨he.code.trans hc, ?_, ?_, ?_, ?_, ?_⟩
+  · simpa only [setVarHOLFinite] using hm.2.2.2.2 ▸ hs
+  · simpa only [globN, setVarHOLFinite, he.globals] using hws
+  · exact hwl'
+  · simpa (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hhash
+  · change evalListHOLFinite st _ = _
+    simp only [evalListHOLFinite, evalListHOLExact]
+    have htl'' := htl'
+    unfold evalHOLFinite at htl''
+    rw [htl'']
+    simp [evalHOLExact, st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
 end HeadStore
