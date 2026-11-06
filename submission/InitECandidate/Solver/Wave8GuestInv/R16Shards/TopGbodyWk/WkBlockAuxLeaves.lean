@@ -10546,4 +10546,75 @@ theorem eval_merge_occupied_then_increment_ts_kept {F : Type}
   | none => exact merge_ts_outer_kept_trans hs (eval_assign_local_ts_kept mid _ _)
   | some r => exact hs
 
+/-- Enumeration and the complete merge iteration preserve the transaction root. -/
+theorem eval_merge_storage_body_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw ow : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (ho : s.locals.lookup (ofString "outer") = some (.val (.word ow)))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hts : globN s "ts" ≠ 0) (hots : ow.toNat = memW s (globN s "ts" + 32))
+    (hnt : (evaluateHOLFiniteState s mergeStorageBody).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageBody).1) :
+    let post := (evaluateHOLFiniteState s mergeStorageBody).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  apply eval_decCall_readOnly_ts_kept s (ofString "s") _ _ _ _
+    (fun v => ∃ f0 kw vw : BitVec 64,
+      v = .rStruct [.val (.word f0), .val (.word kw), .val (.word vw)])
+    hc hW InitECandidate.Solver.Wave8Contracts.M15.ro_htab_item ?_ ?_ hnt hfr
+  · intro vs body callee ret v post ha hl hr
+    rw [hc] at hl
+    obtain ⟨rfl, rfl, t, ord, rfl, htw, how⟩ :=
+      lookup_two_word_result (by decide) lookup_htab_item_bal hl
+    have he : evalAt s (.var .local (ofString "outer")) = some (.val (.word t)) := by
+      obtain ⟨v1, rest, hh, hv⟩ := Wave8M19.Htab.evalList_cons_inv s _ _ ha
+      cases hh
+      exact hv
+    have he' : evalAt s (.var .local (ofString "outer")) = some (.val (.word ow)) := by
+      simp [evalAt, evalHOLExact, ho]
+    rw [he'] at he
+    cases he
+    have hret := congrArg Prod.fst hr
+    have hnz := htab_item_t_nonzero (callEntryStateHOLFinite s callee) ow ord
+      (guestInv_callEntry s callee hW.1.1) htw how v hret
+    obtain ⟨S, hT, _⟩ := hW.2
+    have hmem : ow.toNat ∈ S := by
+      have hm := hT.2.2.2.2.2.1 32 (by simp [tsTableSlots]) hts
+      rw [← hots] at hm
+      exact hm.resolve_left (by intro hz; apply hnz; exact BitVec.eq_of_toNat_eq hz)
+    have hWF : HtabWF (callEntryStateHOLFinite s callee) ow.toNat :=
+      (WkBal.htabWF_with_locals s callee (s.clock - 1) ow.toNat).2 (hT.2.1 _ hmem).1
+    obtain ⟨f0, f1, f2, hv, _⟩ :=
+      htab_item_ret_spec (callEntryStateHOLFinite s callee) ow ord htw how hWF v hret
+    exact ⟨f0, f1, f2, hv⟩
+  · intro v ck hv
+    obtain ⟨f0, kw, vw, rfl⟩ := hv
+    dsimp only
+    intro hnt hfr
+    apply eval_merge_occupied_then_increment_ts_kept
+      (setVarHOLFinite (ofString "s") (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)])
+        {s with clock := ck}) tw f0 kw vw hc
+      (localsFree_worldOK s _ ck hW) ?_ ?_ hbs ht0 htbs hts hnt hfr
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "s" ≠ ofString "bouter" by decide] using ht
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
+/-- The storage invariant is preserved without additional frame hypotheses. -/
+theorem mergeStorageInv_body_preserved {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hI : MergeStorageInv s)
+    (hnt : (evaluateHOLFiniteState s mergeStorageBody).1 ≠ some .timeOut)
+    (hflow : Flowing (evaluateHOLFiniteState s mergeStorageBody).1) :
+    MergeStorageInv (evaluateHOLFiniteState s mergeStorageBody).2 := by
+  have hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageBody).1 := by
+    rcases hflow with h | h | h
+    · exact Or.inl h
+    · exact Or.inr (Or.inr (Or.inl h))
+    · exact Or.inr (Or.inl h)
+  obtain ⟨hW, tw, ow, ht, ho, hbs, ht0, htbs, hts, hots⟩ := hI
+  have hs := eval_merge_storage_body_ts_kept s tw ow hc hW ht ho hbs ht0 htbs hts hots hnt hfr
+  exact mergeStorageInv_body_post s hc
+    ⟨hW, tw, ow, ht, ho, hbs, ht0, htbs, hts, hots⟩ hnt hflow hs.1 hs.2
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
