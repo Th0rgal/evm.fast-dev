@@ -10747,4 +10747,36 @@ theorem eval_merge_storage_cursor_init {F : Type} (s : PanSemStateFiniteExact 64
     _ hc (mergeStorageInv_setLocal s _ _ (by decide) (by decide) hI) hnt hfr
   exact (WorldStepSc.of_pre_locals_clock hs).with_locals_clock _ _
 
+def mergeCursorInit : ProgHOL 64 :=
+  .dec (ofString "i") .one (.const 0#64)
+    (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+      mergeStorageBody) (.return (.const 0#64)))
+
+def mergeCapInit : ProgHOL 64 :=
+  .dec (ofString "cap") .one
+    (.load .one (.op .add [.var .local (ofString "outer"), .const 24#64])) mergeCursorInit
+
+/-- Capacity initialization preserves the established root invariant. -/
+theorem eval_merge_storage_cap_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hI : MergeStorageInv s)
+    (hnt : (evaluateHOLFiniteState s mergeCapInit).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeCapInit).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeCapInit).1 (evaluateHOLFiniteState s mergeCapInit).2 := by
+  unfold mergeCapInit
+  unfold mergeCapInit at hnt hfr
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  dsimp only at hnt hfr ⊢
+  split at hfr
+  · exact absurd hfr not_flowingOrResumes_error
+  · rename_i v he
+    simp only [he] at hnt ⊢
+    split at hfr
+    · rename_i hshape
+      simp only [if_pos hshape] at hnt ⊢
+      have hs := eval_merge_storage_cursor_init (setVarHOLFinite (ofString "cap") v s) hc
+        (mergeStorageInv_setLocal s _ _ (by decide) (by decide) hI) hnt hfr
+      exact (WorldStepSc.of_pre_locals_clock hs).with_locals_clock _ _
+    · exact absurd hfr not_flowingOrResumes_error
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
