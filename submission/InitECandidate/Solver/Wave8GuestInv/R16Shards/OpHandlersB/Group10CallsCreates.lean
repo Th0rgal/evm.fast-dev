@@ -12017,4 +12017,59 @@ theorem words_of_create_memory_sequence_g10 {F : Type}
     exact memoryExpansionLocal_bind_ro_g10 hp hlf _ _ (by decide)
   · exact create_cost_memory_sequence_g10 s0 isCreate2 charged memoryExp cont hcont
 
+theorem extend_memory_cost1_bind_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (charged : Bool)
+    (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (hcont : HandlerRunA s0 MemoryExpansionLocal_g10 charged cont) :
+    HandlerRunA s0 (fun _ => True) charged
+      (.decCall (ofString "x") (.comb [.one, .one]) (ofString "extend_memory_cost1") args cont) := by
+  apply HandlerRunA.decCall epsA_extend_memory_cost1_aligned (Q := MemoryExpansionLocal_g10)
+  · intros; trivial
+  · intro t values body callee rs v post hi hw hp ha hl hpi hpw hch hq
+    obtain ⟨hlf, cw, ebw, rfl, hb⟩ := hq
+    refine ⟨cw, ebw, by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE], ?_⟩
+    have hg : post.globals = t.globals := by rw [hlf]; rfl
+    have hm : post.memory = t.memory := by rw [hlf]; rfl
+    change ebw = 0#64 ∨ (memW post (globN post "ev" + 32) + ebw.toNat < 2 ^ 37 ∧
+      (memW post (globN post "ev" + 32) + ebw.toNat) % 32 = 0)
+    change ebw = 0#64 ∨ (memW t (globN t "ev" + 32) + ebw.toNat < 2 ^ 37 ∧
+      (memW t (globN t "ev" + 32) + ebw.toNat) % 32 = 0) at hb
+    simpa only [memW, globN, hg, hm] using hb
+  · exact hcont
+
+theorem create_prefix_memory_run_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hcont : HandlerRunA s0
+      (fun s => PositiveCostLocal_g10 (ofString "cost") s ∧ MemoryExpansionLocal_g10 s)
+      true createChargedSuffix_g10) :
+    HandlerRunA s0 (fun _ => True) false (sourceFnBody Guest.Software.guestFn_op_create) := by
+  apply HandlerRunA.seq_call_simple epsA_require_not_static
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_sat_word
+  apply extend_memory_cost1_bind_sequence_g10
+  exact words_of_create_memory_sequence_g10 s0 false false _ _ _ hcont
+
+theorem create2_prefix_memory_run_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hcont : HandlerRunA s0
+      (fun s => PositiveCostLocal_g10 (ofString "cost") s ∧ MemoryExpansionLocal_g10 s)
+      true create2ChargedSuffix_g10) :
+    HandlerRunA s0 (fun _ => True) false (sourceFnBody Guest.Software.guestFn_op_create2) := by
+  apply HandlerRunA.seq_call_simple epsA_require_not_static
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_sat_word
+  apply extend_memory_cost1_bind_sequence_g10
+  exact words_of_create_memory_sequence_g10 s0 true false _ _ _ hcont
+
+theorem create_prefix_through_extend_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hcont : HandlerRunA s0 (fun _ => True) true (handlerSuffix_g10 1 createChargedSuffix_g10)) :
+    HandlerRunA s0 (fun _ => True) false (sourceFnBody Guest.Software.guestFn_op_create) := by
+  apply create_prefix_memory_run_g10
+  apply HandlerRunA.weaken (Q := MemoryExpansionLocal_g10)
+  · intro t hi hp; exact hp.2
+  · exact extend_memory_sequence_g10 s0 true _ hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
