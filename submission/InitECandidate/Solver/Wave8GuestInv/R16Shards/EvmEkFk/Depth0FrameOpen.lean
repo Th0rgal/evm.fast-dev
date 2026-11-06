@@ -10229,4 +10229,57 @@ theorem low_word_eq_of_htab_exit {F : Type}
     dsimp at hh
     omega
 
+theorem balObjects_eq_of_nonbal_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    (hn : globN s "bal_accounts" ≠ locN s "t" ∧
+      ∀ ad ∈ balRecords s, memW s ad ≠ locN s "t") :
+    balObjects post = balObjects s := by
+  have hg : globN post "bal_accounts" = globN s "bal_accounts" := by
+    have he := hx.2.2.2.2.2.2.2 (ofString "bal_accounts") (by decide)
+    unfold globN
+    rw [he]
+  apply (R16WkAcctWs.balObjects_eq_of_unhit_except hAs.2 hW.1 hW.2.2.1 hg ?_ hn ?_ ?_).1
+  · intro u hu hne i hi
+    exact table_ivl_unhit_of_separated_htab_exit u hAs hW hu ht hne hx i hi
+  · intro i hi hn
+    apply fixed_ivl_unhit_of_htab_exit hAs hW ht hx i
+    · unfold fixedObjects
+      exact List.mem_append_right _ hi
+    · exact hn
+  · exact ⟨low_word_eq_of_htab_exit hAs hW ht hx 0 (by decide),
+      low_word_eq_of_htab_exit hAs hW ht hx 8 (by decide),
+      low_word_eq_of_htab_exit hAs hW ht hx 16 (by decide)⟩
+
+theorem fixedObjects_eq_of_nonbal_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    (hn : globN s "bal_accounts" ≠ locN s "t" ∧
+      ∀ ad ∈ balRecords s, memW s ad ≠ locN s "t") :
+    fixedObjects post = fixedObjects s := by
+  have hg : ∀ g, g ∈ globalBuffers.map Prod.fst ∨ g = "journal" ∨ g = "journal_cap" →
+      globN post g = globN s g := by
+    intro g hm
+    have hh : ofString g ∉ (["heap_ptr"] : List String).map ofString := by
+      rcases hm with hm | rfl | rfl
+      · obtain ⟨b,hb,rfl⟩ := List.mem_map.1 hm
+        have h : ∀ b ∈ globalBuffers, ofString b.1 ∉ (["heap_ptr"] : List String).map ofString := by decide
+        exact h b hb
+      · decide
+      · decide
+    have he := hx.2.2.2.2.2.2.2 _ hh
+    unfold globN
+    rw [he]
+  have hb : globalBuffers.map (bufferRegion post) = globalBuffers.map (bufferRegion s) := by
+    apply List.map_congr_left
+    intro b hm
+    simp only [bufferRegion,hg b.1 (Or.inl (List.mem_map.2 ⟨b,hm,rfl⟩))]
+  unfold fixedObjects
+  change globalBuffers.map (bufferRegion post) ++ _ = globalBuffers.map (bufferRegion s) ++ _
+  rw [hb,blockOutObjects_eq_of_htab_exit hAs hW ht hx,
+    balObjects_eq_of_nonbal_htab_exit hAs hW ht hx hn,
+    hg "journal" (by simp),hg "journal_cap" (by simp)]
+
 end HeadStore
