@@ -8585,4 +8585,25 @@ theorem get_code_access_tail_of_key_facts {F : Type}
   exact access_set_then_witness_return _ S db hash tw v hA hW hp hdb ht hne
     hcode hshape hws hload hhash hargs
 
+/-- Expose the key call's concrete word result and byte effect at the caller. -/
+theorem sk_call_effect {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL) (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "sk_make") values = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat = globN s "sk_buf" ∧
+      EvmStepLemmas.ByteRegionEffect s post [(globN s "sk_buf", 52)] := by
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "sk_make")
+    _ _ _ _ _ values callee (by rw [hc]; exact lookup_sk_make) hl
+  subst body
+  obtain ⟨w, hr, hw, _, he⟩ := eval_sk_make_body_evm (callEntryStateHOLFinite s callee)
+    hc hma hfit (by rw [hb]; simp) (by rw [hb]; simp [Resumes])
+  rw [hb] at hr he
+  have hv : v = .val (.word w) := by simpa using hr
+  refine ⟨w, hv, hw, ?_⟩
+  exact ⟨he.code, he.memaddrs, he.shMemaddrs, he.baseAddr, he.be, he.globals,
+    he.out_dom, he.cell_frame, he.byte_frame⟩
+
 end HeadStore
