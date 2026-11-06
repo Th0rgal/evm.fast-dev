@@ -14620,4 +14620,87 @@ theorem frameWF_live_log_topic_bound_g09 {F : Type}
     rw [hslot] at he
     exact he.2.2.1
 
+/-- The actual two-pop and stack-check prefix of op_log carries its bounded
+parameter and head alignment into the cost/allocation continuation. -/
+theorem op_log_bounded_prefix_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (nt : BitVec 64) (cont : ProgHOL 64)
+    (hcont : HandlerRun s0 (fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4)
+      false cont) :
+    HandlerRun s0 (fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4)
+      false
+      (.decCall (ofString "start") (.comb [.one, .one, .one, .one]) (ofString "stack_pop") []
+        (.decCall (ofString "size") (.comb [.one, .one, .one, .one]) (ofString "stack_pop") []
+          (.seq (.ite (.cmp .lower
+            (.load .one (.op .add [.var .global (ofString "ev"), .const 16]))
+            (.var .local (ofString "ntopics")))
+            (.raise (ofString "EvmErr") (.const 2)) .skip) cont))) := by
+  apply HandlerRun.decCall (Q := fun t => HeadMemAligned t ∧
+    t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4) eps_stack_pop_headMem
+  · intros; trivial
+  · intro t values body callee ret v post hInv hP hargs hlook hPost hchain hQc
+    refine ⟨?_, ?_, hP.2.2⟩
+    · exact hQc.2 hP.1
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "start" ≠ ofString "ntopics")] using hP.2.1
+  · apply HandlerRun.decCall (Q := fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4) eps_stack_pop_headMem
+    · intros; trivial
+    · intro t values body callee ret v post hInv hP hargs hlook hPost hchain hQc
+      refine ⟨?_, ?_, hP.2.2⟩
+      · exact hQc.2 hP.1
+      · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+          (by decide : ofString "size" ≠ ofString "ntopics")] using hP.2.1
+    · exact HandlerRun.seq_ite_raise_skip (fun _ _ _ hP => hP) hcont
+
+/-- Shape-aware log prefix: both popped operands are U256 values when the
+cost continuation is reached. -/
+theorem op_log_shaped_prefix_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (nt : BitVec 64) (cont : ProgHOL 64)
+    (hcont : HandlerRun s0 (fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      ∃ start size : ValueHOL 64,
+        shapeEqHOL (shapeOfHOLExact start) (.comb [.one, .one, .one, .one]) = true ∧
+        shapeEqHOL (shapeOfHOLExact size) (.comb [.one, .one, .one, .one]) = true ∧
+        t.locals.lookup (ofString "start") = some start ∧
+        t.locals.lookup (ofString "size") = some size) false cont) :
+    HandlerRun s0 (fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4)
+      false
+      (.decCall (ofString "start") (.comb [.one, .one, .one, .one]) (ofString "stack_pop") []
+        (.decCall (ofString "size") (.comb [.one, .one, .one, .one]) (ofString "stack_pop") []
+          (.seq (.ite (.cmp .lower
+            (.load .one (.op .add [.var .global (ofString "ev"), .const 16]))
+            (.var .local (ofString "ntopics")))
+            (.raise (ofString "EvmErr") (.const 2)) .skip) cont))) := by
+  apply HandlerRun.decCall_shaped (Q := fun t => HeadMemAligned t ∧
+    t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+    ∃ start : ValueHOL 64,
+      shapeEqHOL (shapeOfHOLExact start) (.comb [.one, .one, .one, .one]) = true ∧
+      t.locals.lookup (ofString "start") = some start) eps_stack_pop_headMem
+  · intros; trivial
+  · intro t values body callee ret v post hInv hP hsh hargs hlook hPost hchain hQc
+    refine ⟨hQc.2 hP.1, ?_, hP.2.2, v, hsh, ?_⟩
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "start" ≠ ofString "ntopics")] using hP.2.1
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · apply HandlerRun.decCall_shaped (Q := fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      ∃ start size : ValueHOL 64,
+        shapeEqHOL (shapeOfHOLExact start) (.comb [.one, .one, .one, .one]) = true ∧
+        shapeEqHOL (shapeOfHOLExact size) (.comb [.one, .one, .one, .one]) = true ∧
+        t.locals.lookup (ofString "start") = some start ∧
+        t.locals.lookup (ofString "size") = some size) eps_stack_pop_headMem
+    · intros; trivial
+    · intro t values body callee ret v post hInv hP hsh hargs hlook hPost hchain hQc
+      obtain ⟨hHM, hnt, hnt4, start, hstart, hlstart⟩ := hP
+      refine ⟨hQc.2 hHM, ?_, hnt4, start, v, hstart, hsh, ?_, ?_⟩
+      · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+          (by decide : ofString "size" ≠ ofString "ntopics")] using hnt
+      · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+          (by decide : ofString "size" ≠ ofString "start")] using hlstart
+      · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    · exact HandlerRun.seq_ite_raise_skip (fun _ _ _ hP => hP) hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

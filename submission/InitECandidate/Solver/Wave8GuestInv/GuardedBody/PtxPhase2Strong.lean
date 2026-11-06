@@ -16750,4 +16750,118 @@ theorem phase2_get_account_saved_tables
         cases hv
   · exact phase2_return_saved_tables saved aa ak _
 
+/-- Full account lookup restores private tables in an arbitrary saved environment. -/
+theorem phase2_get_account_resume_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat)
+    (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => PtxMessageTables {s with locals := saved} aa ak)
+      name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "get_account")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_get_account] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_get_account,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL,
+      InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account) =
+      (some (.returned v), post) at hr
+  have ht := (phase2_get_account_saved_tables saved aa ak).run
+    (callEntryStateHOLFinite s callee) hc
+    ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1,
+      phase2_message_tables_with_locals {s with locals := saved} saved (s.clock - 1) hp.2.1 rfl,
+      hp.2.2⟩ (by rw [hr]; simp) (by rw [hr]; exact ⟨v, rfl⟩)
+  rw [hr] at ht
+  exact ht
+
+/-- Full account lookup preserves caller-private tables when binding a non-message result. -/
+theorem phase2_get_account_resume_message_tables
+    (aa ak : Nat) (name : MlS) (hne : name ≠ ofString "m") (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+      Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => PtxMessageTables s aa ak) name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have ht := phase2_get_account_resume_saved_tables s.locals aa ak name args
+    s vs body callee ret v post hc hp ha hl hr
+  exact phase2_message_tables_with_locals {post with locals := s.locals} _ post.clock ht
+    (by simp [HolFiniteMapExact.update, FUPDATE, hne])
+
+/-- Account lookup preserves the joint scalar, backing, and private-table assembly guard. -/
+theorem phase2_get_account_message_scalar_backing_tables (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n) :
+    DecCallResumeOn (fun s => (PtxMessageScalarReady buffers contents names s ∧
+      R16Shards.TxBacking s) ∧ PtxMessageTables s aa ak)
+      (fun s => (PtxMessageScalarReady buffers contents names s ∧
+        R16Shards.TxBacking s) ∧ PtxMessageTables s aa ak)
+      name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  exact ⟨phase2_get_account_message_scalar_backing h buffers contents names name args hm hi hn
+    s vs body callee ret v post hc hp.1 ha hl hr,
+    phase2_get_account_resume_message_tables aa ak name hm args
+      s vs body callee ret v post hc ⟨hp.1.1.1.1.1, hp.2, hp.1.1.1.2.2.2.1⟩ ha hl hr⟩
+
+/-- The full account-call guard feeds a bounded message-assembly continuation. -/
+theorem phase2_get_account_message_scalar_backing_tables_bound (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (fun s =>
+      (PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) ∧
+        PtxMessageTables s aa ak) tail b) :
+    TerminatingProgBoundedOn (fun s =>
+      (PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) ∧
+        PtxMessageTables s aa ak)
+      (.decCall name .one (ofString "get_account") args tail) (K.get_account + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => (PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) ∧
+      PtxMessageTables s aa ak) h.fb_get_account
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1
+  · exact phase2_get_account_message_scalar_backing_tables h buffers contents names aa ak name args hm hi hn
+  · exact ht
+
+/-- Transaction warming preserves the joint message assembly and private-table guard. -/
+theorem phase2_htab_set_ts8_message_scalar_backing_tables
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (fun s => (PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) ∧
+      PtxMessageTables s aa ak)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none →
+        (PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) ∧
+          PtxMessageTables s aa ak) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have ht := (phase2_htab_set_ts8_saved_tables s.locals aa ak key value).run s hc
+    ⟨hp.1.1.1.1.1, hp.2, hp.1.1.1.2.2.2.1⟩ hnt hr
+  have hl := phase2_call0_locals s (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value] hr
+  refine ⟨(phase2_htab_set_ts8_message_scalar_backing buffers contents names key value).run
+    s hc hp.1 hnt hr, ?_⟩
+  have he : {(evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])).2
+      with locals := s.locals} = (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])).2 := by
+    rw [← hl]
+  rw [he] at ht
+  exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
