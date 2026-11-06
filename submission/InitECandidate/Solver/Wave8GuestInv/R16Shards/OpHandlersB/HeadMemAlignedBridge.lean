@@ -12077,4 +12077,31 @@ theorem laInvContents_logsListOK {F : Type} {s u post : PanSemStateFiniteExact 6
     hwords halloc hcount hbound (by rw [hcapacity]; rwa [← hcount'])
     hslots hkeepP hkeepC
 
+/-- The append loop preserves chain-wide head-memory alignment whenever its
+frame protects each frame record and continuation. Heap growth does not alter
+either the selected head or the frame-memory allocation pointer. -/
+theorem laInv_headMemChainWF {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 cap0 n0 nc : BitVec 64}
+    (h : LAInv s L arr0 cap0 n0 nc u) (hE : EvmInv s) (hA : HeadMemChainWF s)
+    (hchain : evmChain u = evmChain s)
+    (hun : ∀ ec ∈ evmChain s,
+      R16Shards.IvlUnhit s u (ec.1, 280) ∧ R16Shards.IvlUnhit s u (ec.2, 104)) :
+    HeadMemChainWF u := by
+  obtain ⟨_, _, _, hg, _⟩ := h
+  apply headMemChainWF_of_unhit hE hA hchain hun
+  · unfold globN
+    rw [hg _ (by decide)]
+  · unfold globN
+    rw [hg _ (by decide)]
+
+/-- Group04's head-memory precondition at every framed child-log loop state. -/
+theorem laInv_headMemAligned_group04 {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 cap0 n0 nc : BitVec 64}
+    (h : LAInv s L arr0 cap0 n0 nc u) (hE : EvmInv s) (hA : HeadMemChainWF s)
+    (hchain : evmChain u = evmChain s)
+    (hun : ∀ ec ∈ evmChain s,
+      R16Shards.IvlUnhit s u (ec.1, 280) ∧ R16Shards.IvlUnhit s u (ec.2, 104)) :
+    R16Shards.OpHandlers.HeadMemAligned u :=
+  headMemChainWF_headMemAligned_group04 (laInv_headMemChainWF h hE hA hchain hun)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
