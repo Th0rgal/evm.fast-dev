@@ -11531,6 +11531,138 @@ theorem precompile_sha256_gas_alloc_tail_step {F : Type}
         obtain ⟨a',b',c',d'⟩ := hc.2 ec (hg.1.2.2.2.symm ▸ hec)
         exact ⟨a'.trans a,b'.trans b,c'.trans c,d'.trans d⟩⟩
 
+theorem precompile_seq_call0_flows_resumes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fn : MlS) (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (hc : ∀ t : PanSemStateFiniteExact 64 F,
+      R13.FlowsOrResumes (evaluateHOLFiniteState t cont).1 → Resumes (evaluateHOLFiniteState t cont).1)
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq (.call (some (none,none)) fn args) cont)).1) :
+    Resumes (evaluateHOLFiniteState s (.seq (.call (some (none,none)) fn args) cont)).1 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr ⊢
+  rcases he : evaluateHOLFiniteState s (.call (some (none,none)) fn args) with ⟨r,t⟩
+  simp only [he] at hr ⊢
+  cases r with
+  | none => exact hc t hr
+  | some r =>
+    rcases hr with h|h|h|h
+    · cases h
+    · exact False.elim (precompile_call0_ne_break s fn args (by rw [he]; exact h))
+    · exact False.elim (precompile_call0_ne_continue s fn args (by rw [he]; exact h))
+    · exact h
+
+theorem precompile_decCall_flows_resumes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : MlS) (shape : ShapeHOL) (fn : MlS) (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (hc : ∀ t : PanSemStateFiniteExact 64 F,
+      R13.FlowsOrResumes (evaluateHOLFiniteState t cont).1 → Resumes (evaluateHOLFiniteState t cont).1)
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.decCall name shape fn args cont)).1) :
+    Resumes (evaluateHOLFiniteState s (.decCall name shape fn args cont)).1 := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hr ⊢
+  have bad : ¬ R13.FlowsOrResumes (some (.error : PanSemResultExact 64)) := by
+    rintro (h|h|h|⟨⟨_,h⟩|⟨_,_,h,_⟩⟩) <;> cases h
+  cases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with
+  | none => simp only [ha] at hr; exact False.elim (bad hr)
+  | some vals =>
+    simp only [ha] at hr ⊢
+    cases hl : lookupCodeHOLFinite s.code.lookup fn vals with
+    | none => simp only [hl] at hr; exact False.elim (bad hr)
+    | some entry =>
+      obtain ⟨body,locals,ret⟩ := entry
+      simp only [hl] at hr ⊢
+      by_cases hz : s.clock = 0
+      · simp only [hz,↓reduceIte] at hr
+        rcases hr with h|h|h|⟨⟨_,h⟩|⟨_,_,h,_⟩⟩ <;> cases h
+      · simp only [hz,↓reduceIte] at hr ⊢
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s locals) body with ⟨r,post⟩
+        simp only [hb] at hr ⊢
+        cases r with
+        | none => exact False.elim (bad hr)
+        | some r =>
+          cases r with
+          | error | «break» | «continue» => exact False.elim (bad hr)
+          | returned v =>
+            dsimp only at hr ⊢
+            split
+            · rename_i hsh
+              simp only [hsh,↓reduceIte] at hr
+              exact hc _ hr
+            · rename_i hsh
+              simp only [hsh] at hr
+              exact False.elim (bad hr)
+          | exception e v =>
+            rcases hr with h|h|h|h
+            · cases h
+            · cases h
+            · cases h
+            · exact h
+          | timeOut | finalFfi _ =>
+            rcases hr with h|h|h|⟨⟨_,h⟩|⟨_,_,h,_⟩⟩ <;> cases h
+
+theorem precompile_seq_store_flows_resumes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (addr val : ExpHOL 64) (cont : ProgHOL 64)
+    (hc : ∀ t : PanSemStateFiniteExact 64 F,
+      R13.FlowsOrResumes (evaluateHOLFiniteState t cont).1 → Resumes (evaluateHOLFiniteState t cont).1)
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq (.store addr val) cont)).1) :
+    Resumes (evaluateHOLFiniteState s (.seq (.store addr val) cont)).1 := by
+  have bad : ¬ R13.FlowsOrResumes (some (.error : PanSemResultExact 64)) := by
+    rintro (h|h|h|⟨⟨_,h⟩|⟨_,_,h,_⟩⟩) <;> cases h
+  have hs : (evaluateHOLFiniteState s (.store addr val)).1 = none ∨
+      (evaluateHOLFiniteState s (.store addr val)).1 = some .error := by
+    rw [evaluateHOLFiniteState_store]
+    split <;> (try split) <;> (try split) <;> simp
+  rw [evaluateHOLFiniteState_seq_line780] at hr ⊢
+  rcases he : evaluateHOLFiniteState s (.store addr val) with ⟨r,t⟩
+  simp only [he] at hs hr ⊢
+  rcases hs with rfl|rfl
+  · exact hc t hr
+  · exact False.elim (bad hr)
+
+theorem precompile_return_flows_resumes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (val : ExpHOL 64)
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.return val)).1) :
+    Resumes (evaluateHOLFiniteState s (.return val)).1 := by
+  rw [evaluateHOLFiniteState_return] at hr ⊢
+  cases hv : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) val with
+  | none =>
+    simp only [hv] at hr
+    rcases hr with h|h|h|⟨⟨_,h⟩|⟨_,_,h,_⟩⟩ <;> cases h
+  | some v =>
+    simp only [hv] at hr ⊢
+    split
+    · exact Or.inl ⟨v,rfl⟩
+    · rename_i hsz
+      simp only [hsz,↓reduceIte] at hr
+      rcases hr with h|h|h|⟨⟨_,h⟩|⟨_,_,h,_⟩⟩ <;> cases h
+
+theorem precompile_sha256_words_gas_tail_step {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len : BitVec 64) (ptr : ExpHOL 64)
+    (hi : EvmInv s)
+    (hpad : globN s "sha_pad" ≠ 0) (hst : globN s "sha_st" ≠ 0)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word len)))
+    (hbound : len.toNat+64 < 2^64) :
+    let tail : ProgHOL 64 := .seq
+      (.call (some (none,none)) (ofString "sha256") [ptr,.var .local (ofString "n"),.var .local (ofString "out")])
+      (.seq (.store (.op .add [.var .global (ofString "ev"),.const 120]) (.var .local (ofString "out")))
+        (.seq (.store (.op .add [.var .global (ofString "ev"),.const 128]) (.const 32)) (.return (.const 0))))
+    let gas : ProgHOL 64 := .seq (.call (some (none,none)) (ofString "charge_gas")
+      [.op .add [.const 60,.panop .mul [.const 12,.var .local (ofString "w")]]])
+      (.decCall (ofString "out") .one (ofString "alloc") [.const 32] tail)
+    let p : ProgHOL 64 := .decCall (ofString "w") .one (ofString "words_of") [.var .local (ofString "n")] gas
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    R13.FlowsOrResumes (evaluateHOLFiniteState s p).1 →
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s p).2 := by
+  intro tail gas p hnt hfr
+  apply precompile_step_decCall_ro_at precompile_ro_words_of _ _ _ _ s hi.1.1.code hi ?_ hnt hfr
+  intro v k mid hnt hfr
+  have hinv := localsFree_evmInv s (setVarHOLFinite (ofString "w") v s).locals k hi
+  apply precompile_sha256_gas_alloc_tail_step _ len ptr _ hinv hpad hst ?_ hbound ?_
+  · change (setVarHOLFinite (ofString "w") v s).locals.lookup (ofString "n") = _
+    simp [setVarHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,hn,show ofString "w" ≠ ofString "n" by decide]
+  · exact precompile_seq_call0_flows_resumes mid _ _ _ (fun t ht =>
+      precompile_decCall_flows_resumes t _ _ _ _ _ (fun t ht =>
+        precompile_seq_call0_flows_resumes t _ _ _ (fun t ht =>
+          precompile_seq_store_flows_resumes t _ _ _ (fun t ht =>
+            precompile_seq_store_flows_resumes t _ _ _ (fun t ht =>
+              precompile_return_flows_resumes t _ ht) ht) ht) ht) ht) hfr
+
 theorem precompile_identity_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (args : List (ExpHOL 64)) (n : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
