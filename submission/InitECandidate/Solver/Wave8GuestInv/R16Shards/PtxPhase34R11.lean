@@ -15964,4 +15964,25 @@ theorem acct_empty_return_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Retain the optional-account world contract after restoring caller locals. -/
+theorem get_account_optional_restored_worldStep {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (hW : WorldOK s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account_optional") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    WorldStepSc (bufRegions EvmEkFk.wsAcctBufs) ["heap_ptr", "scratch_ptr"]
+      R10Shards.P26_P28.stdKeep NoExtra s (some (.returned v)) {post with locals := s.locals} := by
+  have hwc := (WkBal.worldOK_with_locals s callee (s.clock - 1)).2 hW
+  have hs := PtxP1.funSpec_at_lookup EvmEkFk.wkSc_get_account_optional s hW.1.1.code
+    vs body callee ret hl hwc (by rw [hr]; simp)
+  rw [hr] at hs
+  have hs' := (hs (Or.inl ⟨v, rfl⟩)).of_pre_locals_clock
+  exact hs'.with_locals_clock s.locals post.clock
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
