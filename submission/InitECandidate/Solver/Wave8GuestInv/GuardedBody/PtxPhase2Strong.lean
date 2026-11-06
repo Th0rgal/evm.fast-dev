@@ -15546,4 +15546,103 @@ theorem phase2_ws_get_account_optional_table_headers {F : Type}
     · simp only [wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hb
       rcases hb with rfl | rfl | rfl <;> decide
 
+open R10Shards.P26_P28 in
+/-- Fresh-only effects on untyped buffers preserve world and journal roles. -/
+theorem phase2_worldEff_roles {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {B : List (String × Nat)} {gw : List String}
+    (ha : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (he : WorldEff s post [] B gw)
+    (hB : ∀ b ∈ B, b ∈ globalBuffers ∧ b.1 ∉ typedRecords.map Prod.fst)
+    (hg : ∀ g ∈ coreWorldGlobals, ofString g ∉ gw.map ofString) :
+    worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
+  have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
+    intro g hgm
+    exact R16Shards.globN_eq_of_lookup (he.gw_kept _ (hg g hgm))
+  have hu : ∀ i ∈ worldTypedIvls s S Nd, Allocated s i → i.1 % 8 = 0 → i.2 % 8 = 0 →
+      IvlUnhit s post i := by
+    intro i hi hal h1 h2
+    apply phase2_worldEff_allocated_unhit he ha ⟨h1, h2⟩ hal (by simp)
+    intro b hb
+    exact disj_symm (untypedBuf_disj_worldTypedIvls hw b (hB b hb).1 (hB b hb).2 i hi)
+  have huf : ∀ i ∈ worldTypedIvls s S Nd, i ∈ fixedObjects s → i.2 ≠ 0 → IvlUnhit s post i := by
+    intro i hi hf hn
+    have hh := (hw.2.2.1.1 i hf).resolve_left hn
+    exact hu i hi hh.1 hh.2.1 hh.2.2.1
+  have hut : ∀ t ∈ S, ∀ i ∈ htabFootprint s t, IvlUnhit s post i := by
+    intro t ht i hi
+    have hf := ((hw.1.2.1 t ht).1.1 i hi).2
+    apply hu i _ ((hw.1.2.1 t ht).2 i hi).1 hf.1 hf.2.1
+    simp only [worldTypedIvls, List.mem_append]
+    exact Or.inl (Or.inl (Or.inl (Or.inl (Or.inl (List.mem_flatMap.mpr ⟨t, ht, hi⟩)))))
+  have hur : ∀ (g : String) (n : Nat), (g, n) ∈ typedRecords → n ≠ 0 →
+      globN s g ≠ 0 → IvlUnhit s post (globN s g, n) := by
+    intro g n hrec hn hgn
+    apply huf _ _ _ hn
+    · simp only [worldTypedIvls, List.mem_append]
+      left; left; left; left; right
+      exact List.mem_map.mpr ⟨(g, n), hrec, by simp [hgn]⟩
+    · simpa [hgn] using typedRecord_mem_fixedObjects s hrec
+  have huts := hur "ts" 72 (by decide) (by decide)
+  have hujr : globN s "journal_cap" ≠ 0 →
+      IvlUnhit s post (globN s "journal", 32 * globN s "journal_cap") := by
+    intro hn
+    apply huf _ _ _ (by dsimp; omega)
+    · simp [worldTypedIvls, hn]
+    · simp [fixedObjects, hn]
+  have hjr := R10Shards.P26_P28.journalRoleSlots_eq_of_unhit ha.1 he.arena.1 ha.2
+    ⟨he.hp_lo, he.sp_hi⟩ (fun (x : Nat) (hx : x ∈ S) => hx) hw.2.1 hw.2.2.1 hcore huts hujr
+  refine ⟨?_, hjr.1⟩
+  apply R10Shards.P26_P28.worldRoleSlots_eq_of_unhit ha.2 hw.1 hw.2.2.1 hcore hut
+    (hur "ws" 40 (by decide) (by decide)) (hur "bs" 80 (by decide) (by decide)) huts
+  · intro i hi hn
+    apply huf i _ _ hn
+    · simp only [worldTypedIvls, List.mem_append]
+      exact Or.inl (Or.inr hi)
+    · simp only [fixedObjects, List.mem_append]
+      exact Or.inr hi
+  · exact ⟨mem_low_eq_of_domain_writes he.out_dom ha.1 (by decide),
+      mem_low_eq_of_domain_writes he.out_dom ha.1 (by decide)⟩
+
+/-- Fresh-only world effects retain the complete message-table witness. -/
+theorem phase2_worldEff_message_tables {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {B : List (String × Nat)} {gw : List String}
+    {aa ak : Nat} (ha : ArenaReady s) (ht : PtxMessageTables s aa ak)
+    (he : WorldEff s post [] B gw)
+    (hB : ∀ b ∈ B, b ∈ globalBuffers ∧ b.1 ∉ typedRecords.map Prod.fst)
+    (hg : ∀ g ∈ R10Shards.P26_P28.coreWorldGlobals, ofString g ∉ gw.map ofString)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hm : locN post "m" = locN s "m") : PtxMessageTables post aa ak := by
+  obtain ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ := ht
+  have ht : PtxMessageTables s aa ak := ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩
+  have hr := phase2_worldEff_roles ha hw he hB hg
+  apply phase2_message_tables_world_step s post ht hin hm hr.1 hr.2
+    (phase2_worldEff_table_header ha hw he ham (fun b hb =>
+      phase2_table_header_disj_buffer hw ham b (hB b hb).1 (hB b hb).2) 0 (by decide))
+    (phase2_worldEff_table_header ha hw he hkm (fun b hb =>
+      phase2_table_header_disj_buffer hw hkm b (hB b hb).1 (hB b hb).2) 0 (by decide))
+  have hstep := WorldEff.to_worldStep_Q (R := fun _ => []) (r := none) (Q := NoExtra)
+    ⟨ha, S, (worldTyped_iff_with s S).mpr ⟨Nd, hw⟩⟩ hB hg he
+    (fun _ _ _ _ _ _ _ _ => trivial)
+  intro S Nd hw
+  obtain ⟨S', Nd', hsub, hw', hg', _⟩ := hstep.2.2.2.2 S Nd hw (by simp [IvlsDisj])
+  exact ⟨S', Nd', hsub, hw', hg'⟩
+
+/-- World-state account lookup retains private tables when the message local is restored. -/
+theorem phase2_ws_get_account_optional_message_tables {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (ha : ArenaReady s) {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hnt : (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    let post := (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2
+    PtxMessageTables {post with locals := s.locals} aa ak := by
+  have he := worldEff_ws_get_account_optional s s ha.2
+    (WorldEff.refl s [] wsBufs wsGw ha hc) hnt hr
+  apply phase2_worldEff_message_tables ha ht (he.locals_clock s.locals _) _ _ hin rfl
+  · decide
+  · decide
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
