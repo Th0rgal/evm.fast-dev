@@ -15062,4 +15062,240 @@ theorem op_log_data_cost_branch_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F
   · intro t he
     exact op_log_data_cost_step_g09 s0 base lo hi P _ hpres hcont
 
+/-- Initialize the concrete topic loop at zero, preserving the owned fresh
+buffer and exposing unchanged caller locals to the post-loop continuation. -/
+theorem op_log_topics_init_step_g09 {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {nt topics qw : BitVec 64} {cont : ProgHOL 64}
+    (hcode : s.code = originalRuntimeCode) (hInvW : EvmInvWith s S Nd)
+    (hlen : (evmChain s).length = (evmChain s0).length) (hR : evmR s < evmR s0)
+    (hnt4 : nt.toNat ≤ 4)
+    (hfit : topics.toNat + (32 * nt.toNat + 8) ≤ qw.toNat)
+    (hq : qw.toNat ≤ heapLimit) (ha : topics.toNat % 8 = 0) (hlo : sourceBase ≤ topics.toNat)
+    (hdj : IvlsDisj [(topics.toNat, qw.toNat - topics.toNat)]
+      (worldTypedIvls s S Nd ++ ((evmChain s).map (frameObjects s)).flatten))
+    (hntlk : s.locals.lookup (ofString "ntopics") = some (.val (.word nt)))
+    (htlk : s.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hcont : ∀ (last : PanSemStateFiniteExact 64 F),
+      last.code = originalRuntimeCode → EvmInvWith last S Nd →
+      (evmChain last).length = (evmChain s0).length → evmR last < evmR s0 →
+      globN last "heap_ptr" = globN s "heap_ptr" →
+      (HeadMemAligned s → HeadMemAligned last) →
+      IvlsDisj [(topics.toNat, qw.toNat - topics.toNat)]
+        (worldTypedIvls last S Nd ++ ((evmChain last).map (frameObjects last)).flatten) →
+      (∀ nm : MlS, nm ≠ ofString "i" → nm ≠ ofString "t" → last.locals.lookup nm = s.locals.lookup nm) →
+      (evaluateHOLFiniteState last cont).1 ≠ some .timeOut →
+      OpDispatchPost s0 (evaluateHOLFiniteState last cont).1 (evaluateHOLFiniteState last cont).2)
+    (hnt : (evaluateHOLFiniteState s (.dec (ofString "i") .one (.const 0)
+      (.seq opLogWhileProg cont))).1 ≠ some .timeOut) :
+    OpDispatchPost s0
+      (evaluateHOLFiniteState s (.dec (ofString "i") .one (.const 0) (.seq opLogWhileProg cont))).1
+      (evaluateHOLFiniteState s (.dec (ofString "i") .one (.const 0) (.seq opLogWhileProg cont))).2 := by
+  rw [evaluateHOLFiniteState_dec_total] at hnt ⊢
+  simp only [evalHOLFinite, evalHOLExact, shapeOfHOLExact, shapeEqHOL, Bool.true_and,
+    Bool.and_true, ↓reduceIte] at hnt ⊢
+  let si := setVarHOLFinite (ofString "i") (.val (.word 0)) s
+  have hiw : EvmInvWith si S Nd := evmInvWith_localsFree (s := s) si.locals s.clock hInvW
+  have hi : si.locals.lookup (ofString "i") = some (.val (.word 0)) := by
+    simp [si, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hntsi : si.locals.lookup (ofString "ntopics") = some (.val (.word nt)) := by
+    simpa [si, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      (by decide : ofString "i" ≠ ofString "ntopics")] using hntlk
+  have htpsi : si.locals.lookup (ofString "topics") = some (.val (.word topics)) := by
+    simpa [si, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      (by decide : ofString "i" ≠ ofString "topics")] using htlk
+  have hcongr := evm_congr (s := s) (t := si) rfl rfl
+  have hch : evmChain si = evmChain s := evmChain_congr (s := s) (t := si) rfl rfl
+  have hrsi : evmR si = evmR s := hcongr.2.1
+  have hdjsi : IvlsDisj [(topics.toNat, qw.toNat - topics.toNat)]
+      (worldTypedIvls si S Nd ++ ((evmChain si).map (frameObjects si)).flatten) := by
+    rw [worldTypedIvls_congr_mg_g09 (s := s) (t := si) rfl rfl,
+      map_frameObjects_congr_mg_g09 (s := s) (t := si) rfl rfl]
+    exact hdj
+  have hloop := op_log_topic_while_step_g09 (s0 := s0) (S := S) (Nd := Nd) (nt := nt)
+    (topics := topics) (qw := qw) (cont := cont) nt.toNat si 0 (by simp) hnt4
+    hcode hiw (by rw [hch]; exact hlen) (by rw [hrsi]; exact hR)
+    hfit hq ha hlo hdjsi hi hntsi htpsi
+  change OpDispatchPost s0 (evaluateHOLFiniteState si (.seq opLogWhileProg cont)).1
+    { (evaluateHOLFiniteState si (.seq opLogWhileProg cont)).2 with
+      locals := ((evaluateHOLFiniteState si (.seq opLogWhileProg cont)).2.locals).resVarEq
+        (ofString "i", s.locals.lookup (ofString "i")) }
+  apply opDispatchPost_congr_lc (s := s0) (s' := s0)
+    (post := (evaluateHOLFiniteState si (.seq opLogWhileProg cont)).2) rfl rfl rfl
+  apply hloop
+  · intro last hc hw hl hr hp hm hdj' hlk hn
+    apply hcont last hc hw hl hr hp hm hdj'
+    · intro nm hni hnt'
+      rw [hlk nm hni hnt']
+      simp [si, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hni, Ne.symm hni]
+    · exact hn
+  · exact hnt
+
+/-- Allocate the bounded topic buffer and execute its initialized loop,
+delivering separated ownership and unchanged remaining locals downstream. -/
+theorem op_log_topics_alloc_loop_g09 {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {nt : BitVec 64} {cont : ProgHOL 64}
+    (hcode : s.code = originalRuntimeCode) (hInvW : EvmInvWith s S Nd)
+    (hlen : (evmChain s).length = (evmChain s0).length) (hR : evmR s < evmR s0)
+    (hnt4 : nt.toNat ≤ 4) (hHM : HeadMemAligned s)
+    (hntlk : s.locals.lookup (ofString "ntopics") = some (.val (.word nt)))
+    (hcont : ∀ (topics qw : BitVec 64) (last : PanSemStateFiniteExact 64 F),
+      last.code = originalRuntimeCode → EvmInvWith last S Nd →
+      (evmChain last).length = (evmChain s0).length → evmR last < evmR s0 →
+      HeadMemAligned last → globN last "heap_ptr" = qw.toNat →
+      topics.toNat + (32 * nt.toNat + 8) ≤ qw.toNat → qw.toNat ≤ heapLimit →
+      topics.toNat % 8 = 0 → sourceBase ≤ topics.toNat →
+      IvlsDisj [(topics.toNat, qw.toNat - topics.toNat)]
+        (worldTypedIvls last S Nd ++ ((evmChain last).map (frameObjects last)).flatten) →
+      last.locals.lookup (ofString "topics") = some (.val (.word topics)) →
+      (∀ nm : MlS, nm ≠ ofString "i" → nm ≠ ofString "t" → nm ≠ ofString "topics" →
+        last.locals.lookup nm = s.locals.lookup nm) →
+      (evaluateHOLFiniteState last cont).1 ≠ some .timeOut →
+      OpDispatchPost s0 (evaluateHOLFiniteState last cont).1 (evaluateHOLFiniteState last cont).2)
+    (hnt : (evaluateHOLFiniteState s (.decCall (ofString "topics") .one (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "ntopics"), .const 32], .const 8]]
+      (.dec (ofString "i") .one (.const 0) (.seq opLogWhileProg cont)))).1 ≠ some .timeOut) :
+    OpDispatchPost s0
+      (evaluateHOLFiniteState s (.decCall (ofString "topics") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "ntopics"), .const 32], .const 8]]
+        (.dec (ofString "i") .one (.const 0) (.seq opLogWhileProg cont)))).1
+      (evaluateHOLFiniteState s (.decCall (ofString "topics") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "ntopics"), .const 32], .const 8]]
+        (.dec (ofString "i") .one (.const 0) (.seq opLogWhileProg cont)))).2 := by
+  have hsz : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.op .add [.panop .mul [.var .local (ofString "ntopics"), .const 32], .const 8]) =
+      some (.val (.word (nt * 32#64 + 8#64))) := by
+    simp [evalHOLExact, evalListHOLExact, hntlk, valueIsWord, valueWord, panOpHOL, wordOpHOL, wordOp]
+  have hn : (nt * 32#64 + 8#64).toNat = 32 * nt.toNat + 8 := by
+    rw [BitVec.toNat_add, BitVec.toNat_mul]
+    change ((nt.toNat * 32) % 2^64 + 8) % 2^64 = _
+    rw [Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)]
+    omega
+  apply decCall_alloc_step_g09 (s0 := s0) (s := s) (charged := true) hcode hInvW hlen hR hsz hnt
+  intro topics qw allocated hc hw hworld hframes hchain hpotential hhead hg hm hdom hl hp hq hfit hlim ha hqa hlo hwords hdj hncont
+  have hnt_a : allocated.locals.lookup (ofString "ntopics") = some (.val (.word nt)) := by
+    rw [hl]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      (by decide : ofString "topics" ≠ ofString "ntopics")] using hntlk
+  have htopics_a : allocated.locals.lookup (ofString "topics") = some (.val (.word topics)) := by
+    rw [hl]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have hfit' : topics.toNat + (32 * nt.toNat + 8) ≤ qw.toNat := by rwa [hn] at hfit
+  apply op_log_topics_init_step_g09 hc hw (by rw [hchain]; exact hlen)
+    (by rw [hpotential]; exact hR) hnt4 hfit' hlim ha hlo hdj hnt_a htopics_a
+  · intro last hcL hwL hlL hrL hpL hmL hdjL hlk hnL
+    apply hcont topics qw last hcL hwL hlL hrL (hmL (hhead hHM)) (hpL.trans hq)
+      hfit' hlim ha hlo hdjL
+    · rw [hlk (ofString "topics") (by decide) (by decide)]
+      exact htopics_a
+    · intro nm hni hnt' hntop
+      rw [hlk nm hni hnt', hl]
+      simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hntop]
+    · exact hnL
+  · exact hncont
+
+/-- Compose the record and address allocations, retaining their separated
+ownership and the caller locals needed by record construction. -/
+theorem op_log_record_allocations_g09 {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {cont : ProgHOL 64}
+    (hcode : s.code = originalRuntimeCode) (hInvW : EvmInvWith s S Nd)
+    (hlen : (evmChain s).length = (evmChain s0).length) (hR : evmR s < evmR s0)
+    (hHM : HeadMemAligned s)
+    (hcont : ∀ (log address finish : BitVec 64) (last : PanSemStateFiniteExact 64 F),
+      last.code = originalRuntimeCode → EvmInvWith last S Nd →
+      (evmChain last).length = (evmChain s0).length → evmR last < evmR s0 →
+      HeadMemAligned last →
+      worldTypedIvls last S Nd = worldTypedIvls s S Nd →
+      (evmChain last).map (frameObjects last) = (evmChain s).map (frameObjects s) →
+      last.memory = s.memory → last.memaddrs = s.memaddrs →
+      globN s "heap_ptr" = log.toNat → globN last "heap_ptr" = finish.toNat →
+      log.toNat + 40 ≤ address.toNat → address.toNat + 24 ≤ finish.toNat →
+      finish.toNat ≤ heapLimit → log.toNat % 8 = 0 → address.toNat % 8 = 0 →
+      sourceBase ≤ log.toNat → sourceBase ≤ address.toNat →
+      IvlsDisj [(log.toNat, address.toNat - log.toNat),
+        (address.toNat, finish.toNat - address.toNat)]
+        (worldTypedIvls last S Nd ++ ((evmChain last).map (frameObjects last)).flatten) →
+      last.locals.lookup (ofString "log") = some (.val (.word log)) →
+      last.locals.lookup (ofString "log_address") = some (.val (.word address)) →
+      (∀ nm : MlS, nm ≠ ofString "log" → nm ≠ ofString "log_address" →
+        last.locals.lookup nm = s.locals.lookup nm) →
+      (evaluateHOLFiniteState last cont).1 ≠ some .timeOut →
+      OpDispatchPost s0 (evaluateHOLFiniteState last cont).1 (evaluateHOLFiniteState last cont).2)
+    (hnt : (evaluateHOLFiniteState s (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+      (.decCall (ofString "log_address") .one (ofString "alloc") [.const 24] cont))).1 ≠ some .timeOut) :
+    OpDispatchPost s0
+      (evaluateHOLFiniteState s (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+        (.decCall (ofString "log_address") .one (ofString "alloc") [.const 24] cont))).1
+      (evaluateHOLFiniteState s (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+        (.decCall (ofString "log_address") .one (ofString "alloc") [.const 24] cont))).2 := by
+  apply decCall_alloc_step_g09 (s0 := s0) (s := s) (charged := true) (nw := 40#64) hcode hInvW hlen hR rfl hnt
+  intro log next first hc1 hw1 hwt1 hfo1 hch1 hr1 hhm1 hg1 hm1 hd1 hl1 hp1 hq1 hfit1 hlim1 ha1 hqa1 hlo1 hwords1 hdj1 hn1
+  apply decCall_alloc_step_g09 (s0 := s0) (s := first) (charged := true) (nw := 24#64) hc1 hw1
+    (by rw [hch1]; exact hlen) (by rw [hr1]; exact hR) rfl hn1
+  intro address finish last hc2 hw2 hwt2 hfo2 hch2 hr2 hhm2 hg2 hm2 hd2 hl2 hp2 hq2 hfit2 hlim2 ha2 hqa2 hlo2 hwords2 hdj2 hn2
+  have haddr : next.toNat = address.toNat := hq1.symm.trans hp2
+  have hdjFirst : IvlsDisj [(log.toNat, address.toNat - log.toNat)]
+      (worldTypedIvls last S Nd ++ ((evmChain last).map (frameObjects last)).flatten) := by
+    rw [hwt2, hfo2, ← haddr]
+    exact hdj1
+  apply hcont log address finish last hc2 hw2
+    (by rw [hch2,hch1]; exact hlen) (by rw [hr2,hr1]; exact hR)
+    (hhm2 (hhm1 hHM)) (hwt2.trans hwt1) (hfo2.trans hfo1)
+    (hm2.trans hm1) (hd2.trans hd1) hp1 hq2
+    (by simpa only [show (40#64).toNat = 40 from rfl, haddr] using hfit1)
+    hfit2 hlim2 ha1 ha2 hlo1 hlo2
+  · intro a ha b hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
+    rcases ha with rfl | rfl
+    · exact hdjFirst _ (by simp) b hb
+    · exact hdj2 _ (by simp) b hb
+  · rw [hl2, hl1]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE,
+      (by decide : ofString "log_address" ≠ ofString "log")]
+  · rw [hl2]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  · intro nm hnlog hnaddr
+    rw [hl2,hl1]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hnlog, Ne.symm hnaddr]
+  · exact hn2
+
+/-- Exact effects of the three header stores in log construction. -/
+theorem op_log_header_stores_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (log address topics nt : BitVec 64)
+    (hl : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (ha : s.locals.lookup (ofString "log_address") = some (.val (.word address)))
+    (ht : s.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hn : s.locals.lookup (ofString "ntopics") = some (.val (.word nt)))
+    (hd0 : s.memaddrs log) (hd8 : s.memaddrs (log + 8#64))
+    (hd16 : s.memaddrs (log + 16#64)) :
+    evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+          (.var .local (ofString "log_address")))
+        (.seq (.store (.op .add [.var .local (ofString "log"), .const 8])
+          (.var .local (ofString "topics")))
+          (.store (.op .add [.var .local (ofString "log"), .const 16])
+            (.var .local (ofString "ntopics"))))) =
+      (none, {s with memory := fun a => if a = log + 16#64 then .word nt else
+        if a = log + 8#64 then .word topics else if a = log then .word address else s.memory a}) := by
+  simp [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store,
+    evalHOLExact, evalListHOLExact, hl, ha, ht, hn, valueIsWord, valueWord,
+    wordOpHOL, wordOp, flattenHOL, panMemStoresHOL, panMemStoreHOL, hd0, hd8, hd16]
+
+/-- Exact effects of the final two data-field stores before log_append. -/
+theorem op_log_data_stores_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (log data n : BitVec 64)
+    (hl : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hd : s.locals.lookup (ofString "data") = some (.val (.word data)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hd24 : s.memaddrs (log + 24#64)) (hd32 : s.memaddrs (log + 32#64)) :
+    evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "log"), .const 24])
+          (.var .local (ofString "data")))
+        (.store (.op .add [.var .local (ofString "log"), .const 32])
+          (.var .local (ofString "n")))) =
+      (none, {s with memory := fun a => if a = log + 32#64 then .word n else
+        if a = log + 24#64 then .word data else s.memory a}) := by
+  simp [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store,
+    evalHOLExact, evalListHOLExact, hl, hd, hn, valueIsWord, valueWord,
+    wordOpHOL, wordOp, flattenHOL, panMemStoresHOL, panMemStoreHOL, hd24, hd32]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

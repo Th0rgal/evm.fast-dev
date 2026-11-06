@@ -16957,4 +16957,158 @@ theorem journal_address_stores_backing_resume {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Compose allocation, key copying, address calculation and journal writes into a backing frame. -/
+theorem journal_alloc_to_writes_backing_resume {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {b : Ivl}
+    (j n p len t f0 f1 : BitVec 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hncap : n.toNat < globN s "journal_cap") (hjbase : j.toNat = globN s "journal")
+    (heff : WorldEff s cur [(j.toNat + 32 * n.toNat, 32)] [] ["heap_ptr"])
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hlen : cur.locals.lookup (ofString "klen") = some (.val (.word len)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hbound : j.toNat + 32 * n.toNat + 32 < 2 ^ 64)
+    (hr : evaluateHOLFiniteState cur
+      (.decCall (ofString "kc") .one (ofString "alloc") [.var .local (ofString "klen")]
+      (.seq (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "kc"), .var .local (ofString "key"), .var .local (ofString "klen")])
+      (.dec (ofString "r") .one (.op .add [.var .global (ofString "journal"),
+        .panop .mul [.var .global (ofString "journal_n"), .const 32#64]])
+      (.seq (.store (.var .local (ofString "r")) (.var .local (ofString "t")))
+        (.seq (.store (.op .add [.var .local (ofString "r"), .const 8#64]) (.var .local (ofString "kc")))
+          (.seq (.store (.op .add [.var .local (ofString "r"), .const 16#64]) (.rfield 0 (.var .local (ofString "old"))))
+            (.seq (.store (.op .add [.var .local (ofString "r"), .const 24#64]) (.rfield 1 (.var .local (ofString "old"))))
+              (.seq (.assign .global (ofString "journal_n") (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail)))))))) =
+      (some (.returned rv), out)) :
+    ∃ mid u, IvlUnhit s mid b ∧ evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨copied, u, he, hl, hrun, hm⟩ := journal_alloc_copy_prefix_effect p len _ rv heff hp hlen hr
+  have hj' : copied.globals.lookup (ofString "journal") = some (.val (.word j)) := by
+    rw [← he.gw_kept _ (by decide)]; exact hj
+  have hn' : copied.globals.lookup (ofString "journal_n") = some (.val (.word n)) := by
+    rw [← he.gw_kept _ (by decide)]; exact hn
+  obtain ⟨mid, v, hf, htail, hm'⟩ := journal_address_stores_backing_resume j n t p f0 f1 tail rv
+    hA hfix hb hal hb1 hb2 hncap hjbase he hj' hn'
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, ht, show ofString "kc" ≠ ofString "t" by decide])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, hold, show ofString "kc" ≠ ofString "old" by decide])
+    hbound hrun
+  exact ⟨mid, v, hf, htail, hm.trans hm'⟩
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Journal typing and remaining capacity put the next record strictly below address wraparound. -/
+theorem journal_record_bound_of_typed {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} (n : Nat)
+    (hA : ArenaOK s) (hJ : JournalTyped s S) (hn : n < globN s "journal_cap") :
+    globN s "journal" + 32 * n + 32 < 2 ^ 64 := by
+  rcases hJ.2.2.1 with hz | ⟨hal, _⟩
+  · omega
+  have hh : heapLimit < 2 ^ 64 := by decide
+  have hs : scratchEnd < 2 ^ 64 := by decide
+  rcases hal with ⟨_, hi⟩ | ⟨_, hi⟩
+  · have := hA.2.1; dsimp at hi; omega
+  · have := hA.2.2.2.2.1; dsimp at hi; omega
+
+end PtxP34
+
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The key-length declaration exposes its word value while retaining the journal effect. -/
+theorem journal_klen_dec_effect {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {jrec : Ivl}
+    (init : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hr : evaluateHOLFiniteState cur (.dec (ofString "klen") .one init tail) = (some (.returned rv), out)) :
+    ∃ n mid u, WorldEff s mid [jrec] [] ["heap_ptr"] ∧
+      mid.locals = cur.locals.update (ofString "klen", .val (.word n)) ∧
+      mid.globals = cur.globals ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨n, _, u, ht, hout⟩ := dec_ret_inv hr
+  refine ⟨n, _, u, heff.locals_clock _ _, rfl, rfl, ht, ?_⟩
+  rw [hout]
+
+end PtxP34
+
+namespace PtxP34
+open private seq_call0_ret_inv trap_with_call_no_none_resumes from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- A returned journal sequence passes its capacity guard and resumes the tail unchanged. -/
+theorem journal_guard_seq_resume {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap")))
+        (.call (some (none, none)) (ofString "trap_with") [.const trapCode]) .skip) tail) = (some (.returned rv), out)) :
+    jn.toNat < jc.toNat ∧ evaluateHOLFiniteState s tail = (some (.returned rv), out) := by
+  by_cases hn : jn.toNat < jc.toNat
+  · have hc : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+      simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+    rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hr
+    simp [evalHOLExact, hjn, hjc, hc, evaluateHOLFiniteState_skip] at hr
+    exact ⟨hn, hr⟩
+  · have hc : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = true := by
+      simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+    have hg : evaluateHOLFiniteState s
+        (.ite (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap")))
+          (.call (some (none, none)) (ofString "trap_with") [.const trapCode]) .skip) =
+        evaluateHOLFiniteState s (.call (some (none, none)) (ofString "trap_with") [.const trapCode]) := by
+      rw [evaluateHOLFiniteState_ite]
+      simp [evalHOLExact, hjn, hjc, hc]
+    rw [evaluateHOLFiniteState_seq_line780, hg] at hr
+    obtain ⟨mid, hm, _⟩ := seq_call0_ret_inv (by rw [evaluateHOLFiniteState_seq_line780]; exact hr)
+    exact False.elim ((trap_with_call_no_none_resumes s trapCode hcode).1 (congrArg Prod.fst hm))
+
+end PtxP34
+
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The full jset journal-append block preserves block-output backing before its tail. -/
+theorem jset_journal_append_backing_resume {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {S : List Nat} {b : Ivl}
+    (j n cap p t f0 f1 : BitVec 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaOK s) (hJ : JournalTyped s S) (hfix : FixedTyped s)
+    (hb : b ∈ blockOutObjects s) (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (heff : WorldEff s cur [] [] ["heap_ptr"])
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hr : evaluateHOLFiniteState cur
+      (journalAppendTailProg 4#64 (.rfield 0 (.var .local (ofString "old"))) tail) = (some (.returned rv), out)) :
+    ∃ mid u, IvlUnhit s mid b ∧ evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  unfold journalAppendTailProg at hr
+  obtain ⟨hcap, hrest⟩ := journal_guard_seq_resume cur out n cap 4#64 _ rv heff.code
+    (by rw [← heff.gw_kept _ (by decide)]; exact hn)
+    (by rw [← heff.gw_kept _ (by decide)]; exact hc) hr
+  have hcap' : n.toNat < globN s "journal_cap" := by simpa [globN, hc] using hcap
+  have hjbase : j.toNat = globN s "journal" := by simp [globN, hj]
+  have hbound := journal_record_bound_of_typed n.toNat hA hJ hcap'
+  rw [← hjbase] at hbound
+  have he : WorldEff s cur [(j.toNat + 32 * n.toNat, 32)] [] ["heap_ptr"] :=
+    heff.mono (by intro _ h; cases h) (by intro _ h; cases h) (by intro _ h; exact h)
+  obtain ⟨len, entry, u, he', hl, hg, hrun, hm⟩ := journal_klen_dec_effect _ _ rv he hrest
+  obtain ⟨mid, v, hf, htail, hm'⟩ := journal_alloc_to_writes_backing_resume j n p len t f0 f1 tail rv
+    hA hfix hb hal hb1 hb2 hcap' hjbase he' hj hn (by rw [hg]; exact hp)
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, ht, show ofString "klen" ≠ ofString "t" by decide])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, hold, show ofString "klen" ≠ ofString "old" by decide])
+    hbound hrun
+  exact ⟨mid, v, hf, htail, hm.trans hm'⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

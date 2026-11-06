@@ -10395,6 +10395,257 @@ theorem precompile_sha256_blocks_body_index {F : Type}
       (by rw [hloc]; exact hx) hb
   | some r => simp [run] at hr
 
+theorem precompile_while_normal_exit {F : Type}
+    (P : PanSemStateFiniteExact 64 F → Prop) (cond : ExpHOL 64) (body : ProgHOL 64)
+    (hdec : ∀ s, P s → P (decClockHOLFinite s))
+    (hb : ∀ s, P s → LoopActive cond s →
+      (evaluateHOLFiniteState s body).1 ≠ some .break ∧
+      ((evaluateHOLFiniteState s body).1 = none ∨
+        (evaluateHOLFiniteState s body).1 = some .continue → P (evaluateHOLFiniteState s body).2))
+    (s : PanSemStateFiniteExact 64 F) (hp : P s)
+    (hr : (evaluateHOLFiniteState s (.while cond body)).1 = none) :
+    let post := (evaluateHOLFiniteState s (.while cond body)).2
+    P post ∧ @evalHOLFinite 64 F _ post
+      (fun a => Classical.propDecidable (post.memaddrs a)) cond = some (.val (.word 0)) := by
+  rw [evaluateHOLFiniteState_while_total] at hr ⊢
+  split
+  · rename_i v hv
+    rw [hv] at hr
+    dsimp only at hr
+    split
+    · rename_i hn
+      change v ≠ 0#64 at hn
+      have hn' : v ≠ (0 : BitVec 64) := hn
+      rw [if_pos hn'] at hr
+      split
+      · rename_i hz
+        simp [hz] at hr
+      · dsimp only at hr ⊢
+        rename_i hz
+        rw [if_neg hz] at hr
+        rw [fixClockHOLFinite_evaluateState] at hr ⊢
+        have ha : LoopActive cond (decClockHOLFinite s) :=
+          loopActive_decClock ⟨_, hv, hn⟩
+        obtain ⟨hnb, hpres⟩ := hb (decClockHOLFinite s) (hdec s hp) ha
+        have rem := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+        rcases run : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r,mid⟩
+        rw [run] at hnb hpres rem
+        have hlt : mid.clock < s.clock := by change mid.clock ≤ s.clock-1 at rem; omega
+        cases r with
+        | none =>
+          simp only [run] at hr ⊢
+          exact precompile_while_normal_exit P cond body hdec hb mid (hpres (Or.inl rfl)) hr
+        | some r =>
+          cases r <;> simp only [run] at hr ⊢
+          all_goals first
+            | exact precompile_while_normal_exit P cond body hdec hb mid (hpres (Or.inr rfl)) hr
+            | exact False.elim (hnb rfl)
+            | cases hr
+    · rename_i hn
+      have hz : v = 0 := by simpa only [not_not] using hn
+      exact ⟨hp, hz ▸ hv⟩
+  · rename_i hn
+    split at hr <;> simp_all
+termination_by s.clock
+
+theorem precompile_call0_ne_break {F : Type} (u : PanSemStateFiniteExact 64 F)
+    (fn : MlS) (args : List (ExpHOL 64)) :
+    (evaluateHOLFiniteState u (.call (some (none, none)) fn args)).1 ≠ some .break := by
+  rw [evaluateHOLFiniteState_call]
+  rcases evalListHOLFinite u (h := fun a => Classical.propDecidable (u.memaddrs a)) args with _ | vals
+  · simp
+  · dsimp only
+    rcases lookupCodeHOLFinite u.code.lookup fn vals with _ | ⟨body, callee, ret⟩
+    · simp
+    · dsimp only
+      by_cases hk : u.clock = 0
+      · rw [if_pos hk]; simp
+      · rw [if_neg hk]
+        rcases evaluateHOLFiniteState (callEntryStateHOLFinite u callee) body with ⟨r, st⟩
+        cases r with
+        | none => simp
+        | some r1 =>
+          cases r1 with
+          | returned rv => dsimp only; split <;> simp
+          | _ => simp
+
+theorem precompile_sha256_blocks_body_control {F : Type}
+    (s : PanSemStateFiniteExact 64 F) :
+    let body := ProgHOL.seq
+      (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64]))
+    (evaluateHOLFiniteState s body).1 ≠ some .break ∧
+      (evaluateHOLFiniteState s body).1 ≠ some .continue := by
+  dsimp only
+  have hc := precompile_call0_ne_continue s (ofString "sha256_block")
+    [.var .global (ofString "sha_st"),
+      .op .add [.var .local (ofString "p"), .var .local (ofString "i")]]
+  rw [evaluateHOLFiniteState_seq_line780]
+  rcases run : evaluateHOLFiniteState s
+    (.call (some (none, none)) (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"), .var .local (ofString "i")]]) with ⟨r,m⟩
+  cases r with
+  | none =>
+    dsimp only
+    rw [evaluateHOLFiniteState_assign]
+    split
+    · simp
+    · split <;> simp
+  | some r =>
+    dsimp only
+    rw [run] at hc
+    constructor
+    · have hn := precompile_call0_ne_break s (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]]
+      simpa only [run] using hn
+    · exact hc
+
+theorem precompile_sha256_blocks_normal_remainder {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len : BitVec 64)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : ∃ i : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word i)) ∧ i.toNat ≤ len.toNat)
+    (hbound : len.toNat + 64 < 2^64) :
+    let loop := ProgHOL.while
+      (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"), .const 64]))
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64])))
+    (evaluateHOLFiniteState s loop).1 = none →
+    let post := (evaluateHOLFiniteState s loop).2
+    post.locals.lookup (ofString "len") = some (.val (.word len)) ∧
+      ∃ i : BitVec 64, post.locals.lookup (ofString "i") = some (.val (.word i)) ∧
+        i.toNat ≤ len.toNat ∧ len.toNat-i.toNat < 64 := by
+  dsimp only
+  intro hr
+  let P := fun (t : PanSemStateFiniteExact 64 F) =>
+    t.locals.lookup (ofString "len") = some (.val (.word len)) ∧
+    ∃ i : BitVec 64, t.locals.lookup (ofString "i") = some (.val (.word i)) ∧ i.toNat ≤ len.toNat
+  have he := precompile_while_normal_exit P _ _ ?_ ?_ s ⟨hl,hx⟩ hr
+  · obtain ⟨⟨hlp,i,hip,hib⟩, hguard⟩ := he
+    exact ⟨hlp, i, hip, hib, precompile_sha256_blocks_exit_remainder _ len i hlp hip hib hbound hguard⟩
+  · intro t ht
+    exact ht
+  · intro t ht ha
+    obtain ⟨hlt,i,hit,hib⟩ := ht
+    refine ⟨(precompile_sha256_blocks_body_control t).1, ?_⟩
+    intro hflow
+    rcases hflow with hflow|hflow
+    · have hb := precompile_sha256_blocks_active_bound t len i hlt hit hib hbound ha
+      obtain ⟨hln,hin,hbn⟩ := precompile_sha256_blocks_body_index t len i hlt hit hb hflow
+      exact ⟨hln,i+64,hin,hbn⟩
+    · exact False.elim ((precompile_sha256_blocks_body_control t).2 hflow)
+
+theorem precompile_sha256_blocks_body_local {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (name : MlS) (hne : name ≠ ofString "i") :
+    let body := ProgHOL.seq
+      (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64]))
+    (evaluateHOLFiniteState s body).1 = none →
+    (evaluateHOLFiniteState s body).2.locals.lookup name = s.locals.lookup name := by
+  dsimp only
+  intro hr
+  rw [evaluateHOLFiniteState_seq_line780] at hr ⊢
+  rcases run : evaluateHOLFiniteState s
+    (.call (some (none, none)) (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"), .var .local (ofString "i")]]) with ⟨r,m⟩
+  cases r with
+  | none =>
+    dsimp only
+    have hloc := precompile_call0_locals_on_flow s (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"), .var .local (ofString "i")]] (by rw [run])
+    rw [run] at hloc
+    rw [evaluateHOLFiniteState_assign]
+    split
+    · exact congrArg (fun l => l.lookup name) hloc
+    · simp only [setKvarHOLFinite, setVarHOLFinite]
+      split
+      · simpa [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne] using
+          congrArg (fun l => l.lookup name) hloc
+      · exact congrArg (fun l => l.lookup name) hloc
+  | some r => simp [run] at hr
+
+theorem precompile_sha256_blocks_normal_local {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (name : MlS) (hne : name ≠ ofString "i") :
+    let loop := ProgHOL.while
+      (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"), .const 64]))
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64])))
+    (evaluateHOLFiniteState s loop).1 = none →
+    (evaluateHOLFiniteState s loop).2.locals.lookup name = s.locals.lookup name := by
+  dsimp only
+  intro hr
+  have he := precompile_while_normal_exit
+    (fun (t : PanSemStateFiniteExact 64 F) => t.locals.lookup name = s.locals.lookup name)
+    _ _ (fun t ht => ht) ?_ s rfl hr
+  · exact he.1
+  · intro t ht ha
+    refine ⟨(precompile_sha256_blocks_body_control t).1, ?_⟩
+    intro hflow
+    rcases hflow with hflow|hflow
+    · exact (precompile_sha256_blocks_body_local t name hne hflow).trans ht
+    · exact False.elim ((precompile_sha256_blocks_body_control t).2 hflow)
+
+open R10Shards.P26_P28 in
+theorem precompile_sha256_blocks_then {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (stp len : BitVec 64)
+    (body : ProgHOL 64) (Rl : List Ivl)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : ∃ i : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word i)) ∧ i.toNat ≤ len.toNat)
+    (hbound : len.toNat + 64 < 2^64)
+    (hin : ∀ i ∈ [(stp.toNat,64)], 0 < i.2 → ∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1+i.2 ≤ j.1+j.2)
+    (hbody : ∀ (m : PanSemStateFiniteExact 64 F), m.code = originalRuntimeCode → GuestInv m →
+      m.globals = s.globals →
+      (∀ name, name ≠ ofString "i" → m.locals.lookup name = s.locals.lookup name) →
+      m.locals.lookup (ofString "len") = some (.val (.word len)) →
+      (∃ i : BitVec 64, m.locals.lookup (ofString "i") = some (.val (.word i)) ∧
+        i.toNat ≤ len.toNat ∧ len.toNat-i.toNat < 64) →
+      (evaluateHOLFiniteState m body).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState m body).1 = none ∨ Resumes (evaluateHOLFiniteState m body).1) →
+      ByteEff m (evaluateHOLFiniteState m body).2 Rl) :
+    let loop := ProgHOL.while
+      (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"), .const 64]))
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64])))
+    (evaluateHOLFiniteState s (.seq loop body)).1 ≠ some .timeOut →
+    ((evaluateHOLFiniteState s (.seq loop body)).1 = none ∨ Resumes (evaluateHOLFiniteState s (.seq loop body)).1) →
+    ByteEff s (evaluateHOLFiniteState s (.seq loop body)).2 Rl := by
+  dsimp only
+  intro hnt hr
+  have he := precompile_sha256_blocks_loop_effect s stp hc hi hs
+  refine precompile_byteEff_seq_resumes s _ body Rl hnt hr
+    (fun _ _ => he.mono hin) ?_
+  intro m run hntm hrm
+  have hn : (evaluateHOLFiniteState s _).1 = none := congrArg Prod.fst run
+  obtain ⟨hlm,hxm⟩ := precompile_sha256_blocks_normal_remainder s len hl hx hbound hn
+  have hloc := fun name hne => precompile_sha256_blocks_normal_local s name hne hn
+  rw [run] at he hlm hxm
+  apply hbody m (he.code.trans hc)
+    (guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi) he.globals
+  · intro name hne
+    simpa only [run] using hloc name hne
+  · exact hlm
+  · exact hxm
+  · exact hntm
+  · exact hrm
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)

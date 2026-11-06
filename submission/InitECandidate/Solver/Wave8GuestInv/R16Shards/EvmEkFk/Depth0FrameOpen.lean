@@ -9202,4 +9202,196 @@ theorem ext_code_tail_of_world_nonzero {F : Type} (s : PanSemStateFiniteExact 64
     hsk hws hts hbs hdn htn hcn hl
   exact ⟨S,Nd,db,hash,tw,h⟩
 
+/-- Full external-code retrieval reduces to strong entry facts after account lookup. -/
+theorem ext_code_of_return_of_world_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hentry : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "addr")] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post) →
+      ∀ vals b cl r,
+      let st := setVarHOLFinite (ofString "a") v {post with locals := s.locals}
+      evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+          .var .local (ofString "addr")] = some vals →
+      lookupCodeHOLFinite st.code.lookup (ofString "get_code") vals = some (b,cl,r) →
+      ∃ S Nd db hash tw, GetCodeEntryStrong (callEntryStateHOLFinite st cl) S Nd db hash tw) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ext_code_of)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  change Ret s (.decCall (ofString "a") .one (ofString "get_account")
+    [.var .local (ofString "addr")]
+    (.decCall (ofString "c") (.comb [.one,.one]) (ofString "get_code")
+      [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+        .var .local (ofString "addr")] (.return (.var .local (ofString "c"))))) _
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  have hm := (InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).1
+  rw [hb] at hm
+  exact ext_code_tail_of_world_entry _ (hm.trans hc) (hentry values body callee ret v post ha hl hb)
+
+/-- Transport protected code records through an unchanged table/fixed layout. -/
+theorem codeDbPayloadStrong_of_preserved_layout {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hv : htabValues post db = htabValues s db)
+    (hw : ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hf : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hfixed : fixedObjects post = fixedObjects s) :
+    CodeDbPayloadStrong post S db := by
+  refine ⟨nodeDbEntriesStrong_of_preserved_payloads he.1 hAs hAp hhp hv hw, ?_⟩
+  intro p hp
+  rw [hv] at hp
+  obtain ⟨hi,hb,ht,hfix⟩ := he.2 p hp
+  refine ⟨⟨hi.1,le_trans hi.2 hhp⟩,hb,?_,?_⟩
+  · intro t ht' i hi'
+    rw [hf t ht'] at hi'
+    exact ht t ht' i hi'
+  · intro i hi'
+    rw [hfixed] at hi'
+    exact hfix i hi'
+
+/-- Structural preservation of the strengthened world's code-root payloads. -/
+theorem worldTypedCodeStrong_of_preserved_layout {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (he : WorldTypedCodeStrong s S) (hW : WorldTyped post S)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg : ∀ g, globN post g = globN s g)
+    (hr : ∀ g k, (g,k) ∈ ([("ws",16),("bs",48),("ts",48)] : List (String × Nat)) →
+      memW post (globN s g+k) = memW s (globN s g+k))
+    (hv : ∀ db, htabValues post db = htabValues s db)
+    (hw : ∀ db, ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hf : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hfixed : fixedObjects post = fixedObjects s) :
+    WorldTypedCodeStrong post S := by
+  refine ⟨hW,?_⟩
+  intro g k hmem hn
+  rw [hg g,hr g k hmem]
+  exact codeDbPayloadStrong_of_preserved_layout (he.2 g k hmem (by rwa [hg g] at hn))
+    hAs hAp hhp (hv _) (hw _) hf hfixed
+
+/-- Typed-cell preservation fixes every in-bounds field of a live world record. -/
+theorem typed_record_root_preserved {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (hC : EvmBase.SameTypedCells s post S Nd)
+    (g : String) (sz k : Nat) (hg : (g,sz) ∈ typedRecords)
+    (hn : globN s g ≠ 0) (hk : k + 8 ≤ sz) :
+    memW post (globN s g+k) = memW s (globN s g+k) := by
+  have hi : (globN s g,sz) ∈ worldTypedIvls s S Nd := by
+    unfold worldTypedIvls
+    simp only [List.mem_append]
+    exact Or.inl (Or.inl (Or.inl (Or.inl (Or.inr (List.mem_map.2 ⟨(g,sz),hg,by simp [hn]⟩)))))
+  have hf : (globN s g,sz) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.2
+    exact ⟨(g,sz),(show ∀ r ∈ typedRecords, r ∈ globalBuffers by decide) _ hg,by simp [hn]⟩
+  have hb : globN s g+sz ≤ 2^64 := by
+    rcases hW.2.2.1.1 _ hf with hz | ⟨ha,_⟩
+    · dsimp at hz; omega
+    · exact allocated_le_2pow64 hA.2 ha
+  exact EvmBase.memW_eq_of_cellHits hC (by omega) hi (by dsimp; omega)
+
+/-- A typed-cell frame supplies code-root preservation; unrelated globals may change. -/
+theorem worldTypedCodeStrong_of_typed_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (he : WorldTypedCodeStrong s S) (hW : WorldTyped post S)
+    (hWT : WorldTypedWith s S Nd)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hC : EvmBase.SameTypedCells s post S Nd)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg : ∀ g ∈ (["ws","bs","ts"] : List String), globN post g = globN s g)
+    (hv : ∀ db, htabValues post db = htabValues s db)
+    (hw : ∀ db, ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hf : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hfixed : fixedObjects post = fixedObjects s) :
+    WorldTypedCodeStrong post S := by
+  refine ⟨hW,?_⟩
+  intro g k hm hn
+  have hgg : globN post g = globN s g := hg g (by
+    simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+    rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ <;> simp)
+  have hn' : globN s g ≠ 0 := by rwa [hgg] at hn
+  have hr : memW post (globN s g+k) = memW s (globN s g+k) := by
+    simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+    rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩
+    · exact typed_record_root_preserved hAs hWT hC "ws" 40 16 (by decide) hn' (by decide)
+    · exact typed_record_root_preserved hAs hWT hC "bs" 80 48 (by decide) hn' (by decide)
+    · exact typed_record_root_preserved hAs hWT hC "ts" 72 48 (by decide) hn' (by decide)
+  rw [hgg,hr]
+  exact codeDbPayloadStrong_of_preserved_layout (he.2 g k hm hn') hAs hAp hhp (hv _) (hw _) hf hfixed
+
+/-- Typed-cell preservation discharges table layout and value preservation. -/
+theorem codeDbPayloadStrong_of_typed_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db) (hW : WorldTypedWith s S Nd) (hm : db ∈ S)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hC : EvmBase.SameTypedCells s post S Nd)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hw : ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hfixed : fixedObjects post = fixedObjects s) :
+    CodeDbPayloadStrong post S db := by
+  exact codeDbPayloadStrong_of_preserved_layout he hAs hAp hhp
+    (EvmBase.htabValues_eq hC hm (hW.1.2.1 db hm).1) hw
+    (fun t ht => EvmBase.htabFootprint_eq hC ht (hW.1.2.1 t ht).1) hfixed
+
+/-- Writes confined to fresh heap and the free scratch gap preserve old heap words. -/
+theorem old_heap_word_of_fresh_world_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s)
+    (hframe : ∀ a : BitVec 64, post.memory a ≠ s.memory a →
+      ((freeGap s).1 < a.toNat+8 ∧ a.toNat < (freeGap s).1+(freeGap s).2) ∨
+      ((heapFree s).1 < a.toNat+8 ∧ a.toNat < (heapFree s).1+(heapFree s).2))
+    (a : Nat) (ha : a+8 ≤ globN s "heap_ptr") :
+    memW post a = memW s a := by
+  have hh : globN s "heap_ptr" ≤ heapLimit := hA.2.2.1
+  have hl : heapLimit < 2^64 := by decide
+  have hb : a < 2^64 := by omega
+  unfold memW
+  have hm : post.memory (BitVec.ofNat 64 a) = s.memory (BitVec.ofNat 64 a) := by
+    by_contra hn
+    have hc := hframe (BitVec.ofNat 64 a) hn
+    rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb] at hc
+    rcases hc with ⟨hf,_⟩ | ⟨hhf,_⟩
+    · have hs : heapLimit ≤ scratchStart := by decide
+      have hfmp := hA.2.2.2.1
+      unfold freeGap at hf
+      dsimp at hf
+      omega
+    · unfold heapFree at hhf
+      dsimp at hhf
+      omega
+  rw [hm]
+
+/-- Fresh-region writes preserve the protected database payload words. -/
+theorem codeDbPayloadStrong_of_fresh_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db) (hW : WorldTypedWith s S Nd) (hm : db ∈ S)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hC : EvmBase.SameTypedCells s post S Nd)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hframe : ∀ a : BitVec 64, post.memory a ≠ s.memory a →
+      ((freeGap s).1 < a.toNat+8 ∧ a.toNat < (freeGap s).1+(freeGap s).2) ∨
+      ((heapFree s).1 < a.toNat+8 ∧ a.toNat < (heapFree s).1+(heapFree s).2))
+    (hfixed : fixedObjects post = fixedObjects s) :
+    CodeDbPayloadStrong post S db := by
+  apply codeDbPayloadStrong_of_typed_frame he hW hm hAs hAp hC hhp ?_ hfixed
+  intro p hp
+  have hi := (he.2 p hp).1.2
+  dsimp only at hi
+  exact ⟨old_heap_word_of_fresh_world_effect hAs hframe p (by omega),
+    old_heap_word_of_fresh_world_effect hAs hframe (p+8) (by omega)⟩
+
 end HeadStore
