@@ -18119,4 +18119,36 @@ theorem phase2_ct_alloc_ready_separated (h : PtxCallees) {ι : Type} [Nonempty �
   simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     show ofString "ct" ≠ ofString "m" by decide] using hd
 
+/-- Separation from owned objects includes every optional global scratch buffer. -/
+theorem phase2_owned_disjoint_global_buffer {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (buffer : Ivl)
+    (hd : IvlsDisj [buffer] (worldOwned s S Nd))
+    (name : String) (size : Nat) (hn : (name, size) ∈ globalBuffers) :
+    Disj buffer (globN s name, if globN s name = 0 then 0 else size) := by
+  by_cases hz : globN s name = 0
+  · simp [hz, Disj]
+  by_cases hs : size = 0
+  · simp [hs, Disj]
+  have hm : (globN s name, size) ∈ fixedObjects s := by
+    unfold fixedObjects
+    simp only [List.mem_append]
+    exact Or.inl (Or.inl (Or.inl (List.mem_map.mpr ⟨(name, size), hn, by simp [hz]⟩)))
+  simpa [hz] using hd buffer (by simp) (globN s name, size)
+    (by simp only [worldOwned, List.mem_append]; exact Or.inl (Or.inr hm))
+
+/-- The message and saved buffers are separated from the Keccak scratch regions. -/
+theorem phase2_message_keccak_separation {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxMessageStoreReady buffers contents s)
+    (name : String) (size : Nat) (hn : (name, size) ∈ globalBuffers) :
+    Disj (locN s "m", 176) (globN s name, if globN s name = 0 then 0 else size) ∧
+      ∀ i, Disj (buffers i) (globN s name, if globN s name = 0 then 0 else size) := by
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  obtain ⟨_, S, Nd, _, _, hd⟩ := hp.2.2.2.2.2 i
+  constructor
+  · exact phase2_owned_disjoint_global_buffer s S Nd _ hd name size hn
+  · intro j
+    obtain ⟨_, S, Nd, _, hb, _⟩ := hp.2.2.2.2.2 j
+    exact phase2_owned_disjoint_global_buffer s S Nd _ hb.2.1 name size hn
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
