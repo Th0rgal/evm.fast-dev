@@ -7480,4 +7480,35 @@ theorem get_code_ws_fallback_return_entry_strong {F : Type} (s : PanSemStateFini
   · simpa [NodeDbEntriesStrong, callEntryStateHOLFinite, htabValues, hdr, nodeF,
       memW, WordsOK, WordAt, globN] using he
 
+/-- The concrete key-building call preserves both code-record words when
+the record is separated from its 52-byte global scratch buffer. -/
+theorem sk_make_preserves_code_record {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (p : Nat) (hp : p + 16 ≤ 2 ^ 64)
+    (hd : Disj (p, 16) (globN s "sk_buf", 52))
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post)) :
+    memW post p = memW s p ∧ memW post (p + 8) = memW s (p + 8) := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  have hword : ∀ off, off = 0 ∨ off = 8 →
+      memW post (p + off) = memW s (p + off) := by
+    intro off hoff
+    unfold memW
+    rw [heff.cell_frame _ ?_]
+    intro i hi _ hhit
+    simp only [List.mem_singleton] at hi
+    subst i
+    have hnat : (BitVec.ofNat 64 (p + off)).toNat = p + off :=
+      Nat.mod_eq_of_lt (by rcases hoff with rfl | rfl <;> omega)
+    rw [hnat] at hhit
+    change globN s "sk_buf" < p + off + 8 ∧ p + off < globN s "sk_buf" + 52 at hhit
+    rcases hd with hd | hd | hd | hd <;> dsimp only at hd <;>
+      rcases hoff with rfl | rfl <;> omega
+  exact ⟨by simpa using hword 0 (Or.inl rfl), hword 8 (Or.inr rfl)⟩
+
 end HeadStore
