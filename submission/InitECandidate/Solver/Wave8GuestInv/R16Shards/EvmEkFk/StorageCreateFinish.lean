@@ -4958,6 +4958,32 @@ theorem nodePath_branch_update_so {F : Type} {s : PanSemStateFiniteExact 64 F}
     rw [hword 32 (Or.inl rfl), hword 40 (Or.inr rfl)]
   · simp [hkind]
 
+theorem branch_store_child_decoder_so {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {Nd : List Nat} {br idx wch : BitVec 64}
+    (ha : ArenaReady s) (hNd : NodeHeap s Nd)
+    (hbr : br.toNat ∈ Nd) (hk : memW s br.toNat = 3)
+    (hi : idx.toNat < 16) (hc : RootIn Nd wch.toNat) :
+    let slot := br + BitVec.ofNat 64 32 + idx * BitVec.ofNat 64 8
+    let post := { s with memory := Wave8Contracts.M26.updW s.memory slot wch }
+    s.memaddrs slot ∧ DecoderNodeStep s post Nd Nd ∧ memW post br.toNat = 3 := by
+  intro slot post
+  obtain ⟨hdom, hstep, hkpost⟩ := R14Shards.branch_store_child_step ha hNd hbr hk hi hc
+  have hhi := (hNd.1 br.toNat hbr).2.2.1.2
+  have hsize : nodeSize (memW s br.toNat) = 176 := by simp [nodeSize, hk]
+  dsimp [nodeIvl] at hhi
+  rw [hsize] at hhi
+  have hlimit : heapLimit < 2 ^ 64 := by decide
+  have hslot : slot = BitVec.ofNat 64 (br.toNat + 32 + 8 * idx.toNat) := by
+    apply BitVec.eq_of_toNat_eq
+    dsimp [slot]
+    simp only [BitVec.toNat_add, BitVec.toNat_mul, BitVec.toNat_ofNat]
+    omega
+  refine ⟨hdom, ⟨hstep, ?_, fun x hx hnx => absurd hx hnx⟩, hkpost⟩
+  apply nodePath_branch_update_so hNd hbr hk (br.toNat + 32 + 8 * idx.toNat) wch
+    (by omega) (by omega)
+  · dsimp [post]; rw [hslot]
+  · exact hstep.kinds
+
 theorem DecoderNodeStep.with_locals_clock {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {Nd Nd' : List Nat} (h : DecoderNodeStep s post Nd Nd')
     (L : HolFiniteMapExact MlS (ValueHOL 64)) (C : Nat) :
