@@ -9553,6 +9553,34 @@ theorem precompile_sha256_padding_length_effect {F : Type}
       rw [hs]; rcases hb with h|h <;> omega
   · simp at hv
 
+theorem precompile_sha256_final_blocks_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_st") = some (.val (.word stp))) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"), .var .global (ofString "sha_pad")])
+        (.ite (.cmp .equal (.var .local (ofString "total")) (.const 128))
+          (.call (some (none, none)) (ofString "sha256_block")
+            [.var .global (ofString "sha_st"),
+              .op .add [.var .global (ofString "sha_pad"), .const 64]]) .skip))).2
+      [(stp.toNat,64)] := by
+  have he := precompile_sha256_block_call_effect s stp
+    (.var .global (ofString "sha_st")) (.var .global (ofString "sha_pad")) hc hi
+    (by simp [evalHOLFinite, evalHOLExact, hp])
+  apply R10Shards.P26_P28.byteEff_seq he
+  intro m hm
+  rw [hm] at he
+  have hgm : GuestInv m := guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi
+  have hpm : m.globals.lookup (ofString "sha_st") = some (.val (.word stp)) := by
+    rw [he.globals]; exact hp
+  apply R10Shards.P26_P28.byteEff_ite
+  · exact precompile_sha256_block_call_effect m stp
+      (.var .global (ofString "sha_st"))
+      (.op .add [.var .global (ofString "sha_pad"), .const 64]) (he.code.trans hc) hgm
+      (by simp [evalHOLFinite, evalHOLExact, hpm])
+  · exact R10Shards.P26_P28.byteEff_skip m _
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
