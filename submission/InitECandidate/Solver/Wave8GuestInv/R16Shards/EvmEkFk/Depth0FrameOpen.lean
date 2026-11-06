@@ -6932,4 +6932,31 @@ theorem get_code_cache_lookup_return_strong {F : Type} (s : PanSemStateFiniteExa
   subst found
   exact hmiss _ _ _ _ post ptr ha hl hb
 
+/-- The final world-state fallback of `get_code` forwards the bounded pair
+from the concrete installed `ws_get_code` call. -/
+theorem get_code_ws_fallback_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode)
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hentry : ∀ values body callee ret,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "code_hash")] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "ws_get_code") values = some (body, callee, ret) →
+      WsCodeLookupStrong (callEntryStateHOLFinite s callee)) :
+    Ret s (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+      [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  obtain ⟨code, code_n, hv, hn⟩ := ws_get_code_call_return_entry_strong s body callee ret
+    values v post hcode hshape (hentry values body callee ret ha hl) hl hb
+  subst v
+  have hc : (setVarHOLFinite (ofString "c")
+      (.rStruct [.val (.word code), .val (.word code_n)]) {post with locals := s.locals}).locals.lookup
+      (ofString "c") = some (.rStruct [.val (.word code), .val (.word code_n)]) := by
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  intro w hw
+  obtain ⟨hv, hn, _⟩ := ext_code_of_tail_return _ code code_n hc hn w hw
+  exact ⟨code, code_n, hv, hn⟩
+
 end HeadStore
