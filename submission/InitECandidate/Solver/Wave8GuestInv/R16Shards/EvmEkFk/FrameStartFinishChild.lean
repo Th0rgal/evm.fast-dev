@@ -14321,6 +14321,462 @@ theorem fcPrelude_no_err (hCF : CreateFinishSpecs) {F : Type}
     rw [if_pos h0, evaluateHOLFiniteState_skip]
     simp [OpDispatchSpec.IsEvmErr]
 
+/-! ## The `fcBranches` path structure -/
+
+/-- The error-path body shared by both the `kind = 2` and `kind ≠ 2` arms:
+rollback, incorporate on error, the optional `new_account_charged` refund,
+`set_retdata` from the child frame, and the zero return struct push. -/
+def fcPathErr : ProgHOL 64 :=
+  .seq (.call (some (none, none)) (ofString "rollback_child_access") [.var .local (ofString "child")])
+    (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+        [.var .local (ofString "child")])
+      (.seq (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged")) (.const 0#64))
+            (.call (some (none, none)) (ofString "credit_state_gas_refund") [.const 183600#64])
+            .skip)
+        (.seq (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+          (.call (some (none, none)) (ofString "stack_push")
+            [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))))
+
+/-- The `kind = 2` success-path body: incorporate on success, empty retdata,
+`av := address_to_u256(contract_address)`, and the address push. -/
+def fcPathKind2Ok : ProgHOL 64 :=
+  .seq (.call (some (none, none)) (ofString "incorporate_child_on_success")
+      [.var .local (ofString "child")])
+    (.seq (.call (some (none, none)) (ofString "set_retdata")
+        [.var .local (ofString "empty"), .const 0#64])
+      (.decCall (ofString "av") (.comb [.one, .one, .one, .one]) (ofString "address_to_u256")
+        [.var .local (ofString "contract_address")]
+        (.call (some (none, none)) (ofString "stack_push") [.var .local (ofString "av")])))
+
+/-- The `kind ≠ 2` success-path body: incorporate on success, retdata from the child
+frame, and the one-flagged return struct push. -/
+def fcPathNe2Ok : ProgHOL 64 :=
+  .seq (.call (some (none, none)) (ofString "incorporate_child_on_success")
+      [.var .local (ofString "child")])
+    (.seq (.call (some (none, none)) (ofString "set_retdata")
+        [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+         .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+      (.call (some (none, none)) (ofString "stack_push")
+        [.rstruct [.const 1#64, .const 0#64, .const 0#64, .const 0#64]]))
+
+/-- The `kind ≠ 2` tail: `actual := min(out_size, [child+128])` and the conditional
+`memcpy` into the out window. -/
+def fcMinTail : ProgHOL 64 :=
+  .decCall (ofString "actual") .one (ofString "min")
+    [.var .local (ofString "out_size"),
+     .load .one (.op .add [.var .local (ofString "child"), .const 128#64])]
+    (.ite (.cmp .notEqual (.var .local (ofString "actual")) (.const 0#64))
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.load .one (.op .add [.var .global (ofString "ev"), .const 24#64]),
+             .var .local (ofString "out_start")],
+         .load .one (.op .add [.var .global (ofString "ev"), .const 144#64]),
+         .var .local (ofString "actual")])
+      .skip)
+
+theorem fcBranches_eq :
+    fcBranches =
+      .ite (.cmp .equal (.var .local (ofString "kind")) (.const 2#64))
+        (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+          (.ite (.cmp .notEqual
+              (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+              (.const 0#64))
+            fcPathErr
+            fcPathKind2Ok))
+        (.seq
+          (.ite (.cmp .notEqual
+              (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+              (.const 0#64))
+            fcPathErr
+            fcPathNe2Ok)
+          fcMinTail) := rfl
+
+/-! ## Branch-walk leaf hypotheses
+
+The remaining sub-goals of `FcBranchWalk`, stated as hypotheses so the path
+composition can be verified before the leaves are discharged.  Each leaf
+consumes a `FcBranchState` (plus the branch budget) and returns the branch
+state of the call's post-state, mirroring the shape of
+`incorporate_child_on_error_fc_step`. -/
+
+/-- Leaf hypothesis: the general-`n` `set_retdata(p, n)` call at branch level. -/
+def FcSetRetdataStep : Prop :=
+  ∀ {F : Type} {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat},
+    FcBranchState s0 st S →
+    Inside (globN s0 "ev", 280) (globN st "scratch_ptr") scratchEnd →
+    WordsOK st (globN s0 "ev", 280) →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) ≤
+      OpDispatchSpec.evmR s0 →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) + 1 <
+      2 ^ 64 →
+    ∀ (pExp nExp : ExpHOL 64) (pw nw : BitVec 64),
+    evalAt st pExp = some (.val (.word pw)) →
+    evalAt st nExp = some (.val (.word nw)) →
+    (evaluateHOLFiniteState st
+      (.call (some (none, none)) (ofString "set_retdata") [pExp, nExp])).1 ≠ some .timeOut →
+    let prog : ProgHOL 64 := .call (some (none, none)) (ofString "set_retdata") [pExp, nExp]
+    (∀ u, (evaluateHOLFiniteState st prog).1 ≠ some (.returned u)) ∧
+    ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st prog).1 ∧
+    ((evaluateHOLFiniteState st prog).1 = none →
+      let post := (evaluateHOLFiniteState st prog).2
+      FcBranchState s0 post S ∧
+      post.globals = st.globals ∧
+      evmChain post = evmChain st ∧
+      OpDispatchSpec.evmR post ≤ OpDispatchSpec.evmR st ∧
+      memW post (globN post "ev" + 16) = memW st (globN st "ev" + 16) ∧
+      memW post (globN post "ev" + 40) = memW st (globN st "ev" + 40) ∧
+      memW post (globN post "ev" + 232) = memW st (globN st "ev" + 232))
+
+/-- Leaf hypothesis (proved below as `fcSetRetdataZero`): the
+`set_retdata(p, 0)` call at branch level. -/
+def FcSetRetdataZeroStep : Prop :=
+  ∀ {F : Type} {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat},
+    FcBranchState s0 st S →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) ≤
+      OpDispatchSpec.evmR s0 →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) + 1 <
+      2 ^ 64 →
+    ∀ (pExp : ExpHOL 64) (pv : BitVec 64),
+    evalAt st pExp = some (.val (.word pv)) →
+    (evaluateHOLFiniteState st
+      (.call (some (none, none)) (ofString "set_retdata") [pExp, .const 0#64])).1 ≠ some .timeOut →
+    let prog : ProgHOL 64 := .call (some (none, none)) (ofString "set_retdata") [pExp, .const 0#64]
+    (∀ u, (evaluateHOLFiniteState st prog).1 ≠ some (.returned u)) ∧
+    ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st prog).1 ∧
+    ((evaluateHOLFiniteState st prog).1 = none →
+      let post := (evaluateHOLFiniteState st prog).2
+      FcBranchState s0 post S ∧
+      post.locals = st.locals ∧
+      post.globals = st.globals ∧
+      evmChain post = evmChain st ∧
+      OpDispatchSpec.evmR post = OpDispatchSpec.evmR st ∧
+      memW post (globN post "ev" + 16) = memW st (globN st "ev" + 16) ∧
+      memW post (globN post "ev" + 40) = memW st (globN st "ev" + 40) ∧
+      memW post (globN post "ev" + 232) = memW st (globN st "ev" + 232))
+
+/-- Leaf hypothesis: the `stack_push(v)` call at branch level, for a four-word
+struct value.  The grow path may move the stack and update `scratch_ptr`. -/
+def FcStackPushStep : Prop :=
+  ∀ {F : Type} {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat},
+    FcBranchState s0 st S →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) ≤
+      OpDispatchSpec.evmR s0 →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) + 1 <
+      2 ^ 64 →
+    ∀ (vExp : ExpHOL 64) (vv : ValueHOL 64),
+    evalAt st vExp = some vv →
+    shapeEqHOL (.comb [.one, .one, .one, .one]) (shapeOfHOLExact vv) = true →
+    (evaluateHOLFiniteState st
+      (.call (some (none, none)) (ofString "stack_push") [vExp])).1 ≠ some .timeOut →
+    let prog : ProgHOL 64 := .call (some (none, none)) (ofString "stack_push") [vExp]
+    (∀ u, (evaluateHOLFiniteState st prog).1 ≠ some (.returned u)) ∧
+    ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st prog).1 ∧
+    ((evaluateHOLFiniteState st prog).1 = none →
+      let post := (evaluateHOLFiniteState st prog).2
+      FcBranchState s0 post S ∧
+      (∀ g : String, ofString g ≠ ofString "scratch_ptr" → globN post g = globN st g) ∧
+      post.locals = st.locals ∧
+      evmChain post = evmChain st ∧
+      OpDispatchSpec.evmR post ≤ OpDispatchSpec.evmR st)
+
+/-- Leaf hypothesis: the `incorporate_child_on_success(child)` call at branch
+level (first call of both success paths). -/
+def FcIncorpSuccessStep : Prop :=
+  ∀ {F : Type} {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat},
+    FcBranchState s0 st S →
+    FcPoppedChild s0 st S →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) ≤
+      OpDispatchSpec.evmR s0 →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) + 1 <
+      2 ^ 64 →
+    (evaluateHOLFiniteState st
+      (.call (some (none, none)) (ofString "incorporate_child_on_success")
+        [.var .local (ofString "child")])).1 ≠ some .timeOut →
+    let prog : ProgHOL 64 :=
+      .call (some (none, none)) (ofString "incorporate_child_on_success")
+        [.var .local (ofString "child")]
+    (∀ u, (evaluateHOLFiniteState st prog).1 ≠ some (.returned u)) ∧
+    ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st prog).1 ∧
+    ((evaluateHOLFiniteState st prog).1 = none →
+      let post := (evaluateHOLFiniteState st prog).2
+      ∃ S', FcBranchState s0 post S' ∧
+        post.locals = st.locals ∧
+        post.globals = st.globals ∧
+        evmChain post = evmChain st ∧
+        OpDispatchSpec.evmR post ≤
+          OpDispatchSpec.evmR st + memW st (globN s0 "ev" + 64) ∧
+        memW post (globN post "ev" + 16) = memW st (globN st "ev" + 16) ∧
+        memW post (globN post "ev" + 40) = memW st (globN st "ev" + 40) ∧
+        memW post (globN post "ev" + 232) = memW st (globN st "ev" + 232))
+
+/-- Leaf hypothesis: the `av := address_to_u256(contract_address); stack_push(av)`
+segment at branch level (the `kind = 2` success tail). -/
+def FcAddrToU256Step : Prop :=
+  ∀ {F : Type} {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat},
+    FcBranchState s0 st S →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) ≤
+      OpDispatchSpec.evmR s0 →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) + 1 <
+      2 ^ 64 →
+    ∀ (caExp : ExpHOL 64) (caw : BitVec 64),
+    evalAt st caExp = some (.val (.word caw)) →
+    (evaluateHOLFiniteState st
+      (.decCall (ofString "av") (.comb [.one, .one, .one, .one]) (ofString "address_to_u256")
+        [caExp]
+        (.call (some (none, none)) (ofString "stack_push") [.var .local (ofString "av")]))).1 ≠
+      some .timeOut →
+    let prog : ProgHOL 64 :=
+      .decCall (ofString "av") (.comb [.one, .one, .one, .one]) (ofString "address_to_u256")
+        [caExp]
+        (.call (some (none, none)) (ofString "stack_push") [.var .local (ofString "av")])
+    (∀ u, (evaluateHOLFiniteState st prog).1 ≠ some (.returned u)) ∧
+    ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st prog).1 ∧
+    ((evaluateHOLFiniteState st prog).1 = none →
+      let post := (evaluateHOLFiniteState st prog).2
+      FcBranchState s0 post S ∧
+      (∀ g : String, ofString g ≠ ofString "scratch_ptr" → globN post g = globN st g) ∧
+      post.locals = st.locals ∧
+      evmChain post = evmChain st ∧
+      OpDispatchSpec.evmR post ≤ OpDispatchSpec.evmR st)
+
+/-- Leaf hypothesis: the `actual := min(out_size, [child+128]); if (actual ≠ 0)
+memcpy(...)` tail at branch level (the `kind ≠ 2` tail). -/
+def FcMinTailStep : Prop :=
+  ∀ {F : Type} {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat},
+    FcBranchState s0 st S →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) ≤
+      OpDispatchSpec.evmR s0 →
+    OpDispatchSpec.evmR st + (memW st (globN s0 "ev" + 64) + memW st (globN s0 "ev" + 192)) + 1 <
+      2 ^ 64 →
+    (out_win : memW s0 (globN s0 "cur_cont" + 16) ≠ 2 →
+      memW s0 (globN s0 "cur_cont" + 80) = 0 ∨
+        memW s0 (globN s0 "cur_cont" + 72) + memW s0 (globN s0 "cur_cont" + 80) ≤
+          memW st (globN st "ev" + 40)) →
+    (evaluateHOLFiniteState st fcMinTail).1 ≠ some .timeOut →
+    (∀ u, (evaluateHOLFiniteState st fcMinTail).1 ≠ some (.returned u)) ∧
+    ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st fcMinTail).1 ∧
+    ((evaluateHOLFiniteState st fcMinTail).1 = none →
+      let post := (evaluateHOLFiniteState st fcMinTail).2
+      FcBranchState s0 post S ∧
+      post.locals = st.locals ∧
+      post.globals = st.globals ∧
+      evmChain post = evmChain st ∧
+      OpDispatchSpec.evmR post ≤ OpDispatchSpec.evmR st)
+
+/-! ### The `set_retdata(p, 0)` leaf -/
+
+private theorem fc_updW3_memory_ne (x a1 a2 a3 : BitVec 64)
+    (m : BitVec 64 → HolWordLab 64) (v1 v2 v3 : BitVec 64)
+    (hx1 : x ≠ a1) (hx2 : x ≠ a2) (hx3 : x ≠ a3) :
+    R14W (R14W (R14W m a1 v1) a2 v2) a3 v3 x = m x := by
+  simp [R14W, R14Shards.OpHandlersA.updW, hx1, hx2, hx3]
+
+theorem fcSetRetdataZero : FcSetRetdataZeroStep := by
+  intro F s0 st S hBS hgas hgas2 pExp pv hp hnt
+  dsimp only
+  obtain ⟨hbnd, hwok, hlk, hsp, hRdec⟩ := ev_head_facts hBS.arena hBS.inv
+  obtain ⟨evw, hev_empty⟩ := hBS.arena.2.2.2.2.2.2.2.2.2 "evm_empty" (by decide)
+  set e : BitVec 64 := BitVec.ofNat 64 (globN st "ev") with he_def
+  have he_nat : e.toNat = globN st "ev" := by
+    rw [he_def, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  have he_lk : st.globals.lookup (ofString "ev") = some (.val (.word e)) := by
+    rw [he_def]; exact hlk
+  have hcode : st.code = originalRuntimeCode := hBS.arena.1.code
+  have hn0 : evalAt st (.const 0#64) = some (.val (.word 0#64)) := rfl
+  have hclk : st.clock ≠ 0 := by
+    intro h0
+    apply hnt
+    rw [evaluateHOLFiniteState_call]
+    have hargs : evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        [pExp, .const 0#64] = some [.val (.word pv), .val (.word 0#64)] := by
+      simp [evalListHOLFinite, evalListHOLExact, evalAt, evalHOLExact, hp]
+    rw [hargs]; dsimp only
+    have hl := pan_two_word_lookup st.code.lookup (ofString "set_retdata") (ofString "p")
+      (ofString "n") (sourceFnBody Guest.Software.guestFn_set_retdata) pv 0#64
+      (by decide) (by rw [hcode]; exact lookup_set_retdata_fc)
+    rw [hl]; dsimp only
+    simp [h0]
+  have hbnd232 : e.toNat + 232 < 2 ^ 64 := by rw [he_nat]; omega
+  have hdom144 : st.memaddrs (e + 144#64) := by
+    have hwa : WordAt st (globN st "ev" + 8 * 18) := hwok.2.2 18 (by omega)
+    obtain ⟨w, hdom, _⟩ := hwa
+    have heq : e + 144#64 = BitVec.ofNat 64 (globN st "ev" + 8 * 18) := by
+      apply BitVec.eq_of_toNat_eq
+      have h144 : (144#64 : BitVec 64).toNat = 144 := rfl
+      rw [BitVec.toNat_add, he_nat, h144, BitVec.toNat_ofNat]
+    rw [heq]; exact hdom
+  have hdom152 : st.memaddrs (e + 152#64) := by
+    have hwa : WordAt st (globN st "ev" + 8 * 19) := hwok.2.2 19 (by omega)
+    obtain ⟨w, hdom, _⟩ := hwa
+    have heq : e + 152#64 = BitVec.ofNat 64 (globN st "ev" + 8 * 19) := by
+      apply BitVec.eq_of_toNat_eq
+      have h152 : (152#64 : BitVec 64).toNat = 152 := rfl
+      rw [BitVec.toNat_add, he_nat, h152, BitVec.toNat_ofNat]
+    rw [heq]; exact hdom
+  have hdom216 : st.memaddrs (e + 216#64) := by
+    have hwa : WordAt st (globN st "ev" + 8 * 27) := hwok.2.2 27 (by omega)
+    obtain ⟨w, hdom, _⟩ := hwa
+    have heq : e + 216#64 = BitVec.ofNat 64 (globN st "ev" + 8 * 27) := by
+      apply BitVec.eq_of_toNat_eq
+      have h216 : (216#64 : BitVec 64).toNat = 216 := rfl
+      rw [BitVec.toNat_add, he_nat, h216, BitVec.toNat_ofNat]
+    rw [heq]; exact hdom
+  have hrun := set_retdata_zero_call_run st pExp (.const 0#64) pv e evw hcode hp hn0 hclk
+    he_lk hev_empty hbnd232 hdom144 hdom152 hdom216
+  have hnone : (evaluateHOLFiniteState st
+      (.call (some (none, none)) (ofString "set_retdata") [pExp, .const 0#64])).1 = none := by
+    rw [hrun]
+  refine ⟨fun u hu => by rw [hnone] at hu; simp at hu, fun herr => by
+    rw [hnone] at herr; simp [OpDispatchSpec.IsEvmErr] at herr, fun _ => ?_⟩
+  rw [hrun]
+  dsimp only
+  have hA1 : BitVec.ofNat 64 (e.toNat + 144) = BitVec.ofNat 64 (globN st "ev" + 144) := by
+    apply congrArg (BitVec.ofNat 64); rw [he_nat]
+  have hA2 : BitVec.ofNat 64 (e.toNat + 152) = BitVec.ofNat 64 (globN st "ev" + 152) := by
+    apply congrArg (BitVec.ofNat 64); rw [he_nat]
+  have hA3 : BitVec.ofNat 64 (e.toNat + 216) = BitVec.ofNat 64 (globN st "ev" + 216) := by
+    apply congrArg (BitVec.ofNat 64); rw [he_nat]
+  have hne12 : BitVec.ofNat 64 (globN st "ev" + 144) ≠ BitVec.ofNat 64 (globN st "ev" + 152) := by
+    intro heq; have h := congrArg BitVec.toNat heq
+    simp only [BitVec.toNat_ofNat] at h
+    omega
+  have hne13 : BitVec.ofNat 64 (globN st "ev" + 144) ≠ BitVec.ofNat 64 (globN st "ev" + 216) := by
+    intro heq; have h := congrArg BitVec.toNat heq
+    simp only [BitVec.toNat_ofNat] at h
+    omega
+  have hne23 : BitVec.ofNat 64 (globN st "ev" + 152) ≠ BitVec.ofNat 64 (globN st "ev" + 216) := by
+    intro heq; have h := congrArg BitVec.toNat heq
+    simp only [BitVec.toNat_ofNat] at h
+    omega
+  set post : PanSemStateFiniteExact 64 F := { st with clock := st.clock - 1, memory := (R14W (R14W (R14W st.memory (BitVec.ofNat 64 (e.toNat + 144)) evw) (BitVec.ofNat 64 (e.toNat + 152)) 0#64) (BitVec.ofNat 64 (e.toNat + 216)) 0#64) } with hpost_def
+  have hmem_out : ∀ x : BitVec 64,
+      (∀ off ∈ headRetZeroOffs, x ≠ BitVec.ofNat 64 (globN st "ev" + off)) →
+      post.memory x = st.memory x := by
+    intro x hx
+    have hx1 : x ≠ BitVec.ofNat 64 (e.toNat + 144) := by
+      rw [hA1]; exact hx 144 (by decide)
+    have hx2 : x ≠ BitVec.ofNat 64 (e.toNat + 152) := by
+      rw [hA2]; exact hx 152 (by decide)
+    have hx3 : x ≠ BitVec.ofNat 64 (e.toNat + 216) := by
+      rw [hA3]; exact hx 216 (by decide)
+    show R14W (R14W (R14W st.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+        (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+      (BitVec.ofNat 64 (e.toNat + 216)) 0#64 x = st.memory x
+    exact fc_updW3_memory_ne x _ _ _ _ _ _ _ hx1 hx2 hx3
+  have hmem144 : post.memory (BitVec.ofNat 64 (globN st "ev" + 144)) = .word evw := by
+    show R14W (R14W (R14W st.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+        (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+      (BitVec.ofNat 64 (e.toNat + 216)) 0#64 (BitVec.ofNat 64 (globN st "ev" + 144)) = .word evw
+    rw [hA1, hA2, hA3]
+    simp [R14W, R14Shards.OpHandlersA.updW, hne12, hne13]
+  have hmem152 : post.memory (BitVec.ofNat 64 (globN st "ev" + 152)) = .word 0#64 := by
+    show R14W (R14W (R14W st.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+        (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+      (BitVec.ofNat 64 (e.toNat + 216)) 0#64 (BitVec.ofNat 64 (globN st "ev" + 152)) = .word 0#64
+    rw [hA1, hA2, hA3]
+    simp [R14W, R14Shards.OpHandlersA.updW, hne23]
+  have hmem216 : post.memory (BitVec.ofNat 64 (globN st "ev" + 216)) = .word 0#64 := by
+    show R14W (R14W (R14W st.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+        (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+      (BitVec.ofNat 64 (e.toNat + 216)) 0#64 (BitVec.ofNat 64 (globN st "ev" + 216)) = .word 0#64
+    rw [hA1, hA2, hA3]
+    simp [R14W, R14Shards.OpHandlersA.updW]
+  have h144 : memW post (globN st "ev" + 144) = globN st "evm_empty" := by
+    unfold memW
+    rw [hmem144]
+    have hge : globN st "evm_empty" = evw.toNat := by
+      unfold globN
+      rw [show st.globals.lookup (ofString "evm_empty") =
+        some (ValueHOL.val (HolWordLab.word evw)) from hev_empty]
+    rw [hge]
+  have h216 : memW post (globN st "ev" + 216) = 0 := by
+    unfold memW
+    rw [hmem216]
+    simp
+  have hcell : ∀ off : Nat, off + 8 ≤ 280 → off % 8 = 0 → off ≠ 144 → off ≠ 152 → off ≠ 216 →
+      memW post (globN st "ev" + off) = memW st (globN st "ev" + off) := by
+    intro off hoff h8 hn144 hn152 hn216
+    have hx144 : BitVec.ofNat 64 (globN st "ev" + off) ≠
+        BitVec.ofNat 64 (globN st "ev" + 144) := by
+      intro heq; apply hn144
+      have h := congrArg BitVec.toNat heq
+      rw [BitVec.toNat_ofNat, BitVec.toNat_ofNat,
+        Nat.mod_eq_of_lt (show globN st "ev" + off < 2 ^ 64 by omega),
+        Nat.mod_eq_of_lt (show globN st "ev" + 144 < 2 ^ 64 by omega)] at h
+      omega
+    have hx152 : BitVec.ofNat 64 (globN st "ev" + off) ≠
+        BitVec.ofNat 64 (globN st "ev" + 152) := by
+      intro heq; apply hn152
+      have h := congrArg BitVec.toNat heq
+      rw [BitVec.toNat_ofNat, BitVec.toNat_ofNat,
+        Nat.mod_eq_of_lt (show globN st "ev" + off < 2 ^ 64 by omega),
+        Nat.mod_eq_of_lt (show globN st "ev" + 152 < 2 ^ 64 by omega)] at h
+      omega
+    have hx216 : BitVec.ofNat 64 (globN st "ev" + off) ≠
+        BitVec.ofNat 64 (globN st "ev" + 216) := by
+      intro heq; apply hn216
+      have h := congrArg BitVec.toNat heq
+      rw [BitVec.toNat_ofNat, BitVec.toNat_ofNat,
+        Nat.mod_eq_of_lt (show globN st "ev" + off < 2 ^ 64 by omega),
+        Nat.mod_eq_of_lt (show globN st "ev" + 216 < 2 ^ 64 by omega)] at h
+      omega
+    unfold memW
+    rw [hmem_out _ (fun hoff' hm => by
+      have hm' : hoff' = 144 ∨ hoff' = 152 ∨ hoff' = 216 := by
+        simpa [headRetZeroOffs] using hm
+      rcases hm' with rfl | rfl | rfl
+      · exact hx144
+      · exact hx152
+      · exact hx216)]
+  have hGp : GuestInv post := ⟨hcode, hBS.arena.1.memaddrs, hBS.arena.1.shMemaddrs,
+    hBS.arena.1.baseAddr⟩
+  have hglob : post.globals = st.globals := rfl
+  have hbe : post.be = st.be := rfl
+  have hloc : post.locals = st.locals := rfl
+  have hsp_le : memW post (globN st "ev" + 16) ≤ memW st (globN st "ev" + 232) := by
+    rw [hcell 16 (by omega) (by omega) (by omega) (by omega) (by omega)]; exact hsp
+  have hgas_le : memW post (globN st "ev" + 64) + memW post (globN st "ev" + 192) +
+      (((evmChain st).tail.map fun ec => memW st (ec.1 + 64) + memW st (ec.1 + 192)).sum) + 1 <
+      2 ^ 64 := by
+    rw [hcell 64 (by omega) (by omega) (by omega) (by omega) (by omega),
+      hcell 192 (by omega) (by omega) (by omega) (by omega) (by omega), ← hRdec]
+    omega
+  obtain ⟨hAp', hIp', hch, hfix, htab, hframes, _, _, _, hRp'⟩ :=
+    evmInvAt_of_head_ret_zero hBS.arena hBS.inv hGp hglob hbe hmem_out h216 h144 hsp_le hgas_le
+  have hhp : globN st "heap_ptr" ≤ globN post "heap_ptr" := by unfold globN; rw [hglob]
+  have hRel := releaseReadyAt_transport hBS.release hhp hch
+    (fun ec hec => (hframes ec hec).1)
+    (fun ec hec => ⟨(hframes ec hec).2.2.1, (hframes ec hec).2.2.2.2.1⟩)
+    (fun ec hec => Or.inl (hframes ec hec).2.1)
+    (fun ec hec => (hframes ec hec).2.2.2.2.2.1)
+    (fun t ht => Or.inl (htab t ht)) hfix
+  have hcells : ∀ ec ∈ evmChain post,
+    memW post (ec.1 + 24) = memW s0 (ec.1 + 24) ∧
+    memW post (ec.1 + 32) = memW s0 (ec.1 + 32) ∧
+    memW post (ec.1 + 40) = memW s0 (ec.1 + 40) ∧
+    memW post (ec.2 + 56) = memW s0 (ec.2 + 56) := by
+    intro ec hec
+    rw [hch] at hec
+    obtain ⟨a, b, c, d⟩ := hBS.cells ec hec
+    exact ⟨(hframes ec hec).2.2.1.trans a, (hframes ec hec).2.2.2.1.trans b,
+      (hframes ec hec).2.2.2.2.1.trans c, (hframes ec hec).2.2.2.2.2.2.trans d⟩
+  have hevR : OpDispatchSpec.evmR post = OpDispatchSpec.evmR st := by
+    rw [hRp',
+      hcell 64 (by omega) (by omega) (by omega) (by omega) (by omega),
+      hcell 192 (by omega) (by omega) (by omega) (by omega) (by omega)]
+    exact hRdec.symm
+  have hev_post : globN post "ev" = globN st "ev" := rfl
+  refine ⟨⟨hAp', hIp', hRel, fcEntryLocals_congr_locals hloc hBS.locals_ok,
+    hch.trans hBS.chain_eq, by rw [hch]; exact hBS.length_eq, by rw [hevR]; exact hBS.r_le,
+    hcells, by rw [hev_post]; exact hBS.ev_eq⟩, hloc, hglob, hch, hevR, ?_, ?_, ?_⟩
+  · rw [hev_post]
+    exact hcell 16 (by omega) (by omega) (by omega) (by omega) (by omega)
+  · rw [hev_post]
+    exact hcell 40 (by omega) (by omega) (by omega) (by omega) (by omega)
+  · rw [hev_post]
+    exact hcell 232 (by omega) (by omega) (by omega) (by omega) (by omega)
+
 /-! ## The branch walk abstraction -/
 
 /-- From the popped state, the branches and cleanup establish `FinishPost`.  This is the
