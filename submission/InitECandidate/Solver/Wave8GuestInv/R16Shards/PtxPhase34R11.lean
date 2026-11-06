@@ -18497,4 +18497,41 @@ theorem journal_cut_world_frames_table_tail_output {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Rejoin the cut proof and the original table mutation at the same entry,
+yielding both nested block-output header words at the original output. -/
+theorem journal_cut_table_tail_header_words {F : Type}
+    (s cur out cut mid : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (jn jc trapCode tw : BitVec 64) (e16 key value result : ExpHOL 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd) (htw : tw.toNat ∈ S)
+    (hcode : cur.code = originalRuntimeCode)
+    (hjn : cur.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : cur.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.var .local (ofString "t"), key, value]) (.return result))) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut))
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (hm : cut = {mid with locals := cut.locals})
+    (hf : ∀ k ∈ ([40, 72] : List Nat), IvlUnhit s cut (memW s (globN s "bo" + k), 24)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW out (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  let bs := ([40, 72] : List Nat).map (fun k => (memW s (globN s "bo" + k), 24))
+  obtain ⟨entry, u, hw', hf', ht', hr', ho⟩ := journal_cut_world_frames_table_tail_output
+    s cur out cut mid jn jc trapCode tw e16 _ rv bs hcode hjn hjc ht hr hcut hw hm (by
+      intro b hb
+      obtain ⟨k, hk, rfl⟩ := List.mem_map.mp hb
+      exact hf k hk)
+  have hd := journal_table_tail_header_words s entry u S Nd tw key value result rv hW hT hw' htw ht'
+    (by intro k hk; exact hf' _ (List.mem_map.mpr ⟨k, hk, rfl⟩)) hr'
+  intro k hk
+  simpa only [memW, ho] using hd k hk
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
