@@ -7108,7 +7108,7 @@ theorem eval_merge_hit_assign_union {F : Type}
 
 /-- The actual merge hit branch selects the owned lookup value and executes
 the inner union under the withdrawal mask. -/
-theorem eval_merge_hit_branch {F : Type}
+theorem eval_merge_hit_branch_heap {F : Type}
     (s : PanSemStateFiniteExact 64 F) (f0 f1 : BitVec 64) (miss : ProgHOL 64)
     (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
     (hbs : globN s "bs" ≠ 0) (hout : memW s (globN s "bs" + 32) ≠ 0)
@@ -7130,7 +7130,7 @@ theorem eval_merge_hit_branch {F : Type}
         miss (.assign .local (ofString "binner") (.rfield 1 (.var .local (ofString "m")))))
         (.call (some (none, none)) (ofString "htab_union_into")
           [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))]))
-    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s out.1 out.2 := by
+    WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s out.1 out.2 := by
   have hcond : evalAt s (.cmp .equal (.rfield 0 (.var .local (ofString "m"))) (.const 0#64)) =
       some (.val (.word 0#64)) := by
     simpa [evalAt, evalHOLExact, hm, Flapjack.Compiler.Encoders.Asm.wordCmpHOL] using hflag
@@ -7161,6 +7161,33 @@ theorem eval_merge_hit_branch {F : Type}
         simp [evalAt, evalHOLExact, hm]
       rw [he] at hv
       exact ⟨f1, (Option.some.inj hv).symm, hi⟩) hnt hfr
+  exact hs
+
+/-- The heap-only hit contract also supplies the common withdrawal frame. -/
+theorem eval_merge_hit_branch {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (f0 f1 : BitVec 64) (miss : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hbs : globN s "bs" ≠ 0) (hout : memW s (globN s "bs" + 32) ≠ 0)
+    (hm : s.locals.lookup (ofString "m") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hflag : f0 ≠ 0)
+    (hi : f1.toNat ∈ htabValues s (memW s (globN s "bs" + 32)))
+    (hnt : (evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "m"))) (.const 0#64))
+        miss (.assign .local (ofString "binner") (.rfield 1 (.var .local (ofString "m")))))
+        (.call (some (none, none)) (ofString "htab_union_into")
+          [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))]))).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "m"))) (.const 0#64))
+        miss (.assign .local (ofString "binner") (.rfield 1 (.var .local (ofString "m")))))
+        (.call (some (none, none)) (ofString "htab_union_into")
+          [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))]))).1) :
+    let out := evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "m"))) (.const 0#64))
+        miss (.assign .local (ofString "binner") (.rfield 1 (.var .local (ofString "m")))))
+        (.call (some (none, none)) (ofString "htab_union_into")
+          [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))]))
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s out.1 out.2 := by
+  have hs := eval_merge_hit_branch_heap s f0 f1 miss hc hW hbs hout hm hflag hi hnt hfr
   apply worldStepSc_mono_mask (B1 := []) (B2 := withdrawalBufs)
     (gw1 := ["heap_ptr"]) (gw2 := withdrawalGlobals) (by simp) (by decide) _ hs
   intro rec hrec k hk
