@@ -18690,6 +18690,8 @@ end PtxP34
 namespace PtxP34
 open R16WkAcctWs
 
+open InitECandidate.Solver.GuestTrapAndLookup
+
 /-- The concrete transaction account table discharges the journal-role premises. -/
 theorem jset_body_ts16_header_words {F : Type}
     (s out : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
