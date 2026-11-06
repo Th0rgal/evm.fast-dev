@@ -9143,6 +9143,34 @@ theorem precompile_sha256_init_call_effect {F : Type}
     subst r
     exact ⟨(stp.toNat,64), List.mem_singleton.mpr rfl, le_rfl, le_rfl⟩
 
+theorem precompile_sha256_blocks_loop_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_st") = some (.val (.word stp))) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.while (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"), .const 64]))
+        (.seq (.call (some (none, none)) (ofString "sha256_block")
+          [.var .global (ofString "sha_st"),
+            .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"), .const 64]))))).2 [(stp.toNat,64)] := by
+  apply precompile_byteEff_while_inv
+    (fun t => t.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    _ _ _ (by intro t ht; exact ht) ?_ s hc hi hp
+  intro t hct hgt hpt
+  have he := precompile_sha256_block_call_effect t stp
+    (.var .global (ofString "sha_st"))
+    (.op .add [.var .local (ofString "p"), .var .local (ofString "i")])
+    hct hgt (by simp [evalHOLFinite, evalHOLExact, hpt])
+  have hes := R10Shards.P26_P28.byteEff_seq he
+    (fun m hm => R10Shards.P26_P28.byteEff_assign_local m (ofString "i")
+      (.op .add [.var .local (ofString "i"), .const 64]) _)
+  refine ⟨hes, ?_⟩
+  intro hr
+  rw [hes.globals]
+  exact hpt
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
