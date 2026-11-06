@@ -9226,6 +9226,27 @@ theorem precompile_sha256_init_nonzero_of_flow {F : Type}
   subst stp
   exact precompile_sha256_init_call_null_not_flows s ptr hi hp hflow
 
+theorem precompile_seq_flows_left {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (first cont : ProgHOL 64)
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq first cont)).1) :
+    R13.FlowsOrResumes (evaluateHOLFiniteState s first).1 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases he : evaluateHOLFiniteState s first with ⟨r,t⟩
+  cases r with
+  | none => exact Or.inl rfl
+  | some r => simpa only [he] using hr
+
+theorem precompile_sha256_init_nonzero_of_sequence {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ptr : ExpHOL 64) (stp : BitVec 64)
+    (cont : ProgHOL 64) (hi : GuestInv s)
+    (hp : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) ptr =
+      some (.val (.word stp)))
+    (hflow : R13.FlowsOrResumes (evaluateHOLFiniteState s
+      (.seq (.call (some (none,none)) (ofString "sha256_state_init") [ptr]) cont)).1) :
+    stp.toNat ≠ 0 :=
+  precompile_sha256_init_nonzero_of_flow s ptr stp hi hp
+    (precompile_seq_flows_left s _ cont hflow)
+
 theorem precompile_sha256_init_call_effect {F : Type}
     (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (ptr : ExpHOL 64)
     (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
