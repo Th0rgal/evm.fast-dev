@@ -13529,4 +13529,52 @@ theorem log_no_growth_final_typed_cells_g09 {F : Type}
     · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
     · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
 
+/-- A newly constructed record separated from the two in-place append writes
+retains its validity and owned intervals after installation in the list. -/
+theorem log_no_growth_new_record_preserved_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n log : BitVec 64)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hbound : log.toNat + 40 ≤ 2 ^ 64)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8))
+    (hlog : LogEntryOK s log.toNat) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    LogEntryOK post log.toNat ∧ logOwnedIvls post log.toNat = logOwnedIvls s log.toNat := by
+  dsimp only
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  have hrecord : ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW {s with memory := fun a =>
+        if a = p + n * 8#64 then .word log
+        else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+        (log.toNat + k) = memW s (log.toNat + k) := by
+    intro k hk
+    have hkbound : k + 8 ≤ 40 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+    have hnat : (BitVec.ofNat 64 (log.toNat + k)).toNat = log.toNat + k :=
+      Nat.mod_eq_of_lt (by omega)
+    have hne1 : BitVec.ofNat 64 (log.toNat + k) ≠ p + n * 8#64 := by
+      intro heq
+      have heq' := congrArg BitVec.toNat heq
+      rw [hnat, hs] at heq'
+      rcases hdbuffer with h | h | h | h <;> dsimp only at h <;> omega
+    have hne2 : BitVec.ofNat 64 (log.toNat + k) ≠ l + 8#64 := by
+      intro heq
+      have heq' := congrArg BitVec.toNat heq
+      rw [hnat, hl8] at heq'
+      rcases hdheader with h | h | h | h <;> dsimp only at h <;> omega
+    simp only [memW, hne1, hne2, ↓reduceIte]
+  exact ⟨logEntryOK_of_record_agree_g09 (s := s) rfl (le_refl _) hrecord hlog,
+    logOwnedIvls_of_record_agree_g09 (s := s) rfl hrecord⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
