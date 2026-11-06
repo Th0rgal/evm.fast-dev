@@ -16415,4 +16415,60 @@ theorem op_log_growth_readback_g09 {F : Type}
     exact read (memW s (memW s (memW s (ec.1 + 88)) + 8*i), 40)
       (hrecords ec he i hi) k hkbound
 
+/-- Growth list validity and exact owned-log extension precede message reconstruction. -/
+theorem op_log_growth_list_post_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap q log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat) (hnonnull : l.toNat ≠ 0)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] (frameObjects s ec))
+    (hl_bound : l.toNat + 24 ≤ 2^64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hcopy : ∀ i, i < n.toNat →
+      memW copy (p.toNat + 8*i) = memW s (memW s l.toNat + 8*i))
+    (heff : ByteRegionEffect s copy [(p.toNat, q.toNat - p.toNat)])
+    (hheap : globN s "heap_ptr" ≤ globN copy "heap_ptr")
+    (hheap_bound : globN copy "heap_ptr" ≤ 2^64)
+    (hwords : WordsOK copy (p.toNat, q.toNat - p.toNat))
+    (hlo : sourceBase ≤ p.toNat) (hq : q.toNat ≤ globN copy "heap_ptr")
+    (hlog : LogEntryOK copy log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, q.toNat - p.toNat)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then HolWordLab.word p else copy.memory a}
+    memW post (ec.1 + 88) = l.toNat →
+    LogsListOK post (memW post (ec.1 + 88)) ∧
+      frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls copy log.toNat := by
+  dsimp only
+  intro hframe
+  have hheader : (l.toNat, 24) ∈ frameObjects s ec := by simp [frameObjects, hl]
+  obtain ⟨_, _, _, hmul, _, _, _, _, hslot, _⟩ :=
+    log_growth_word_bounds_g09 hcap_pos hcap_bound hlen hgrow hfit
+  rw [hmul] at hslot
+  have hscratch : globN copy "scratch_ptr" ≤ globN s "scratch_ptr" := by
+    unfold globN
+    rw [heff.globals]
+  obtain ⟨hhw, hha, hlogPost, howned⟩ :=
+    log_growth_header_and_new_record_g09 s copy ec S l p n cap q log hA hFW hl
+      heff.memaddrs hheap hscratch hl_bound hslot hheap_bound hlog hdheader hdbuffer
+  obtain ⟨_, _, hslots⟩ := log_growth_buffer_of_allocated_g09 copy ec l p n cap q log
+    (frameObjects s ec) hheader hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit
+    hwords hlo hq hframe
+  have hsys : globN copy "vm_system_address" = globN s "vm_system_address" := by
+    unfold globN
+    rw [heff.globals]
+  obtain ⟨hlist, hlogs⟩ := log_growth_post_of_separated_records_g09 s copy ec l p n cap q log
+    (frameObjects s ec) hl hn hheader hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit
+    hcopy heff.memaddrs hheap hsys
+    (log_growth_old_records_g09 l p n q hA hFW hpw hl hn hnonnull hfresh heff)
+    hframe hhw hha hslots hlogPost
+  exact ⟨hlist, by rw [hlogs, howned]⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
