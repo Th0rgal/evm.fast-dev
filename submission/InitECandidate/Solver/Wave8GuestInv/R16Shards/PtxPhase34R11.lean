@@ -18687,4 +18687,42 @@ theorem jset_body_header_words_of_roles {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+
+/-- The concrete transaction account table discharges the journal-role premises. -/
+theorem jset_body_ts16_header_words {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (j n cap p tw kw : BitVec 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (hts : globN s "ts" ≠ 0) (htw : tw.toNat = memW s (globN s "ts" + 16))
+    (htn : tw.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_jset) =
+      (some (.returned rv), out)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW out (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have hrole : journalRole s tw.toNat = "ts+16" := by
+    unfold journalRole
+    rw [if_pos ⟨hts, htw⟩]
+  apply jset_body_header_words_of_roles s out S Nd j n cap p tw kw rv hW hT hj hn hc hp ht hk ?_
+    (by rw [hrole]; decide) hr
+  intro S hTS
+  have hnz : memW s (globN s "ts" + 16) ≠ 0 := by rwa [← htw]
+  have hslot := EvmEkFk.nonValueSlot_ts16 s S hTS hts hnz
+  refine ⟨by rw [htw]; exact hslot.1, ?_⟩
+  rw [hrole, htw]
+  apply mem_worldRoleSlots_recRole s "ts" 16 "ts+16" hts hnz
+  apply List.mem_append.2
+  right
+  unfold recRoles
+  simp [hts]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
