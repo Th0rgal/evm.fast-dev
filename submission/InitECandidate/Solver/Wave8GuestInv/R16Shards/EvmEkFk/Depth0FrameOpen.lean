@@ -10742,4 +10742,292 @@ theorem frameOutside_congr {F : Type} {s t t' : PanSemStateFiniteExact 64 F} {ke
   rw [hmem a]
   exact h a hkeep hfresh
 
+/-! ### Generic call step
+
+Every call of the `frame_new` body either leaves memory unchanged or writes only inside
+the fresh scratch below the old `scratch_ptr` (the callee's own allocations) or inside the
+heap growth of the call.  `FNRL.step` transports the invariant across any such step. -/
+
+theorem FNR.words {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    (h : FNR s t m e) :
+    ∃ sp fp : BitVec 64, t.globals.lookup (ofString "scratch_ptr") = some (.val (.word sp)) ∧
+      t.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word fp)) ∧
+      globN t "scratch_ptr" = sp.toNat ∧ globN t "frame_mem_ptr" = fp.toNat := by
+  obtain ⟨-, -, -, ⟨-, hA⟩, -⟩ := h
+  obtain ⟨sp, h1, h2⟩ := glob_of_words t hA "scratch_ptr" (by decide)
+  obtain ⟨fp, h3, h4⟩ := glob_of_words t hA "frame_mem_ptr" (by decide)
+  exact ⟨sp, fp, h1, h3, h2, h4⟩
+
+/-- Generic call step: `t'` restores the `msg`/`e` lookups of `t.locals`, keeps
+code/memaddrs/be and the non-pointer globals, is arena-ready with monotonically moved
+pointers, and differs from `t` in memory only inside the fresh scratch zone
+`[loS, loS + lenS)` below the old `scratch_ptr` or the heap zone `[loH, loH + lenH)` grown
+by the call. -/
+theorem FNRL.step {F : Type} {s t t' : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep)
+    (hlm : t'.locals.lookup (ofString "msg") = t.locals.lookup (ofString "msg"))
+    (hle : t'.locals.lookup (ofString "e") = t.locals.lookup (ofString "e"))
+    (hcode : t'.code = t.code) (hme : t'.memaddrs = t.memaddrs) (hbe : t'.be = t.be)
+    (hAR : ArenaReady t') (hsp : globN t' "scratch_ptr" ≤ globN t "scratch_ptr")
+    (hspE : globN t' "scratch_ptr" ≤ e.toNat) (hheap : globN t "heap_ptr" ≤ globN t' "heap_ptr")
+    (hg : ∀ k, k ≠ ofString "scratch_ptr" → k ≠ ofString "heap_ptr" →
+      k ≠ ofString "frame_mem_ptr" → t'.globals.lookup k = t.globals.lookup k)
+    {loS lenS loH lenH : Nat}
+    (hloS : globN t' "scratch_ptr" ≤ loS) (hhiS : loS + lenS ≤ globN t "scratch_ptr")
+    (hloH : globN t "heap_ptr" ≤ loH) (hhiH : loH + lenH ≤ globN t' "heap_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (loS, lenS) → ¬ CellHits a.toNat (loH, lenH) →
+      t'.memory a = t.memory a) :
+    FNRL s t' m e fv keep := by
+  obtain ⟨hfr, hled⟩ := h
+  have hfacts := FNR.facts hfr
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15⟩ := hfr
+  have hspS : globN t' "scratch_ptr" ≤ globN s "scratch_ptr" := by
+    have := hloS; have := hhiS; have := h6; have := h7; omega
+  refine ⟨⟨hcode.trans h1, hme.trans h2, hbe.trans h3, hAR, hAR.2.2.2.2.1, hspE, h7, h8, h9,
+    h10.trans hheap, h11, ?_, ?_, hlm.trans h14, hle.trans h15⟩, ?_⟩
+  · intro k hk1 hk2 hk3
+    rw [hg k hk1 hk2 hk3]
+    exact h12 k hk1 hk2 hk3
+  · intro a haS haH
+    have hms : ¬ CellHits a.toNat (loS, lenS) := by
+      intro hchi
+      exact haS (R13SoloHtabSet.cellHits_of_inside hchi ⟨hloS, by omega⟩)
+    have hmh : ¬ CellHits a.toNat (loH, lenH) := by
+      intro hchi
+      exact haH (R13SoloHtabSet.cellHits_of_inside hchi ⟨le_trans h10 hloH, by omega⟩)
+    have h1' := hmem a hms hmh
+    refine h1'.trans (h13 a ?_ ?_)
+    · intro hchi
+      exact haS (R13SoloHtabSet.cellHits_of_inside hchi ⟨hsp, by omega⟩)
+    · intro hchi
+      exact haH (R13SoloHtabSet.cellHits_of_inside hchi ⟨le_refl _, by omega⟩)
+  · intro a ha
+    obtain ⟨h8a, hge, hhiA, hval⟩ := hled a ha
+    refine ⟨h8a, hge, hhiA, ?_⟩
+    have halt : a < 2 ^ 64 := by have := hfacts.1; omega
+    have hms : ¬ CellHits (BitVec.ofNat 64 a).toNat (loS, lenS) := by
+      intro hchi
+      obtain ⟨-, hc2⟩ := hchi
+      rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt a halt] at hc2
+      omega
+    have hmh : ¬ CellHits (BitVec.ofNat 64 a).toNat (loH, lenH) := by
+      intro hchi
+      obtain ⟨-, hc2⟩ := hchi
+      rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt a halt] at hc2
+      have hhL : globN t' "heap_ptr" ≤ heapLimit := hAR.2.2.1
+      have hsc : heapLimit = scratchStart := rfl
+      have := hfacts.2.2
+      omega
+    rw [memW_of a (hmem (BitVec.ofNat 64 a) hms hmh)]
+    exact hval
+
+/-- `x := scratch_alloc(arg)` step. -/
+theorem FNRL.scratchAlloc {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep) (x : MlS)
+    (hx1 : ofString "msg" ≠ x) (hx2 : ofString "e" ≠ x) {arg : ExpHOL 64} (nv : BitVec 64)
+    (harg : ev t arg = some (.val (.word nv))) {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop} (hΦ : LocIns Φ)
+    (hb : ∀ (t' : PanSemStateFiniteExact 64 F) (q : BitVec 64), FNRL s t' m e fv keep →
+      t'.locals.lookup x = some (.val (.word q)) →
+      (∀ y, y ≠ x → t'.locals.lookup y = t.locals.lookup y) → Ret t' cont Φ) :
+    Ret t (.decCall x .one (ofString "scratch_alloc") [arg] cont) Φ := by
+  have hfr : FNR s t m e := h.1
+  obtain ⟨sp, fp, hsp, hfp, gsp, gfp⟩ := FNR.words hfr
+  have hA := hfr.2.2.2.1.2
+  have hfs : fp.toNat ≤ sp.toNat := by have := hA.2.2.2.1; omega
+  have hsa : sp.toNat % 8 = 0 := by have := hA.2.2.2.2.2.2.2.1; omega
+  refine Ret.mono (HtabC00Ports.decCall_scratch_alloc hfr.1 nv harg sp fp hsp hfp ?_)
+    (fun v t h => hΦ v t _ h)
+  intro hc1 hc2
+  obtain ⟨qa, qf, qs, -, -⟩ := hb_scratch_alloc_arith sp fp nv hfs hsa hc1 hc2
+  generalize (sp - nv) &&& ((0 : BitVec 64) - 8) = q at *
+  generalize hT : setVarHOLFinite x (.val (.word q)) { t with
+      globals := t.globals.update (ofString "scratch_ptr", .val (.word q)),
+      clock := t.clock - 1 } = T
+  have Tg : T.globals = t.globals.update (ofString "scratch_ptr", .val (.word q)) := by
+    rw [← hT]; rfl
+  have Tm : T.memory = t.memory := by rw [← hT]; rfl
+  have Tc : T.code = t.code := by rw [← hT]; rfl
+  have hG : GuestInv T := by rw [← hT]; exact guestInv_congr (s := t) rfl rfl rfl rfl hfr.2.2.2.1.1
+  have hsq : T.globals.lookup (ofString "scratch_ptr") = some (.val (.word q)) := by
+    rw [Tg]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have hfq : T.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word fp)) := by
+    rw [Tg]; simp [HolFiniteMapExact.lookup_update, FUPDATE]; exact hfp
+  have hkg : ∀ k, k ≠ ofString "scratch_ptr" → k ≠ ofString "frame_mem_ptr" →
+      T.globals.lookup k = t.globals.lookup k := by
+    intro k h1 _; rw [Tg]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm h1]
+  have hse : sp.toNat ≤ scratchEnd := by have := hA.2.2.2.2.1; omega
+  have hss : scratchStart ≤ fp.toNat := by have := hA.2.2.1; omega
+  have hfa : fp.toNat % 8 = 0 := by have := hA.2.2.2.2.2.2.1; omega
+  have hxl : T.locals.lookup x = some (.val (.word q)) := by rw [← hT]; exact setVar_lookup_eq _ _ _
+  have hyl : ∀ y, y ≠ x → T.locals.lookup y = t.locals.lookup y := by
+    intro y hy; rw [← hT]; exact setVar_lookup_ne _ _ _ _ hy
+  refine Ret.mono (hb T q ?_ hxl hyl) (fun v t h => hΦ v t _ h)
+  have hh : globN T "heap_ptr" = globN t "heap_ptr" := by
+    unfold globN; rw [hkg _ (by decide) (by decide)]
+  have hgsT : globN T "scratch_ptr" = q.toNat := by unfold globN; rw [hsq]
+  have Tme : T.memaddrs = t.memaddrs := by rw [← hT]; rfl
+  have Tbe : T.be = t.be := by rw [← hT]; rfl
+  refine FNRL.step h (hyl _ hx1) (hyl _ hx2) Tc Tme Tbe
+    (arenaReady_of_sp_fmp hG hA hkg q fp hsq hfq hss qf (by omega) hfa qa)
+    (by rw [hgsT, gsp]; exact qs) ?_ (le_of_eq hh.symm) (fun k k1 _ k3 => hkg k k1 k3)
+    (loS := q.toNat) (lenS := sp.toNat - q.toNat) (loH := globN t "heap_ptr") (lenH := 0)
+    (by rw [hgsT]) (by rw [gsp]; omega) (le_refl _) (by rw [hh]; omega)
+    (fun a _ _ => by rw [Tm])
+  have := hfr.2.2.2.2.2.1
+  omega
+
+/-- `mem := frame_mem_alloc(1024)` step: `mem` is the old `frame_mem_ptr`, which advances by
+exactly 1024. -/
+theorem FNRL.frameMemAlloc {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep) {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop} (hΦ : LocIns Φ)
+    (hb : ∀ (t' : PanSemStateFiniteExact 64 F) (p : BitVec 64), p.toNat = globN t "frame_mem_ptr" →
+      globN t' "frame_mem_ptr" = globN t "frame_mem_ptr" + 1024 → FNRL s t' m e fv keep →
+      t'.locals.lookup (ofString "mem") = some (.val (.word p)) →
+      (∀ y, y ≠ ofString "mem" → t'.locals.lookup y = t.locals.lookup y) → Ret t' cont Φ) :
+    Ret t (.decCall (ofString "mem") .one (ofString "frame_mem_alloc")
+      [.const (BitVec.ofNat 64 1024)] cont) Φ := by
+  have hfr : FNR s t m e := h.1
+  obtain ⟨sp, fp, hsp, hfp, gsp, gfp⟩ := FNR.words hfr
+  have hA := hfr.2.2.2.1.2
+  have hfs : fp.toNat ≤ sp.toNat := by have := hA.2.2.2.1; omega
+  have hse : sp.toNat ≤ scratchEnd := by have := hA.2.2.2.2.1; omega
+  have hss : scratchStart ≤ fp.toNat := by have := hA.2.2.1; omega
+  have hfa : fp.toNat % 8 = 0 := by have := hA.2.2.2.2.2.2.1; omega
+  have hsa : sp.toNat % 8 = 0 := by have := hA.2.2.2.2.2.2.2.1; omega
+  refine Ret.decCallL hΦ fun vals body cal ret v post h1 h2 h3 => ?_
+  have hv : vals = [.val (.word 1024)] := by
+    obtain ⟨v1, rfl, he1⟩ := evalList1_inv _ _ h1
+    simp [ev, evalHOLExact] at he1
+    rw [← he1]; rfl
+  obtain ⟨rfl, rfl⟩ := lk1 hfr.1 R16Shards.OpHandlers.lookup_frame_mem_alloc 1024 hv h2
+  have hr := R16Shards.OpHandlers.frame_mem_alloc_body_run
+    (callEntryStateHOLFinite t (HolFiniteMapExact.empty.update (ofString "n", .val (.word 1024))))
+    fp sp 1024 hfr.1 hfp hsp
+    (by simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+  simp only at hr
+  rw [h3] at hr
+  obtain ⟨rfl, hc1, hc2, hpost⟩ := hr _ rfl
+  have hq := frame_mem_alloc_1024 fp sp hfs hse hfa hc1 hc2
+  generalize (fp + ((1024 : BitVec 64) + 7)) &&& ((0 : BitVec 64) - 8) = q at hq hc2 hpost
+  simp only at hpost
+  generalize hT : setVarHOLFinite (ofString "mem") (.val (.word fp)) { post with locals := t.locals } = T
+  have Tg : T.globals = t.globals.update (ofString "frame_mem_ptr", .val (.word q)) := by
+    rw [← hT, hpost]; rfl
+  have Tm : T.memory = t.memory := by rw [← hT, hpost]; rfl
+  have Tc : T.code = t.code := by rw [← hT, hpost]; rfl
+  have hG : GuestInv T := by
+    rw [← hT, hpost]; exact guestInv_congr (s := t) rfl rfl rfl rfl hfr.2.2.2.1.1
+  have hsq : T.globals.lookup (ofString "scratch_ptr") = some (.val (.word sp)) := by
+    rw [Tg]; simp [HolFiniteMapExact.lookup_update, FUPDATE]; exact hsp
+  have hfq : T.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word q)) := by
+    rw [Tg]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have hkg : ∀ k, k ≠ ofString "scratch_ptr" → k ≠ ofString "frame_mem_ptr" →
+      T.globals.lookup k = t.globals.lookup k := by
+    intro k _ h2; rw [Tg]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm h2]
+  have hxl : T.locals.lookup (ofString "mem") = some (.val (.word fp)) := by
+    rw [← hT]; exact setVar_lookup_eq _ _ _
+  have hyl : ∀ y, y ≠ ofString "mem" → T.locals.lookup y = t.locals.lookup y := by
+    intro y hy; rw [← hT]; exact setVar_lookup_ne _ _ _ _ hy
+  have Tme : T.memaddrs = t.memaddrs := by rw [← hT, hpost]; rfl
+  have Tbe : T.be = t.be := by rw [← hT, hpost]; rfl
+  refine hb T fp gfp.symm ?_ ?_ hxl hyl
+  · have hfqT : globN T "frame_mem_ptr" = q.toNat := by unfold globN; rw [hfq]
+    rw [hfqT, hq, gfp]
+  · have hgsT : globN T "scratch_ptr" = sp.toNat := by unfold globN; rw [hsq]
+    have hh : globN T "heap_ptr" = globN t "heap_ptr" := by
+      unfold globN; rw [hkg _ (by decide) (by decide)]
+    refine FNRL.step h (hyl _ (by decide)) (hyl _ (by decide)) Tc Tme Tbe
+      (arenaReady_of_sp_fmp hG hA hkg sp q hsq hfq (by omega) (by omega) hse (by omega) hsa)
+      (by rw [hgsT, gsp]) (by rw [hgsT]; have := hfr.2.2.2.2.2.1; omega) (le_of_eq hh.symm)
+      (fun k k1 _ k3 => hkg k k1 k3)
+      (loS := sp.toNat) (lenS := 0) (loH := globN t "heap_ptr") (lenH := 0)
+      (by rw [hgsT]) (by rw [gsp]; omega) (le_refl _) (by rw [hh]; omega)
+      (fun a _ _ => by rw [Tm])
+
+open Flapjack in
+/-- Evaluation preserves `be` (needed to rebuild FNR conjunct 3 after opaque call results). -/
+theorem FNR.evalBe {F : Type} {X post : PanSemStateFiniteExact 64 F} {b : ProgHOL 64}
+    {r : Option (PanSemResultExact 64)} (h3 : evaluateHOLFiniteState X b = (r, post)) :
+    post.be = X.be := by
+  have inv := evaluateInvariantsHOLFinite b
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite X) r
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite post)
+    (by simp only [PanPropsEvalStateFiniteExact.evaluateHOLFinitePair,
+          PanPropsEvalStateFiniteExact.toPanSemFinite_ofPanSemFinite, h3])
+  exact inv.2.2.1
+
+/-- Post-state transport for `htab_count` calls: the callee leaves everything unchanged. -/
+theorem FNRL.htabCountPost {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep) (w : BitVec 64) (x : MlS)
+    (hx1 : ofString "msg" ≠ x) (hx2 : ofString "e" ≠ x) (rv : ValueHOL 64)
+    (post : PanSemStateFiniteExact 64 F)
+    (h3 : evaluateHOLFiniteState (callEntryStateHOLFinite t
+      (HolFiniteMapExact.empty.update (ofString "t", .val (.word w))))
+      (sourceFnBody Guest.Software.guestFn_htab_count) = (some (.returned rv), post)) :
+    FNRL s (setVarHOLFinite x rv { post with locals := t.locals }) m e fv keep := by
+  have hfr : FNR s t m e := h.1
+  obtain ⟨hg, hm, hc, hmd⟩ := Ret.apply (htab_count_run (callEntryStateHOLFinite t _)) h3
+  have hGp := guestInv_post (guestInv_callEntry _ _ hfr.2.2.2.1.1) h3
+  have Tg : (setVarHOLFinite x rv { post with locals := t.locals }).globals = t.globals := hg
+  have Tm : ∀ a : BitVec 64, (setVarHOLFinite x rv { post with locals := t.locals }).memory a
+      = t.memory a := by
+    intro a; show post.memory a = t.memory a; rw [hm]; rfl
+  have Tc : (setVarHOLFinite x rv { post with locals := t.locals }).code = t.code := hc
+  have Tme : (setVarHOLFinite x rv { post with locals := t.locals }).memaddrs
+      = t.memaddrs := hmd
+  have hbe0 := FNR.evalBe (X := callEntryStateHOLFinite t
+    (HolFiniteMapExact.empty.update (ofString "t", .val (.word w)))) h3
+  have Tbe : (setVarHOLFinite x rv { post with locals := t.locals }).be = t.be := hbe0
+  have hgn : ∀ n, globN (setVarHOLFinite x rv { post with locals := t.locals }) n
+      = globN t n := by intro n; unfold globN; rw [Tg]
+  refine FNRL.step h (setVar_lookup_ne _ _ _ _ hx1) (setVar_lookup_ne _ _ _ _ hx2) Tc Tme Tbe
+    ⟨guestInv_congr (s := post) rfl rfl rfl rfl hGp, arenaOK_congr (s := t) hg hfr.2.2.2.1.2⟩
+    (le_of_eq (hgn _)) ((le_of_eq (hgn _)).trans hfr.2.2.2.2.2.1) (le_of_eq (hgn _).symm)
+    (fun k _ _ _ => by rw [Tg])
+    (loS := globN (setVarHOLFinite x rv { post with locals := t.locals }) "scratch_ptr")
+    (lenS := 0) (loH := globN t "heap_ptr") (lenH := 0)
+    (le_refl _) (by rw [hgn]; omega) (le_refl _) (by rw [hgn]; omega)
+    (fun a _ _ => Tm a)
+
+/-- `acc_n := htab_count(ld(msg+k))` (declaration form). -/
+theorem FNRL.htabCountDec {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep) (k : BitVec 64) {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop} (hΦ : LocIns Φ)
+    (hb : ∀ (t' : PanSemStateFiniteExact 64 F) (v : BitVec 64), FNRL s t' m e fv keep →
+      t'.locals.lookup (ofString "acc_n") = some (.val (.word v)) →
+      (∀ y, y ≠ ofString "acc_n" → t'.locals.lookup y = t.locals.lookup y) → Ret t' cont Φ) :
+    Ret t (.decCall (ofString "acc_n") .one (ofString "htab_count")
+      [.load .one (.op .add [.var .local (ofString "msg"), .const k])] cont) Φ := by
+  have hfr : FNR s t m e := h.1
+  refine Ret.decCallL hΦ fun vals body cal ret v post h1 h2 h3 => ?_
+  obtain ⟨v1, rfl, he⟩ := evalList1_inv _ _ h1
+  obtain ⟨w, rfl, -⟩ := ev_load_msg hfr.2.2.2.2.2.2.2.2.2.2.2.2.2.1 k v1 he
+  obtain ⟨rfl, rfl⟩ := lk1 hfr.1 lookup_htab_count w rfl h2
+  obtain ⟨u, rfl⟩ := Ret.apply (htab_count_word _) h3
+  exact hb _ u (FNRL.htabCountPost h w _ (by decide) (by decide) _ post h3) (setVar_lookup_eq _ _ _)
+    (fun y hy => setVar_lookup_ne _ _ _ _ hy)
+
+/-- `acc_n := htab_count(ld(msg+k))` (assignment form). -/
+theorem FNRL.htabCountAssign {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep) (k : BitVec 64) {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hb : ∀ (t' : PanSemStateFiniteExact 64 F) (v : BitVec 64), FNRL s t' m e fv keep →
+      t'.locals.lookup (ofString "acc_n") = some (.val (.word v)) →
+      (∀ y, y ≠ ofString "acc_n" → t'.locals.lookup y = t.locals.lookup y) → Ret t' cont Φ) :
+    Ret t (.seq (.call (some (some (.local, ofString "acc_n"), none)) (ofString "htab_count")
+      [.load .one (.op .add [.var .local (ofString "msg"), .const k])]) cont) Φ := by
+  have hfr : FNR s t m e := h.1
+  refine Ret.seq (fun v hv => False.elim (callAssign_noRet t _ _ _ v hv)) ?_
+  intro t2 ht
+  obtain ⟨values, body, cal, ret, rv, post, h1, h2, h3, h4⟩ := callAssign_inv ht
+  obtain ⟨v1, rfl, he⟩ := evalList1_inv _ _ h1
+  obtain ⟨w, rfl, -⟩ := ev_load_msg hfr.2.2.2.2.2.2.2.2.2.2.2.2.2.1 k v1 he
+  obtain ⟨rfl, rfl⟩ := lk1 hfr.1 lookup_htab_count w rfl h2
+  rw [h4]
+  obtain ⟨u, rfl⟩ := Ret.apply (htab_count_word _) h3
+  exact hb _ u (FNRL.htabCountPost h w _ (by decide) (by decide) _ post h3) (setVar_lookup_eq _ _ _)
+    (fun y hy => setVar_lookup_ne _ _ _ _ hy)
+
 end FrameOpenRich
