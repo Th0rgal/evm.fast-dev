@@ -13845,4 +13845,46 @@ theorem evmInvAt_of_log_no_growth_new_objects_g09 {F : Type}
   · simpa only [hcons, List.tail_cons] using htail
   · simpa only [hcons, List.tail_cons] using hlogs
 
+/-- In-place append preserves header allocation and word-domain validity,
+including the previously unused insertion cell in the backing array. -/
+theorem log_no_growth_header_and_slots_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap log : BitVec 64)
+    (hFW : FrameWF s S ec)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    WordsOK post (l.toNat, 24) ∧ Allocated post (l.toNat, 24) ∧
+      ∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8 * i) := by
+  dsimp only
+  have hheader := hFW.1 (memW s (ec.1 + 88), 24) (by simp)
+  rw [hl] at hheader
+  have hbuffer : WordsOK s (p.toNat, 8 * cap.toNat) := by
+    have hw := hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+    unfold frameLogs at hw
+    simpa only [hl, hm0, hm16] using hw
+  have word_post : ∀ a, WordAt s a → WordAt
+      {s with memory := fun a =>
+        if a = p + n * 8#64 then .word log
+        else if a = l + 8#64 then .word (n + 1#64) else s.memory a} a := by
+    intro a ha
+    obtain ⟨w, hd, hw⟩ := ha
+    cases hm : (s.memory (BitVec.ofNat 64 a)) with
+    | word w =>
+      by_cases h1 : BitVec.ofNat 64 a = p + n * 8#64
+      · exact ⟨log, hd, by dsimp only; rw [if_pos h1]⟩
+      · by_cases h2 : BitVec.ofNat 64 a = l + 8#64
+        · exact ⟨n + 1#64, hd, by dsimp only; rw [if_neg h1, if_pos h2]⟩
+        · exact ⟨w, hd, by dsimp only; rw [if_neg h1, if_neg h2, hm]⟩
+  refine ⟨⟨hheader.2.1, hheader.2.2.1, fun k hk => word_post _ (hheader.2.2.2 k hk)⟩,
+    Or.inr hheader.1, ?_⟩
+  intro i hi
+  apply word_post
+  apply hbuffer.2.2 i
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
