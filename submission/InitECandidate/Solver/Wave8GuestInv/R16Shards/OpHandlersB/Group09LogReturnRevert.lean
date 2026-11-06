@@ -16902,4 +16902,61 @@ theorem op_log_growth_invariant_of_separation_g09 {F : Type}
   · simpa only [hcons, List.tail_cons] using hslots
   · simpa only [hcons, List.tail_cons] using hrecords
 
+/-- Typed-cell preservation derives the world metadata needed for growth reconstruction. -/
+theorem op_log_growth_invariant_from_cells_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {head : Ivl} {tail : List Ivl} {log : Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hcell : SameTypedCells s post S Nd) (hdom : post.memaddrs = s.memaddrs)
+    (hgrows : AllocatorGrows s post)
+    (hglobals : ∀ g, ofString g ≠ ofString "heap_ptr" →
+      ofString g ≠ ofString "scratch_ptr" → ofString g ≠ ofString "frame_mem_ptr" →
+      globN post g = globN s g)
+    (hchain : evmChain post = evmChain s) (hcons : evmChain s = head :: tail)
+    (hscratch : globN post "scratch_ptr" = globN s "scratch_ptr")
+    (hframe : globN post "frame_mem_ptr" = globN s "frame_mem_ptr")
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hheader : ∀ ec ∈ tail, ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hslots : ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8*i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8*i))
+    (hrecords : ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (memW s (memW s (memW s (ec.1 + 88)) + 8*i) + k) =
+        memW s (memW s (memW s (memW s (ec.1 + 88)) + 8*i) + k))
+    (hlogs : frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log)
+    (hmsgBuffer : ∀ ec ∈ evmChain s, Disj (memW s (ec.1 + 112), 176) (frameLogs post head))
+    (hmsgNew : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls post log,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hFW : ∀ ec ∈ evmChain s, FrameWF s S ec) (hheadWF : FrameWF post S head)
+    (holdpw : ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj)
+    (hbufferOld : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (frameLogs post head) o)
+    (hnewpw : (logOwnedIvls post log).Pairwise Disj)
+    (hnewOld : ∀ x ∈ logOwnedIvls post log, ∀ ec ∈ evmChain s,
+      ∀ o ∈ frameObjects s ec, Disj x o)
+    (hnewBuffer : ∀ x ∈ logOwnedIvls post log, Disj x (frameLogs post head))
+    (hold : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd))
+    (hbuffer : ∀ i ∈ worldOwned s S Nd, Disj (frameLogs post head) i)
+    (hnew : IvlsDisj (logOwnedIvls post log) (worldOwned s S Nd)) : EvmInvAt post S := by
+  have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
+    intro g hg
+    have hne : ofString g ≠ ofString "heap_ptr" ∧
+        ofString g ≠ ofString "scratch_ptr" ∧ ofString g ≠ ofString "frame_mem_ptr" := by
+      revert g hg
+      decide
+    exact hglobals g hne.1 hne.2.1 hne.2.2
+  obtain ⟨_, _, _, hfixed, _, hfoot, _⟩ := log_growth_world_preserved_g09
+    hAs hAp hWT hgrows.1 (by rw [hscratch]) hglobals hcell
+  have hempty := hglobals "evm_empty" (by decide) (by decide) (by decide)
+  have hsys := hglobals "vm_system_address" (by decide) (by decide) (by decide)
+  exact op_log_growth_invariant_of_separation_g09 hAs hAp hinv hWT hcell hdom hgrows
+    hglobals hcore hfixed hfoot hchain hcons hscratch hframe hempty hsys hfields hcont
+    hheader hslots hrecords hlogs hmsgBuffer hmsgNew hFW hheadWF holdpw hbufferOld
+    hnewpw hnewOld hnewBuffer hold hbuffer hnew
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
