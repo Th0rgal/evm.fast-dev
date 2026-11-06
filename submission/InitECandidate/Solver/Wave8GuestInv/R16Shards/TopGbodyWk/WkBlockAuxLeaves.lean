@@ -10695,4 +10695,24 @@ theorem eval_merge_storage_loop {F : Type} (s0 : PanSemStateFiniteExact 64 F)
       · exact absurd hfr not_flowingOrResumes_error
       · exact absurd hfr not_flowingOrResumes_error
 
+theorem progWithdrawalStep_return (e : ExpHOL 64) : ProgWithdrawalStep (.return e) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_return]
+  split
+  · exact WorldStepSc.refl s _ hW.1
+  · split
+    · exact (WorldStepSc.refl s none hW.1).with_locals_clock _ _
+    · exact WorldStepSc.refl s _ hW.1
+
+/-- The storage loop composes with the function's final return. -/
+theorem eval_merge_storage_loop_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (cond : ExpHOL 64) (hc : s.code = originalRuntimeCode) (hI : MergeStorageInv s)
+    (hnt : (evaluateHOLFiniteState s (.seq (.while cond mergeStorageBody) (.return (.const 0#64)))).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq (.while cond mergeStorageBody) (.return (.const 0#64)))).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s (.seq (.while cond mergeStorageBody) (.return (.const 0#64)))).1
+        (evaluateHOLFiniteState s (.seq (.while cond mergeStorageBody) (.return (.const 0#64)))).2 := by
+  exact eval_withdrawal_then s _ _ hc hI.1
+    (eval_merge_storage_loop s cond hc hI) (progWithdrawalStep_return _) hnt hfr
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
