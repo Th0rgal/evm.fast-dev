@@ -17088,4 +17088,44 @@ theorem journal_guard_seq_resume {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The full jset journal-append block preserves block-output backing before its tail. -/
+theorem jset_journal_append_backing_resume {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {S : List Nat} {b : Ivl}
+    (j n cap p t f0 f1 : BitVec 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaOK s) (hJ : JournalTyped s S) (hfix : FixedTyped s)
+    (hb : b ∈ blockOutObjects s) (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (heff : WorldEff s cur [] [] ["heap_ptr"])
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hr : evaluateHOLFiniteState cur
+      (journalAppendTailProg 4#64 (.rfield 0 (.var .local (ofString "old"))) tail) = (some (.returned rv), out)) :
+    ∃ mid u, IvlUnhit s mid b ∧ evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  unfold journalAppendTailProg at hr
+  obtain ⟨hcap, hrest⟩ := journal_guard_seq_resume cur out n cap 4#64 _ rv heff.code
+    (by rw [← heff.gw_kept _ (by decide)]; exact hn)
+    (by rw [← heff.gw_kept _ (by decide)]; exact hc) hr
+  have hcap' : n.toNat < globN s "journal_cap" := by simpa [globN, hc] using hcap
+  have hjbase : j.toNat = globN s "journal" := by simp [globN, hj]
+  have hbound := journal_record_bound_of_typed n.toNat hA hJ hcap'
+  rw [← hjbase] at hbound
+  have he : WorldEff s cur [(j.toNat + 32 * n.toNat, 32)] [] ["heap_ptr"] :=
+    heff.mono (by intro _ h; cases h) (by intro _ h; cases h) (by intro _ h; exact h)
+  obtain ⟨len, entry, u, he', hl, hg, hrun, hm⟩ := journal_klen_dec_effect _ _ rv he hrest
+  obtain ⟨mid, v, hf, htail, hm'⟩ := journal_alloc_to_writes_backing_resume j n p len t f0 f1 tail rv
+    hA hfix hb hal hb1 hb2 hcap' hjbase he' hj hn (by rw [hg]; exact hp)
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, ht, show ofString "klen" ≠ ofString "t" by decide])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, hold, show ofString "klen" ≠ ofString "old" by decide])
+    hbound hrun
+  exact ⟨mid, v, hf, htail, hm.trans hm'⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
