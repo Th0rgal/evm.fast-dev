@@ -11075,6 +11075,39 @@ theorem precompile_sha256_output_precise_effect {F : Type}
         subst i
         exact ⟨(ev.toNat+120,16),by simp,le_rfl,le_rfl⟩)
 
+open R10Shards.P26_P28 in
+theorem precompile_chain_cells_of_disjoint_byteEff {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {rl : List Ivl}
+    (hi : Wave8Contracts.M23.EvmInvAt s S) (he : ByteEff s post rl)
+    (hd : ∀ i ∈ rl, ∀ j ∈ ((evmChain s).map (frameObjects s)).flatten, Disj i j) :
+    ChainCellsAgree s post := by
+  have word : ∀ ec ∈ evmChain s, ∀ base sz k : Nat,
+      (base,sz) ∈ frameScratch s ec → k % 8 = 0 → k+8 < sz →
+      memW post (base+k) = memW s (base+k) := by
+    intro ec hec base sz k hj hk8 hk
+    have hf := hi.2.2.2.2.1 ec hec
+    have hb : base+sz ≤ 2^64 := le_trans (hf.1 (base,sz) hj).1.2 (by
+      rw [R11Shards.scratchEnd_val]; decide)
+    have hbase8 := (hf.1 (base,sz) hj).2.1
+    have hj' : (base,sz) ∈ frameObjects s ec := by
+      simp only [frameScratch,List.mem_cons,List.not_mem_nil,or_false] at hj
+      rcases hj with h|h|h|h <;> simp [frameObjects,←h]
+    refine (InitECandidate.Solver.Wave8GuestInv.SoloHtabSet.memW_eq_iff_memB he.be
+      (by omega) (by omega) (by omega) (by omega)).mpr ?_
+    intro r hr
+    by_contra hn
+    obtain ⟨i,hir,hib⟩ := he.byte_frame (base+k+r) (by omega) hn
+    have hdis := hd i hir (base,sz) (List.mem_flatten.mpr
+      ⟨frameObjects s ec,List.mem_map.mpr ⟨ec,hec,rfl⟩,hj'⟩)
+    rcases i with ⟨a,n⟩
+    simp only [InIvl,Disj] at hib hdis
+    rcases hdis with h|h|h|h <;> omega
+  intro ec hec
+  exact ⟨word ec hec ec.1 280 24 (by simp [frameScratch]) (by omega) (by omega),
+    word ec hec ec.1 280 32 (by simp [frameScratch]) (by omega) (by omega),
+    word ec hec ec.1 280 40 (by simp [frameScratch]) (by omega) (by omega),
+    word ec hec ec.2 104 56 (by simp [frameScratch]) (by omega) (by omega)⟩
+
 theorem precompile_sha256_call_evmStep {F : Type}
     (s : PanSemStateFiniteExact 64 F) (pad stp out len : BitVec 64)
     (ptr count dest : ExpHOL 64)
