@@ -17801,4 +17801,32 @@ theorem journal_append_replace_memory_rel {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The cut exposes an original tail execution while retaining the original output memory. -/
+theorem journal_cut_memory_tail_output {F : Type}
+    (s out cut : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut)) :
+    ∃ (entry u : PanSemStateFiniteExact 64 F), cut.memory = entry.memory ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨cut', hr', entry, u, hm, ht, hout⟩ := journal_append_replace_memory_rel s out jn jc trapCode
+    e16 tail (.return (.const 0#64)) rv (.val (.word 0#64))
+    (fun orig mem => ∃ (entry u : PanSemStateFiniteExact 64 F), mem = entry.memory ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ orig = u.memory) hcode hjn hjc hr (by
+        intro entry u hu
+        refine ⟨entry.emptyLocalsHOLFinite, ?_, entry, u, rfl, hu, rfl⟩
+        simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact])
+  have he : cut' = cut := (Prod.mk.inj (hr'.symm.trans hcut)).2
+  subst cut'
+  exact ⟨entry, u, hm, ht, hout⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
