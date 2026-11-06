@@ -9870,4 +9870,20 @@ theorem htabValues_eq_of_witness_effect {F : Type}
     subst j
     exact Fast_C08WkShard03.disj_allocated_freeGap hA.2 hal
 
+/-- Actual witness-account execution preserves strong entries with no extra frame premises. -/
+theorem ws_get_account_execution_entries_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hWT : WorldTypedWith s S Nd) (he : CodeDbPayloadStrong s S db) (hm : db ∈ S)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_account_optional") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    NodeDbEntriesStrong post db := by
+  have heff := ws_get_account_execution_effect s values body callee ret v post hc hA hl hb
+  exact nodeDbEntriesStrong_of_preserved_payloads he.1 hA heff.arena heff.hp_lo
+    (htabValues_eq_of_witness_effect hWT hA heff db hm)
+    (protected_payload_words_of_witness_effect he hA heff)
+
 end HeadStore
