@@ -15923,4 +15923,52 @@ theorem op_log_growth_owned_record_g09 {F : Type}
   obtain ⟨hpair, hsep⟩ := op_log_detached_ownership_g09 h0 h8 h16 h24 h32 ht hlog ha hdj
   exact ⟨hv, heq, heq ▸ hpair, heq ▸ hsep⟩
 
+/-- In-place append establishes its semantic list result directly from pre-store validity. -/
+theorem op_log_no_growth_list_post_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hl_bound : l.toNat + 24 ≤ 2^64)
+    (hp_bound : p.toNat + 8 * n.toNat + 8 ≤ 2^64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hec : ec.1 + 280 ≤ 2^64)
+    (hecHeader : Disj (ec.1, 280) (l.toNat, 24))
+    (hecBuffer : Disj (ec.1, 280) (p.toNat, 8 * n.toNat + 8))
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    LogsListOK post (memW post (ec.1 + 88)) ∧
+      frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls s log.toNat := by
+  dsimp only
+  have hcount : n.toNat + 1 < 2^64 := by
+    have hb := (frameWF_logs_cap_bounds hA.2 hFW).2.2.2.1
+    rw [hl, hn] at hb
+    omega
+  have hheap : globN s "heap_ptr" ≤ 2^64 := by
+    have hh := hA.2.2.1
+    rw [R11Shards.heapLimit_val] at hh
+    omega
+  obtain ⟨hv, ho⟩ := log_no_growth_new_record_preserved_g09 s l p n log
+    hl_bound hp_bound (le_trans hlog.2.1.2 hheap) hdheader hdbuffer hlog
+  obtain ⟨hw, ha, hs⟩ := log_no_growth_header_and_slots_g09 s ec S l p n cap log
+    hFW hl hm0 hm16 hlt
+  have hf := log_no_growth_protected_words_g09 s l p n log (ec.1, 280)
+    hl_bound hp_bound hec hecHeader hecBuffer
+  have hrecords := log_no_growth_old_record_separation_g09 l p n cap
+    hA hFW hpw hl hn hm0 hm16 hnonnull hlt
+  obtain ⟨hlist, hobjects⟩ := log_no_growth_semantic_post_g09 s ec S l p n cap log
+    hA hFW hl hn hm0 hm16 hlt hcount hl_bound hp_bound hdisj hd8 hdslot
+    hrecords ((hf 88 (by omega)).trans hl) hw ha hs hv
+  exact ⟨hlist, by rw [hobjects, ho]⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
