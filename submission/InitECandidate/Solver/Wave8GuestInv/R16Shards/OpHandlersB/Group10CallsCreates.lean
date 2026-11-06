@@ -12552,4 +12552,29 @@ theorem world_typed_heap_transport_g10 {F : Type}
   exact (worldTypedWith_congr_w1 ha hap hh (le_of_eq hsc) hg hcell hw
     ⟨hfp, fun o ho => Or.inl (hf ▸ ho)⟩).1
 
+theorem heap_step_fixed_objects_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (ha : ArenaReady s) (hap : ArenaReady post) (hw : WorldTypedWith s S Nd)
+    (hm : post.memory = s.memory) (hbe : post.be = s.be)
+    (hg : GlobalsKept ["heap_ptr"] s post) :
+    fixedObjects post = fixedObjects s := by
+  have hcell : SameTypedCells s post S Nd := by
+    refine ⟨hbe, hap.1.memaddrs.trans ha.1.memaddrs.symm, ha.1.memaddrs, ?_, ?_, ?_⟩
+    · intros; rw [hm]
+    · intros; rw [hm]
+    · intros; unfold memB; rw [hm, hbe]
+  have hglob : ∀ nm : String, ofString nm ≠ ofString "heap_ptr" → globN post nm = globN s nm := by
+    intro nm hne
+    unfold globN
+    rw [← hg (ofString nm) (by simp [hne])]
+  unfold fixedObjects
+  rw [blockOutObjects_eq ha.2 hw.2.2.1 hcell (hglob "bo" (by decide)),
+      balObjects_eq ha.2 hw.1 hw.2.2.1 hcell (hglob "bal_accounts" (by decide)),
+      hglob "journal" (by decide), hglob "journal_cap" (by decide)]
+  congr 3
+  apply List.map_congr_left
+  intro gn hgn
+  have hne : ofString gn.1 ≠ ofString "heap_ptr" := by revert gn hgn; decide
+  rw [hglob gn.1 hne]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
