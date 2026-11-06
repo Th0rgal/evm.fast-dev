@@ -19238,4 +19238,100 @@ theorem conditional_destroy_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Table deletion preserves every nonempty fixed object. -/
+theorem htab_del_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat) (b : Ivl)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (ht : locN (callEntryStateHOLFinite s callee) "t" ∈ S)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_del") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : IvlUnhit s post b := by
+  have ha : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).2 hA, ?_, ?_⟩
+    · exact (htabWF_with_locals s callee (s.clock - 1) _).2 (hT.1.2.1 _ ht).1
+    · exact fun i hi => ((hT.1.2.1 _ ht).2 i hi).1
+  have hx := PtxP1.funSpec_at_lookup htab_del_spec s hA.1.code vs body callee ret hl ha
+    (by rw [hr]; simp)
+  rw [hr] at hx
+  obtain ⟨hAp, _, _, _, hhp, _, hframe, _⟩ := hx v rfl
+  exact htab_mutation_fixed_frame hA.2 hAp.2 hT ht hb hbpos hhp hframe
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Table deletion preserves the two transaction backing header words. -/
+theorem htab_del_tx_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (ht : locN (callEntryStateHOLFinite s callee) "t" ∈ S)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_del") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have hb := txWorld_header_fixed hW k hk
+  have hf := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  have hu := htab_del_fixed_frame s post vs body callee ret v S Nd _ hW.1.1 hT ht hb
+    (by simp) hl hr
+  apply memW_eq_of_ivlUnhit hu hf.2.1 (ivl_allocated_bound hW.1.1.2 hf.1).2
+  exact ⟨le_rfl, by dsimp; omega⟩
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open private callee_param_two_r16 from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Lift deletion's fixed frame to a concrete ignored call with local table argument. -/
+theorem htab_del_local_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl)
+    (t : BitVec 64) (key : ExpHOL 64)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (ht : t.toNat ∈ S)
+    (hlt : s.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_del")
+      [.var .local (ofString "t"), key]) = (none, post)) : IvlUnhit s post b := by
+  classical
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases ha : evalListHOLFinite s [.var .local (ofString "t"), key] with _ | values
+  · rw [ha] at hr; cases hr
+  · simp only [ha] at hr
+    rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_del") values with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr
+      split at hr
+      · cases hr
+      · obtain ⟨v1, _, he1, _, hc_t, _⟩ := callee_param_two_r16 s (ofString "htab_del")
+          (ofString "t") (ofString "key") .one .one _ _
+          (by rw [hA.1.code]; exact EvmEkFk.lookup_htab_del_r16)
+          _ _ values body callee ret ha hl
+        have hv : v1 = .val (.word t) := by simpa [evalAt, evalHOLExact, hlt] using he1.symm
+        have hm : locN (callEntryStateHOLFinite s callee) "t" ∈ S := by
+          simpa [locN, callEntryStateHOLFinite, hc_t, hv] using ht
+        rcases hc : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, p⟩
+        rw [hc] at hr
+        cases r with
+        | none => cases hr
+        | some r =>
+          cases r <;> try (simp at hr)
+          rename_i v
+          split at hr
+          · have hu := htab_del_fixed_frame s p values body callee ret v S Nd b hA hT hm hb hbpos hl hc
+            have hp := (Prod.mk.inj hr).2
+            rw [← hp]
+            exact hu
+          · cases hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

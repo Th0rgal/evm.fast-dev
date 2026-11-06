@@ -8825,6 +8825,52 @@ theorem precompile_seq_flow_cases {F : Type}
     · cases h
     · exact h
 
+theorem precompile_seq_nonzero_or_early {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (first cont : ProgHOL 64)
+    (pad : BitVec 64) (Rl : List Ivl) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (he : R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s first).2 Rl)
+    (hc : ∀ t : PanSemStateFiniteExact 64 F, GuestInv t →
+      t.globals.lookup (ofString "sha_pad") = some (.val (.word pad)) →
+      R13.FlowsOrResumes (evaluateHOLFiniteState t cont).1 → pad.toNat ≠ 0)
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq first cont)).1) :
+    pad.toNat ≠ 0 ∨
+      (evaluateHOLFiniteState s first).1 = some .break ∨
+      (evaluateHOLFiniteState s first).1 = some .continue ∨
+      Resumes (evaluateHOLFiniteState s first).1 := by
+  rcases precompile_seq_flow_cases s first cont hr with ⟨hn,hflow⟩ | hctrl
+  · left
+    exact hc _ (guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi)
+      (by rw [he.globals]; exact hp) hflow
+  · exact Or.inr hctrl
+
+theorem precompile_while_no_loop_control {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (cond : ExpHOL 64) (body : ProgHOL 64) :
+    (evaluateHOLFiniteState s (.while cond body)).1 ≠ some .break ∧
+    (evaluateHOLFiniteState s (.while cond body)).1 ≠ some .continue := by
+  rw [evaluateHOLFiniteState_while_total]
+  split
+  · split
+    · split
+      · simp
+      · dsimp only
+        rw [fixClockHOLFinite_evaluateState]
+        have hle := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+        rcases run : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r,m⟩
+        rw [run] at hle
+        have hlt : m.clock < s.clock := by
+          change m.clock ≤ s.clock - 1 at hle
+          omega
+        cases r with
+        | none => exact precompile_while_no_loop_control m cond body
+        | some r =>
+          cases r with
+          | «continue» => exact precompile_while_no_loop_control m cond body
+          | _ => simp
+    · simp
+  · simp
+termination_by s.clock
+
 theorem precompile_memzero_null_128 {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hi : GuestInv s)
     (hp : s.locals.lookup (ofString "dst") = some (.val (.word 0)))
