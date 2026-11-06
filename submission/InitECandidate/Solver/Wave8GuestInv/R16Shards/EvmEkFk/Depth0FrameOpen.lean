@@ -9067,4 +9067,45 @@ theorem code_cache_args_of_typed_record {F : Type} (s : PanSemStateFiniteExact 6
   simp only [getCodeCacheArgs, evalListHOLFinite, evalListHOLExact, hl]
   simp [evalHOLExact, hh]
 
+/-- Concrete load and argument evaluations follow from strong world typing. -/
+theorem get_code_entry_of_world_nonzero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (hash : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S) (hWT : WorldTypedWith s S Nd)
+    (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hsk : globN s "sk_buf" ≠ 0) (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hbs : globN s "bs" ≠ 0)
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hdn : memW s (globN s "ws" + 16) ≠ 0)
+    (htn : memW s (globN s "ts" + 40) ≠ 0)
+    (hcn : ∀ owner, owner = "ts" ∨ owner = "bs" → memW s (globN s owner + 48) ≠ 0) :
+    ∃ db tw, GetCodeEntryStrong s S Nd db hash tw := by
+  obtain ⟨db,hdb,hwl⟩ := typed_record_root_load s hWT.2.2.1 "ws" 40 16 (by decide) hws (by decide) (by decide)
+  obtain ⟨tw,ht,htl⟩ := typed_record_root_load s hWT.2.2.1 "ts" 72 40 (by decide) hts (by decide) (by decide)
+  refine ⟨db,tw,get_code_entry_of_strong_roots s S Nd db hash tw hA hW hWT hc hs hfit hsk hws hts hh
+    hdb ht (by rwa [hdb]) (by rwa [ht]) hwl htl ?_⟩
+  intro owner ho
+  have hn : globN s owner ≠ 0 := by rcases ho with rfl | rfl; exact hts; exact hbs
+  obtain ⟨root,hr,ha⟩ := code_cache_args_of_typed_record s hWT.2.2.1 owner hash ho hn hh
+  exact ⟨hn,root,hr,by rw [hr]; exact hcn owner ho,ha⟩
+
+/-- Bounded code retrieval from world typing with live concrete roots. -/
+theorem get_code_return_of_world_nonzero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (hash : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S) (hWT : WorldTypedWith s S Nd)
+    (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hsk : globN s "sk_buf" ≠ 0) (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hbs : globN s "bs" ≠ 0)
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hdn : memW s (globN s "ws" + 16) ≠ 0)
+    (htn : memW s (globN s "ts" + 40) ≠ 0)
+    (hcn : ∀ owner, owner = "ts" ∨ owner = "bs" → memW s (globN s owner + 48) ≠ 0) :
+    Ret s (sourceFnBody Guest.Software.guestFn_get_code) (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  obtain ⟨db,tw,h⟩ := get_code_entry_of_world_nonzero s S Nd hash hA hW hWT hc hs hfit hsk hws hts hbs hh hdn htn hcn
+  exact get_code_return_entry_world_strong s S Nd db hash tw h
+
 end HeadStore
