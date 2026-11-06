@@ -9171,6 +9171,48 @@ theorem precompile_sha256_blocks_loop_effect {F : Type}
   rw [hes.globals]
   exact hpt
 
+theorem precompile_st_be32_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "p") = some (.val (.word p))) :
+    R10Shards.P26_P28.ByteEff s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_st_be32)).2 [(p.toNat,4)] :=
+  (R10Shards.P26_P28.checkByteStoresLocal_sound (ofString "p") 4 (by decide)
+    (sourceFnBody Guest.Software.guestFn_st_be32) rfl s p hc hi hp).1
+
+theorem precompile_st_be32_call_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p : BitVec 64) (ptr value : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) ptr =
+      some (.val (.word p))) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "st_be32") [ptr, value])).2 [(p.toNat,4)] := by
+  have hl : originalRuntimeCode.lookup (ofString "st_be32") =
+      some ([(ofString "p", .one), (ofString "v", .one)],
+        sourceFnBody Guest.Software.guestFn_st_be32, .one) :=
+    lookup_of_guestAst_getElem 27 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_st_be32) rfl
+  refine precompile_call0_byteEff_total _ _ _ _
+    (fun vals => [(R10Shards.P26_P28.valWordNat (vals[0]?.getD (.rStruct [])),4)]) hl ?_ s _ _ hc hi ?_
+  · intro entry vals hce hge hle
+    obtain ⟨p, b, rfl, hpe, hbe⟩ := R10Shards.P26_P28.lookupCode_two_words (by decide) hl hle
+    exact precompile_st_be32_effect entry p hce hge hpe
+  · intro vals hv r hr hpos
+    change @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) ptr = some (.val (.word p)) at hp
+    simp [evalListHOLFinite, evalListHOLExact, hp] at hv
+    split at hv
+    · rename_i v vs hv1 hv2
+      injection hv1 with hv1
+      subst v
+      injection hv with hv
+      subst vals
+      simp only [List.getElem?_cons_zero, Option.getD_some, R10Shards.P26_P28.valWordNat,
+        List.mem_singleton] at hr
+      subst r
+      exact ⟨(p.toNat,4), List.mem_singleton.mpr rfl, le_rfl, le_rfl⟩
+    · simp at hv
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
