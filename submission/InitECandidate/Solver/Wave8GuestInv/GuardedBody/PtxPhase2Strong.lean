@@ -15758,4 +15758,110 @@ theorem phase2_acct_new_resume_message_tables
   exact phase2_message_tables_with_locals _ _ _ ht
     (by simp [HolFiniteMapExact.update, FUPDATE, hne])
 
+/-- Resolve constructor parameters while retaining an effect relative to the outer caller. -/
+theorem phase2_acct_new_lookup_effect {F : Type}
+    {s cur : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {B : List (String × Nat)}
+    {gw : List String} (hg : "heap_ptr" ∈ gw) (he : WorldEff s cur Rl B gw)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (vs : List (ValueHOL 64))
+    (hl : lookupCodeHOLFinite cur.code.lookup (ofString "acct_new") vs =
+      some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new, callee, .one))
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).1) :
+    WorldEff s (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).2 Rl B gw := by
+  have hx := lookupCodeHOLFinite_eq_some cur.code.lookup (ofString "acct_new") vs _ callee _ hl
+  rw [he.code] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_acct_new] at hx
+  rcases vs with _ | ⟨vn, _ | ⟨vb, _ | ⟨vc, _ | rest⟩⟩⟩ <;> try simp at hx
+  rcases vn with ⟨⟨wn⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    rcases vc with ⟨⟨wc⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    try simp [shapeOfHOLExact, shapeEqHOL] at hx
+  simp [show ofString "nonce" ≠ ofString "balance" by decide,
+    show ofString "nonce" ≠ ofString "code_hash" by decide,
+    show ofString "balance" ≠ ofString "code_hash" by decide] at hx
+  obtain ⟨hsh, hL⟩ := hx
+  have hn : callee.lookup (ofString "nonce") = some (.val (.word wn)) := by
+    rw [← hL]; simp [show ofString "nonce" ≠ ofString "balance" by decide,
+      show ofString "nonce" ≠ ofString "code_hash" by decide]
+  have hb : callee.lookup (ofString "balance") = some vb := by
+    rw [← hL]; simp [show ofString "balance" ≠ ofString "code_hash" by decide]
+  have hw : callee.lookup (ofString "code_hash") = some (.val (.word wc)) := by
+    rw [← hL]; simp
+  exact R16Shards.EvmEkFk.worldEff_acct_new s (callEntryStateHOLFinite cur callee)
+    (List.mem_map.mpr ⟨"heap_ptr", hg, rfl⟩) (he.locals_clock callee (cur.clock - 1)) hsh hn hb hw hnt hr
+
+/-- Empty-account construction has only fresh heap effects. -/
+theorem phase2_acct_empty_effect {F : Type}
+    {s cur : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {B : List (String × Nat)}
+    {gw : List String} (hg : "heap_ptr" ∈ gw) (he : WorldEff s cur Rl B gw)
+    (hnt : (evaluateHOLFiniteState cur
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty)).1) :
+    WorldEff s (evaluateHOLFiniteState cur
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty)).2 Rl B gw := by
+  dsimp only [GuestTrapAndLookup.sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_acct_empty,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil] at hnt hr ⊢
+  apply worldEff_decCall_eff he _ _ _ _ _ _ _ R16Shards.EvmEkFk.lookup_acct_new
+    (fun callee vs _ hl hn hr => phase2_acct_new_lookup_effect hg he callee vs hl hn hr)
+    _ hnt (Or.inr (Or.inr (Or.inr hr)))
+  intro callee vs rv post _ _ _ _ he'
+  dsimp only
+  intro _ _
+  exact worldEff_return (he'.locals_clock _ _) _
+
+/-- Empty-account construction preserves caller-private tables across callee entry. -/
+theorem phase2_acct_empty_callEntry_message_tables {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hc : s.code = originalRuntimeCode) (ha : ArenaReady s)
+    {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty)).1) :
+    let post := (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty)).2
+    PtxMessageTables {post with locals := s.locals} aa ak := by
+  have he := phase2_acct_empty_effect (by simp : "heap_ptr" ∈ ["heap_ptr"])
+    ((WorldEff.refl s [] [] ["heap_ptr"] ha hc).locals_clock callee (s.clock - 1)) hnt hr
+  exact phase2_worldEff_message_tables ha ht (he.locals_clock s.locals _) (by simp) (by decide) hin rfl
+
+/-- Restore the private tables after the empty-account constructor returns. -/
+theorem phase2_acct_empty_resume_message_tables
+    (aa ak : Nat) (name : MlS) (hne : name ≠ ofString "m") (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+      Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => PtxMessageTables s aa ak) name (ofString "acct_empty") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "acct_empty") vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_acct_empty] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_acct_empty,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  cases vs with
+  | cons a rest => simp at hx
+  | nil =>
+    simp at hx
+    obtain ⟨rfl, hL, rfl⟩ := hx
+    change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty) =
+        (some (.returned v), post) at hr
+    have ht := phase2_acct_empty_callEntry_message_tables s callee hc hp.1 hp.2.1 hp.2.2
+      (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+    rw [hr] at ht
+    exact phase2_message_tables_with_locals _ _ _ ht
+      (by simp [HolFiniteMapExact.update, FUPDATE, hne])
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
