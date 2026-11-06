@@ -16652,4 +16652,40 @@ theorem phase2_get_account_optional_resume_saved_tables
   rw [hr] at ht
   exact ht
 
+/-- Empty-account allocation preserves private tables in an arbitrary saved environment. -/
+theorem phase2_acct_empty_resume_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat)
+    (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => PtxMessageTables {s with locals := saved} aa ak)
+      name (ofString "acct_empty") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "acct_empty") vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_acct_empty] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_acct_empty,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  cases vs with
+  | cons a rest => simp at hx
+  | nil =>
+    simp at hx
+    obtain ⟨rfl, hL, rfl⟩ := hx
+    change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty) =
+        (some (.returned v), post) at hr
+    have ht := phase2_acct_empty_callEntry_message_tables {s with locals := saved} callee hc
+      ((arenaReady_with_locals s saved s.clock).mpr hp.1) hp.2.1 hp.2.2
+      (by change (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) _).1 ≠ _; rw [hr]; simp)
+      (by change Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) _).1
+          rw [hr]; exact Or.inl ⟨v, rfl⟩)
+    change PtxMessageTables {(evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty)).2
+        with locals := saved} aa ak at ht
+    rw [hr] at ht
+    exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
