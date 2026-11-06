@@ -13234,4 +13234,33 @@ theorem log_growth_handler_post_g09 {F : Type}
     rw [hev, hm24, hm32, hm40, hframe]
     exact hHM
 
+/-- The in-place append writes only the header length and the insertion slot,
+with a byte effect suitable for old-record and typed-world framing. -/
+theorem log_no_growth_final_effect_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n log : BitVec 64)
+    (hma : s.memaddrs = ordinaryDomain)
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64) :
+    ByteRegionEffect s {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+      [(l.toNat + 8, 8), (p.toNat + 8 * n.toNat, 8)] := by
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  let Rl : List Ivl := [(l.toNat + 8, 8), (p.toNat + 8 * n.toNat, 8)]
+  have hlen := log_growth_store_effect_g09 s (l + 8#64) (n + 1#64) Rl hma hd8
+    ⟨(l.toNat + 8, 8), by simp [Rl], by dsimp only; rw [hl8]; omega⟩
+  have hstore := log_growth_store_effect_g09
+    {s with memory := fun a => if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    (p + n * 8#64) log Rl hma hdslot
+    ⟨(p.toNat + 8 * n.toNat, 8), by simp [Rl], by dsimp only; rw [hs]; omega⟩
+  exact hlen.trans hstore
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

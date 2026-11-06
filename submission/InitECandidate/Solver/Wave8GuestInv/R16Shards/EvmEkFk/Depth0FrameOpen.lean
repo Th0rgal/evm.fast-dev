@@ -6932,4 +6932,131 @@ theorem get_code_cache_lookup_return_strong {F : Type} (s : PanSemStateFiniteExa
   subst found
   exact hmiss _ _ _ _ post ptr ha hl hb
 
+/-- The final world-state fallback of `get_code` forwards the bounded pair
+from the concrete installed `ws_get_code` call. -/
+theorem get_code_ws_fallback_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode)
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hentry : ∀ values body callee ret,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "code_hash")] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "ws_get_code") values = some (body, callee, ret) →
+      WsCodeLookupStrong (callEntryStateHOLFinite s callee)) :
+    Ret s (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+      [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  obtain ⟨code, code_n, hv, hn⟩ := ws_get_code_call_return_entry_strong s body callee ret
+    values v post hcode hshape (hentry values body callee ret ha hl) hl hb
+  subst v
+  have hc : (setVarHOLFinite (ofString "c")
+      (.rStruct [.val (.word code), .val (.word code_n)]) {post with locals := s.locals}).locals.lookup
+      (ofString "c") = some (.rStruct [.val (.word code), .val (.word code_n)]) := by
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  intro w hw
+  obtain ⟨hv, hn, _⟩ := ext_code_of_tail_return _ code code_n hc hn w hw
+  exact ⟨code, code_n, hv, hn⟩
+
+/-- Returning assignment calls expose the actual resumed caller state. This
+handles the second cache lookup, which reuses `w` rather than declaring it. -/
+theorem Ret.seq_callAssign_gen {F : Type} {s : PanSemStateFiniteExact 64 F} {x fname : MlS}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hk : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      Ret (setVarHOLFinite x v {post with locals := s.locals}) cont Φ) :
+    Ret s (.seq (.call (some (some (.local, x), none)) fname args) cont) Φ := by
+  refine Ret.seq (fun v hv => False.elim (callAssign_noRet s x fname args v hv)) ?_
+  intro t ht
+  obtain ⟨values, body, callee, ret, v, post, ha, hl, hb, hr⟩ := callAssign_inv ht
+  rw [hr]
+  exact hk values body callee ret v post ha hl hb
+
+/-- Cache lookup returns a genuine live payload and preserves nonlocal state. -/
+theorem get_code_cache_call_resume_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (db hash : BitVec 64) (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (hW : HtabWF s db.toNat)
+    (hentries : NodeDbEntriesStrong s db.toNat)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_get")
+      [.val (.word db), .val (.word hash)] = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    post = {s with locals := post.locals, clock := post.clock} ∧
+      ∃ found ptr : BitVec 64, v = .rStruct [.val (.word found), .val (.word ptr)] ∧
+        (found ≠ 0 → WordsOK s (ptr.toNat, 16) ∧
+          Inside (memW s ptr.toNat, memW s (ptr.toNat + 8)) sourceBase (globN s "heap_ptr")) := by
+  obtain ⟨hbody, ht⟩ := lookupCodeHOLFinite_param_at
+    s.code.lookup (ofString "htab_get") [] (ofString "t") .one [(ofString "key", .one)]
+    (sourceFnBody Guest.Software.guestFn_htab_get) (.comb [.one, .one])
+    (by intro p hp; simp at hp; rw [hp]; decide)
+    (by rw [hcode]; exact WkBal.lookup_htab_get) (vpre := []) (by simp) hl
+  obtain ⟨_, hk⟩ := lookupCodeHOLFinite_param_at
+    s.code.lookup (ofString "htab_get") [(ofString "t", .one)] (ofString "key") .one []
+    (sourceFnBody Guest.Software.guestFn_htab_get) (.comb [.one, .one])
+    (by simp) (by rw [hcode]; exact WkBal.lookup_htab_get)
+    (vpre := [.val (.word db)]) (by simp) hl
+  subst body
+  let ce := callEntryStateHOLFinite s callee
+  have hWce : HtabWF ce db.toNat := WkBal.htabWF_with_locals s callee (s.clock - 1) db.toNat |>.2 hW
+  obtain ⟨found, ptr, hv, hm⟩ := WkBal.htab_get_ret_in_values ce db hash hcode ht hk hWce v
+    (congrArg Prod.fst hb)
+  have hframe := R16WkAcctWs.evaluate_roProgR16 R16WkAcctWs.wsGetCodeCallees
+    R16WkAcctWs.wsGetCodeCallees_good (sourceFnBody Guest.Software.guestFn_htab_get)
+    (by decide) ce hcode
+  rw [hb] at hframe
+  refine ⟨?_, found, ptr, hv, fun hf => ?_⟩
+  · simpa [R16WkAcctWs.LocFrameR16, ce, callEntryStateHOLFinite] using hframe
+  · apply hentries ptr.toNat
+    simpa [ce, callEntryStateHOLFinite, htabValues, hdr, nodeF, memW] using hm hf
+
+/-- The second cache uses an assignment call; its hit/miss contract is the
+same bounded record contract as the first cache's declaration call. -/
+theorem get_code_cache_assign_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (db hash : BitVec 64) (args : List (ExpHOL 64)) (tail : ProgHOL 64)
+    (hcode : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args =
+      some [.val (.word db), .val (.word hash)])
+    (hW : HtabWF s db.toNat) (hentries : NodeDbEntriesStrong s db.toNat)
+    (hmiss : ∀ values body callee ret post (ptr : BitVec 64),
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "htab_get") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned (.rStruct [.val (.word 0), .val (.word ptr)])), post) →
+      Ret (setVarHOLFinite (ofString "w") (.rStruct [.val (.word 0), .val (.word ptr)])
+        {post with locals := s.locals}) tail
+        (fun v _ => ∃ code code_n : BitVec 64,
+          v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40)) :
+    Ret s (.seq (.call (some (some (.local, ofString "w"), none)) (ofString "htab_get") args)
+      (.seq (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "w"))) (.const 0))
+        (.return (.rstruct [
+          .load .one (.rfield 1 (.var .local (ofString "w"))),
+          .load .one (.op .add [.rfield 1 (.var .local (ofString "w")), .const 8])])) .skip) tail))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.seq_callAssign_gen
+  intro values body callee ret v post ha hl hb
+  have hvals : values = [.val (.word db), .val (.word hash)] := by
+    rw [hargs] at ha; exact Option.some.inj ha.symm
+  subst values
+  obtain ⟨hpost, found, ptr, hv, hrecord⟩ :=
+    get_code_cache_call_resume_strong s db hash body callee ret v post hcode hW hentries hl hb
+  subst v
+  let st := setVarHOLFinite (ofString "w")
+    (.rStruct [.val (.word found), .val (.word ptr)]) {post with locals := s.locals}
+  have hst : st = {s with locals := st.locals, clock := st.clock} := by
+    dsimp only [st, setVarHOLFinite]; rw [hpost]
+  apply get_code_cache_branch_return st
+    (by rw [hst]; exact localsFree_arenaReady s _ _ hA) found ptr tail
+    (by simp [st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+  · intro hf
+    rw [hst]
+    simpa [WordsOK, WordAt, memW, globN] using hrecord hf
+  · intro hz
+    subst found
+    exact hmiss _ _ _ _ post ptr ha hl hb
+
 end HeadStore
