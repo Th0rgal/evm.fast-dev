@@ -10641,6 +10641,70 @@ theorem precompile_sha256_blocks_then {F : Type}
   · exact hntm
   · exact hrm
 
+open R10Shards.P26_P28 in
+theorem precompile_sha256_blocks_padding_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad stp out len : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (ho : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : ∃ i : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word i)) ∧ i.toNat ≤ len.toNat)
+    (hbound : len.toNat + 64 < 2^64) (hpad : pad.toNat + 128 ≤ heapEnd)
+    (hob : out.toNat + 32 < 2^64) :
+    let tail := ProgHOL.seq
+      (.call (some (none, none)) (ofString "st_be64")
+        [.op .sub [.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "total")],
+          .const 8], .shift .lsl (.var .local (ofString "len")) (.const 3)])
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"), .var .global (ofString "sha_pad")])
+        (.seq (.ite (.cmp .equal (.var .local (ofString "total")) (.const 128))
+          (.call (some (none, none)) (ofString "sha256_block")
+            [.var .global (ofString "sha_st"),
+              .op .add [.var .global (ofString "sha_pad"), .const 64]]) .skip)
+          (.seq (.call (some (none, none)) (ofString "sha256_finish")
+            [.var .global (ofString "sha_st"), .var .local (ofString "out")])
+            (.return (.const 0)))))
+    let final := ProgHOL.dec (ofString "total") .one (.const 64)
+      (.seq (.ite (.cmp .notLower (.var .local (ofString "rem")) (.const 56))
+        (.assign .local (ofString "total") (.const 128)) .skip) tail)
+    let padding := ProgHOL.seq
+      (.call (some (none, none)) (ofString "memzero")
+        [.var .global (ofString "sha_pad"), .const 128])
+      (.seq (.call (some (none, none)) (ofString "memcpy")
+        [.var .global (ofString "sha_pad"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")],
+          .var .local (ofString "rem")])
+        (.seq (.storeByte (.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "rem")])
+          (.const 128)) final))
+    let rest := ProgHOL.dec (ofString "rem") .one
+      (.op .sub [.var .local (ofString "len"), .var .local (ofString "i")]) padding
+    let loop := ProgHOL.while
+      (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"), .const 64]))
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64])))
+    (evaluateHOLFiniteState s (.seq loop rest)).1 ≠ some .timeOut →
+    ((evaluateHOLFiniteState s (.seq loop rest)).1 = none ∨ Resumes (evaluateHOLFiniteState s (.seq loop rest)).1) →
+    ByteEff s (evaluateHOLFiniteState s (.seq loop rest)).2
+      [(pad.toNat,128),(stp.toNat,64),(out.toNat,32)] := by
+  dsimp only
+  intro hnt hr
+  refine precompile_sha256_blocks_then s stp len _ _ hc hi hs hl hx hbound ?_ ?_ hnt hr
+  · intro i hi hpos
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact ⟨_, by simp, le_rfl, le_rfl⟩
+  · intro m hcm him hgm hlm hlen hindex hntm hrm
+    obtain ⟨i, hxi, hile, hirem⟩ := hindex
+    refine precompile_sha256_remainder_then m len i _ _ hcm him hlen hxi hile hirem ?_ hntm hrm
+    intro n hcn hin hgn hln hrem hremb hntn hrn
+    exact precompile_sha256_padding_path_effect n pad (len-i) stp out _ hcn hin
+      (by rw [hgn,hgm]; exact hp) hrem (by rw [hgn,hgm]; exact hs)
+      (by rw [hln _ (by decide),hlm _ (by decide)]; exact ho) hremb hpad hob hntn hrn
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
