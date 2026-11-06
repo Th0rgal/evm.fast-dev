@@ -7666,4 +7666,36 @@ theorem codeDbPayloadStrong_entries_of_sk_make {F : Type}
   · exact Or.inr (Or.inr (Or.inl h))
   · exact Or.inr (Or.inr (Or.inr (by omega)))
 
+/-- The actual key-builder write region cannot change a separated table's
+live values; only aligned cells of its well-formed footprint are read. -/
+theorem htabValues_eq_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hw : HtabWF s db)
+    (hd : ∀ i ∈ htabFootprint s db, Disj i (globN s "sk_buf", 52)) :
+    htabValues post db = htabValues s db := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  apply InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.htabValues_eq_of_unhit hw
+  intro i hi
+  right
+  intro a ha hhit
+  apply heff.cell_frame
+  intro j hj _
+  simp only [List.mem_singleton] at hj
+  subst j
+  have hi8 := (hw.1 i hi).2.1
+  have hi28 := (hw.1 i hi).2.2.1
+  intro hh
+  have hs := hd i hi
+  unfold CellHits at hhit hh
+  rcases hs with hs | hs | hs | hs <;> try dsimp only at hs
+  all_goals omega
+
 end HeadStore
