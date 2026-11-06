@@ -7840,6 +7840,219 @@ theorem transfer_log_tail_step {F : Type}
   exact ⟨⟨localsFree_evmInv _ _ _ tail.1.1, tail.1.2.1, tail.1.2.2.1,
     (evmChain_with_locals _ _ _).trans tail.1.2.2.2⟩, tail.2⟩
 
+theorem transfer_decCall_readOnly_step {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (name fn : MlS) (shape : ShapeHOL)
+    (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hro : ReadOnlyFn fn)
+    (hr : Resumes (evaluateHOLFiniteState s (.decCall name shape fn args cont)).1)
+    (hcont : ∀ mid : PanSemStateFiniteExact 64 F,
+      mid = {s with locals := mid.locals, clock := mid.clock} →
+      (∀ k, k ≠ name → mid.locals.lookup k = s.locals.lookup k) →
+      Resumes (evaluateHOLFiniteState mid cont).1 →
+      EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState mid cont).2) :
+    EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState s (.decCall name shape fn args cont)).2 := by
+  obtain ⟨params, body, ret, lookup, spec⟩ := hro
+  have hcode := hInv.1.1.code
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hr ⊢
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · simp only [ha] at hr; rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+  simp only [ha] at hr ⊢
+  rcases hl : lookupCodeHOLFinite s.code.lookup fn vals with _ | ⟨body', callee, ret'⟩
+  · simp only [hl] at hr; rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+  simp only [hl] at hr ⊢
+  by_cases hz : s.clock = 0
+  · simp only [hz, ↓reduceIte] at hr; rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+  simp only [hz, ↓reduceIte] at hr ⊢
+  have hb := lookupCodeHOLFinite_installed_body s.code.lookup fn params body body' ret ret' vals callee
+    (by rw [hcode]; exact lookup) hl
+  subst hb
+  have entry : callEntryStateHOLFinite s callee =
+      {s with locals := callee, clock := (callEntryStateHOLFinite s callee).clock} := by cases s; rfl
+  have hex : ∃ vs, lookupCodeHOLFinite originalRuntimeCode.lookup fn vs =
+      some (body', (callEntryStateHOLFinite s callee).locals, ret) := by
+    have he := lookupCodeHOLFinite_installed_return s fn params body' body' ret ret' vals callee
+      (by rw [hcode]; exact lookup) hl
+    subst he
+    exact ⟨vals, by simpa only [hcode, callEntryStateHOLFinite] using hl⟩
+  rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨res, post⟩
+  simp only [run] at hr ⊢
+  cases res with
+  | none => rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+  | some result =>
+    cases result with
+    | returned v =>
+      dsimp only at hr ⊢
+      split at hr
+      · rename_i hs
+        simp only [hs, ↓reduceIte]
+        have ro := spec (callEntryStateHOLFinite s callee) hcode
+          (guestInv_callEntry s callee hInv.1.1) hex (by rw [run]; simp)
+          (by rw [run]; exact Or.inl ⟨v, rfl⟩)
+        rw [run] at ro
+        have postEq := state_trans_locals_clock entry ro
+        let mid := setVarHOLFinite name v {post with locals := s.locals}
+        have midEq : mid = {s with locals := mid.locals, clock := mid.clock} := by
+          have h : mid = {post with locals := mid.locals, clock := post.clock} := by cases post; rfl
+          exact state_trans_locals_clock postEq h
+        have tail := hcont mid midEq (by
+          intro k hk; simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hk]) hr
+        exact ⟨⟨localsFree_evmInv _ _ _ tail.1.1, tail.1.2.1, tail.1.2.2.1,
+          (evmChain_with_locals _ _ _).trans tail.1.2.2.2⟩, tail.2⟩
+      · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+    | exception e v =>
+      have res : Resumes (some (.exception e v)) := hr
+      have ro := spec (callEntryStateHOLFinite s callee) hcode
+        (guestInv_callEntry s callee hInv.1.1) hex (by rw [run]; simp) (by rw [run]; exact res)
+      rw [run] at ro
+      have postEq := state_trans_locals_clock entry ro
+      have eq : emptyLocalsHOLFinite post =
+          {s with locals := (emptyLocalsHOLFinite post).locals, clock := (emptyLocalsHOLFinite post).clock} := by
+        have h : emptyLocalsHOLFinite post =
+            {post with locals := (emptyLocalsHOLFinite post).locals, clock := post.clock} := by cases post; rfl
+        exact state_trans_locals_clock postEq h
+      dsimp only
+      rw [eq]
+      exact ⟨⟨localsFree_evmInv _ _ _ hInv, le_rfl, fun _ _ => rfl, evmChain_with_locals _ _ _⟩,
+        fun _ _ => ⟨rfl, rfl, rfl, rfl⟩⟩
+    | _ => rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
+theorem emit_transfer_log_body_step {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (sender recipient topic : BitVec 64) (av : ValueHOL 64)
+    (hInv : EvmInv s)
+    (hsys : Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr"))
+    (htopic : s.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hsender : s.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrecipient : s.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (ha : s.locals.lookup (ofString "amount") = some av)
+    (hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_emit_transfer_log)).1) :
+    EvmStepCC ["heap_ptr"] s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_emit_transfer_log)).2 := by
+  have body : sourceFnBody Guest.Software.guestFn_emit_transfer_log =
+      .decCall (ofString "z") .one (ofString "u256_is_zero") [.var .local (ofString "amount")]
+        (.seq (.ite (.cmp .notEqual (.var .local (ofString "z")) (.const 0))
+          (.return (.const 0)) .skip) transferLogTail) := rfl
+  rw [body] at hr ⊢
+  apply transfer_decCall_readOnly_step s (ofString "z") (ofString "u256_is_zero") .one _ _
+    hInv ro_u256_is_zero hr
+  intro mid eq loc resum
+  have inv : EvmInv mid := by rw [eq]; exact localsFree_evmInv _ _ _ hInv
+  have tail (ht : Resumes (evaluateHOLFiniteState mid transferLogTail).1) :
+      EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState mid transferLogTail).2 := by
+    obtain ⟨p, hp⟩ : ∃ p : BitVec 64, mid.globals.lookup (ofString "heap_ptr") = some (.val (.word p)) :=
+      globalWord_of_globN_pos mid "heap_ptr"
+        (by have h := inv.1.2.1; rw [sourceBase_val] at h; omega)
+    have ready : Inside (globN mid "vm_system_address", 20) sourceBase (globN mid "heap_ptr") := by
+      rw [eq]; exact hsys
+    obtain ⟨sysw, hsysw⟩ : ∃ w : BitVec 64,
+        mid.globals.lookup (ofString "vm_system_address") = some (.val (.word w)) :=
+      globalWord_of_globN_pos mid "vm_system_address"
+        (by have h := ready.1; rw [sourceBase_val] at h; omega)
+    have htopic' : mid.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)) := by
+      rw [eq]; exact htopic
+    obtain ⟨evw, hev⟩ : ∃ w : BitVec 64, mid.globals.lookup (ofString "ev") = some (.val (.word w)) :=
+      globalWord_of_globN_pos mid "ev" (by
+        obtain ⟨_, S, invAt⟩ := (evmInv_iff_at mid).1 inv
+        have fw := invAt.2.2.2.2.1 (globN mid "ev", globN mid "cur_cont") List.mem_cons_self
+        have hlo := (fw.1 (globN mid "ev", 280) (by simp)).1.1
+        have hgap := inv.1.2.2.2.1
+        have hsp := inv.1.2.2.2.2.1
+        rw [R11Shards.scratchStart_val] at hgap
+        omega)
+    have st := transfer_log_tail_step mid p sysw topic sender recipient evw av inv hp hsysw htopic'
+      ((loc _ (by decide)).trans hsender) ((loc _ (by decide)).trans hrecipient)
+      ((loc _ (by decide)).trans ha) hev ready ht
+    conv at st => arg 2; rw [eq]
+    refine ⟨⟨st.1.1, st.1.2.1, st.1.2.2.1, st.1.2.2.2.trans (evmChain_with_locals _ _ _)⟩, ?_⟩
+    intro ec hec
+    exact st.2 ec ((evmChain_with_locals _ _ _).symm ▸ hec)
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at resum ⊢
+  split at resum
+  · rename_i w hw
+    split at resum
+    · rename_i hz
+      simp only [hw, hz, ↓reduceIte, evaluateHOLFiniteState_skip] at resum ⊢
+      exact tail resum
+    · rename_i hz
+      simp only [hw, hz, ↓reduceIte, evaluateHOLFiniteState_return, evalHOLExact,
+        shapeOfHOLExact, sizeOfShapeWithContextHOL, show (1 : Nat) ≤ 32 from by decide,
+        ↓reduceIte, emptyLocalsHOLFinite] at resum ⊢
+      have eq' : {mid with locals := HolFiniteMapExact.empty} =
+          {s with locals := HolFiniteMapExact.empty, clock := mid.clock} := by rw [eq]
+      change EvmStepCC ["heap_ptr"] s {mid with locals := HolFiniteMapExact.empty}
+      rw [eq']
+      exact ⟨⟨localsFree_evmInv _ _ _ hInv, le_rfl, fun _ _ => rfl, evmChain_with_locals _ _ _⟩,
+        fun _ _ => ⟨rfl, rfl, rfl, rfl⟩⟩
+  · rcases resum with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
+private theorem emit_transfer_log_params {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hex : ∃ vs, lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "emit_transfer_log") vs =
+      some (sourceFnBody Guest.Software.guestFn_emit_transfer_log, s.locals, .one)) :
+    ∃ (sender recipient : BitVec 64) (amount : ValueHOL 64),
+      s.locals.lookup (ofString "sender") = some (.val (.word sender)) ∧
+      s.locals.lookup (ofString "recipient") = some (.val (.word recipient)) ∧
+      s.locals.lookup (ofString "amount") = some amount := by
+  obtain ⟨vals, hl⟩ := hex
+  have hx := lookupCodeHOLFinite_eq_some originalRuntimeCode.lookup (ofString "emit_transfer_log")
+    vals _ s.locals .one hl
+  simp only [lookupCodeHOLExact, lookup_emit_transfer_log_local] at hx
+  rcases vals with _ | ⟨vs, _ | ⟨vr, _ | ⟨va, _ | _⟩⟩⟩
+  · simp at hx
+  · simp at hx
+  · simp at hx
+  · rcases vs with ⟨⟨sender⟩⟩ | _ | _ <;> rcases vr with ⟨⟨recipient⟩⟩ | _ | _ <;>
+      try (simp [shapeOfHOLExact, shapeEqHOL] at hx)
+    simp [shapeOfHOLExact, shapeEqHOL,
+      show ofString "sender" ≠ ofString "recipient" by decide,
+      show ofString "sender" ≠ ofString "amount" by decide,
+      show ofString "recipient" ≠ ofString "amount" by decide] at hx
+    have hL := hx.2
+    refine ⟨sender, recipient, va, ?_, ?_, ?_⟩ <;>
+      (simp only [← hL]; simp [show ofString "sender" ≠ ofString "recipient" by decide,
+        show ofString "sender" ≠ ofString "amount" by decide,
+        show ofString "recipient" ≠ ofString "sender" by decide,
+        show ofString "recipient" ≠ ofString "amount" by decide,
+        show ofString "amount" ≠ ofString "sender" by decide,
+        show ofString "amount" ≠ ofString "recipient" by decide])
+  · simp at hx
+
+theorem ek_cc_emit_transfer_log_ready :
+    EvmKeeps (fun s => EvmAvoids FrameStartAvoids s ∧ FrameStartSysReady s)
+      frameStartGw (ofString "emit_transfer_log") ∧
+    ChainCellsKept (fun s => EvmAvoids FrameStartAvoids s ∧ FrameStartSysReady s)
+      (ofString "emit_transfer_log") := by
+  have step {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (hP : EvmAvoids FrameStartAvoids s ∧ FrameStartSysReady s)
+      (hex : ∃ vs, lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "emit_transfer_log") vs =
+        some (sourceFnBody Guest.Software.guestFn_emit_transfer_log, s.locals, .one))
+      (hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_emit_transfer_log)).1) :
+      EvmStepCC frameStartGw s
+        (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_emit_transfer_log)).2 := by
+    obtain ⟨hA, S, inv, _⟩ := hP.1
+    have hInv : EvmInv s := ⟨hA, S, inv⟩
+    obtain ⟨sender, recipient, amount, hs, hrp, ha⟩ := emit_transfer_log_params hex
+    obtain ⟨topic, htopic⟩ := hA.2.2.2.2.2.2.2.2.2 "transfer_topic" (by decide)
+    have st := emit_transfer_log_body_step s sender recipient topic amount hInv hP.2.1 htopic hs hrp ha hr
+    exact ⟨⟨st.1.1, st.1.2.1, fun k hk => st.1.2.2.1 k (by
+      intro he; apply hk; simp only [List.map_cons, List.map_nil, List.mem_singleton] at he
+      rw [he]; simp [frameStartGw]), st.1.2.2.2⟩, st.2⟩
+  constructor
+  · refine ⟨_, _, _, lookup_emit_transfer_log_local, ?_⟩
+    intro F s hcode hP hex hnt hr
+    exact (step s hP hex hr).1
+  · refine ⟨_, _, _, lookup_emit_transfer_log_local, ?_⟩
+    intro F s hcode hP hex hnt hr
+    exact (step s hP hex hr).2
+
+theorem ek_emit_transfer_log_ready :
+    EvmKeeps (fun s => EvmAvoids FrameStartAvoids s ∧ FrameStartSysReady s)
+      frameStartGw (ofString "emit_transfer_log") :=
+  ek_cc_emit_transfer_log_ready.1
+
+theorem cc_emit_transfer_log_ready :
+    ChainCellsKept (fun s => EvmAvoids FrameStartAvoids s ∧ FrameStartSysReady s)
+      (ofString "emit_transfer_log") :=
+  ek_cc_emit_transfer_log_ready.2
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
