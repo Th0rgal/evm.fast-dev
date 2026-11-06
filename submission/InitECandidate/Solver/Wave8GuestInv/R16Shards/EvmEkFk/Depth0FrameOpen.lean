@@ -10946,4 +10946,88 @@ theorem FNRL.frameMemAlloc {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e :
       (by rw [hgsT]) (by rw [gsp]; omega) (le_refl _) (by rw [hh]; omega)
       (fun a _ _ => by rw [Tm])
 
+open Flapjack in
+/-- Evaluation preserves `be` (needed to rebuild FNR conjunct 3 after opaque call results). -/
+theorem FNR.evalBe {F : Type} {X post : PanSemStateFiniteExact 64 F} {b : ProgHOL 64}
+    {r : Option (PanSemResultExact 64)} (h3 : evaluateHOLFiniteState X b = (r, post)) :
+    post.be = X.be := by
+  have inv := evaluateInvariantsHOLFinite b
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite X) r
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite post)
+    (by simp only [PanPropsEvalStateFiniteExact.evaluateHOLFinitePair,
+          PanPropsEvalStateFiniteExact.toPanSemFinite_ofPanSemFinite, h3])
+  exact inv.2.2.1
+
+/-- Post-state transport for `htab_count` calls: the callee leaves everything unchanged. -/
+theorem FNRL.htabCountPost {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep) (w : BitVec 64) (x : MlS)
+    (hx1 : ofString "msg" ≠ x) (hx2 : ofString "e" ≠ x) (rv : ValueHOL 64)
+    (post : PanSemStateFiniteExact 64 F)
+    (h3 : evaluateHOLFiniteState (callEntryStateHOLFinite t
+      (HolFiniteMapExact.empty.update (ofString "t", .val (.word w))))
+      (sourceFnBody Guest.Software.guestFn_htab_count) = (some (.returned rv), post)) :
+    FNRL s (setVarHOLFinite x rv { post with locals := t.locals }) m e fv keep := by
+  have hfr : FNR s t m e := h.1
+  obtain ⟨hg, hm, hc, hmd⟩ := Ret.apply (htab_count_run (callEntryStateHOLFinite t _)) h3
+  have hGp := guestInv_post (guestInv_callEntry _ _ hfr.2.2.2.1.1) h3
+  have Tg : (setVarHOLFinite x rv { post with locals := t.locals }).globals = t.globals := hg
+  have Tm : ∀ a : BitVec 64, (setVarHOLFinite x rv { post with locals := t.locals }).memory a
+      = t.memory a := by
+    intro a; show post.memory a = t.memory a; rw [hm]; rfl
+  have Tc : (setVarHOLFinite x rv { post with locals := t.locals }).code = t.code := hc
+  have Tme : (setVarHOLFinite x rv { post with locals := t.locals }).memaddrs
+      = t.memaddrs := hmd
+  have hbe0 := FNR.evalBe (X := callEntryStateHOLFinite t
+    (HolFiniteMapExact.empty.update (ofString "t", .val (.word w)))) h3
+  have Tbe : (setVarHOLFinite x rv { post with locals := t.locals }).be = t.be := hbe0
+  have hgn : ∀ n, globN (setVarHOLFinite x rv { post with locals := t.locals }) n
+      = globN t n := by intro n; unfold globN; rw [Tg]
+  refine FNRL.step h (setVar_lookup_ne _ _ _ _ hx1) (setVar_lookup_ne _ _ _ _ hx2) Tc Tme Tbe
+    ⟨guestInv_congr (s := post) rfl rfl rfl rfl hGp, arenaOK_congr (s := t) hg hfr.2.2.2.1.2⟩
+    (le_of_eq (hgn _)) ((le_of_eq (hgn _)).trans hfr.2.2.2.2.2.1) (le_of_eq (hgn _).symm)
+    (fun k _ _ _ => by rw [Tg])
+    (loS := globN (setVarHOLFinite x rv { post with locals := t.locals }) "scratch_ptr")
+    (lenS := 0) (loH := globN t "heap_ptr") (lenH := 0)
+    (le_refl _) (by rw [hgn]; omega) (le_refl _) (by rw [hgn]; omega)
+    (fun a _ _ => Tm a)
+
+/-- `acc_n := htab_count(ld(msg+k))` (declaration form). -/
+theorem FNRL.htabCountDec {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep) (k : BitVec 64) {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop} (hΦ : LocIns Φ)
+    (hb : ∀ (t' : PanSemStateFiniteExact 64 F) (v : BitVec 64), FNRL s t' m e fv keep →
+      t'.locals.lookup (ofString "acc_n") = some (.val (.word v)) →
+      (∀ y, y ≠ ofString "acc_n" → t'.locals.lookup y = t.locals.lookup y) → Ret t' cont Φ) :
+    Ret t (.decCall (ofString "acc_n") .one (ofString "htab_count")
+      [.load .one (.op .add [.var .local (ofString "msg"), .const k])] cont) Φ := by
+  have hfr : FNR s t m e := h.1
+  refine Ret.decCallL hΦ fun vals body cal ret v post h1 h2 h3 => ?_
+  obtain ⟨v1, rfl, he⟩ := evalList1_inv _ _ h1
+  obtain ⟨w, rfl, -⟩ := ev_load_msg hfr.2.2.2.2.2.2.2.2.2.2.2.2.2.1 k v1 he
+  obtain ⟨rfl, rfl⟩ := lk1 hfr.1 lookup_htab_count w rfl h2
+  obtain ⟨u, rfl⟩ := Ret.apply (htab_count_word _) h3
+  exact hb _ u (FNRL.htabCountPost h w _ (by decide) (by decide) _ post h3) (setVar_lookup_eq _ _ _)
+    (fun y hy => setVar_lookup_ne _ _ _ _ hy)
+
+/-- `acc_n := htab_count(ld(msg+k))` (assignment form). -/
+theorem FNRL.htabCountAssign {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep) (k : BitVec 64) {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hb : ∀ (t' : PanSemStateFiniteExact 64 F) (v : BitVec 64), FNRL s t' m e fv keep →
+      t'.locals.lookup (ofString "acc_n") = some (.val (.word v)) →
+      (∀ y, y ≠ ofString "acc_n" → t'.locals.lookup y = t.locals.lookup y) → Ret t' cont Φ) :
+    Ret t (.seq (.call (some (some (.local, ofString "acc_n"), none)) (ofString "htab_count")
+      [.load .one (.op .add [.var .local (ofString "msg"), .const k])]) cont) Φ := by
+  have hfr : FNR s t m e := h.1
+  refine Ret.seq (fun v hv => False.elim (callAssign_noRet t _ _ _ v hv)) ?_
+  intro t2 ht
+  obtain ⟨values, body, cal, ret, rv, post, h1, h2, h3, h4⟩ := callAssign_inv ht
+  obtain ⟨v1, rfl, he⟩ := evalList1_inv _ _ h1
+  obtain ⟨w, rfl, -⟩ := ev_load_msg hfr.2.2.2.2.2.2.2.2.2.2.2.2.2.1 k v1 he
+  obtain ⟨rfl, rfl⟩ := lk1 hfr.1 lookup_htab_count w rfl h2
+  rw [h4]
+  obtain ⟨u, rfl⟩ := Ret.apply (htab_count_word _) h3
+  exact hb _ u (FNRL.htabCountPost h w _ (by decide) (by decide) _ post h3) (setVar_lookup_eq _ _ _)
+    (fun y hy => setVar_lookup_ne _ _ _ _ hy)
+
 end FrameOpenRich
