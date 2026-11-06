@@ -10747,4 +10747,77 @@ theorem eval_merge_storage_cursor_init {F : Type} (s : PanSemStateFiniteExact 64
     _ hc (mergeStorageInv_setLocal s _ _ (by decide) (by decide) hI) hnt hfr
   exact (WorldStepSc.of_pre_locals_clock hs).with_locals_clock _ _
 
+def mergeCursorInit : ProgHOL 64 :=
+  .dec (ofString "i") .one (.const 0#64)
+    (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+      mergeStorageBody) (.return (.const 0#64)))
+
+def mergeCapInit : ProgHOL 64 :=
+  .dec (ofString "cap") .one
+    (.load .one (.op .add [.var .local (ofString "outer"), .const 24#64])) mergeCursorInit
+
+/-- Capacity initialization preserves the established root invariant. -/
+theorem eval_merge_storage_cap_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hI : MergeStorageInv s)
+    (hnt : (evaluateHOLFiniteState s mergeCapInit).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeCapInit).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeCapInit).1 (evaluateHOLFiniteState s mergeCapInit).2 := by
+  unfold mergeCapInit
+  unfold mergeCapInit at hnt hfr
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  dsimp only at hnt hfr ⊢
+  split at hfr
+  · exact absurd hfr not_flowingOrResumes_error
+  · rename_i v he
+    simp only [he] at hnt ⊢
+    split at hfr
+    · rename_i hshape
+      simp only [if_pos hshape] at hnt ⊢
+      have hs := eval_merge_storage_cursor_init (setVarHOLFinite (ofString "cap") v s) hc
+        (mergeStorageInv_setLocal s _ _ (by decide) (by decide) hI) hnt hfr
+      exact (WorldStepSc.of_pre_locals_clock hs).with_locals_clock _ _
+    · exact absurd hfr not_flowingOrResumes_error
+
+theorem mergeStorageInv_bind_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (tw ow : BitVec 64) (hW : WorldOK s)
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hts : globN s "ts" ≠ 0) (hots : ow.toNat = memW s (globN s "ts" + 32)) :
+    MergeStorageInv (setVarHOLFinite (ofString "bouter") (.val (.word tw))
+      (setVarHOLFinite (ofString "outer") (.val (.word ow)) s)) := by
+  refine ⟨localsFree_worldOK s _ s.clock hW, tw, ow, ?_, ?_, hbs, ht0, htbs, hts, hots⟩
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "bouter" ≠ ofString "outer" by decide]
+
+/-- Root declarations compose with capacity, cursor, loop, and return. -/
+theorem eval_merge_storage_root_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (et eo : ExpHOL 64) (tw ow : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (heo : evalAt s eo = some (.val (.word ow)))
+    (het : evalAt (setVarHOLFinite (ofString "outer") (.val (.word ow)) s) et = some (.val (.word tw)))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hts : globN s "ts" ≠ 0) (hots : ow.toNat = memW s (globN s "ts" + 32))
+    (hnt : (evaluateHOLFiniteState s (.dec (ofString "outer") .one eo
+      (.dec (ofString "bouter") .one et mergeCapInit))).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.dec (ofString "outer") .one eo
+      (.dec (ofString "bouter") .one et mergeCapInit))).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s (.dec (ofString "outer") .one eo
+        (.dec (ofString "bouter") .one et mergeCapInit))).1
+        (evaluateHOLFiniteState s (.dec (ofString "outer") .one eo
+        (.dec (ofString "bouter") .one et mergeCapInit))).2 := by
+  unfold evalAt at heo het
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  simp only [heo, shapeOfHOLExact, shapeEqHOL, ↓reduceIte] at hnt hfr ⊢
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  simp only [het, shapeOfHOLExact, shapeEqHOL, ↓reduceIte] at hnt hfr ⊢
+  have hs := eval_merge_storage_cap_init
+    (setVarHOLFinite (ofString "bouter") (.val (.word tw))
+      (setVarHOLFinite (ofString "outer") (.val (.word ow)) s)) hc
+    (mergeStorageInv_bind_roots s tw ow hW hbs ht0 htbs hts hots) hnt hfr
+  exact (WorldStepSc.of_pre_locals_clock (s := s) hs).with_locals_clock _ _
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

@@ -8991,4 +8991,138 @@ theorem get_code_entry_of_strong_roots {F : Type} (s : PanSemStateFiniteExact 64
   exact ⟨hA,hWT,hmdb,hmt,hne,hp,hc,hfit,hsk,hs,hws,hts,hh,hwl,htl,
     cache "ts" (Or.inl rfl),cache "bs" (Or.inr rfl)⟩
 
+/-- An in-domain record word yields the concrete successful root-load evaluation. -/
+theorem global_record_load_of_wordAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (g : String) (k : BitVec 64) (hn : globN s g ≠ 0)
+    (hw : WordAt s (globN s g + k.toNat)) :
+    ∃ w : BitVec 64, w.toNat = memW s (globN s g + k.toNat) ∧
+      evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString g), .const k])) = some (.val (.word w)) := by
+  classical
+  obtain ⟨w,hd,hm⟩ := hw
+  refine ⟨w, ?_, ?_⟩
+  · simp [memW, hm]
+  · have hg : ∃ v : BitVec 64, s.globals.lookup (ofString g) = some (.val (.word v)) ∧ v.toNat = globN s g := by
+      unfold globN at hn ⊢
+      cases he : s.globals.lookup (ofString g) with
+      | none => simp [he] at hn
+      | some v =>
+        cases v with
+        | rStruct vs => simp [he] at hn
+        | nStruct n vs => simp [he] at hn
+        | val v => cases v with | word v => exact ⟨v,rfl,rfl⟩
+    obtain ⟨gv,hg,hgn⟩ := hg
+    have ha : gv + k = BitVec.ofNat 64 (globN s g + k.toNat) := by
+      apply BitVec.eq_of_toNat_eq
+      simp [BitVec.toNat_add, hgn]
+    simp [evalHOLFinite, evalHOLExact, evalListHOLExact, hg, wordOpHOL, wordOp,
+      valueIsWord, valueWord, ha, memLoadHOLExact, hd, hm]
+
+/-- Aligned fields of nonzero typed records are in-domain words. -/
+theorem typed_record_wordAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hF : FixedTyped s) (g : String) (sz k : Nat)
+    (hg : (g,sz) ∈ typedRecords) (hn : globN s g ≠ 0)
+    (hk : k % 8 = 0) (hle : k + 8 ≤ sz) : WordAt s (globN s g + k) := by
+  have hf : (globN s g, sz) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.2
+    refine ⟨(g,sz), ?_, ?_⟩
+    · exact (show ∀ r ∈ typedRecords, r ∈ globalBuffers by decide) _ hg
+    · simp [hn]
+  rcases hF.1 _ hf with hz | ⟨_,hw⟩
+  · dsimp at hz; omega
+  · have hw' := hw.2.2 (k / 8) (by omega)
+    have heq : 8 * (k / 8) = k := by omega
+    simpa only [heq] using hw'
+
+theorem typed_record_root_load {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hF : FixedTyped s) (g : String) (sz : Nat) (k : BitVec 64)
+    (hg : (g,sz) ∈ typedRecords) (hn : globN s g ≠ 0)
+    (hk : k.toNat % 8 = 0) (hle : k.toNat + 8 ≤ sz) :
+    ∃ w : BitVec 64, w.toNat = memW s (globN s g + k.toNat) ∧
+      evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString g), .const k])) = some (.val (.word w)) := by
+  exact global_record_load_of_wordAt s g k hn (typed_record_wordAt s hF g sz k.toNat hg hn hk hle)
+
+/-- Fixed-record typing and the hash binding discharge concrete cache arguments. -/
+theorem code_cache_args_of_typed_record {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hF : FixedTyped s) (owner : String) (hash : BitVec 64)
+    (ho : owner = "ts" ∨ owner = "bs") (hn : globN s owner ≠ 0)
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash))) :
+    ∃ root : BitVec 64, root.toNat = memW s (globN s owner + 48) ∧
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (getCodeCacheArgs owner) = some [.val (.word root), .val (.word hash)] := by
+  have hl : ∃ root : BitVec 64, root.toNat = memW s (globN s owner + 48) ∧
+      evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString owner), .const 48])) = some (.val (.word root)) := by
+    rcases ho with rfl | rfl
+    · exact typed_record_root_load s hF "ts" 72 48 (by decide) hn (by decide) (by decide)
+    · exact typed_record_root_load s hF "bs" 80 48 (by decide) hn (by decide) (by decide)
+  obtain ⟨root,hr,hl⟩ := hl
+  refine ⟨root,hr,?_⟩
+  unfold evalHOLFinite at hl
+  simp only [getCodeCacheArgs, evalListHOLFinite, evalListHOLExact, hl]
+  simp [evalHOLExact, hh]
+
+/-- Concrete load and argument evaluations follow from strong world typing. -/
+theorem get_code_entry_of_world_nonzero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (hash : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S) (hWT : WorldTypedWith s S Nd)
+    (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hsk : globN s "sk_buf" ≠ 0) (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hbs : globN s "bs" ≠ 0)
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hdn : memW s (globN s "ws" + 16) ≠ 0)
+    (htn : memW s (globN s "ts" + 40) ≠ 0)
+    (hcn : ∀ owner, owner = "ts" ∨ owner = "bs" → memW s (globN s owner + 48) ≠ 0) :
+    ∃ db tw, GetCodeEntryStrong s S Nd db hash tw := by
+  obtain ⟨db,hdb,hwl⟩ := typed_record_root_load s hWT.2.2.1 "ws" 40 16 (by decide) hws (by decide) (by decide)
+  obtain ⟨tw,ht,htl⟩ := typed_record_root_load s hWT.2.2.1 "ts" 72 40 (by decide) hts (by decide) (by decide)
+  refine ⟨db,tw,get_code_entry_of_strong_roots s S Nd db hash tw hA hW hWT hc hs hfit hsk hws hts hh
+    hdb ht (by rwa [hdb]) (by rwa [ht]) hwl htl ?_⟩
+  intro owner ho
+  have hn : globN s owner ≠ 0 := by rcases ho with rfl | rfl; exact hts; exact hbs
+  obtain ⟨root,hr,ha⟩ := code_cache_args_of_typed_record s hWT.2.2.1 owner hash ho hn hh
+  exact ⟨hn,root,hr,by rw [hr]; exact hcn owner ho,ha⟩
+
+/-- Bounded code retrieval from world typing with live concrete roots. -/
+theorem get_code_return_of_world_nonzero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (hash : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S) (hWT : WorldTypedWith s S Nd)
+    (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hsk : globN s "sk_buf" ≠ 0) (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hbs : globN s "bs" ≠ 0)
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hdn : memW s (globN s "ws" + 16) ≠ 0)
+    (htn : memW s (globN s "ts" + 40) ≠ 0)
+    (hcn : ∀ owner, owner = "ts" ∨ owner = "bs" → memW s (globN s owner + 48) ≠ 0) :
+    Ret s (sourceFnBody Guest.Software.guestFn_get_code) (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  obtain ⟨db,tw,h⟩ := get_code_entry_of_world_nonzero s S Nd hash hA hW hWT hc hs hfit hsk hws hts hbs hh hdn htn hcn
+  exact get_code_return_entry_world_strong s S Nd db hash tw h
+
+/-- Fixed buffer ownership bounds the concrete key-builder write range. -/
+theorem key_buffer_fit_of_world {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (hF : FixedTyped s) (hn : globN s "sk_buf" ≠ 0) :
+    globN s "sk_buf" + 52 ≤ 2 ^ 64 := by
+  have hi : (globN s "sk_buf", 64) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.2
+    exact ⟨("sk_buf",64),by decide,by simp [hn]⟩
+  rcases hF.1 _ hi with hz | ⟨ha,_⟩
+  · norm_num at hz
+  · have hb := allocated_le_2pow64 hA.2 ha
+    dsimp only at hb
+    omega
+
 end HeadStore
