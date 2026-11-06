@@ -7449,4 +7449,35 @@ theorem codeCacheLookupStrong_of_preserved_payloads {F : Type}
   exact ⟨hAp, db, hash, hargs.trans ha, hwf _ hW,
     nodeDbEntriesStrong_of_preserved_payloads he hAs hAp hhp (hvalues _ hW) (hwords _ hW)⟩
 
+/-- Concrete fallback entry words discharge the installed callee-entry
+obligation; the call only replaces locals and decrements the clock. -/
+theorem get_code_ws_fallback_return_entry_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (db hash : BitVec 64) (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hA : ArenaReady s)
+    (hdb : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hW : HtabWF s db.toNat) (he : NodeDbEntriesStrong s db.toNat) :
+    Ret s (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+      [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply get_code_ws_fallback_return_strong s hc hs
+  intro values body callee ret ha hl
+  have hv : values = [.val (.word hash)] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, hh] using ha.symm
+  subst values
+  obtain ⟨_, hhash⟩ := lookupCodeHOLFinite_param_at s.code.lookup (ofString "ws_get_code")
+    [] (ofString "code_hash") .one [] _ (.comb [.one, .one])
+    (by simp) (by rw [hc]; exact lookup_ws_get_code_local)
+    (vpre := []) (by simp) hl
+  apply wsCodeLookupStrong_of_words (callEntryStateHOLFinite s callee) db hash
+    (localsFree_arenaReady s _ _ hA) ?_ hhash
+    ((WkBal.htabWF_with_locals s _ _ _).2 hW) ?_
+  · rw [evalHOLFinite_eq_toExact] at hdb ⊢
+    exact hdb
+  · simpa [NodeDbEntriesStrong, callEntryStateHOLFinite, htabValues, hdr, nodeF,
+      memW, WordsOK, WordAt, globN] using he
+
 end HeadStore
