@@ -13970,4 +13970,40 @@ theorem msgOwned_of_log_no_growth_g09 {F : Type}
     · exact Or.inr (hnew o ho)
   · exact Or.inl (htail ec ht ▸ ho)
 
+/-- Readback of a suspended frame, its log header, slots and records preserves
+its complete object list and backing-buffer extent. -/
+theorem log_no_growth_tail_objects_congr_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {ec : Ivl}
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hfields : ∀ k, k + 8 ≤ 280 → memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hheader : ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hslots : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8 * i))
+    (hrecords : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+        memW post (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k) =
+          memW s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k)) :
+    frameObjects post ec = frameObjects s ec ∧ frameLogs post ec = frameLogs s ec := by
+  have h0 : memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) := by
+    simpa only [Nat.add_zero] using hheader 0 (by omega)
+  have hlogs : frameLogObjects post ec = frameLogObjects s ec := by
+    unfold frameLogObjects
+    dsimp only
+    rw [hfields 88 (by omega), hheader 8 (by omega)]
+    apply List.flatMap_congr
+    intro i hi
+    have hi' := List.mem_range.1 hi
+    rw [h0, hslots i hi']
+    exact logOwnedIvls_of_record_agree_g09 hsys (hrecords i hi')
+  have hb : frameLogs post ec = frameLogs s ec := by
+    unfold frameLogs
+    rw [hfields 88 (by omega), h0, hheader 16 (by omega)]
+  refine ⟨?_, hb⟩
+  unfold frameObjects frameRet
+  rw [hfields 8 (by omega), hfields 232 (by omega), hfields 24 (by omega),
+    hfields 40 (by omega), hfields 88 (by omega), hfields 144 (by omega),
+    hfields 216 (by omega), hb, hlogs]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
