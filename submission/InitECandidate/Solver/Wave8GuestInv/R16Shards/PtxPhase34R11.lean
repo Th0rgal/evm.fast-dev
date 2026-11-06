@@ -15728,4 +15728,22 @@ theorem htab_get_guarded_trie_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- The initial account-touch table update has no scratch write regions. -/
+theorem account_touch_worldStep {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (hW : WorldOK s)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]),
+       .var .local (ofString "addr"), .const 1]) = (none, mid)) :
+    WorldStep (fun _ => []) ["heap_ptr"] R10Shards.P26_P28.stdKeep NoExtra s none mid := by
+  have hp := R16WkAcctWs.progWStep_call0_htab_set_recSlot (B := []) (gw := ["heap_ptr"])
+    "ts" "ts+8" 8 (.var .local (ofString "addr")) (.const 1) (by simp) (by decide)
+    (fun s S hT hts ht0 => R16WkAcctWs.nonValueSlot_ts8 s S hT hts ht0) s
+  have hs := hp hW.1.1.code hW (by rw [hc]; simp) (by rw [hc]; exact Or.inl rfl)
+  rw [hc] at hs
+  simpa only [WorldStep, RecordsKept, R16WkAcctWs.bufRegions, List.map_nil] using hs.1
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
