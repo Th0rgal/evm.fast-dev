@@ -9935,4 +9935,50 @@ theorem allocated_typed_ivl_unhit_of_witness_effect {F : Type}
     subst j
     exact Fast_C08WkShard03.disj_allocated_freeGap hA.2 hal
 
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+theorem fixed_typed_ivl_unhit_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw)
+    (i : Ivl) (him : i ∈ worldTypedIvls s S Nd)
+    (hfix : i ∈ fixedObjects s) (hn : i.2 ≠ 0) :
+    Fast_C08WkShard03.IvlUnhit s post i := by
+  rcases hWT.2.2.1.1 i hfix with hzero | ⟨hal,hw⟩
+  · exact False.elim (hn hzero)
+  · exact allocated_typed_ivl_unhit_of_witness_effect hWT hA heff i him hal hw.1 hw.2.1
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+theorem blockOutObjects_eq_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    blockOutObjects post = blockOutObjects s := by
+  have hbo : globN post "bo" = globN s "bo" := by
+    have he := heff.gw_kept (ofString "bo") (by decide)
+    unfold globN
+    rw [he]
+  apply (Fast_C08WkShard03.blockOutObjects_eq_of_bo_unhit hA.2 hWT.2.2.1 hbo
+    hWT.1.2.2.2.2.2.2.2.2.2.2.1 ?_ ?_).1
+  · intro hn
+    apply fixed_typed_ivl_unhit_of_witness_effect hWT hA heff
+    · unfold worldTypedIvls
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_right
+      exact List.mem_map.2 ⟨("bo",88),by simp [typedRecords],by simp [hn]⟩
+    · simpa [hn] using Fast_C08WkShard03.typedRecord_mem_fixedObjects s (r := ("bo",88)) (by simp [typedRecords])
+    · simp
+  · intro i hi h24
+    apply fixed_typed_ivl_unhit_of_witness_effect hWT hA heff
+    · unfold worldTypedIvls
+      apply List.mem_append_left
+      apply List.mem_append_left
+      exact List.mem_append_right _ hi
+    · unfold fixedObjects
+      apply List.mem_append_left
+      exact List.mem_append_right _ hi
+    · omega
+
 end HeadStore
