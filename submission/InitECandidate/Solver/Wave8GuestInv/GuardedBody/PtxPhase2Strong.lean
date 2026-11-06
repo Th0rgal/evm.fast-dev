@@ -16797,4 +16797,43 @@ theorem phase2_get_account_resume_message_tables
   exact phase2_message_tables_with_locals {post with locals := s.locals} _ post.clock ht
     (by simp [HolFiniteMapExact.update, FUPDATE, hne])
 
+/-- Account lookup preserves the joint scalar, backing, and private-table assembly guard. -/
+theorem phase2_get_account_message_scalar_backing_tables (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n) :
+    DecCallResumeOn (fun s => (PtxMessageScalarReady buffers contents names s ∧
+      R16Shards.TxBacking s) ∧ PtxMessageTables s aa ak)
+      (fun s => (PtxMessageScalarReady buffers contents names s ∧
+        R16Shards.TxBacking s) ∧ PtxMessageTables s aa ak)
+      name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  exact ⟨phase2_get_account_message_scalar_backing h buffers contents names name args hm hi hn
+    s vs body callee ret v post hc hp.1 ha hl hr,
+    phase2_get_account_resume_message_tables aa ak name hm args
+      s vs body callee ret v post hc ⟨hp.1.1.1.1.1, hp.2, hp.1.1.1.2.2.2.1⟩ ha hl hr⟩
+
+/-- The full account-call guard feeds a bounded message-assembly continuation. -/
+theorem phase2_get_account_message_scalar_backing_tables_bound (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (fun s =>
+      (PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) ∧
+        PtxMessageTables s aa ak) tail b) :
+    TerminatingProgBoundedOn (fun s =>
+      (PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) ∧
+        PtxMessageTables s aa ak)
+      (.decCall name .one (ofString "get_account") args tail) (K.get_account + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => (PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) ∧
+      PtxMessageTables s aa ak) h.fb_get_account
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1
+  · exact phase2_get_account_message_scalar_backing_tables h buffers contents names aa ak name args hm hi hn
+  · exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
