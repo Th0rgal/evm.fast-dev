@@ -16457,4 +16457,29 @@ theorem journal_guard_capacity {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- A successful journal guard leaves the entire state unchanged and establishes capacity. -/
+theorem journal_guard_fallthrough {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s
+      (.ite (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap")))
+        (.call (some (none, none)) (ofString "trap_with") [.const trapCode]) .skip) = (none, post)) :
+    globN s "journal_n" < globN s "journal_cap" ∧ post = s := by
+  have hn := journal_guard_capacity s post jn jc trapCode hcode hjn hjc hr
+  have hc : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  have he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap"))) =
+      some (.val (.word 0#64)) := by
+    simp [evalHOLExact, hjn, hjc, hc]
+  rw [evaluateHOLFiniteState_ite, he] at hr
+  simp [evaluateHOLFiniteState_skip] at hr
+  exact ⟨by simpa [globN, hjn, hjc] using hn, hr.symm⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
