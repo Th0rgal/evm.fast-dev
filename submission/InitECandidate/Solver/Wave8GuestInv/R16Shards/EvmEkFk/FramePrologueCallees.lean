@@ -12418,6 +12418,21 @@ theorem pre_sha256_body_flows_resumes {F : Type} (s : PanSemStateFiniteExact 64 
                 precompile_seq_store_flows_resumes t _ _ _ (fun t ht =>
                   precompile_return_flows_resumes t _ ht) ht) ht) ht) ht) ht) ht) ht) hr
 
+theorem precompile_sha256_block_index_add_bound (i : BitVec 64)
+    (halign : i.toNat % 64 = 0) :
+    (i + 64).toNat % 64 = 0 ∧ (i + 64).toNat ≤ 2^64 - 64 := by
+  have hi := i.isLt
+  have hadd : (i + 64).toNat = (i.toNat + 64) % 2^64 := by
+    simp [BitVec.toNat_add]
+  rw [hadd]
+  constructor <;> omega
+
+theorem precompile_sha256_block_guard_of_large_length (i len : BitVec 64)
+    (halign : i.toNat % 64 = 0) (hlen : ¬ len.toNat + 64 < 2^64) :
+    (i + 64).toNat ≤ len.toNat := by
+  have hb := (precompile_sha256_block_index_add_bound i halign).2
+  omega
+
 theorem pre_sha256_body_step_of_input_bound {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
     (hbound : ∀ msg : ValueHOL 64, @evalHOLExact 64 F _ s.toExact
