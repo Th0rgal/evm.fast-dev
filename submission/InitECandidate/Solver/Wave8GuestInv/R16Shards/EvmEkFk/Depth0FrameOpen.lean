@@ -9829,4 +9829,45 @@ theorem protected_payload_words_of_witness_effect {F : Type}
   · exact Or.inr (Or.inl ⟨hlo,hhi⟩)
   · exact Or.inr (Or.inr ⟨hlo,hhi⟩)
 
+open InitECandidate.Solver.Wave8GuestInv.R16Shards
+  InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03 in
+/-- Every typed table keeps its values under the narrow witness lookup effect. -/
+theorem htabValues_eq_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) (t : Nat) (ht : t ∈ S) :
+    htabValues post t = htabValues s t := by
+  apply Fast_C08WkShard03.htabValues_eq_of_unhit (hWT.1.2.1 t ht).1
+  intro i hi
+  have hal := ((hWT.1.2.1 t ht).2 i hi).1
+  have hw := ((hWT.1.2.1 t ht).1.1 i hi).2
+  have him : i ∈ worldTypedIvls s S Nd := by
+    unfold worldTypedIvls
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    exact List.mem_flatMap.2 ⟨t,ht,hi⟩
+  have hfr : ∀ a : BitVec 64, post.memory a ≠ s.memory a →
+      (∃ j ∈ wsBufs.map (bufferRegion s) ++ [freeGap s], CellHitsPos a.toNat j) ∨
+        CellHitsPos a.toNat (heapFree s) := by
+    intro a hn
+    rcases heff.cell_frame a hn with ⟨j,hj,_⟩ | ⟨b,hb,hh⟩ | hh | hh
+    · cases hj
+    · exact Or.inl ⟨_,List.mem_append_left _ (List.mem_map.2 ⟨b,hb,rfl⟩),hh⟩
+    · exact Or.inl ⟨_,List.mem_append_right _ (by simp),hh⟩
+    · exact Or.inr hh
+  refine Fast_C08WkShard03.ivlUnhit_of_cellHitsPos hw.1 hw.2.1 hfr ?_ (Fast_C08WkShard03.disj_allocated_heapFree hA.2 hal)
+  intro j hj
+  rcases List.mem_append.1 hj with hj | hj
+  · obtain ⟨b,hb,rfl⟩ := List.mem_map.1 hj
+    have hgb : b ∈ globalBuffers ∧ b.1 ∉ typedRecords.map Prod.fst := by
+      simp only [wsBufs,List.mem_cons,List.not_mem_nil,or_false] at hb
+      rcases hb with rfl | rfl | rfl <;> decide
+    exact Disj.flip (Fast_C08WkShard03.untypedBuf_disj_worldTypedIvls hWT b hgb.1 hgb.2 i him)
+  · have heq : j = freeGap s := by simpa using hj
+    subst j
+    exact Fast_C08WkShard03.disj_allocated_freeGap hA.2 hal
+
 end HeadStore
