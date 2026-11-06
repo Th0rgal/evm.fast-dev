@@ -12118,4 +12118,28 @@ theorem memoryExpansionLocal_alloc_binding_g10 {F : Type}
     rw [hm]
     rfl
 
+theorem aligned_heap_growth_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (ha : ArenaReady post) (hbe : post.be = s.be)
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg : GlobalsKept ["heap_ptr"] s post) (hm : post.memory = s.memory) :
+    EvmInv post ∧ Group10.HeadMemChainWF post ∧ evmChain post = evmChain s ∧
+      OpDispatchSpec.evmR post = OpDispatchSpec.evmR s := by
+  obtain ⟨has, S, hiS⟩ := hi
+  obtain ⟨hip, hch, hR⟩ := evmInvAt_of_fresh_heap_step has hiS ha hbe hh hg
+    (by intro a hn; rw [hm])
+    (by intro b hb hn; unfold memB; rw [hm, hbe])
+  have hev : globN post "ev" = globN s "ev" := by
+    unfold globN
+    rw [← hg (ofString "ev") (by decide)]
+  have hfmp : globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := by
+    unfold globN
+    rw [← hg (ofString "frame_mem_ptr") (by decide)]
+  refine ⟨⟨ha, S, hip⟩, ?_, hch, hR⟩
+  apply Group10.headMemChainWF_of_agree hw hch ?_ hev hfmp
+  intro ec hec
+  simp only [memW, hm]
+  trivial
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
