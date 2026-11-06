@@ -10759,6 +10759,76 @@ theorem precompile_sha256_body_effect {F : Type}
     · exact hntb
     · exact hrb
 
+open R10Shards.P26_P28 in
+theorem precompile_call0_byteEff_resumes_at {F : Type} (fname : MlS)
+    (params : List (MlS × ShapeHOL)) (body : ProgHOL 64) (ret : ShapeHOL)
+    (s : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64)) (Rl : List Ivl)
+    (hl : originalRuntimeCode.lookup fname = some (params, body, ret))
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hf : ∀ (entry : PanSemStateFiniteExact 64 F) vals,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some vals →
+      entry.code = originalRuntimeCode → GuestInv entry → entry.globals = s.globals →
+      lookupCodeHOLFinite originalRuntimeCode.lookup fname vals = some (body, entry.locals, ret) →
+      (evaluateHOLFiniteState entry body).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState entry body).1 = none ∨ Resumes (evaluateHOLFiniteState entry body).1) →
+      ByteEff entry (evaluateHOLFiniteState entry body).2 Rl)
+    (hnt : (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).1 = none ∨
+      Resumes (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).1) :
+    ByteEff s (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).2 Rl := by
+  rw [evaluateHOLFiniteState_call] at hnt hr ⊢
+  rcases hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · exact ByteEff.refl s Rl
+  · dsimp only at hnt hr ⊢
+    rw [hargs] at hnt hr
+    dsimp only at hnt hr
+    rcases hlook : lookupCodeHOLFinite s.code.lookup fname vals with _ | ⟨body', callee, ret'⟩
+    · exact ByteEff.refl s Rl
+    · dsimp only at hnt hr ⊢
+      rw [hlook] at hnt hr
+      dsimp only at hnt hr
+      have heq := lookupCodeHOLFinite_installed_body s.code.lookup fname params body body'
+        ret ret' vals callee (by rw [hc]; exact hl) hlook
+      subst heq
+      have heq := lookupCodeHOLFinite_installed_return s fname params body' body'
+        ret ret' vals callee (by rw [hc]; exact hl) hlook
+      subst heq
+      by_cases hz : s.clock = 0
+      · simp only [hz, ↓reduceIte]
+        exact (ByteEff.refl s Rl).locals_clock _ _
+      · simp only [hz, ↓reduceIte] at hnt hr ⊢
+        let entry := callEntryStateHOLFinite s callee
+        have hge : GuestInv entry := guestInv_callEntry s callee hi
+        have hle : lookupCodeHOLFinite originalRuntimeCode.lookup fname vals =
+            some (body', entry.locals, ret') := by
+          simpa [hc, entry, callEntryStateHOLFinite] using hlook
+        have hn : (evaluateHOLFiniteState entry body').1 ≠ some .timeOut := by
+          intro h
+          rcases run : evaluateHOLFiniteState entry body' with ⟨r,m⟩
+          rw [run] at h
+          dsimp only at h
+          subst r
+          exact hnt (by simp [entry] at run; rw [run])
+        have hres : (evaluateHOLFiniteState entry body').1 = none ∨
+            Resumes (evaluateHOLFiniteState entry body').1 := by
+          rcases run : evaluateHOLFiniteState entry body' with ⟨r,m⟩
+          cases r with
+          | none => exact Or.inl rfl
+          | some r =>
+            cases r <;> simp_all [entry, Resumes]
+        have he := hf entry vals hargs hc hge rfl hle hn hres
+        dsimp only [entry] at he
+        rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨res, post⟩
+        rw [run] at he
+        have eff : ByteEff s post Rl := ((ByteEff.refl s _).locals_clock _ _).trans he
+        cases res with
+        | none => exact eff.locals_clock _ _
+        | some r =>
+          cases r <;> dsimp only
+          all_goals first
+            | exact eff.locals_clock _ _
+            | (split <;> exact eff.locals_clock _ _)
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
