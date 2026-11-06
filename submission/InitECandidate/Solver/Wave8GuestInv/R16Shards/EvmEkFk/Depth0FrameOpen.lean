@@ -7542,4 +7542,22 @@ theorem htab_frame_preserves_code_record {F : Type}
       rcases hoff with rfl | rfl <;> omega
   exact ⟨by simpa using hword 0 (Or.inl rfl), hword 8 (Or.inr rfl)⟩
 
+/-- Payload typing survives a concrete table-mutator exit when the database
+values are unchanged and their records belong to separated old heap. -/
+theorem nodeDbEntriesStrong_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db : Nat)
+    (he : NodeDbEntriesStrong s db) (hAs : ArenaReady s)
+    (hx : HtabExit s post)
+    (hvalues : htabValues post db = htabValues s db)
+    (hrec : ∀ p ∈ htabValues s db,
+      p + 16 ≤ globN s "heap_ptr" ∧ p + 16 ≤ 2 ^ 64 ∧
+      ∀ i ∈ htabFootprint s (locN s "t"), Disj (p, 16) i)
+    (hpos : ∀ i ∈ htabFootprint s (locN s "t"), 0 < i.2) :
+    NodeDbEntriesStrong post db := by
+  obtain ⟨hAp, _, _, _, hhp, _, hfr, _⟩ := hx
+  apply nodeDbEntriesStrong_of_preserved_payloads he hAs hAp hhp hvalues
+  intro p hp
+  obtain ⟨hb, hb64, hd⟩ := hrec p hp
+  exact htab_frame_preserves_code_record (locN s "t") p hb hb64 hpos hd hfr
+
 end HeadStore
