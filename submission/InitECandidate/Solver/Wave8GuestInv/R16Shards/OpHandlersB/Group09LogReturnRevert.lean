@@ -15597,4 +15597,39 @@ theorem evaluate_seq_assoc_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
   rcases h : evaluateHOLFiniteState s a with ⟨r, post⟩
   cases r <;> simp [h, evaluateHOLFiniteState_seq_line780]
 
+/-- The actual right-associated data-store tail inherits the grouped-store contract. -/
+theorem op_log_data_tail_step_g09 {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (log data n : BitVec 64) (cont : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hw : EvmInvWith s S Nd)
+    (hl : (evmChain s).length = (evmChain s0).length) (hr : evmR s < evmR s0)
+    (hlog : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hdata : s.locals.lookup (ofString "data") = some (.val (.word data)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hb : log.toNat + 40 ≤ 2^64)
+    (hd24 : s.memaddrs (log + 24#64)) (hd32 : s.memaddrs (log + 32#64))
+    (hdj : IvlsDisj [(log.toNat, 40)]
+      (worldTypedIvls s S Nd ++ ((evmChain s).map (frameObjects s)).flatten))
+    (hcont : ∀ last : PanSemStateFiniteExact 64 F,
+      last.code = originalRuntimeCode → EvmInvWith last S Nd →
+      (evmChain last).length = (evmChain s0).length → evmR last < evmR s0 →
+      ByteRegionEffect s last [(log.toNat, 40)] → last.locals = s.locals →
+      last.memory = (fun a => if a = log + 32#64 then .word n else
+        if a = log + 24#64 then .word data else s.memory a) →
+      (HeadMemAligned s → HeadMemAligned last) →
+      (evaluateHOLFiniteState last cont).1 ≠ some .timeOut →
+      OpDispatchPost s0 (evaluateHOLFiniteState last cont).1 (evaluateHOLFiniteState last cont).2)
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.store (.op .add [.var .local (ofString "log"), .const 24]) (.var .local (ofString "data")))
+        (.seq (.store (.op .add [.var .local (ofString "log"), .const 32]) (.var .local (ofString "n"))) cont))).1 ≠ some .timeOut) :
+    OpDispatchPost s0
+      (evaluateHOLFiniteState s (.seq
+        (.store (.op .add [.var .local (ofString "log"), .const 24]) (.var .local (ofString "data")))
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 32]) (.var .local (ofString "n"))) cont))).1
+      (evaluateHOLFiniteState s (.seq
+        (.store (.op .add [.var .local (ofString "log"), .const 24]) (.var .local (ofString "data")))
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 32]) (.var .local (ofString "n"))) cont))).2 := by
+  rw [← evaluate_seq_assoc_g09] at hnt ⊢
+  exact op_log_data_stores_step_g09 log data n cont hc hw hl hr hlog hdata hn hb hd24 hd32 hdj hcont hnt
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
