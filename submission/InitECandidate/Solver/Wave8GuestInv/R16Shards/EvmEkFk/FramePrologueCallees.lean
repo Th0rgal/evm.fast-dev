@@ -10357,6 +10357,39 @@ theorem precompile_sha256_blocks_increment {F : Type}
         HolFiniteMapExact.lookup_update, FUPDATE]
     · exact ha ▸ hb
 
+theorem precompile_sha256_blocks_body_index {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len i : BitVec 64)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hb : i.toNat + 64 ≤ len.toNat) :
+    let body := ProgHOL.seq
+      (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64]))
+    (evaluateHOLFiniteState s body).1 = none →
+    let post := (evaluateHOLFiniteState s body).2
+    post.locals.lookup (ofString "len") = some (.val (.word len)) ∧
+    post.locals.lookup (ofString "i") = some (.val (.word (i+64))) ∧
+    (i+64).toNat ≤ len.toNat := by
+  dsimp only
+  intro hr
+  rw [evaluateHOLFiniteState_seq_line780] at hr ⊢
+  rcases run : evaluateHOLFiniteState s
+    (.call (some (none, none)) (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"), .var .local (ofString "i")]]) with ⟨r,m⟩
+  cases r with
+  | none =>
+    simp only [run] at hr ⊢
+    have hloc := precompile_call0_locals_on_flow s (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"), .var .local (ofString "i")]] (by rw [run])
+    rw [run] at hloc
+    exact precompile_sha256_blocks_increment m len i (by rw [hloc]; exact hl)
+      (by rw [hloc]; exact hx) hb
+  | some r => simp [run] at hr
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
