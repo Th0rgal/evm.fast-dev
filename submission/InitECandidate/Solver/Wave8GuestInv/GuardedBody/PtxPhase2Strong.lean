@@ -15332,4 +15332,100 @@ theorem phase2_htabExit_ts8_message_tables {F : Type}
     (by simp [R16WkAcctWs.bufRegions, IvlsDisj])
   exact ⟨S', Nd', hsub, hw', hg⟩
 
+/-- Restore the private table witness after a concrete transaction-table call. -/
+theorem phase2_htab_set_ts8_message_tables {ι : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none → PtxMessageTables s aa ak) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ := hp.2
+  obtain ⟨v1, _, _, he1, _, _, hct, _, _⟩ := R16WkAcctWs.callee_param_three s
+    (ofString "htab_set") (ofString "t") (ofString "key") (ofString "value")
+    .one .one .one _ _ (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set)
+    _ _ _ vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw, hts⟩ := R16WkAcctWs.evalAt_loadG_nz s hp.1.1.1.1 "ts" 8
+    (by decide) v1 he1
+  have ht : locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s "ts" + 8) := by
+    simp [locN, callEntryStateHOLFinite, hct, htw]
+  have hn := FunSpec.at_lookup EvmFrameSpecs.nz_htab_set s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1.1) (by rw [hr]; simp)
+  rw [hr] at hn
+  have hnz : memW s (globN s "ts" + 8) ≠ 0 := by
+    rw [← ht]; exact hn (Or.inl ⟨v, rfl⟩)
+  have hmem := (R16WkAcctWs.nonValueSlot_ts8 s S hw.1 hts hnz).1
+  have harg : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1.1, ?_, ?_⟩
+    · rw [ht]
+      exact (htabWF_with_locals s callee (s.clock - 1) _).mpr (hw.1.2.1 _ hmem).1
+    · rw [ht]
+      exact fun i hi => ((hw.1.2.1 _ hmem).2 i hi).1
+  have hx := FunSpec.at_lookup htab_set_spec s hc vs body callee ret hl harg (by rw [hr]; simp)
+  rw [hr] at hx
+  have hx := hx v rfl
+  let pre := setVarHOLFinite (ofString "t") (.val (.word tw)) s
+  have hmp : pre.locals.lookup (ofString "m") = s.locals.lookup (ofString "m") := by
+    simp [pre, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "t" ≠ ofString "m" by decide]
+  have hmt : locN pre "m" = locN s "m" := by
+    exact locN_congr s pre.locals s.clock "m" hmp
+  have hpt : locN pre "t" = locN (callEntryStateHOLFinite s callee) "t" := by
+    simp [pre, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, callEntryStateHOLFinite, hct]
+  have hxp : HtabExit pre {post with locals := s.locals} := by
+    change ArenaReady _ ∧ HtabWF _ _ ∧ _
+    refine ⟨(arenaReady_with_locals post s.locals post.clock).mpr hx.1,
+      (htabWF_with_locals post s.locals post.clock _).mpr (hpt.symm ▸ hx.2.1), ?_⟩
+    change hdr post (locN pre "t") 0 = hdr s (locN pre "t") 0 ∧ _
+    rw [hpt]
+    exact hx.2.2
+  have hbe := (PanRunBounded.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).2.2.1
+  rw [hr] at hbe
+  apply phase2_htabExit_ts8_message_tables (s := pre) (post := {post with locals := s.locals})
+    ((arenaReady_with_locals s pre.locals s.clock).mpr hp.1.1.1)
+    (phase2_message_tables_with_locals s pre.locals s.clock
+      ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ hmp)
+    (by
+      change Inside (locN pre "m", 176) InitE.sourceBase (globN s "heap_ptr")
+      rw [hmt]
+      exact hp.1.2.2.2.1)
+    hmt.symm hbe hts hnz (hpt.trans ht) hxp
+
+/-- Warming preserves the full suffix cut, including the joint table witness. -/
+theorem phase2_htab_set_ts8_message_suffix
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (PtxMessageSuffixReady buffers contents names aa ak)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none → PtxMessageSuffixReady buffers contents names aa ak s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hi := (phase2_message_initialized_tables_iff_suffix).mpr hp
+  apply phase2_message_initialized_tables_iff_suffix.mp
+  exact ⟨(phase2_htab_set_ts8_message_initialized buffers contents names aa ak key value).run
+      s hc hi.1 hnt hr,
+    (phase2_htab_set_ts8_message_tables buffers contents aa ak key value).run
+      s hc ⟨hi.1.1.1.1, hi.2⟩ hnt hr⟩
+
+/-- The full suffix witness survives warming at its original clock cost. -/
+theorem phase2_htab_set_ts8_message_suffix_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (key value : ExpHOL 64)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value]) tail)
+      (K.htab_set + 1 + b) := by
+  intro F s hc hp
+  refine seq_bound_trans (P := PtxMessageSuffixReady buffers contents names aa ak)
+    (Q := PtxMessageSuffixReady buffers contents names aa ak) ?_ ?_ ht s hc hp
+  · apply TerminatingProgBoundedOn.call_on h.fb_htab_set none _
+    intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · exact phase2_htab_set_ts8_message_suffix buffers contents names aa ak key value
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
