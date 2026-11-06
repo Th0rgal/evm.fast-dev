@@ -8732,4 +8732,46 @@ theorem get_code_access_tail_of_world_preloads {F : Type}
   · obtain ⟨hb,hd⟩ := typed_record_word_key_separation hAs hWT "ts" 72 40 (by decide) hts hsk (by decide)
     exact ⟨hb,hd,htl⟩
 
+/-- Cache lookup execution changes only locals and fuel. -/
+theorem readonly_cache_call_state {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_get") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    post = {s with locals := post.locals, clock := post.clock} := by
+  have hl' := hl
+  rw [hc] at hl'
+  have hf := R16WkAcctWs.evaluate_roProgR16 R16WkAcctWs.wsGetCodeCallees
+    R16WkAcctWs.wsGetCodeCallees_good body
+    (R16WkAcctWs.wsGetCodeCallees_good _ (by decide) values body callee ret hl')
+    (callEntryStateHOLFinite s callee) hc
+  rw [hb] at hf
+  simpa [R16WkAcctWs.LocFrameR16, callEntryStateHOLFinite] using hf
+
+/-- Carry an entry invariant through both cache misses to the access tail. -/
+theorem get_code_cache_tail_of_invariant {F : Type}
+    (P : PanSemStateFiniteExact 64 F → Prop)
+    (hbind : ∀ s v k, P s → P (setVarHOLFinite (ofString "w") v {s with clock := k}))
+    (hentry : ∀ s, P s → s.code = originalRuntimeCode ∧
+      CodeCacheLookupStrong s "ts" ∧ CodeCacheLookupStrong s "bs")
+    (htail : ∀ s, P s → Ret s getCodeAccessTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40))
+    (s : PanSemStateFiniteExact 64 F) (hp : P s) :
+    Ret s getCodeCacheTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  obtain ⟨hc, ⟨hA,db,hash,ha,hW,he⟩, _⟩ := hentry s hp
+  apply get_code_cache_lookup_return_strong s db hash _ _ hc hA ha hW he
+  intro values body callee ret post ptr _ hl hb
+  have hpost := readonly_cache_call_state s values body callee ret _ post hc hl hb
+  rw [hpost]
+  have hp' := hbind s (.rStruct [.val (.word 0),.val (.word ptr)]) post.clock hp
+  obtain ⟨hc', _, hA',db',hash',ha',hW',he'⟩ := hentry _ hp'
+  apply get_code_cache_assign_return_strong _ db' hash' _ _ hc' hA' ha' hW' he'
+  intro values' body' callee' ret' post' ptr' _ hl' hb'
+  have hpost' := readonly_cache_call_state _ values' body' callee' ret' _ post' hc' hl' hb'
+  rw [hpost']
+  exact htail _ (hbind _ _ _ hp')
+
 end HeadStore
