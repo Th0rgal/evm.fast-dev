@@ -9347,4 +9347,32 @@ theorem codeDbPayloadStrong_of_typed_frame {F : Type}
     (EvmBase.htabValues_eq hC hm (hW.1.2.1 db hm).1) hw
     (fun t ht => EvmBase.htabFootprint_eq hC ht (hW.1.2.1 t ht).1) hfixed
 
+/-- Writes confined to fresh heap and the free scratch gap preserve old heap words. -/
+theorem old_heap_word_of_fresh_world_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s)
+    (hframe : ∀ a : BitVec 64, post.memory a ≠ s.memory a →
+      ((freeGap s).1 < a.toNat+8 ∧ a.toNat < (freeGap s).1+(freeGap s).2) ∨
+      ((heapFree s).1 < a.toNat+8 ∧ a.toNat < (heapFree s).1+(heapFree s).2))
+    (a : Nat) (ha : a+8 ≤ globN s "heap_ptr") :
+    memW post a = memW s a := by
+  have hh : globN s "heap_ptr" ≤ heapLimit := hA.2.2.1
+  have hl : heapLimit < 2^64 := by decide
+  have hb : a < 2^64 := by omega
+  unfold memW
+  have hm : post.memory (BitVec.ofNat 64 a) = s.memory (BitVec.ofNat 64 a) := by
+    by_contra hn
+    have hc := hframe (BitVec.ofNat 64 a) hn
+    rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb] at hc
+    rcases hc with ⟨hf,_⟩ | ⟨hhf,_⟩
+    · have hs : heapLimit ≤ scratchStart := by decide
+      have hfmp := hA.2.2.2.1
+      unfold freeGap at hf
+      dsimp at hf
+      omega
+    · unfold heapFree at hhf
+      dsimp at hhf
+      omega
+  rw [hm]
+
 end HeadStore
