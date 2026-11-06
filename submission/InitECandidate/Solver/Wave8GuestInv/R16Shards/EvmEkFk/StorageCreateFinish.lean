@@ -4921,6 +4921,43 @@ theorem DecoderNodeStep.refl {F : Type} {s : PanSemStateFiniteExact 64 F} {Nd : 
     (ha : ArenaReady s) (hn : NodeHeap s Nd) : DecoderNodeStep s s Nd Nd :=
   ⟨R14Shards.NodeStep.refl ha hn, fun _ _ => rfl, fun _ hx hnx => absurd hx hnx⟩
 
+theorem nodePath_branch_update_so {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {Nd : List Nat} {br : Nat} (hNd : NodeHeap s Nd) (hbr : br ∈ Nd)
+    (hk : memW s br = 3) (a : Nat) (w : BitVec 64)
+    (ha : br ≤ a) (haend : a + 8 ≤ br + 176)
+    {post : PanSemStateFiniteExact 64 F}
+    (hm : post.memory = Wave8Contracts.M26.updW s.memory (BitVec.ofNat 64 a) w)
+    (hkinds : ∀ n ∈ Nd, memW post n = memW s n) :
+    ∀ n ∈ Nd, nodePath post n = nodePath s n := by
+  intro n hn
+  unfold nodePath
+  rw [hkinds n hn]
+  by_cases hkind : memW s n = 1 ∨ memW s n = 2
+  · have hne : n ≠ br := by intro heq; subst n; rcases hkind with h | h <;> omega
+    have hd := hNd.2 n hn br hbr hne
+    have hnsize : 48 ≤ nodeSize (memW s n) := by
+      rcases hkind with h | h <;> simp [nodeSize, h]
+    have hbrsize : nodeSize (memW s br) = 176 := by simp [nodeSize, hk]
+    have hhi := (hNd.1 br hbr).2.2.1.2
+    have hnhi := (hNd.1 n hn).2.2.1.2
+    have hlimit : heapLimit < 2 ^ 64 := by decide
+    dsimp [Disj, nodeIvl] at hd hhi hnhi
+    rw [hbrsize] at hd hhi
+    have hword : ∀ off, off = 32 ∨ off = 40 → memW post (n + off) = memW s (n + off) := by
+      intro off hoff
+      have ha64 : a < 2 ^ 64 := by omega
+      have hn64 : n + off < 2 ^ 64 := by rcases hoff with rfl | rfl <;> omega
+      have haddr : BitVec.ofNat 64 (n + off) ≠ BitVec.ofNat 64 a := by
+        intro heq
+        have heq' := congrArg BitVec.toNat heq
+        simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hn64, Nat.mod_eq_of_lt ha64] at heq'
+        rcases hd with hd | hd <;> rcases hoff with rfl | rfl <;> omega
+      unfold memW
+      rw [hm]
+      simp [Wave8Contracts.M26.updW, haddr]
+    rw [hword 32 (Or.inl rfl), hword 40 (Or.inr rfl)]
+  · simp [hkind]
+
 theorem DecoderNodeStep.with_locals_clock {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {Nd Nd' : List Nat} (h : DecoderNodeStep s post Nd Nd')
     (L : HolFiniteMapExact MlS (ValueHOL 64)) (C : Nat) :
