@@ -7412,4 +7412,72 @@ theorem get_code_return_entry_strong {F : Type} (s : PanSemStateFiniteExact 64 F
     (get_code_cache_entry_after_compare s values body callee ret post "bs" hc hsecond hl hb)
     hfallback
 
+/-- Payload typing survives heap growth when table values and payload words
+are preserved; no preservation of unrelated memory is required. -/
+theorem nodeDbEntriesStrong_of_preserved_payloads {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {db : Nat}
+    (he : NodeDbEntriesStrong s db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hvalues : htabValues post db = htabValues s db)
+    (hwords : ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p + 8) = memW s (p + 8)) :
+    NodeDbEntriesStrong post db := by
+  intro p hp
+  rw [hvalues] at hp
+  obtain ⟨hw, hin⟩ := he p hp
+  refine ⟨wordsOK_transfer hAs.1 hAp.1 hw, ?_⟩
+  rw [(hwords p hp).1, (hwords p hp).2]
+  exact ⟨hin.1, le_trans hin.2 hhp⟩
+
+/-- Transport the actual cache lookup arguments along with its table and
+payload facts, retaining the concrete database and hash witnesses. -/
+theorem codeCacheLookupStrong_of_preserved_payloads {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (owner : String)
+    (he : CodeCacheLookupStrong s owner) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hargs : evalListHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
+      (getCodeCacheArgs owner) =
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (getCodeCacheArgs owner))
+    (hwf : ∀ db, HtabWF s db → HtabWF post db)
+    (hvalues : ∀ db, HtabWF s db → htabValues post db = htabValues s db)
+    (hwords : ∀ db, HtabWF s db → ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p + 8) = memW s (p + 8)) :
+    CodeCacheLookupStrong post owner := by
+  obtain ⟨hAs, db, hash, ha, hW, he⟩ := he
+  exact ⟨hAp, db, hash, hargs.trans ha, hwf _ hW,
+    nodeDbEntriesStrong_of_preserved_payloads he hAs hAp hhp (hvalues _ hW) (hwords _ hW)⟩
+
+/-- Concrete fallback entry words discharge the installed callee-entry
+obligation; the call only replaces locals and decrements the clock. -/
+theorem get_code_ws_fallback_return_entry_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (db hash : BitVec 64) (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hA : ArenaReady s)
+    (hdb : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hW : HtabWF s db.toNat) (he : NodeDbEntriesStrong s db.toNat) :
+    Ret s (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+      [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply get_code_ws_fallback_return_strong s hc hs
+  intro values body callee ret ha hl
+  have hv : values = [.val (.word hash)] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, hh] using ha.symm
+  subst values
+  obtain ⟨_, hhash⟩ := lookupCodeHOLFinite_param_at s.code.lookup (ofString "ws_get_code")
+    [] (ofString "code_hash") .one [] _ (.comb [.one, .one])
+    (by simp) (by rw [hc]; exact lookup_ws_get_code_local)
+    (vpre := []) (by simp) hl
+  apply wsCodeLookupStrong_of_words (callEntryStateHOLFinite s callee) db hash
+    (localsFree_arenaReady s _ _ hA) ?_ hhash
+    ((WkBal.htabWF_with_locals s _ _ _).2 hW) ?_
+  · rw [evalHOLFinite_eq_toExact] at hdb ⊢
+    exact hdb
+  · simpa [NodeDbEntriesStrong, callEntryStateHOLFinite, htabValues, hdr, nodeF,
+      memW, WordsOK, WordAt, globN] using he
+
 end HeadStore

@@ -13448,4 +13448,85 @@ theorem log_no_growth_old_record_separation_g09 {F : Type}
     · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
     · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
 
+/-- In-place append reconstructs the frame and its log-object list directly
+from pre-state pairwise separation and the concrete two-word update. -/
+theorem log_no_growth_concrete_frame_post_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hn_bound : n.toNat + 1 < 2 ^ 64)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hp_bound : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    (∀ k ∈ ([8, 16, 24, 32, 40, 88, 112, 136, 144, 168, 176, 216, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k)) →
+    WordsOK post (l.toNat, 24) → Allocated post (l.toNat, 24) →
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8 * i)) →
+    MsgOwned post S (memW s (ec.1 + 112)) → LogEntryOK post log.toNat →
+    FrameWF post S ec ∧ frameLogs post ec = frameLogs s ec ∧
+      frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log.toNat := by
+  dsimp only
+  intro hfields hwords hallocated hslots hmsg hlog
+  have hrecords := log_no_growth_old_record_separation_g09 l p n cap
+    hA hFW hpw hl hn hm0 hm16 hnonnull hlt
+  have hframe := (hfields 88 (by simp)).trans hl
+  obtain ⟨hlist, hobjects⟩ := log_no_growth_semantic_post_g09 s ec S l p n cap log
+    hA hFW hl hn hm0 hm16 hlt hn_bound hl_bound hp_bound hdisj hd8 hdslot hrecords
+    hframe hwords hallocated hslots hlog
+  obtain ⟨h0, h8, h16, _, _⟩ := log_no_growth_final_cells_g09 s l p n cap log
+    hl_bound hp_bound hdisj hn_bound hm0 hm16
+  obtain ⟨hWF, hbuffer⟩ := frameWF_of_log_no_growth_g09
+    (post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a})
+    hFW rfl rfl hfields
+    (by simpa only [hl] using h0.trans hm0.symm)
+    (by simpa only [hl] using h16.trans hm16.symm)
+    (by rw [hl, h8, h16]; omega)
+    (by simpa only [hframe, hl] using hlist) hmsg
+  exact ⟨hWF, hbuffer, hobjects⟩
+
+/-- The two in-place append stores preserve typed world cells whenever the
+existing log header and backing array are separated from that world. -/
+theorem log_no_growth_final_typed_cells_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64) (S Nd : List Nat)
+    (hma : s.memaddrs = ordinaryDomain) (hWT : WorldTypedWith s S Nd)
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * cap.toNat ≤ 2 ^ 64) (hlt : n.toNat < cap.toNat)
+    (hheader : ∀ i ∈ worldTypedIvls s S Nd, Disj (l.toNat, 24) i)
+    (hbuffer : ∀ i ∈ worldTypedIvls s S Nd, Disj (p.toNat, 8 * cap.toNat) i) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    SameTypedCells s post S Nd := by
+  dsimp only
+  have heff := log_no_growth_final_effect_g09 s l p n log hma hd8 hdslot hl (by omega)
+  apply ByteRegionEffect.sameTypedCells
+    (Rl := [(l.toNat + 8, 8), (p.toNat + 8 * n.toNat, 8)])
+    (extra := []) hma hWT ?_ (by simp) (by simpa using heff)
+  intro x hx i hi
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+  rcases hx with rfl | rfl
+  · rcases hheader i hi with hz | hz | hleft | hright
+    · cases hz
+    · exact Or.inr (Or.inl hz)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+    · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
+  · rcases hbuffer i hi with hz | hz | hleft | hright
+    · dsimp only at hz; omega
+    · exact Or.inr (Or.inl hz)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+    · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

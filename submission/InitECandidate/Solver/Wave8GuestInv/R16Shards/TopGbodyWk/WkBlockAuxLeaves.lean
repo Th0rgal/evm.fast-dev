@@ -9073,4 +9073,62 @@ theorem wk_state_fresh_tx :
   intro F s hc hW hex hnt hres
   exact (hb s hc hW hex hnt hres).1
 
+/-- Allocation exposes its actual fresh binding to the storage continuation. -/
+theorem eval_merge_new_continuation {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (cont : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hcont : ∀ (post : PanSemStateFiniteExact 64 F) (iw : BitVec 64),
+      post.code = originalRuntimeCode → WorldOK post →
+      post.locals.lookup (ofString "binner") = some (.val (.word iw)) →
+      (∀ y, y ≠ ofString "binner" → post.locals.lookup y = s.locals.lookup y) →
+      hdr post iw.toNat 0 = 32 →
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ iw.toNat) →
+      (evaluateHOLFiniteState post cont).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState post cont).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        post (evaluateHOLFiniteState post cont).1 (evaluateHOLFiniteState post cont).2)
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) cont)).1) :
+    let out := evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) cont)
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s out.1 out.2 := by
+  dsimp only
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases he : evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) with ⟨r, post⟩
+  simp only [he] at hnt hfr ⊢
+  have hflow : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])).1 := by
+    rw [he]
+    cases r with
+    | none => exact Or.inl rfl
+    | some r => exact hfr
+  have hn := merge_new_call_flow_none s (ofString "binner") 32#64 8#64 hc hflow
+  rw [he] at hn
+  cases hn
+  have hs := merge_new_call_worldStep s (ofString "binner") 32#64 8#64
+    hW (by decide) (by decide) hflow
+  rw [he] at hs
+  obtain ⟨S, hw⟩ := hW.2
+  obtain ⟨Nd, hw⟩ := (WkBal.worldTyped_iff_with s S).1 hw
+  have ho := merge_new_call_bound_owned s (ofString "binner") 32#64 8#64 S Nd
+    hW.1 hw (by decide) (by decide) hflow
+  rw [he] at ho
+  obtain ⟨iw, hi, hl, _, _, hk, _, hf, _⟩ := ho
+  have hm := (PanRunBounded.evaluateHOLFiniteState_metadata s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])).1
+  rw [he] at hm
+  exact withdrawalStep_trans (merge_heap_step_withdrawal hs)
+    (hcont post iw (hm.trans hc) (hs.worldOK_bufs (by intro p hp; simp at hp) hW)
+      hi hl hk hf hnt hfr)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
