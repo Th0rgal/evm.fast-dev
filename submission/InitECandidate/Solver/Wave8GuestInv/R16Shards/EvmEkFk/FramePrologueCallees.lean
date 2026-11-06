@@ -9359,6 +9359,78 @@ theorem precompile_sha256_finish_effect {F : Type}
   · intro m hm
     exact R10Shards.P26_P28.byteEff_return m _ _
 
+theorem precompile_call0_byteEff_at {F : Type} (fname : MlS)
+    (params : List (MlS × ShapeHOL)) (body : ProgHOL 64) (ret : ShapeHOL)
+    (s : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64)) (Rl : List Ivl)
+    (hl : originalRuntimeCode.lookup fname = some (params, body, ret))
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hf : ∀ (entry : PanSemStateFiniteExact 64 F) vals,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some vals →
+      entry.code = originalRuntimeCode → GuestInv entry →
+      lookupCodeHOLFinite originalRuntimeCode.lookup fname vals = some (body, entry.locals, ret) →
+      R10Shards.P26_P28.ByteEff entry (evaluateHOLFiniteState entry body).2 Rl) :
+    R10Shards.P26_P28.ByteEff s
+      (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).2 Rl := by
+  rw [evaluateHOLFiniteState_call]
+  rcases hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · exact R10Shards.P26_P28.ByteEff.refl s Rl
+  · dsimp only
+    rcases hlook : lookupCodeHOLFinite s.code.lookup fname vals with _ | ⟨body', callee, ret'⟩
+    · exact R10Shards.P26_P28.ByteEff.refl s Rl
+    · dsimp only
+      have heq := lookupCodeHOLFinite_installed_body s.code.lookup fname params body body'
+        ret ret' vals callee (by rw [hc]; exact hl) hlook
+      subst heq
+      have heq := lookupCodeHOLFinite_installed_return s fname params body' body'
+        ret ret' vals callee (by rw [hc]; exact hl) hlook
+      subst heq
+      by_cases hz : s.clock = 0
+      · simp only [hz, ↓reduceIte]
+        exact (R10Shards.P26_P28.ByteEff.refl s Rl).locals_clock _ _
+      · simp only [hz, ↓reduceIte]
+        let entry := callEntryStateHOLFinite s callee
+        have hge : GuestInv entry := guestInv_callEntry s callee hi
+        have hle : lookupCodeHOLFinite originalRuntimeCode.lookup fname vals =
+            some (body', entry.locals, ret') := by
+          simpa [hc, entry, callEntryStateHOLFinite] using hlook
+        have he := hf entry vals hargs hc hge hle
+        dsimp only [entry] at he
+        rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨res, post⟩
+        rw [run] at he
+        have eff : R10Shards.P26_P28.ByteEff s post Rl :=
+          ((R10Shards.P26_P28.ByteEff.refl s _).locals_clock _ _).trans he
+        cases res with
+        | none => exact eff.locals_clock _ _
+        | some r =>
+          cases r <;> dsimp only
+          all_goals first
+            | exact eff.locals_clock _ _
+            | (split <;> exact eff.locals_clock _ _)
+
+theorem precompile_sha256_finish_call_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (out : BitVec 64) (ptr dest : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) dest =
+      some (.val (.word out))) (hob : out.toNat + 32 < 2^64) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "sha256_finish") [ptr, dest])).2 [(out.toNat,32)] := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256_finish") =
+      some ([(ofString "stp", .one), (ofString "out", .one)],
+        sourceFnBody Guest.Software.guestFn_sha256_finish, .one) :=
+    lookup_of_guestAst_getElem 94 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256_finish) rfl
+  refine precompile_call0_byteEff_at _ _ _ _ s _ _ hl hc hi ?_
+  intro entry vals hargs hce hge hle
+  obtain ⟨p, b, hv, hpe, hbe⟩ := R10Shards.P26_P28.lookupCode_two_words (by decide) hl hle
+  have hb : b = out := by
+    rw [hv] at hargs
+    change @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) dest = some (.val (.word out)) at hp
+    simp [evalListHOLFinite, evalListHOLExact, hp] at hargs
+    split at hargs <;> simp_all
+  subst b
+  exact precompile_sha256_finish_effect entry out hce hge hbe hob
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
