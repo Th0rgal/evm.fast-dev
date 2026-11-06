@@ -19147,4 +19147,35 @@ theorem set_account_call_header_roots {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Cut the concrete commit after installation, retaining typing, roots, backing,
+and the original emptiness-check continuation at one state. -/
+theorem modify_state_commit_prefix_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_modify_state_commit) =
+      (some (.returned v), post)) :
+    ∃ mid S' Nd', TxWorld mid ∧ WorldTypedWith mid S' Nd' ∧
+      globN mid "bo" = globN s "bo" ∧
+      (∀ k ∈ ([40, 72] : List Nat), memW mid (globN s "bo" + k) = memW s (globN s "bo" + k)) ∧
+      (∀ k ∈ ([40, 72] : List Nat),
+        memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k))) ∧
+      evaluateHOLFiniteState mid
+        (.decCall (ofString "e") .one (ofString "acct_is_empty") [.var .local (ofString "a")]
+          (.seq (.ite (.cmp .notEqual (.var .local (ofString "e")) (.const 0))
+            (.call (some (none, none)) (ofString "destroy_account") [.var .local (ofString "addr")]) .skip)
+            (.return (.const 0)))) = (some (.returned v), post) := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "set_account")
+    [.var .local (ofString "addr"), .var .local (ofString "a")]) _) = _ at hr
+  obtain ⟨mid, hm, ht⟩ := seq_call0_ret_inv hr
+  obtain ⟨hw, S', Nd', hty⟩ := set_account_call_txWorld s mid S Nd _ hW hT hm
+  have roots := set_account_call_header_roots s mid _ hW hm
+  exact ⟨mid, S', Nd', hw, hty, roots.1, roots.2,
+    set_account_call0_header_words s mid S Nd _ hW hT hm, ht⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
