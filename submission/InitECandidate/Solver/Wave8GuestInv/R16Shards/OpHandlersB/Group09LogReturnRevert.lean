@@ -16720,4 +16720,44 @@ theorem op_log_growth_pairwise_g09 {F : Type}
   · exact Or.inr (fun ec hec => hbuffer ec (by rw [hcons]; exact List.mem_cons_of_mem _ hec))
   · exact Or.inr (fun ec hec => hnewOld o ho ec (by rw [hcons]; exact List.mem_cons_of_mem _ hec))
 
+/-- Concrete allocated growth stores discharge all head-buffer validity obligations. -/
+theorem op_log_growth_buffer_post_g09 {F : Type}
+    (copy : PanSemStateFiniteExact 64 F) (ec : Ivl)
+    (l p n cap q log : BitVec 64) (objects : List Ivl)
+    (hheader : (l.toNat, 24) ∈ objects)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] objects)
+    (hl : l.toNat + 24 ≤ 2^64)
+    (hcap : 1 ≤ cap.toNat) (hbound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hwords : WordsOK copy (p.toNat, q.toNat - p.toNat))
+    (hlo : sourceBase ≤ p.toNat) (hq : q.toNat ≤ globN copy "heap_ptr") :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then HolWordLab.word p else copy.memory a}
+    memW post (ec.1 + 88) = l.toNat →
+    1 ≤ memW post (l.toNat + 16) ∧
+    memW post (l.toNat + 8) ≤ memW post (l.toNat + 16) ∧
+    Inside (frameLogs post ec) sourceBase (globN post "heap_ptr") ∧
+    WordsOK post (frameLogs post ec) ∧
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8*i)) := by
+  dsimp only
+  intro hframe
+  obtain ⟨_, h8, h16, hcapNat, hnNat, _⟩ :=
+    log_growth_readback_of_fresh_g09 copy l p n cap q log objects
+      hheader hfresh hl hcap hbound hlen hgrow hfit
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  rw [hl8] at h8
+  rw [hl16] at h16
+  obtain ⟨hi, hw, hs⟩ := log_growth_buffer_of_allocated_g09 copy ec l p n cap q log objects
+    hheader hfresh hl hcap hbound hlen hgrow hfit hwords hlo hq hframe
+  exact ⟨by rw [h16]; omega, by rw [h8, h16]; omega, hi, hw, hs⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
