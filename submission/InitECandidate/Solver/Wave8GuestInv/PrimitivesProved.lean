@@ -90,6 +90,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.RecoverSe
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.ComputeStateRoot
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockAuxLeaves
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodyPayloadHeaderExport
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -514,7 +515,7 @@ theorem primitives : Primitives where
   «wk_block_rlp_length» := R11Shards.WkShard09a.«wk_block_rlp_length»
   «wk_encode_withdrawal_rlp» := R16Shards.WkBlockTxEnc.«wk_encode_withdrawal_rlp»
   «dm_encode_withdrawal_rlp» := EvmFrameSpecs.dm_encode_withdrawal_rlp
-  «gbody_payload_header» := «gbody_payload_header»
+  «gbody_payload_header» := R16Shards.TopGbodyWk.«gbody_payload_header»
   «gbody_state_init» := R13Shards.gbody_state_init
   «fb_check_gas_limit» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_check_gas_limit»
   «fb_header_hash» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_header_hash»
