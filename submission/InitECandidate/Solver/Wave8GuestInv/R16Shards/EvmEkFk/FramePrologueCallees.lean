@@ -9604,6 +9604,47 @@ theorem precompile_sha256_padding_total_choice {F : Type}
         setKvarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
   · exact ⟨64, ht, Or.inl rfl⟩
 
+theorem precompile_sha256_finish_return_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (out : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (ho : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hob : out.toNat + 32 < 2^64) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "sha256_finish")
+        [.var .global (ofString "sha_st"), .var .local (ofString "out")])
+        (.return (.const 0)))).2 [(out.toNat,32)] := by
+  apply R10Shards.P26_P28.byteEff_seq (precompile_sha256_finish_call_effect s out
+    (.var .global (ofString "sha_st")) (.var .local (ofString "out")) hc hi
+    (by simp [evalHOLFinite, evalHOLExact, ho]) hob)
+  intro m hm
+  exact R10Shards.P26_P28.byteEff_return m _ _
+
+theorem precompile_sha256_optional_block_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (hr : (evaluateHOLFiniteState s
+      (.ite (.cmp .equal (.var .local (ofString "total")) (.const 128))
+        (.call (some (none, none)) (ofString "sha256_block")
+          [.var .global (ofString "sha_st"),
+            .op .add [.var .global (ofString "sha_pad"), .const 64]]) .skip)).1 = none) :
+    (evaluateHOLFiniteState s
+      (.ite (.cmp .equal (.var .local (ofString "total")) (.const 128))
+        (.call (some (none, none)) (ofString "sha256_block")
+          [.var .global (ofString "sha_st"),
+            .op .add [.var .global (ofString "sha_pad"), .const 64]]) .skip)).2.locals = s.locals := by
+  rw [evaluateHOLFiniteState_ite] at hr ⊢
+  split
+  · rename_i v he
+    rw [he] at hr
+    dsimp only at hr
+    split
+    · rename_i hz
+      simp [evaluateHOLFiniteState, evaluateHOLFiniteStateWithDeciders,
+        evalPanSemRecursiveCallFiniteContext]
+    · rename_i hz
+      simp only [hz, ↓reduceIte] at hr
+      exact precompile_call0_locals_on_flow s _ _ hr
+  · rfl
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
