@@ -13936,4 +13936,38 @@ theorem log_no_growth_frame_post_of_separation_g09 {F : Type}
   · unfold frameRet
     rw [hfields 144 (by omega), hfields 216 (by omega)]
 
+/-- Head-only object append preserves message ownership when the newly
+attached intervals are separated from the existing message record. -/
+theorem msgOwned_of_log_no_growth_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {head : Ivl} {tail : List Ivl} {newObjects : List Ivl} {m : Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hWT : WorldTypedWith s S Nd) (hcell : SameTypedCells s post S Nd)
+    (hglobals : post.globals = s.globals) (hdom : post.memaddrs = s.memaddrs)
+    (hchain : evmChain post = evmChain s)
+    (hcons : evmChain s = head :: tail)
+    (hhead : frameObjects post head = frameObjects s head ++ newObjects)
+    (htail : ∀ ec ∈ tail, frameObjects post ec = frameObjects s ec)
+    (hnew : ∀ o ∈ newObjects, Disj (m, 176) o)
+    (hmsg : MsgOwned s S m) : MsgOwned post S m := by
+  have hg : ∀ g, globN post g = globN s g := by
+    intro g
+    unfold globN
+    rw [hglobals]
+  obtain ⟨_, _, _, hfixed, _, hfoot, _, _, _⟩ := log_growth_world_preserved_g09
+    hAs hAp hWT (by rw [hg "heap_ptr"]) (by rw [hg "scratch_ptr"])
+    (by intros; exact hg _) hcell
+  apply msgOwned_of_log_growth_cells_g09 hAs hAp hWT hcell
+    (by intros; exact hg _) hdom
+    ⟨by rw [hg "heap_ptr"], by rw [hg "scratch_ptr"]⟩ hfixed hfoot hchain ?_ hmsg
+  intro ec hec o ho
+  rw [hcons] at hec
+  rcases List.mem_cons.1 hec with heq | ht
+  · subst ec
+    rw [hhead] at ho
+    rcases List.mem_append.1 ho with ho | ho
+    · exact Or.inl ho
+    · exact Or.inr (hnew o ho)
+  · exact Or.inl (htail ec ht ▸ ho)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
