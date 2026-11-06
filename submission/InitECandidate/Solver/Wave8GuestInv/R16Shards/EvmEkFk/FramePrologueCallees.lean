@@ -9820,6 +9820,45 @@ theorem precompile_sha256_body_padding_nonzero {F : Type}
       split at h <;> simp_all
     · exact False.elim (precompile_sha256_init_call_not_resumes s _ hi.code h)
 
+theorem precompile_sha256_call_padding_nonzero {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad stp : BitVec 64) (args : List (ExpHOL 64))
+    (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s
+      (.call (some (none,none)) (ofString "sha256") args)).1) :
+    pad.toNat ≠ 0 := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256") =
+      some ([(ofString "p",.one),(ofString "len",.one),(ofString "out",.one)],
+        sourceFnBody Guest.Software.guestFn_sha256,.one) :=
+    lookup_of_guestAst_getElem 95 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256) rfl
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · rw [ha] at hr
+    simp [R13.FlowsOrResumes,Resumes] at hr
+  · rw [ha] at hr
+    dsimp only at hr
+    rcases hlook : lookupCodeHOLFinite s.code.lookup (ofString "sha256") vals with _ | ⟨body,callee,ret⟩
+    · simp [hlook,R13.FlowsOrResumes,Resumes] at hr
+    · rw [hlook] at hr
+      dsimp only at hr
+      have heq := lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ body _ ret _ callee
+        (by rw [hi.code]; exact hl) hlook
+      subst heq
+      by_cases hz : s.clock = 0
+      · simp [hz,R13.FlowsOrResumes,Resumes] at hr
+      · rw [if_neg hz] at hr
+        have hbody : R13.FlowsOrResumes (evaluateHOLFiniteState
+            (callEntryStateHOLFinite s callee) (sourceFnBody Guest.Software.guestFn_sha256)).1 := by
+          rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+              (sourceFnBody Guest.Software.guestFn_sha256) with ⟨r,post⟩
+          cases r with
+          | none => exact Or.inl rfl
+          | some r => cases r <;> simp_all [R13.FlowsOrResumes,Resumes]
+        exact precompile_sha256_body_padding_nonzero _ pad stp
+          (guestInv_callEntry s callee hi) hp hs hbody
+
 theorem precompile_st_be32_effect {F : Type}
     (s : PanSemStateFiniteExact 64 F) (p : BitVec 64)
     (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
@@ -12058,7 +12097,6 @@ theorem precompile_sha256_allocated_tail {F : Type}
     (hc : next.code = originalRuntimeCode)
     (hp : next.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
     (hs : next.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
-    (hpad : pad.toNat ≠ 0)
     (hn : next.locals.lookup (ofString "n") = some (.val (.word len)))
     (ho : next.locals.lookup (ofString "out") = some (.val (.word out)))
     (hbound : len.toNat+64 < 2^64) :
@@ -12070,6 +12108,9 @@ theorem precompile_sha256_allocated_tail {F : Type}
     R13.FlowsOrResumes (evaluateHOLFiniteState next p).1 →
     EvmStepCC frameStartGw next (evaluateHOLFiniteState next p).2 := by
   intro p hnt hflow
+  have hpad : pad.toNat ≠ 0 :=
+    precompile_sha256_call_padding_nonzero next pad stp _ hstep.1.1.1.1 hp hs
+      (precompile_seq_flows_left next _ _ hflow)
   have hst : stp.toNat ≠ 0 :=
     precompile_sha256_call_state_nonzero next stp _ hstep.1.1.1.1 hs
       (precompile_seq_flows_left next _ _ hflow)
@@ -12087,7 +12128,6 @@ theorem precompile_sha256_alloc_tail_step {F : Type}
     (hhp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word out)))
     (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
     (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
-    (hpad : pad.toNat ≠ 0)
     (hn : s.locals.lookup (ofString "n") = some (.val (.word len)))
     (hbound : len.toNat+64 < 2^64) :
     let tail : ProgHOL 64 := .seq
@@ -12112,7 +12152,7 @@ theorem precompile_sha256_alloc_tail_step {F : Type}
     simp [globN,hhp]
   have hrn : Resumes (evaluateHOLFiniteState next tail).1 := hres ▸ hr
   have hc := precompile_sha256_allocated_tail pad stp out len ptr hi hstep hm hb fresh
-    hstep.1.1.1.1.code hpn hsn hpad hnn ho hbound
+    hstep.1.1.1.1.code hpn hsn hnn ho hbound
     (by intro ht; exact EvmFrameSpecs.not_resumes_timeOut (ht ▸ hrn))
     (Or.inr (Or.inr (Or.inr hrn)))
   have hs' : EvmStepCC frameStartGw s next := precompile_step_weaken
@@ -12136,7 +12176,6 @@ theorem precompile_sha256_alloc_tail_step {F : Type}
 theorem precompile_sha256_gas_alloc_tail_step {F : Type}
     (s : PanSemStateFiniteExact 64 F) (len : BitVec 64) (ptr : ExpHOL 64)
     (args : List (ExpHOL 64)) (hi : EvmInv s)
-    (hpad : globN s "sha_pad" ≠ 0)
     (hn : s.locals.lookup (ofString "n") = some (.val (.word len)))
     (hbound : len.toNat+64 < 2^64) :
     let tail : ProgHOL 64 := .seq
@@ -12165,8 +12204,6 @@ theorem precompile_sha256_gas_alloc_tail_step {F : Type}
     have hg := precompile_charge_gas_call_step args s hi.1.1.code hi
       (by rw [heval]; simp) (by rw [heval]; exact Or.inl rfl)
     rw [heval] at hg
-    have hpv : globN mid "sha_pad" = globN s "sha_pad" := by
-      unfold globN; rw [←hg.1.2.2.1 _ (by decide)]
     have words := hg.1.1.1.2.2.2.2.2.2.2.2.2
     obtain ⟨pad,hp⟩ := words "sha_pad" (by decide)
     obtain ⟨stp,hs⟩ := words "sha_st" (by decide)
@@ -12174,14 +12211,10 @@ theorem precompile_sha256_gas_alloc_tail_step {F : Type}
     change mid.globals.lookup (ofString "sha_pad") = some (.val (.word pad)) at hp
     change mid.globals.lookup (ofString "sha_st") = some (.val (.word stp)) at hs
     change mid.globals.lookup (ofString "heap_ptr") = some (.val (.word out)) at hh
-    have hpz : pad.toNat ≠ 0 := by
-      have hpv' : pad.toNat = globN mid "sha_pad" := by simp [globN,hp]
-      rw [hpv',hpv]
-      exact hpad
     have hflow : (evaluateHOLFiniteState s (.call (some (none,none)) (ofString "charge_gas") args)).1 = none := by rw [heval]
     have hlocals := precompile_call0_locals_on_flow s _ _ hflow
     rw [heval] at hlocals
-    have hc := precompile_sha256_alloc_tail_step mid pad stp out len ptr hg.1.1 hh hp hs hpz
+    have hc := precompile_sha256_alloc_tail_step mid pad stp out len ptr hg.1.1 hh hp hs
       (by rw [hlocals]; exact hn) hbound hr
     exact ⟨⟨hc.1.1,le_trans hg.1.2.1 hc.1.2.1,
       fun k hk => (hg.1.2.2.1 k hk).trans (hc.1.2.2.1 k hk),
@@ -12295,7 +12328,6 @@ theorem precompile_return_flows_resumes {F : Type} (s : PanSemStateFiniteExact 6
 theorem precompile_sha256_words_gas_tail_step {F : Type}
     (s : PanSemStateFiniteExact 64 F) (len : BitVec 64) (ptr : ExpHOL 64)
     (hi : EvmInv s)
-    (hpad : globN s "sha_pad" ≠ 0)
     (hn : s.locals.lookup (ofString "n") = some (.val (.word len)))
     (hbound : len.toNat+64 < 2^64) :
     let tail : ProgHOL 64 := .seq
@@ -12313,7 +12345,7 @@ theorem precompile_sha256_words_gas_tail_step {F : Type}
   apply precompile_step_decCall_ro_at precompile_ro_words_of _ _ _ _ s hi.1.1.code hi ?_ hnt hfr
   intro v k mid hnt hfr
   have hinv := localsFree_evmInv s (setVarHOLFinite (ofString "w") v s).locals k hi
-  apply precompile_sha256_gas_alloc_tail_step _ len ptr _ hinv hpad ?_ hbound ?_
+  apply precompile_sha256_gas_alloc_tail_step _ len ptr _ hinv ?_ hbound ?_
   · change (setVarHOLFinite (ofString "w") v s).locals.lookup (ofString "n") = _
     simp [setVarHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE,hn,show ofString "w" ≠ ofString "n" by decide]
   · exact precompile_seq_call0_flows_resumes mid _ _ _ (fun t ht =>
@@ -12388,7 +12420,6 @@ theorem pre_sha256_body_flows_resumes {F : Type} (s : PanSemStateFiniteExact 64 
 
 theorem pre_sha256_body_step_of_input_bound {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
-    (hpad : globN s "sha_pad" ≠ 0)
     (hbound : ∀ msg : ValueHOL 64, @evalHOLExact 64 F _ s.toExact
         (fun a => Classical.propDecidable (s.memaddrs a))
         (.load .one (.op .add [.var .global (ofString "ev"),.const 112])) = some msg →
@@ -12413,7 +12444,7 @@ theorem pre_sha256_body_step_of_input_bound {F : Type}
   let u := setVarHOLFinite (ofString "n") (.val (.word n)) t
   have hiu : EvmInv u := by
     exact localsFree_evmInv t u.locals t.clock hit
-  apply precompile_sha256_words_gas_tail_step u n _ hiu hpad ?_ hnb hnt hfr
+  apply precompile_sha256_words_gas_tail_step u n _ hiu ?_ hnb hnt hfr
   simp [u,setVarHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE]
 
 theorem precompile_identity_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
