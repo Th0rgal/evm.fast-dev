@@ -15313,4 +15313,36 @@ theorem blockOut_disj_global_buffer {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03
+
+/-- Trie account lookup preserves both transaction backing-pointer words. -/
+theorem ws_get_account_optional_tx_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_account_optional") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have hb := txWorld_header_fixed hW k hk
+  have hf := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  have hbo : (memW s (globN s "bo" + k), 24) ∈ blockOutObjects s := by
+    have hk' : k = 40 ∨ k = 72 := by simpa using hk
+    rcases hk' with rfl | rfl <;> simp [blockOutObjects, hW.2.bo_nz, hW.2.bo40, hW.2.bo72]
+  have hB : ∀ g ∈ wsBufs, Disj (memW s (globN s "bo" + k), 24) (bufferRegion s g) := by
+    intro g hg
+    apply blockOut_disj_global_buffer hT.2.2.1 hbo
+    simp only [wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hg
+    rcases hg with rfl | rfl | rfl <;> decide
+  have hu := ws_get_account_optional_call_allocated_frame s post vs body callee ret v _
+    hW.1.1 hf.1 hf.2.1 (by simp) hB hl hr
+  apply memW_eq_of_ivlUnhit hu.2 hf.2.1 (ivl_allocated_bound hW.1.1.2 hf.1).2
+  exact ⟨le_rfl, by dsimp; omega⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
