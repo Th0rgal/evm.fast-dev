@@ -17479,4 +17479,91 @@ theorem phase2_htab_set_aa_final_store_ready {ι : Type}
     rw [hmt]
     exact hp.2.2.2.2.1
 
+/-- The private warming call and final pointer stores feed the backing-aware tail. -/
+theorem phase2_final_warm_pointer_source_bound (h : PtxCallees) {ι : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (ha : "aa" ∈ names) (hk : "ak" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (spinePlug 4 (spineAt 94 ptxCode) tail) (K.htab_set + 1 + b) := by
+  have hb : TerminatingProgBoundedOn (PtxMessageTableStoreReady
+      (fun _ : Unit => (InitE.sourceBase, 0)) (fun _ _ => 0) names aa ak)
+      (spinePlug 2 (spineAt 96 ptxCode) tail) b := phase2_final_pointer_source_bound
+    (fun _ : Unit => (InitE.sourceBase, 0)) (fun _ _ => 0) names aa ak ha hk
+    (fun s hc hp => ht s hc (phase2_message_suffix_ready hp))
+  have he : spinePlug 4 (spineAt 94 ptxCode) tail =
+      .seq (.call (some (none, none)) (ofString "htab_set")
+        [.var .local (ofString "aa"),
+         .load .one (.op .add [.var .local (ofString "m"), .const 32]), .const 1])
+        (.seq .skip (spinePlug 2 (spineAt 96 ptxCode) tail)) := by
+    simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
+    rfl
+  rw [he]
+  intro F s hc hp
+  apply seq_bound_trans (Q := PtxMessageTableStoreReady
+    (fun _ : Unit => (InitE.sourceBase, 0)) (fun _ _ => 0) names aa ak) ?_
+    (phase2_htab_set_aa_final_store_ready buffers contents names aa ak _ _) ?_ s hc hp
+  · apply TerminatingProgBoundedOn.call_on h.fb_htab_set none _
+    intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · intro F s hc hp
+    simpa only [Nat.zero_add] using seq_bound_trans
+      (PtxP1.bound_of_clock (fun s => clock_skip s)) (Hoare.skip (fun _ hp _ => hp)) hb s hc hp
+
+/-- A non-gas constant field store retains the final warming precondition. -/
+theorem phase2_message_table_ready_const_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak off : Nat) (hoff : off + 8 ≤ 176)
+    (hg : off ≠ 40) (w : BitVec 64) :
+    Hoare (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.store (.op .add [.var .local (ofString "m"), .const off]) (.const w))
+      (fun r s => r = none → PtxMessageTableStoreReady buffers contents names aa ak s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx he hst
+  have hv : v = .val (.word w) := by simpa [evalAt, evalHOLExact] using he.symm
+  subst v
+  have hst' : @panMemStoresHOL 64 _ x [.word w] s.memaddrs
+      (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem := by
+    simpa only [flattenHOL] using hst
+  obtain ⟨hd, _, hm⟩ := panMemStoresHOL_word_spec hst'
+  have ht := phase2_message_tables_backing_store buffers contents hp.1.1 hp.2.1 hp.2.2.1 hd
+    (phase2_message_offset_inside hp.1.1 off hoff hx) hm
+  have hf := phase2_message_store_fields buffers contents hp.1.1 off hoff hx hst'
+  refine ⟨⟨ht.1, hp.1.2⟩, ht.2.1, ht.2.2, hp.2.2.2.1, ?_, hp.2.2.2.2.2⟩
+  change memW {s with memory := mem} (locN s "m" + 40) < 2 ^ 63
+  rw [hf.2.2 5 (by decide) (by omega)]
+  exact hp.2.2.2.2.1
+
+/-- All six final Phase-2 instructions compose in their exact source order. -/
+theorem phase2_final_source_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (ha : "aa" ∈ names) (hk : "ak" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (spinePlug 6 (spineAt 92 ptxCode) tail) (K.htab_set + 1 + b) := by
+  have hb : TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (spinePlug 4 (spineAt 94 ptxCode) tail) (K.htab_set + 1 + b) :=
+    phase2_final_warm_pointer_source_bound h buffers contents names aa ak ha hk ht
+  have he : spinePlug 6 (spineAt 92 ptxCode) tail =
+      .seq .skip (.seq (.store (.op .add [.var .local (ofString "m"), .const 136]) (.const 1))
+        (spinePlug 4 (spineAt 94 ptxCode) tail)) := by
+    simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
+    rfl
+  rw [he]
+  have hs : TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq (.store (.op .add [.var .local (ofString "m"), .const 136]) (.const 1))
+        (spinePlug 4 (spineAt 94 ptxCode) tail)) (K.htab_set + 1 + b) := by
+    intro F s hc hp
+    simpa only [Nat.zero_add, Nat.cast_ofNat] using seq_bound_trans
+      (PtxP1.bound_of_clock (fun s => clock_store s _ _))
+      (phase2_message_table_ready_const_store buffers contents names aa ak 136 (by decide) (by decide) 1)
+      hb s hc hp
+  intro F s hc hp
+  simpa only [Nat.zero_add] using seq_bound_trans
+    (PtxP1.bound_of_clock (fun s => clock_skip s)) (Hoare.skip (fun _ hp _ => hp)) hs s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
