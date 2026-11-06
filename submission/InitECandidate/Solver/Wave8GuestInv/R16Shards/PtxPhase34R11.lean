@@ -19127,4 +19127,24 @@ theorem set_account_call_txWorld {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+
+/-- Stable header roots allow composition after account installation. -/
+theorem set_account_call_header_roots {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64)) (hW : TxWorld s)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "set_account") args) =
+      (none, post)) :
+    globN post "bo" = globN s "bo" ∧
+      ∀ k ∈ ([40, 72] : List Nat), memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+  have hs := (set_account_call_worldStep s post args hW.1 hr).1
+  apply worldStep_empty_tx_header_roots hs hW (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by simp [R10Shards.P26_P28.stdKeep])
+  intro k hk
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+  rcases hk with rfl | rfl <;> simp
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
