@@ -19478,4 +19478,37 @@ theorem jdel_journal_final_stores_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- All deletion-record stores and the counter increment preserve block-output backing. -/
+theorem jdel_journal_stores_counter_backing_resume {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {b : Ivl} (n : Nat)
+    (r t kc f0 f1 : BitVec 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hn : n < globN s "journal_cap") (hrnat : r.toNat = globN s "journal" + 32 * n)
+    (heff : WorldEff s cur [(r.toNat, 32)] [] ["heap_ptr"])
+    (hrloc : cur.locals.lookup (ofString "r") = some (.val (.word r)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hk : cur.locals.lookup (ofString "kc") = some (.val (.word kc)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hbound : r.toNat + 32 < 2 ^ 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.store (.var .local (ofString "r")) (.var .local (ofString "t")))
+        (.seq (.store (.op .add [.var .local (ofString "r"), .const 8#64]) (.var .local (ofString "kc")))
+          (.seq (.store (.op .add [.var .local (ofString "r"), .const 16#64]) (.const 1#64))
+            (.seq (.store (.op .add [.var .local (ofString "r"), .const 24#64]) (.rfield 1 (.var .local (ofString "old"))))
+              (.seq (.assign .global (ofString "journal_n") (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail))))) =
+      (some (.returned rv), out)) :
+    ∃ mid, IvlUnhit s mid b ∧ mid.locals = cur.locals ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨mid8, he8, hl8, hrest⟩ := journal_first_stores_effect r t kc _ rv heff hrloc ht hk hbound hr
+  obtain ⟨stored, hs, hl, hrest⟩ := jdel_journal_final_stores_effect r f0 f1 _ rv he8
+    (by rw [hl8]; exact hrloc) (by rw [hl8]; exact hold) hbound hrest
+  rw [hrnat] at hs
+  obtain ⟨mid, hf, hl', htail⟩ := journal_counter_backing_resume tail rv hA hfix hb hal hb1 hb2 hn hs hrest
+  exact ⟨mid, hf, hl'.trans (hl.trans hl8), htail⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
