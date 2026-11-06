@@ -18895,4 +18895,32 @@ theorem fresh_account_balance_store_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+
+/-- The world invariant supplies all journal and allocator word witnesses. -/
+theorem jset_call_ts16_world_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (tw kw : BitVec 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (ht : callee.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : callee.lookup (ofString "key") = some (.val (.word kw)))
+    (hts : globN s "ts" ≠ 0) (htw : tw.toNat = memW s (globN s "ts" + 16))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "jset") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have hA := hW.1.1
+  obtain ⟨j, hj⟩ := hA.2.2.2.2.2.2.2.2.2 "journal" (by decide)
+  obtain ⟨n, hn⟩ := hA.2.2.2.2.2.2.2.2.2 "journal_n" (by decide)
+  obtain ⟨cap, hc⟩ := hA.2.2.2.2.2.2.2.2.2 "journal_cap" (by decide)
+  obtain ⟨p, hp⟩ := hA.2.2.2.2.2.2.2.2.2 "heap_ptr" (by decide)
+  exact jset_call_ts16_return_header_words s post S Nd vs body callee ret j n cap p tw kw rv
+    hW hT hj hn hc hp ht hk hts htw hl hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
