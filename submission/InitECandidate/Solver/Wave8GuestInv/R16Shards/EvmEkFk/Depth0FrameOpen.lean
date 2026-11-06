@@ -9786,4 +9786,23 @@ theorem get_account_execution_entries_strong {F : Type} (s : PanSemStateFiniteEx
   exact nodeDbEntriesStrong_of_preserved_payloads he.1 hA hs.1.1 hhp hv
     (get_account_execution_payload_words s values body callee ret v post S Nd db hc hA hWT he hl hb hsep)
 
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+/-- The witness account lookup has a narrow effect with no old owned write region. -/
+theorem ws_get_account_execution_effect {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_account_optional") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    WorldEff s post [] wsBufs wsGw := by
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ body _ ret values callee
+    (by rw [hc]; exact lookup_ws_get_account_optional_top) hl
+  subst body
+  have he := worldEff_ws_get_account_optional s (callEntryStateHOLFinite s callee) hA.2
+    ((WorldEff.refl s [] wsBufs wsGw hA hc).locals_clock _ _) (by rw [hb]; simp)
+    (by rw [hb]; simp [Resumes])
+  rw [hb] at he
+  exact he
+
 end HeadStore
