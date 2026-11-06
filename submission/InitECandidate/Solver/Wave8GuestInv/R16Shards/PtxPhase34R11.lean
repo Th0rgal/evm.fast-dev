@@ -16429,4 +16429,32 @@ theorem journal_worldEff_blockOut_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private trap_with_call_no_none_resumes from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- A journal capacity guard can fall through only with space for the next record. -/
+theorem journal_guard_capacity {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s
+      (.ite (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap")))
+        (.call (some (none, none)) (ofString "trap_with") [.const trapCode]) .skip) = (none, post)) :
+    jn.toNat < jc.toNat := by
+  by_contra hn
+  have hc : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = true := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  have he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap"))) =
+      some (.val (.word 1#64)) := by
+    simp [evalHOLExact, hjn, hjc, hc]
+  rw [evaluateHOLFiniteState_ite, he] at hr
+  simp at hr
+  have hh := (trap_with_call_no_none_resumes s trapCode hcode).1
+  rw [hr] at hh
+  exact hh rfl
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
