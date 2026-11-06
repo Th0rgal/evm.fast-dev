@@ -16251,4 +16251,38 @@ theorem modify_state_commit_call_worldStep {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- The concrete state commit preserves the transaction environment and world typing. -/
+theorem modify_state_commit_call_txWorld {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (args : List (ExpHOL 64)) (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "modify_state_commit") args) = (none, mid)) :
+    TxWorld mid ∧ ∃ S' Nd', WorldTypedWith mid S' Nd' := by
+  have hs := (modify_state_commit_call_worldStep s mid args hW.1 hc).1
+  have hB : ValidBufList [("sk_buf", 52)] := by
+    intro p hp
+    simp only [List.mem_singleton] at hp
+    subst p
+    exact ⟨64, by decide, by decide, by decide⟩
+  have hd := validBufList_disj hB hT
+  obtain ⟨S', Nd', _, hT', _⟩ := hs.2.2.2.2 S Nd hT hd
+  have hz : ∀ i ∈ bufRegions [("sk_buf", 52)] s, i.2 = 0 → i.1 % 8 = 0 := by
+    intro i hi
+    simp only [bufRegions, List.map_cons, List.map_nil, List.mem_singleton] at hi
+    subst i
+    exact PtxP1.bufferRegion_zero_aligned s "sk_buf" 52 (by decide)
+  have hl := (ignored_call_fall_locals s mid _ _ hc).1
+  have he := txEnv_preserved_by_worldStep hs (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp [R10Shards.P26_P28.stdKeep])
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+    (fun i hi => hd i hi _ (PtxP1.bo_mem_typed hW.2.bo_nz))
+    (bo_words hT.2.2.1 hW.2.bo_nz).2.1 hz hW.2 (locals := mid.locals) (by rw [hl])
+  exact ⟨⟨PtxP1.worldOK_of_parts hs.1 hT', he⟩, S', Nd', hT'⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
