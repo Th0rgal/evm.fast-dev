@@ -16982,4 +16982,37 @@ theorem op_log_old_ownership_g09 {F : Type}
       exact (hsep ec hec o ho).2 j hj
   · exact hav o ho j hj
 
+/-- Allocation order separates a fresh heap interval from all previously allocated regions. -/
+theorem op_log_fresh_disj_allocated_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {fresh old : Ivl}
+    (hlo : globN s "heap_ptr" ≤ fresh.1)
+    (hhi : fresh.1 + fresh.2 ≤ globN s "scratch_ptr")
+    (hold : Allocated s old) : Disj fresh old := by
+  rcases hold with hh | hs
+  · exact Or.inr (Or.inr (Or.inr (le_trans hh.2 hlo)))
+  · exact Or.inr (Or.inr (Or.inl (le_trans hhi hs.1)))
+
+/-- The same allocation bounds discharge every typed-world write-separation premise. -/
+theorem op_log_fresh_disj_world_cells_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {fresh : Ivl}
+    (hWT : WorldTypedWith s S Nd)
+    (hlo : globN s "heap_ptr" ≤ fresh.1)
+    (hhi : fresh.1 + fresh.2 ≤ globN s "scratch_ptr") :
+    ∀ i ∈ worldTypedIvls s S Nd, Disj fresh i := by
+  intro i hi
+  rcases worldTypedIvls_allocated hWT hi with hz | ha
+  · exact Or.inr (Or.inl hz)
+  · exact op_log_fresh_disj_allocated_g09 hlo hhi ha
+
+/-- Fresh heap allocation also preserves the message exclusion needed by append. -/
+theorem op_log_fresh_disj_messages_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {fresh : Ivl}
+    (hFW : ∀ ec ∈ evmChain s, FrameWF s S ec)
+    (hlo : globN s "heap_ptr" ≤ fresh.1)
+    (hhi : fresh.1 + fresh.2 ≤ globN s "scratch_ptr") :
+    ∀ ec ∈ evmChain s, Disj (memW s (ec.1 + 112), 176) fresh := by
+  intro ec hec
+  exact R11Shards.Disj.symm (op_log_fresh_disj_allocated_g09 hlo hhi
+    (hFW ec hec).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
