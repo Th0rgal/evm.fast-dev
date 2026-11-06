@@ -17680,4 +17680,44 @@ theorem op_log_no_growth_execution_of_log_ownership_g09 {F : Type}
     hA hinv hcons hl hn hm0 hm16 hnonnull hlt hlog hdheader hdbuffer
     hnewMsg hnew hnewOld hnewWorld hclock he hlg hde hme hm0w hm8w hm16w hne hHM
 
+/-- Fresh heap bounds separate an allocation from every object of the old chain. -/
+theorem op_log_fresh_disj_chain_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {fresh : Ivl}
+    (hA : ArenaReady s) (hFW : ∀ ec ∈ evmChain s, FrameWF s S ec)
+    (hlo : globN s "heap_ptr" ≤ fresh.1)
+    (hhi : fresh.1 + fresh.2 ≤ heapLimit) :
+    IvlsDisj [fresh] ((evmChain s).map (frameObjects s)).flatten := by
+  intro x hx o ho
+  simp only [List.mem_singleton] at hx
+  subst x
+  obtain ⟨os, hos, ho⟩ := List.mem_flatten.1 ho
+  obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hos
+  have hd := frameObject_disj_fresh_heap_g09 hA.2 hhi (hFW ec hec) ho
+  unfold Disj
+  rcases hd with hz | hr | hl
+  · exact Or.inr (Or.inl hz)
+  · exact Or.inr (Or.inr (Or.inl hr))
+  · exact Or.inr (Or.inr (Or.inr (le_trans hl hlo)))
+
+/-- A fresh detached record's allocation intervals provide all old-chain exclusions. -/
+theorem op_log_detached_chain_ownership_g09 {F : Type}
+    {s record : PanSemStateFiniteExact 64 F} {S : List Nat}
+    {log address topics data nt size : Nat}
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (h0 : memW record log = address) (h8 : memW record (log + 8) = topics)
+    (h16 : memW record (log + 16) = nt) (h24 : memW record (log + 24) = data)
+    (h32 : memW record (log + 32) = size)
+    (ht : topics + 32 * nt ≤ log) (hl : log + 40 ≤ address) (ha : address + 20 ≤ data)
+    (hfresh : ∀ x ∈ ([(log, 40), (address, 20), (topics, 32*nt), (data, size)] : List Ivl),
+      globN s "heap_ptr" ≤ x.1 ∧ x.1 + x.2 ≤ heapLimit) :
+    (logOwnedIvls record log).Pairwise Disj ∧
+      IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls record log) := by
+  obtain ⟨_, _, hFW, _, _⟩ := op_log_old_ownership_g09 hinv
+  obtain ⟨hpw, hd⟩ := op_log_detached_ownership_g09 h0 h8 h16 h24 h32 ht hl ha
+    (objects := ((evmChain s).map (frameObjects s)).flatten) (by
+      intro x hx o ho
+      exact op_log_fresh_disj_chain_g09 hA hFW (hfresh x hx).1 (hfresh x hx).2
+        x (by simp) o ho)
+  exact ⟨hpw, fun o ho x hx => R11Shards.Disj.symm (hd x hx o ho)⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
