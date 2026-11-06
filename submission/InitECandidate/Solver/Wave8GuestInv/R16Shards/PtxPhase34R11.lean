@@ -16801,4 +16801,35 @@ theorem journal_alloc_restored_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open EvmEkFk InitECandidate.Solver.GuestTrapAndLookup
+
+/-- The concrete journal allocator declaration retains effects, bounds and caller locals. -/
+theorem journal_alloc_decCall_effect {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {jrec : Ivl} (p n : BitVec 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : cur.locals.lookup (ofString "klen") = some (.val (.word n)))
+    (hr : evaluateHOLFiniteState cur
+      (.decCall (ofString "kc") .one (ofString "alloc") [.var .local (ofString "klen")] tail) =
+      (some (.returned rv), out)) :
+    ∃ mid u, WorldEff s mid [jrec] [] ["heap_ptr"] ∧
+      globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + n.toNat ≤ heapLimit ∧
+      mid.locals = cur.locals.update (ofString "kc", .val (.word p)) ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨vs, body, callee, ret, v, post, u, ha, hl, hc, ht, hm⟩ := dec_call_return_inv_args hr
+  have hav : vs = [.val (.word n)] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, hn] using ha.symm
+  subst vs
+  have hlk := pan_one_word_lookup cur.code.lookup (ofString "alloc") (ofString "n")
+    (sourceFnBody Guest.Software.guestFn_alloc) n (by rw [heff.code]; exact lookup_alloc_r16)
+  rw [hlk] at hl
+  obtain ⟨rfl, rfl, rfl⟩ := Option.some.inj hl
+  obtain ⟨hv, he, hlo, hhi⟩ := journal_alloc_restored_effect p n v heff hp hc
+  subst v
+  exact ⟨_, u, he, hlo, hhi, rfl, ht, hm⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
