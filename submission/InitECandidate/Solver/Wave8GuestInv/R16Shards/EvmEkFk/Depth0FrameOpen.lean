@@ -10087,4 +10087,29 @@ theorem code_roots_kept_of_witness_effect {F : Type}
   exact code_roots_kept_of_recordsKept hw.2.2.2.1 hw.2.2.1
     (by intro g k hm i hi; cases hi)
 
+/-- Updating a typed table leaves every distinct typed table's footprint unchanged. -/
+theorem htabFootprint_eq_of_separated_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (hdb : db ∈ S) (ht : locN s "t" ∈ S)
+    (hne : db ≠ locN s "t") (hx : HtabExit s post) :
+    htabFootprint post db = htabFootprint s db := by
+  have hw := (hW.1.2.1 db hdb).1
+  have htw := (hW.1.2.1 (locN s "t") ht).1
+  have hhead : (db,88) ∈ htabFootprint s db := by simp [htabFootprint]
+  have hbound := allocated_le_2pow64 hAs.2 ((hW.1.2.1 db hdb).2 _ hhead).1
+  apply (InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.htabFootprint_eq_of_hdr_unhit
+    (hw.1 _ hhead).2.1 hbound ?_).2
+  right
+  apply ivlUnhit_of_frameOutside ⟨(hw.1 _ hhead).2.1,by norm_num⟩ hx.2.2.2.2.2.2.1
+  · intro j hj
+    exact ⟨(htw.1 j hj).2.1,(htw.1 j hj).2.2.1⟩
+  · have hs := hAs.2.2.2.2.2.2.1
+    have hp := hx.1.2.2.2.2.2.2.1
+    exact ⟨hs,by omega⟩
+  · intro j hj
+    exact hW.1.2.2.1 db hdb (locN s "t") ht hne (db,88) hhead j hj
+  · apply disj_fresh_of_allocated hAs.2 hx.1.2 hx.2.2.2.2.1
+    exact ((hW.1.2.1 db hdb).2 (db,88) hhead).1
+
 end HeadStore
