@@ -12473,6 +12473,20 @@ theorem precompile_sha256_block_guard_of_large_length (i len : BitVec 64)
   have hb := (precompile_sha256_block_index_add_bound i halign).2
   omega
 
+theorem precompile_sha256_block_guard_true {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (i len : BitVec 64)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (halign : i.toNat % 64 = 0) (hlen : ¬ len.toNat + 64 < 2^64) :
+    @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a))
+      (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"),.const 64])) = some (.val (.word 1)) := by
+  have hb := precompile_sha256_block_guard_of_large_length i len halign hlen
+  simp [BitVec.toNat_add] at hb
+  simpa [evalHOLFinite,evalHOLExact,evalListHOLExact,hi,hl,Compiler.Encoders.Asm.wordCmpHOL,
+    wordOpHOL,wordOp,valueIsWord,valueWord,BitVec.le_def,hb]
+    using hb
+
 theorem pre_sha256_body_step_of_input_bound {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
     (hbound : ∀ msg : ValueHOL 64, @evalHOLExact 64 F _ s.toExact
