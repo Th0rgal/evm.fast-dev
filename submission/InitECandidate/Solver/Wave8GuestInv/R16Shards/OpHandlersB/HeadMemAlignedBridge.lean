@@ -11641,4 +11641,45 @@ theorem laInv_append_callee_contents {F : Type} (s u : PanSemStateFiniteExact 64
         · exact Or.inr hh) hc1
   exact Ret.mono hrun (fun _ _ hp => hp.2)
 
+/-- Evaluate the actual child-array load used as `log_append`'s second argument. -/
+theorem ev_child_log_slot {F : Type} (u : PanSemStateFiniteExact 64 F)
+    (p i lg : BitVec 64)
+    (hp : u.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hi : u.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hd : u.memaddrs (p + i * 8)) (hm : u.memory (p + i * 8) = .word lg) :
+    ev u (.load .one (.op .add [.var .local (ofString "p"),
+      .panop .mul [.var .local (ofString "i"), .const 8]])) = some (.val (.word lg)) := by
+  have hmul := ev_mulE u (.var .local (ofString "i")) (.const 8) i 8
+    (by rw [ev_loc]; exact hi) (ev_const u 8)
+  have hadd := ev_add2 u (.var .local (ofString "p"))
+    (.panop .mul [.var .local (ofString "i"), .const 8]) p (i * 8)
+    (by rw [ev_loc]; exact hp) hmul
+  simp only [ev] at hadd ⊢
+  rw [evalHOLExact, hadd]
+  simp only [memLoadHOLExact]
+  rw [if_pos hd]
+  simp [hm]
+  exact hm
+
+/-- The source-load pointer agrees with the entry-state child contents once
+the loop frame preserves its source cell. -/
+theorem laInv_child_log_value {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (L arr0 cap0 n0 nc p i lg : BitVec 64)
+    (h : LAInv s L arr0 cap0 n0 nc u)
+    (hm : u.memory (p + i * 8) = .word lg)
+    (hw : p.toNat + 8 * i.toNat < 2 ^ 64)
+    (harr : ¬ CellHits (p.toNat + 8 * i.toNat) (arr0.toNat, 8 * cap0.toNat))
+    (hregion : p.toNat + 8 * i.toNat + 8 ≤ globN s "heap_ptr" ∨
+      heapLimit ≤ p.toNat + 8 * i.toNat)
+    (h0 : p + i * 8 ≠ L) (h8 : p + i * 8 ≠ L + 8) (h16 : p + i * 8 ≠ L + 16) :
+    lg.toNat = memW s (p.toNat + 8 * i.toNat) := by
+  have heq : BitVec.ofNat 64 (p.toNat + 8 * i.toNat) = p + i * 8 := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hw, log_slot_toNat p i hw]
+  have hkeep := laInv_source_memW h hw harr hregion
+    (by rwa [heq]) (by rwa [heq]) (by rwa [heq])
+  have hval : memW u (p.toNat + 8 * i.toNat) = lg.toNat := by
+    simp only [memW, heq, hm]
+  exact hval.symm.trans hkeep
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
