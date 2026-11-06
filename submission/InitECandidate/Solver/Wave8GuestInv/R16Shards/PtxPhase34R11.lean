@@ -17751,4 +17751,54 @@ theorem decCall_return_replace_memory_rel {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private journalAppendTailProg seq_call0_ret_inv seq_store_ret_inv seq_assign_ret_inv
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Lift a relation between both output memories through the complete journal block. -/
+theorem journal_append_replace_memory_rel {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail tail' : ProgHOL 64) (rv rv' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → (BitVec 64 → HolWordLab 64) → Prop)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry tail' = (some (.returned rv'), u') ∧ P u.memory u'.memory) :
+    ∃ out', evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail') = (some (.returned rv'), out') ∧ P out.memory out'.memory := by
+  unfold journalAppendTailProg at hr ⊢
+  have ⟨hn, hrest⟩ := journal_guard_seq_resume s out jn jc trapCode _ rv hcode hjn hjc hr
+  have hcmp : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  simp only [evalHOLExact, hjn, hjc, hcmp, evaluateHOLFiniteState_skip]
+  apply dec_return_replace_memory_rel hrest
+  intro entry u hu
+  apply decCall_return_replace_memory_rel hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_call0_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  intro entry u hu
+  apply dec_return_replace_memory_rel hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_assign_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  exact hc
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
