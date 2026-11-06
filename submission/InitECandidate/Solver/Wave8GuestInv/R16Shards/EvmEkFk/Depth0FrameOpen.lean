@@ -9580,4 +9580,32 @@ theorem get_account_execution_world_step {F : Type} (s : PanSemStateFiniteExact 
   rw [hb] at hs
   exact hs (by simp [Resumes])
 
+/-- The standard record contract preserves all code/access roots away from outputs. -/
+theorem code_roots_kept_of_recordsKept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    (hR : RecordsKept R stdKeep s post)
+    (hG : GlobalsKept ["heap_ptr","scratch_ptr"] s post)
+    (hsep : ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      ∀ i ∈ R s, ¬ CellHits (globN s g+k) i) :
+    ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW post (globN post g+k) = memW s (globN s g+k) := by
+  intro g k hm hn
+  have hg : globN post g = globN s g := by
+    have heq : s.globals.lookup (ofString g) = post.globals.lookup (ofString g) := hG _ (by
+      simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+      rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ <;> decide)
+    unfold globN
+    rw [heq]
+  rw [hg]
+  have hr : ∃ ks, (g,ks) ∈ stdKeep ∧ k ∈ ks := by
+    simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+    rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩
+    · exact ⟨[0,8,16,24,32],by decide,by decide⟩
+    · exact ⟨[0,8,16,24,32,40,48,56,64],by decide,by decide⟩
+    · exact ⟨[0,8,16,24,32,40,48,56,64],by decide,by decide⟩
+    · exact ⟨[0,8,16,24,32,40,48,56,64,72],by decide,by decide⟩
+  obtain ⟨ks,hks,hk⟩ := hr
+  exact hR (g,ks) hks hn k hk (hsep g k hm)
+
 end HeadStore
