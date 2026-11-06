@@ -7894,4 +7894,35 @@ theorem codeDbPayloadStrong_of_sk_make {F : Type}
     rw [hfixed] at hi
     exact hobjects i hi
 
+/-- The key builder preserves a table's footprint whenever its header is
+separated from the concrete scratch-buffer write. -/
+theorem htabFootprint_eq_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hw : HtabWF s db)
+    (hd : Disj (db, 88) (globN s "sk_buf", 52)) :
+    htabFootprint post db = htabFootprint s db := by
+  have hhdr : (db, 88) ∈ htabFootprint s db := by simp [htabFootprint]
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  have hd8 := (hw.1 _ hhdr).2.1
+  have h264 : heapEnd ≤ 2 ^ 64 := by decide
+  apply (InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.htabFootprint_eq_of_hdr_unhit
+    hd8 (by have := (hw.1 _ hhdr).1.2; dsimp only at this; omega) ?_).2
+  right
+  intro a ha hh
+  apply heff.cell_frame
+  intro j hj _ hhj
+  simp only [List.mem_singleton] at hj
+  subst j
+  unfold CellHits at hh hhj
+  rcases hd with hz | hz | hz | hz <;> try dsimp only at hz
+  all_goals omega
+
 end HeadStore
