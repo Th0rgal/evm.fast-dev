@@ -9661,4 +9661,625 @@ theorem account_records_preserve_code_roots {F : Type}
   · exact hR ("bs",[0,8,16,24,32,40,48,56,64,72]) (by decide) hn 48 (by decide)
       (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "bs" 80 48 (by decide) hn (by decide))
 
+/-- An actual successful account lookup preserves the caller's live code roots. -/
+theorem get_account_execution_code_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW post (globN post g+k) = memW s (globN s g+k) := by
+  have hs := get_account_execution_world_step s values body callee ret v post hc hW hl hb
+  have hentry : WorldOK (callEntryStateHOLFinite s callee) := localsFree_worldOK s _ _ hW
+  obtain ⟨_,S,hS⟩ := hentry
+  obtain ⟨Nd,hWT⟩ := (worldTyped_iff_with _ _).1 hS
+  have hr := account_records_preserve_code_roots hWT hs.1.2.2.2.1 hs.1.2.2.1
+  simpa [globN,memW,callEntryStateHOLFinite] using hr
+
+/-- Account execution preserves world validity, protected globals, and live roots. -/
+theorem get_account_execution_world_live_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    WorldOK post ∧ GlobalsKept ["heap_ptr","scratch_ptr"] s post ∧
+    (∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW s (globN s g+k) ≠ 0 → memW post (globN post g+k) ≠ 0) := by
+  have hs := get_account_execution_world_step s values body callee ret v post hc hW hl hb
+  have hentry : WorldOK (callEntryStateHOLFinite s callee) := localsFree_worldOK s _ _ hW
+  obtain ⟨_,S,hS⟩ := hentry
+  obtain ⟨Nd,hWT⟩ := (worldTyped_iff_with _ _).1 hS
+  obtain ⟨S',Nd',_,hWT',_⟩ := hs.1.2.2.2.2 S Nd hWT
+    (R16WkAcctWs.validBufList_disj validBufList_wsAcctBufs hWT)
+  refine ⟨⟨hs.1.1,S',(worldTyped_iff_with _ _).2 ⟨Nd',hWT'⟩⟩,?_,?_⟩
+  · exact hs.1.2.2.1
+  · intro g k hm hn hv
+    rw [get_account_execution_code_roots s values body callee ret v post hc hW hl hb g k hm hn]
+    exact hv
+
+/-- The full world-step frame protects payload words given cell-level separation.
+This handles empty owned intervals without assuming they have positive size. -/
+theorem protected_payload_words_of_worldStep_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db) (hA : ArenaReady s)
+    (hF : FrameOutside s post
+      (worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s ++ [freeGap s]) (heapFree s))
+    (hsep : ∀ p ∈ htabValues s db, ∀ a ∈ [p,p+8],
+      ∀ i ∈ worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s, ¬ CellHits a i) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  intro p hp
+  obtain ⟨hi,hb,_,_⟩ := he.2 p hp
+  have hheap := hA.2.2.1
+  have hw : ∀ a ∈ [p,p+8], memW post a = memW s a := by
+    intro a ha
+    have ha' : a = p ∨ a = p+8 := by simpa using ha
+    have hn : (BitVec.ofNat 64 a).toNat = a := by
+      rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt (by rcases ha' with rfl | rfl <;> omega)]
+    unfold memW
+    rw [hF (BitVec.ofNat 64 a) (by
+      intro i him hit
+      rw [hn] at hit
+      rcases List.mem_append.1 him with him | him
+      · exact hsep p hp a ha i him hit
+      · have hi' : i = freeGap s := by simpa using him
+        subst i
+        have hfmp := hA.2.2.2.1
+        have hlim : heapLimit ≤ InitE.scratchStart := by decide
+        unfold CellHits freeGap at hit
+        unfold Inside at hi
+        dsimp only at hit hi
+        rcases ha' with rfl | rfl <;> omega) (by
+      rw [hn]
+      unfold CellHits heapFree
+      unfold Inside at hi
+      dsimp only at hi ⊢
+      rcases ha' with rfl | rfl <;> omega)]
+  exact ⟨hw p (by simp),hw (p+8) (by simp)⟩
+
+/-- Recover protected payload words from an actual account execution and separation. -/
+theorem get_account_execution_payload_words {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hWT : WorldTypedWith s S Nd) (he : CodeDbPayloadStrong s S db)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post))
+    (hsep : ∀ p ∈ htabValues s db, ∀ a ∈ [p,p+8],
+      ∀ i ∈ worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s, ¬ CellHits a i) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  have hW : WorldOK s := ⟨hA,S,(worldTyped_iff_with _ _).2 ⟨Nd,hWT⟩⟩
+  have hs := get_account_execution_world_step s values body callee ret v post hc hW hl hb
+  have hentryWT : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd := by
+    refine ⟨?_,hWT.2.1,hWT.2.2.1,hWT.2.2.2⟩
+    exact (tablesTyped_with_locals s callee (callEntryStateHOLFinite s callee).clock S).2 hWT.1
+  obtain ⟨S',Nd',_,_,_,hframe,_⟩ := hs.1.2.2.2.2 S Nd hentryWT
+    (R16WkAcctWs.validBufList_disj validBufList_wsAcctBufs hentryWT)
+  have hframe' : FrameOutside s post
+      (worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s ++ [freeGap s]) (heapFree s) := hframe
+  exact protected_payload_words_of_worldStep_frame he hA hframe' hsep
+
+/-- Account execution retains payload typing when database values and cells are protected. -/
+theorem get_account_execution_entries_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hWT : WorldTypedWith s S Nd) (he : CodeDbPayloadStrong s S db)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post))
+    (hv : htabValues post db = htabValues s db)
+    (hsep : ∀ p ∈ htabValues s db, ∀ a ∈ [p,p+8],
+      ∀ i ∈ worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s, ¬ CellHits a i) :
+    NodeDbEntriesStrong post db := by
+  have hW : WorldOK s := ⟨hA,S,(worldTyped_iff_with _ _).2 ⟨Nd,hWT⟩⟩
+  have hs := get_account_execution_world_step s values body callee ret v post hc hW hl hb
+  have hhp : globN s "heap_ptr" ≤ globN post "heap_ptr" := hs.1.2.1
+  exact nodeDbEntriesStrong_of_preserved_payloads he.1 hA hs.1.1 hhp hv
+    (get_account_execution_payload_words s values body callee ret v post S Nd db hc hA hWT he hl hb hsep)
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+/-- The witness account lookup has a narrow effect with no old owned write region. -/
+theorem ws_get_account_execution_effect {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_account_optional") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    WorldEff s post [] wsBufs wsGw := by
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ body _ ret values callee
+    (by rw [hc]; exact lookup_ws_get_account_optional_top) hl
+  subst body
+  have he := worldEff_ws_get_account_optional s (callEntryStateHOLFinite s callee) hA.2
+    ((WorldEff.refl s [] wsBufs wsGw hA hc).locals_clock _ _) (by rw [hb]; simp)
+    (by rw [hb]; simp [Resumes])
+  rw [hb] at he
+  exact he
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+/-- The narrow witness effect preserves payload words without trie separation. -/
+theorem protected_payload_words_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  apply protected_payload_words_of_world_frame he hA
+  intro a hn
+  rcases heff.cell_frame a hn with ⟨i,hi,_⟩ | ⟨b,hb,hpos,hlo,hhi⟩ | ⟨_,hlo,hhi⟩ | ⟨_,hlo,hhi⟩
+  · cases hi
+  · refine Or.inl ⟨bufferRegion s b,Or.inr ?_,hpos,hlo,hhi⟩
+    have hgb : b ∈ globalBuffers := by
+      simp only [wsBufs,List.mem_cons,List.not_mem_nil,or_false] at hb
+      rcases hb with rfl | rfl | rfl <;> decide
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    exact List.mem_map.2 ⟨b,hgb,rfl⟩
+  · exact Or.inr (Or.inl ⟨hlo,hhi⟩)
+  · exact Or.inr (Or.inr ⟨hlo,hhi⟩)
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards
+  InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03 in
+/-- Every typed table keeps its values under the narrow witness lookup effect. -/
+theorem htabValues_eq_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) (t : Nat) (ht : t ∈ S) :
+    htabValues post t = htabValues s t := by
+  apply Fast_C08WkShard03.htabValues_eq_of_unhit (hWT.1.2.1 t ht).1
+  intro i hi
+  have hal := ((hWT.1.2.1 t ht).2 i hi).1
+  have hw := ((hWT.1.2.1 t ht).1.1 i hi).2
+  have him : i ∈ worldTypedIvls s S Nd := by
+    unfold worldTypedIvls
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    exact List.mem_flatMap.2 ⟨t,ht,hi⟩
+  have hfr : ∀ a : BitVec 64, post.memory a ≠ s.memory a →
+      (∃ j ∈ wsBufs.map (bufferRegion s) ++ [freeGap s], CellHitsPos a.toNat j) ∨
+        CellHitsPos a.toNat (heapFree s) := by
+    intro a hn
+    rcases heff.cell_frame a hn with ⟨j,hj,_⟩ | ⟨b,hb,hh⟩ | hh | hh
+    · cases hj
+    · exact Or.inl ⟨_,List.mem_append_left _ (List.mem_map.2 ⟨b,hb,rfl⟩),hh⟩
+    · exact Or.inl ⟨_,List.mem_append_right _ (by simp),hh⟩
+    · exact Or.inr hh
+  refine Fast_C08WkShard03.ivlUnhit_of_cellHitsPos hw.1 hw.2.1 hfr ?_ (Fast_C08WkShard03.disj_allocated_heapFree hA.2 hal)
+  intro j hj
+  rcases List.mem_append.1 hj with hj | hj
+  · obtain ⟨b,hb,rfl⟩ := List.mem_map.1 hj
+    have hgb : b ∈ globalBuffers ∧ b.1 ∉ typedRecords.map Prod.fst := by
+      simp only [wsBufs,List.mem_cons,List.not_mem_nil,or_false] at hb
+      rcases hb with rfl | rfl | rfl <;> decide
+    exact Disj.flip (Fast_C08WkShard03.untypedBuf_disj_worldTypedIvls hWT b hgb.1 hgb.2 i him)
+  · have heq : j = freeGap s := by simpa using hj
+    subst j
+    exact Fast_C08WkShard03.disj_allocated_freeGap hA.2 hal
+
+/-- Actual witness-account execution preserves strong entries with no extra frame premises. -/
+theorem ws_get_account_execution_entries_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hWT : WorldTypedWith s S Nd) (he : CodeDbPayloadStrong s S db) (hm : db ∈ S)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_account_optional") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    NodeDbEntriesStrong post db := by
+  have heff := ws_get_account_execution_effect s values body callee ret v post hc hA hl hb
+  exact nodeDbEntriesStrong_of_preserved_payloads he.1 hA heff.arena heff.hp_lo
+    (htabValues_eq_of_witness_effect hWT hA heff db hm)
+    (protected_payload_words_of_witness_effect he hA heff)
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+/-- Expose typed table-layout preservation from the witness effect's world bridge. -/
+theorem htabFootprint_eq_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    ∀ t ∈ S, htabFootprint post t = htabFootprint s t := by
+  let Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+    fun a _ b T _ => ∀ t ∈ T, htabFootprint b t = htabFootprint a t
+  have hw : WorldStep (fun {_} _ => []) wsGw stdKeep Q s none post :=
+    heff.to_worldStep_Q ⟨hA,S,(worldTyped_iff_with _ _).2 ⟨Nd,hWT⟩⟩
+      (by decide) (by decide) (fun _ _ _ _ _ _ _ hf => hf)
+  obtain ⟨S',Nd',hsub,hWT',hg,hf,hq⟩ := hw.2.2.2.2 S Nd hWT (by intro i hi; cases hi)
+  intro t ht
+  exact hq t (hsub t ht)
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards
+  InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03 in
+/-- Aligned allocated typed intervals are untouched by the witness effect. -/
+theorem allocated_typed_ivl_unhit_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw)
+    (i : Ivl) (him : i ∈ worldTypedIvls s S Nd) (hal : Allocated s i)
+    (ha : i.1 % 8 = 0) (hn : i.2 % 8 = 0) :
+    Fast_C08WkShard03.IvlUnhit s post i := by
+  have hfr : ∀ a : BitVec 64, post.memory a ≠ s.memory a →
+      (∃ j ∈ wsBufs.map (bufferRegion s) ++ [freeGap s], CellHitsPos a.toNat j) ∨
+        CellHitsPos a.toNat (heapFree s) := by
+    intro a hn
+    rcases heff.cell_frame a hn with ⟨j,hj,_⟩ | ⟨b,hb,hh⟩ | hh | hh
+    · cases hj
+    · exact Or.inl ⟨_,List.mem_append_left _ (List.mem_map.2 ⟨b,hb,rfl⟩),hh⟩
+    · exact Or.inl ⟨_,List.mem_append_right _ (by simp),hh⟩
+    · exact Or.inr hh
+  refine Fast_C08WkShard03.ivlUnhit_of_cellHitsPos ha hn hfr ?_
+    (Fast_C08WkShard03.disj_allocated_heapFree hA.2 hal)
+  intro j hj
+  rcases List.mem_append.1 hj with hj | hj
+  · obtain ⟨b,hb,rfl⟩ := List.mem_map.1 hj
+    have hgb : b ∈ globalBuffers ∧ b.1 ∉ typedRecords.map Prod.fst := by
+      simp only [wsBufs,List.mem_cons,List.not_mem_nil,or_false] at hb
+      rcases hb with rfl | rfl | rfl <;> decide
+    exact Disj.flip (Fast_C08WkShard03.untypedBuf_disj_worldTypedIvls hWT b hgb.1 hgb.2 i him)
+  · have heq : j = freeGap s := by simpa using hj
+    subst j
+    exact Fast_C08WkShard03.disj_allocated_freeGap hA.2 hal
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+theorem fixed_typed_ivl_unhit_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw)
+    (i : Ivl) (him : i ∈ worldTypedIvls s S Nd)
+    (hfix : i ∈ fixedObjects s) (hn : i.2 ≠ 0) :
+    Fast_C08WkShard03.IvlUnhit s post i := by
+  rcases hWT.2.2.1.1 i hfix with hzero | ⟨hal,hw⟩
+  · exact False.elim (hn hzero)
+  · exact allocated_typed_ivl_unhit_of_witness_effect hWT hA heff i him hal hw.1 hw.2.1
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+theorem blockOutObjects_eq_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    blockOutObjects post = blockOutObjects s := by
+  have hbo : globN post "bo" = globN s "bo" := by
+    have he := heff.gw_kept (ofString "bo") (by decide)
+    unfold globN
+    rw [he]
+  apply (Fast_C08WkShard03.blockOutObjects_eq_of_bo_unhit hA.2 hWT.2.2.1 hbo
+    hWT.1.2.2.2.2.2.2.2.2.2.2.1 ?_ ?_).1
+  · intro hn
+    apply fixed_typed_ivl_unhit_of_witness_effect hWT hA heff
+    · unfold worldTypedIvls
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_right
+      exact List.mem_map.2 ⟨("bo",88),by simp [typedRecords],by simp [hn]⟩
+    · simpa [hn] using Fast_C08WkShard03.typedRecord_mem_fixedObjects s (r := ("bo",88)) (by simp [typedRecords])
+    · simp
+  · intro i hi h24
+    apply fixed_typed_ivl_unhit_of_witness_effect hWT hA heff
+    · unfold worldTypedIvls
+      apply List.mem_append_left
+      apply List.mem_append_left
+      exact List.mem_append_right _ hi
+    · unfold fixedObjects
+      apply List.mem_append_left
+      exact List.mem_append_right _ hi
+    · omega
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+theorem balObjects_eq_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    balObjects post = balObjects s := by
+  have hbal : globN post "bal_accounts" = globN s "bal_accounts" := by
+    have he := heff.gw_kept (ofString "bal_accounts") (by decide)
+    unfold globN
+    rw [he]
+  apply (Fast_C08WkShard03.balObjects_eq_of_unhit hA.2 hWT.1 hWT.2.2.1 hbal ?_ ?_ ?_).1
+  · intro t ht i hi
+    apply allocated_typed_ivl_unhit_of_witness_effect hWT hA heff
+    · unfold worldTypedIvls
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_left
+      exact List.mem_flatMap.2 ⟨t,ht,hi⟩
+    · exact ((hWT.1.2.1 t ht).2 i hi).1
+    · exact ((hWT.1.2.1 t ht).1.1 i hi).2.1
+    · exact ((hWT.1.2.1 t ht).1.1 i hi).2.2.1
+  · intro i hi hn
+    apply fixed_typed_ivl_unhit_of_witness_effect hWT hA heff
+    · unfold worldTypedIvls
+      apply List.mem_append_left
+      exact List.mem_append_right _ hi
+    · unfold fixedObjects
+      exact List.mem_append_right _ hi
+    · exact hn
+  · constructor
+    · exact Fast_C08WkShard03.mem_low_eq_of_domain_writes heff.out_dom hA.1 (by rw [sourceBase_val]; omega)
+    · exact Fast_C08WkShard03.mem_low_eq_of_domain_writes heff.out_dom hA.1 (by rw [sourceBase_val]; omega)
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+theorem fixedObjects_eq_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    fixedObjects post = fixedObjects s := by
+  have hg : ∀ g, g ∈ globalBuffers.map Prod.fst ∨ g = "journal" ∨ g = "journal_cap" →
+      globN post g = globN s g := by
+    intro g hm
+    have hn : ofString g ∉ wsGw.map ofString := by
+      rcases hm with hm | rfl | rfl
+      · obtain ⟨b,hb,rfl⟩ := List.mem_map.1 hm
+        have h : ∀ b ∈ globalBuffers, ofString b.1 ∉ wsGw.map ofString := by decide
+        exact h b hb
+      · decide
+      · decide
+    have he := heff.gw_kept _ hn
+    unfold globN
+    rw [he]
+  have hb : globalBuffers.map (bufferRegion post) = globalBuffers.map (bufferRegion s) := by
+    apply List.map_congr_left
+    intro b hm
+    simp only [bufferRegion,hg b.1 (Or.inl (List.mem_map.2 ⟨b,hm,rfl⟩))]
+  unfold fixedObjects
+  change globalBuffers.map (bufferRegion post) ++ _ = globalBuffers.map (bufferRegion s) ++ _
+  rw [hb,blockOutObjects_eq_of_witness_effect hWT hA heff,
+    balObjects_eq_of_witness_effect hWT hA heff,
+    hg "journal" (by simp),hg "journal_cap" (by simp)]
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+/-- The narrow witness effect preserves the full structural payload invariant. -/
+theorem codeDbPayloadStrong_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db)
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) (hdb : db ∈ S) :
+    CodeDbPayloadStrong post S db := by
+  exact codeDbPayloadStrong_of_preserved_layout he hA heff.arena heff.hp_lo
+    (htabValues_eq_of_witness_effect hWT hA heff db hdb)
+    (protected_payload_words_of_witness_effect he hA heff)
+    (htabFootprint_eq_of_witness_effect hWT hA heff)
+    (fixedObjects_eq_of_witness_effect hWT hA heff)
+
+/-- Actual installed witness lookup preserves the full code payload invariant. -/
+theorem ws_get_account_execution_payload_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hWT : WorldTypedWith s S Nd) (he : CodeDbPayloadStrong s S db) (hm : db ∈ S)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_account_optional") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    CodeDbPayloadStrong post S db := by
+  exact codeDbPayloadStrong_of_witness_effect he hWT hA
+    (ws_get_account_execution_effect s values body callee ret v post hc hA hl hb) hm
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+/-- Witness lookup keeps live code/access roots at their post-state record addresses. -/
+theorem code_roots_kept_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW post (globN post g+k) = memW s (globN s g+k) := by
+  have hw : WorldStep (fun {_} _ => []) wsGw stdKeep NoExtra s none post :=
+    heff.to_worldStep_Q ⟨hA,S,(worldTyped_iff_with _ _).2 ⟨Nd,hWT⟩⟩
+      (by decide) (by decide) (fun _ _ _ _ _ _ _ _ => True.intro)
+  exact code_roots_kept_of_recordsKept hw.2.2.2.1 hw.2.2.1
+    (by intro g k hm i hi; cases hi)
+
+/-- Updating a typed table leaves every distinct typed table's footprint unchanged. -/
+theorem htabFootprint_eq_of_separated_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (hdb : db ∈ S) (ht : locN s "t" ∈ S)
+    (hne : db ≠ locN s "t") (hx : HtabExit s post) :
+    htabFootprint post db = htabFootprint s db := by
+  have hw := (hW.1.2.1 db hdb).1
+  have htw := (hW.1.2.1 (locN s "t") ht).1
+  have hhead : (db,88) ∈ htabFootprint s db := by simp [htabFootprint]
+  have hbound := allocated_le_2pow64 hAs.2 ((hW.1.2.1 db hdb).2 _ hhead).1
+  apply (InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.htabFootprint_eq_of_hdr_unhit
+    (hw.1 _ hhead).2.1 hbound ?_).2
+  right
+  apply ivlUnhit_of_frameOutside ⟨(hw.1 _ hhead).2.1,by norm_num⟩ hx.2.2.2.2.2.2.1
+  · intro j hj
+    exact ⟨(htw.1 j hj).2.1,(htw.1 j hj).2.2.1⟩
+  · have hs := hAs.2.2.2.2.2.2.1
+    have hp := hx.1.2.2.2.2.2.2.1
+    exact ⟨hs,by omega⟩
+  · intro j hj
+    exact hW.1.2.2.1 db hdb (locN s "t") ht hne (db,88) hhead j hj
+  · apply disj_fresh_of_allocated hAs.2 hx.1.2 hx.2.2.2.2.1
+    exact ((hW.1.2.1 db hdb).2 (db,88) hhead).1
+
+/-- Every post-mutation table interval lies in an old table or fresh heap. -/
+theorem table_coverage_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post) :
+    ∀ t ∈ S, ∀ i ∈ htabFootprint post t,
+      (∃ u ∈ S, ∃ j ∈ htabFootprint s u, Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr") := by
+  intro t hm i hi
+  by_cases he : t = locN s "t"
+  · subst t
+    rcases (hx.2.2.2.2.2.1 i hi).2 with ⟨j,hj,hin⟩ | hf
+    · exact Or.inl ⟨_,ht,j,hj,hin⟩
+    · right
+      have hp := hx.2.2.2.2.1
+      unfold Inside at hf ⊢
+      dsimp only at hf
+      omega
+  · rw [htabFootprint_eq_of_separated_htab_exit t hAs hW hm ht he hx] at hi
+    exact Or.inl ⟨t,hm,i,hi,⟨Nat.le_refl _,Nat.le_refl _⟩⟩
+
+/-- Protected payload records remain separate from all post-mutation tables. -/
+theorem payload_tables_disjoint_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post) :
+    ∀ p ∈ htabValues s db, ∀ t ∈ S, ∀ i ∈ htabFootprint post t, Disj (p,16) i := by
+  intro p hp t hm i hi
+  apply protected_payload_disj_of_growth he hp
+  rcases table_coverage_of_htab_exit hAs hW ht hx t hm i hi with ⟨u,hu,j,hj,hin⟩ | hf
+  · exact Or.inr (Or.inl ⟨j,Or.inl ⟨u,hu,hj⟩,hin⟩)
+  · exact Or.inr (Or.inr hf)
+
+/-- A typed table mutation leaves every nonempty fixed object untouched. -/
+theorem fixed_ivl_unhit_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    (i : Ivl) (hi : i ∈ fixedObjects s) (hn : i.2 ≠ 0) :
+    Fast_C08WkShard03.IvlUnhit s post i := by
+  obtain ⟨hal,hw⟩ := (hW.2.2.1.1 i hi).resolve_left hn
+  have htw := (hW.1.2.1 (locN s "t") ht).1
+  apply ivlUnhit_of_frameOutside ⟨hw.1,hw.2.1⟩ hx.2.2.2.2.2.2.1
+  · intro j hj
+    exact ⟨(htw.1 j hj).2.1,(htw.1 j hj).2.2.1⟩
+  · have hs := hAs.2.2.2.2.2.2.1
+    have hp := hx.1.2.2.2.2.2.2.1
+    exact ⟨hs,by omega⟩
+  · intro j hj
+    exact Disj.flip (((hW.1.2.1 _ ht).2 j hj).2 i hi)
+  · exact disj_fresh_of_allocated hAs.2 hx.1.2 hx.2.2.2.2.1 hal
+
+/-- The block-output layout survives a typed table mutation. -/
+theorem blockOutObjects_eq_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post) :
+    blockOutObjects post = blockOutObjects s := by
+  have hg : globN post "bo" = globN s "bo" := by
+    have he := hx.2.2.2.2.2.2.2 (ofString "bo") (by decide)
+    unfold globN
+    rw [he]
+  apply (Fast_C08WkShard03.blockOutObjects_eq_of_bo_unhit hAs.2 hW.2.2.1 hg
+    hW.1.2.2.2.2.2.2.2.2.2.2.1 ?_ ?_).1
+  · intro hn
+    apply fixed_ivl_unhit_of_htab_exit hAs hW ht hx
+    · simpa [hn] using Fast_C08WkShard03.typedRecord_mem_fixedObjects s (r := ("bo",88)) (by simp [typedRecords])
+    · simp
+  · intro i hi h24
+    apply fixed_ivl_unhit_of_htab_exit hAs hW ht hx
+    · unfold fixedObjects
+      apply List.mem_append_left
+      exact List.mem_append_right _ hi
+    · omega
+
+theorem table_ivl_unhit_of_separated_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (u : Nat)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (hu : u ∈ S) (ht : locN s "t" ∈ S) (hne : u ≠ locN s "t")
+    (hx : HtabExit s post) :
+    ∀ i ∈ htabFootprint s u, Fast_C08WkShard03.IvlUnhit s post i := by
+  intro i hi
+  have hw := (hW.1.2.1 u hu).1
+  have htw := (hW.1.2.1 (locN s "t") ht).1
+  apply ivlUnhit_of_frameOutside ⟨(hw.1 i hi).2.1,(hw.1 i hi).2.2.1⟩ hx.2.2.2.2.2.2.1
+  · intro j hj
+    exact ⟨(htw.1 j hj).2.1,(htw.1 j hj).2.2.1⟩
+  · have hs := hAs.2.2.2.2.2.2.1
+    have hp := hx.1.2.2.2.2.2.2.1
+    exact ⟨hs,by omega⟩
+  · exact hW.1.2.2.1 u hu (locN s "t") ht hne i hi
+  · exact disj_fresh_of_allocated hAs.2 hx.1.2 hx.2.2.2.2.1 ((hW.1.2.1 u hu).2 i hi).1
+
+theorem low_word_eq_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    (a : Nat) (ha : a + 8 ≤ sourceBase) : memW post a = memW s a := by
+  have hb : a < 2 ^ 64 := by
+    have : sourceBase < 2 ^ 64 := by decide
+    omega
+  have hm := hx.2.2.2.2.2.2.1 (BitVec.ofNat 64 a) ?_ ?_
+  · unfold memW
+    rw [hm]
+  · intro j hj hh
+    have hlo := ((hW.1.2.1 _ ht).1.1 j hj).1.1
+    unfold CellHits at hh
+    rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb] at hh
+    omega
+  · intro hh
+    have hlo := hAs.2.1
+    unfold CellHits at hh
+    rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb] at hh
+    dsimp at hh
+    omega
+
+theorem balObjects_eq_of_nonbal_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    (hn : globN s "bal_accounts" ≠ locN s "t" ∧
+      ∀ ad ∈ balRecords s, memW s ad ≠ locN s "t") :
+    balObjects post = balObjects s := by
+  have hg : globN post "bal_accounts" = globN s "bal_accounts" := by
+    have he := hx.2.2.2.2.2.2.2 (ofString "bal_accounts") (by decide)
+    unfold globN
+    rw [he]
+  apply (R16WkAcctWs.balObjects_eq_of_unhit_except hAs.2 hW.1 hW.2.2.1 hg ?_ hn ?_ ?_).1
+  · intro u hu hne i hi
+    exact table_ivl_unhit_of_separated_htab_exit u hAs hW hu ht hne hx i hi
+  · intro i hi hn
+    apply fixed_ivl_unhit_of_htab_exit hAs hW ht hx i
+    · unfold fixedObjects
+      exact List.mem_append_right _ hi
+    · exact hn
+  · exact ⟨low_word_eq_of_htab_exit hAs hW ht hx 0 (by decide),
+      low_word_eq_of_htab_exit hAs hW ht hx 8 (by decide),
+      low_word_eq_of_htab_exit hAs hW ht hx 16 (by decide)⟩
+
+theorem fixedObjects_eq_of_nonbal_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    (hn : globN s "bal_accounts" ≠ locN s "t" ∧
+      ∀ ad ∈ balRecords s, memW s ad ≠ locN s "t") :
+    fixedObjects post = fixedObjects s := by
+  have hg : ∀ g, g ∈ globalBuffers.map Prod.fst ∨ g = "journal" ∨ g = "journal_cap" →
+      globN post g = globN s g := by
+    intro g hm
+    have hh : ofString g ∉ (["heap_ptr"] : List String).map ofString := by
+      rcases hm with hm | rfl | rfl
+      · obtain ⟨b,hb,rfl⟩ := List.mem_map.1 hm
+        have h : ∀ b ∈ globalBuffers, ofString b.1 ∉ (["heap_ptr"] : List String).map ofString := by decide
+        exact h b hb
+      · decide
+      · decide
+    have he := hx.2.2.2.2.2.2.2 _ hh
+    unfold globN
+    rw [he]
+  have hb : globalBuffers.map (bufferRegion post) = globalBuffers.map (bufferRegion s) := by
+    apply List.map_congr_left
+    intro b hm
+    simp only [bufferRegion,hg b.1 (Or.inl (List.mem_map.2 ⟨b,hm,rfl⟩))]
+  unfold fixedObjects
+  change globalBuffers.map (bufferRegion post) ++ _ = globalBuffers.map (bufferRegion s) ++ _
+  rw [hb,blockOutObjects_eq_of_htab_exit hAs hW ht hx,
+    balObjects_eq_of_nonbal_htab_exit hAs hW ht hx hn,
+    hg "journal" (by simp),hg "journal_cap" (by simp)]
+
 end HeadStore
