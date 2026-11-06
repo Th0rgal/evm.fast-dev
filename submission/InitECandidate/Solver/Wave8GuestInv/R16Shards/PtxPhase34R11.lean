@@ -17256,4 +17256,32 @@ theorem journal_worldStep_header_fixed {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R13Shards InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Convert journal backing frames into the header-word contract across the table tail. -/
+theorem journal_table_tail_header_words {F : Type}
+    (s mid post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (t : BitVec 64) (key value result : ExpHOL 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (ht : t.toNat ∈ S)
+    (hlt : mid.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hfr : ∀ k ∈ ([40, 72] : List Nat), IvlUnhit s mid (memW s (globN s "bo" + k), 24))
+    (hr : evaluateHOLFiniteState mid (.seq (.call (some (none, none)) (ofString "htab_set")
+      [.var .local (ofString "t"), key, value]) (.return result)) =
+        (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have hf := journal_worldStep_table_tail_frame s mid post S Nd
+    (memW s (globN s "bo" + k), 24) t key value result rv hT hw
+    (journal_worldStep_header_fixed hW hw k hk) (by simp) ht hlt (hfr k hk) hr
+  have hb := txWorld_header_fixed hW k hk
+  have ha := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  apply memW_eq_of_ivlUnhit hf ha.2.1 (ivl_allocated_bound hW.1.1.2 ha.1).2
+  exact ⟨le_rfl, by dsimp; omega⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
