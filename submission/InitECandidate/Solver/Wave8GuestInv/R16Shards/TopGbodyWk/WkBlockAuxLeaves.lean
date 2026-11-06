@@ -6,6 +6,7 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.Common
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalRemove
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.SetLstNew
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkBalAddChanges
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_has
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_item
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.RlpHelpers
@@ -11342,5 +11343,9 @@ theorem wk_bal_init :
 theorem wk_bal_remove_change :
     WorldKeeps BalChangeArg (fun _ => []) [] stdKeep NoExtra
       (ofString "bal_remove_change") := WkBal.wk_bal_remove_change
+
+theorem wk_add_balance_change :
+    WorldKeeps WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_balance_change") := WkBal.wk_add_balance_change
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

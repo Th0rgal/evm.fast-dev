@@ -8,6 +8,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.AllocJournalSte
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkKeccak256
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkGetCode
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalBase
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
 
 /-! `fk_frame_open` and `ek_depth0_prepare`: the outermost frame is opened by `frame_open`
 (kind 0) on top of `MsgReady`, and `depth0_prepare` keeps the EVM invariant. -/
@@ -9561,5 +9562,50 @@ theorem protected_payload_words_of_disjoint_frame {F : Type}
       dsimp only at hit hi
       omega)]
   exact ⟨hw p (by omega) (by omega),hw (p+8) (by omega) (by omega)⟩
+
+/-- Recover the concrete relational world step from a successful account call. -/
+theorem get_account_execution_world_step {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    R16WkAcctWs.WorldStepSc (R16WkAcctWs.bufRegions wsAcctBufs)
+      ["heap_ptr","scratch_ptr"] stdKeep NoExtra
+      (callEntryStateHOLFinite s callee) (some (.returned v)) post := by
+  have hentry : WorldOK (callEntryStateHOLFinite s callee) := localsFree_worldOK s _ _ hW
+  have hs := FunSpec.at_lookup wkSc_get_account s hc values body callee ret hl hentry
+    (by rw [hb]; simp)
+  rw [hb] at hs
+  exact hs (by simp [Resumes])
+
+/-- The standard record contract preserves all code/access roots away from outputs. -/
+theorem code_roots_kept_of_recordsKept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    (hR : RecordsKept R stdKeep s post)
+    (hG : GlobalsKept ["heap_ptr","scratch_ptr"] s post)
+    (hsep : ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      ∀ i ∈ R s, ¬ CellHits (globN s g+k) i) :
+    ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW post (globN post g+k) = memW s (globN s g+k) := by
+  intro g k hm hn
+  have hg : globN post g = globN s g := by
+    have heq : s.globals.lookup (ofString g) = post.globals.lookup (ofString g) := hG _ (by
+      simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+      rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ <;> decide)
+    unfold globN
+    rw [heq]
+  rw [hg]
+  have hr : ∃ ks, (g,ks) ∈ stdKeep ∧ k ∈ ks := by
+    simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+    rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩
+    · exact ⟨[0,8,16,24,32],by decide,by decide⟩
+    · exact ⟨[0,8,16,24,32,40,48,56,64],by decide,by decide⟩
+    · exact ⟨[0,8,16,24,32,40,48,56,64],by decide,by decide⟩
+    · exact ⟨[0,8,16,24,32,40,48,56,64,72],by decide,by decide⟩
+  obtain ⟨ks,hks,hk⟩ := hr
+  exact hR (g,ks) hks hn k hk (hsep g k hm)
 
 end HeadStore

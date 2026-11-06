@@ -17216,4 +17216,66 @@ theorem phase2_htab_set_aa_backing (aa ak : Nat) (key value : ExpHOL 64) :
   exact phase2_htabExit_callEntry_backing callee hp.1.1.1 hp.1.2 hw
     (ht.symm ▸ ham) hp.2.1 (hx v rfl)
 
+/-- The concrete private-address warming call preserves all twenty-two message words. -/
+theorem phase2_htab_set_aa_message_words (aa ak : Nat) (key value : ExpHOL 64)
+    (words : Nat → Nat) :
+    Hoare (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+      Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr") ∧
+      locN s "m" % 8 = 0 ∧ locN s "aa" = aa ∧
+      ∀ k, k < 22 → memW s (locN s "m" + 8 * k) = words k)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.var .local (ofString "aa"), key, value])
+      (fun r s => r = none → ∀ k, k < 22 →
+        memW s (locN s "m" + 8 * k) = words k) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ := hp.2.1
+  obtain ⟨v1, _, _, he1, _, _, hct, _, _⟩ := R16WkAcctWs.callee_param_three s
+    (ofString "htab_set") (ofString "t") (ofString "key") (ofString "value")
+    .one .one .one _ _ (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set)
+    _ _ _ vs body callee ret ha hl
+  have hev : s.locals.lookup (ofString "aa") = some v1 := by
+    simpa [evalAt, evalHOLExact] using he1
+  have ht : locN (callEntryStateHOLFinite s callee) "t" = aa := by
+    simpa [locN, callEntryStateHOLFinite, hct, hev] using hp.2.2.2.2.1
+  have harg : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1, ?_, ?_⟩
+    · rw [ht]
+      exact (htabWF_with_locals s callee (s.clock - 1) _).mpr (hw.1.2.1 _ ham).1
+    · rw [ht]
+      exact fun i hi => ((hw.1.2.1 _ ham).2 i hi).1
+  have hx := FunSpec.at_lookup htab_set_spec s hc vs body callee ret hl harg (by rw [hr]; simp)
+  rw [hr] at hx
+  have hx := hx v rfl
+  let pre := setVarHOLFinite (ofString "t") v1 s
+  have hmp : pre.locals.lookup (ofString "m") = s.locals.lookup (ofString "m") := by
+    simp [pre, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "t" ≠ ofString "m" by decide]
+  have hmt : locN pre "m" = locN s "m" := locN_congr s pre.locals s.clock "m" hmp
+  have hpt : locN pre "t" = locN (callEntryStateHOLFinite s callee) "t" := by
+    simp [pre, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, callEntryStateHOLFinite, hct]
+  have hxp : HtabExit pre {post with locals := s.locals} := by
+    change ArenaReady _ ∧ HtabWF _ _ ∧ _
+    refine ⟨(arenaReady_with_locals post s.locals post.clock).mpr hx.1,
+      (htabWF_with_locals post s.locals post.clock _).mpr (hpt.symm ▸ hx.2.1), ?_⟩
+    change hdr post (locN pre "t") 0 = hdr s (locN pre "t") 0 ∧ _
+    rw [hpt]
+    exact hx.2.2
+  have hbe := (PanRunBounded.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).2.2.1
+  rw [hr] at hbe
+  intro k hk
+  have hf := phase2_htabExit_aa_message_fields (s := pre) (post := {post with locals := s.locals})
+    ((arenaReady_with_locals s pre.locals s.clock).mpr hp.1)
+    (phase2_message_tables_with_locals s pre.locals s.clock
+      ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ hmp)
+    (by change Inside (locN pre "m", 176) InitE.sourceBase (globN s "heap_ptr");
+        rw [hmt]; exact hp.2.2.1)
+    (by rw [hmt]; exact hp.2.2.2.1)
+    hmt.symm hbe (hpt.trans ht) hxp k hk
+  apply hf.trans
+  change memW s (locN pre "m" + 8 * k) = words k
+  rw [hmt]
+  exact hp.2.2.2.2.2 k hk
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

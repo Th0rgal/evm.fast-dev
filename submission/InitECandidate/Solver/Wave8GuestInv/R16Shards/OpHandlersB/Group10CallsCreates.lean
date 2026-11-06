@@ -11656,4 +11656,85 @@ theorem create_decCall_charge_then_child_g10 {F : Type}
     exact bound_cost_local_positive_g10 _ name cost hpos
   · exact charge_positive_local_then_child_g10 s0 name cont charged hchild
 
+def CreateBaseExp_g10 (isCreate2 : Bool) : ExpHOL 64 :=
+  if isCreate2 then
+    .op .add [.const 12000, .panop .mul [.const 6, .var .local (ofString "w")],
+      .panop .mul [.const 2, .var .local (ofString "w")]]
+  else .op .add [.const 12000, .panop .mul [.const 2, .var .local (ofString "w")]]
+
+def BoundedWordsLocal_g10 {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w : BitVec 64, s.locals.lookup (ofString "w") = some (.val (.word w)) ∧ w.toNat < 2 ^ 59
+
+theorem create_base_exp_eval_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (isCreate2 : Bool) (w : BitVec 64)
+    (hw : s.locals.lookup (ofString "w") = some (.val (.word w))) :
+    @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (CreateBaseExp_g10 isCreate2) = some (.val (.word
+        (if isCreate2 then 12000#64 + 6#64 * w + 2#64 * w else 12000#64 + 2#64 * w))) := by
+  cases isCreate2 <;>
+    simp [CreateBaseExp_g10, evalHOLExact, evalListHOLExact, hw, panOpHOL,
+      wordOpHOL, wordOp, valueIsWord, valueWord, BitVec.add_assoc]
+
+theorem create_cost_callee_args_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (isCreate2 : Bool) (hp : BoundedWordsLocal_g10 s) (memoryExp : ExpHOL 64)
+    {values : List (ValueHOL 64)} {body : ProgHOL 64}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)} {rs : ShapeHOL}
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [CreateBaseExp_g10 isCreate2, memoryExp] = some values)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "add_sat") values = some (body, callee, rs)) :
+    CreateCostArgs_g10 isCreate2 (callEntryStateHOLFinite s callee) := by
+  rw [hc] at hl
+  obtain ⟨_, _, aw, bw, rfl, hca, hcb⟩ := two_word_arg_lookup (by decide) lookup_add_sat hl
+  obtain ⟨w, hw, hb⟩ := hp
+  rw [evalListHOLFinite_eq_toExact] at ha
+  simp only [evalListHOLExact, create_base_exp_eval_g10 s isCreate2 w hw] at ha
+  cases he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) memoryExp with
+  | none => simp [he] at ha
+  | some mv =>
+    simp only [he] at ha
+    have heq : (if isCreate2 then 12000#64 + 6#64 * w + 2#64 * w else 12000#64 + 2#64 * w) = aw := by
+      simpa using congrArg List.head? (Option.some.inj ha)
+    exact ⟨w, bw, hb, by simpa [heq, callEntryStateHOLFinite] using hca, hcb⟩
+
+theorem create_cost_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (isCreate2 charged : Bool)
+    (memoryExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 (ofString "cost")) cont) :
+    HandlerRunA s0 BoundedWordsLocal_g10 charged
+      (.decCall (ofString "cost") .one (ofString "add_sat")
+        [CreateBaseExp_g10 isCreate2, memoryExp]
+        (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local (ofString "cost")]) cont)) := by
+  apply create_decCall_charge_then_child_g10 s0 BoundedWordsLocal_g10 isCreate2 charged
+    (ofString "cost") _ cont ?_ hchild
+  intro t values body callee rs hc hi hw hp ha hl
+  exact create_cost_callee_args_g10 t hc isCreate2 hp memoryExp ha hl
+
+theorem words_of_create_cost_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (isCreate2 charged : Bool)
+    (sizeExp memoryExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 (ofString "cost")) cont) :
+    HandlerRunA s0 (fun _ => True) charged
+      (.decCall (ofString "w") .one (ofString "words_of") [sizeExp]
+        (.decCall (ofString "cost") .one (ofString "add_sat")
+          [CreateBaseExp_g10 isCreate2, memoryExp]
+          (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local (ofString "cost")]) cont))) := by
+  apply HandlerRunA.decCall epsA_words_of_bounded_g10 (Q := BoundedWordsLocal_g10)
+  · intro t values body callee rs hc hi hw hp ha hl
+    rw [hc] at hl
+    rw [evalListHOLFinite_eq_toExact] at ha
+    simp only [evalListHOLExact] at ha
+    cases he : @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) sizeExp with
+    | none => simp [he] at ha
+    | some v =>
+      simp only [he] at ha
+      have hv : values = [v] := (Option.some.inj ha).symm
+      subst values
+      obtain ⟨_, _, n, _, hn⟩ := one_word_arg_lookup lookup_words_of hl
+      exact ⟨n, hn⟩
+  · intro t values body callee rs v post hi hw hp ha hl hpi hpw hch hq
+    obtain ⟨w, rfl, hb⟩ := hq.2
+    exact ⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE], hb⟩
+  · exact create_cost_sequence_g10 s0 isCreate2 charged memoryExp cont hchild
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
