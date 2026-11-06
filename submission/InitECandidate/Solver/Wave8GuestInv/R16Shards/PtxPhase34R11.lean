@@ -16752,4 +16752,31 @@ theorem journal_alloc_copy_bounds {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup InitECandidate.Solver.HeapPotential
+
+/-- Successful allocator execution supplies the journal copy bounds and narrow effect. -/
+theorem journal_alloc_body_effect {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} {jrec : Ivl} (p n : BitVec 64) (v : ValueHOL 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : cur.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hr : evaluateHOLFiniteState cur (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    v = .val (.word p) ∧ WorldEff s post [jrec] [] ["heap_ptr"] ∧
+      globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + n.toNat ≤ heapLimit := by
+  have hs := R13.alloc_body_resumes cur p heff.code hp (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at hs
+  obtain ⟨n', hn', hv, hc1, hc2, hpost⟩ := hs
+  have he : n' = n := by rw [hn] at hn'; injection hn' with h; injection h with h; injection h with h; exact h.symm
+  subst n'
+  have hv' : v = .val (.word p) := by injection hv with h; injection h
+  have hnext : post = {cur with
+      globals := cur.globals.update (ofString "heap_ptr", .val (.word ((p + (n + 7)) &&& ((0 : BitVec 64) - 8)))),
+      locals := post.locals, clock := post.clock} := by
+    dsimp only at hpost
+    rw [hpost]
+  exact ⟨hv', journal_alloc_copy_bounds p n heff hp hc1 hc2 hnext⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
