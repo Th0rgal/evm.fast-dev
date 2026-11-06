@@ -9908,6 +9908,44 @@ theorem precompile_sha256_padding_choice_then {F : Type}
   · exact hntm
   · exact hrm
 
+open R10Shards.P26_P28 in
+theorem precompile_sha256_choice_tail_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad stp out : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (ht : s.locals.lookup (ofString "total") = some (.val (.word 64)))
+    (hv : isValidValueHOLExact s.toExact .local (ofString "total") (.val (.word 128)) = true)
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (ho : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hpad : pad.toNat + 128 < 2^64) (hob : out.toNat + 32 < 2^64) :
+    let tail := ProgHOL.seq
+      (.call (some (none, none)) (ofString "st_be64")
+        [.op .sub [.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "total")],
+          .const 8], .shift .lsl (.var .local (ofString "len")) (.const 3)])
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"), .var .global (ofString "sha_pad")])
+        (.seq (.ite (.cmp .equal (.var .local (ofString "total")) (.const 128))
+          (.call (some (none, none)) (ofString "sha256_block")
+            [.var .global (ofString "sha_st"),
+              .op .add [.var .global (ofString "sha_pad"), .const 64]]) .skip)
+          (.seq (.call (some (none, none)) (ofString "sha256_finish")
+            [.var .global (ofString "sha_st"), .var .local (ofString "out")])
+            (.return (.const 0)))))
+    let p := ProgHOL.seq
+      (.ite (.cmp .notLower (.var .local (ofString "rem")) (.const 56))
+        (.assign .local (ofString "total") (.const 128)) .skip) tail
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    ((evaluateHOLFiniteState s p).1 = none ∨ Resumes (evaluateHOLFiniteState s p).1) →
+    ByteEff s (evaluateHOLFiniteState s p).2 [(pad.toNat,128),(stp.toNat,64),(out.toNat,32)] := by
+  dsimp only
+  intro hnt hr
+  refine precompile_sha256_padding_choice_then s _ _ hc hi ht hv hnt hr ?_
+  intro m hcm him hgm hlm htotal hntm hrm
+  obtain ⟨total, htm, htb⟩ := htotal
+  exact precompile_sha256_length_tail_effect m pad total stp out _ hcm him
+    (by rw [hgm]; exact hp) htm (by rw [hgm]; exact hs)
+    (by rw [hlm (ofString "out") (by decide)]; exact ho) htb hpad hob hntm hrm
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
