@@ -15274,4 +15274,27 @@ theorem fcIte_load_ne0_eq {F : Type} (st : PanSemStateFiniteExact 64 F)
   · simp [hw, Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
   · simp [hw, Flapjack.Compiler.Encoders.Asm.wordCmpHOL, beq_iff_eq]
 
+-- rung 17: dec-state lifting for the popped bundles (bridge port of the
+-- staging's locals/clock congruences, which are private there)
+
+theorem frameObjects_locals_eq {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (ck : Nat) (ec : Ivl) :
+    frameObjects { s with locals := L, clock := ck } ec = frameObjects s ec := rfl
+
+theorem nonDelAccessTable_locals_iff {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (ck : Nat) (S : List Nat) (t0 : Nat) :
+    NonDelAccessTable { s with locals := L, clock := ck } S t0 ↔
+      NonDelAccessTable s S t0 := by
+  simp only [NonDelAccessTable, evmChain_lc_fc s L ck]; rfl
+
+/-- The `empty` declaration extends the popped state without disturbing the
+branch-state bundle. -/
+theorem fcBranchState_dec_empty {F : Type}
+    {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat} {v : ValueHOL 64}
+    (h : FcBranchState s0 st S) :
+    FcBranchState s0 (setVarHOLFinite (ofString "empty") v st) S := by
+  have hL : FcEntryLocals s0 (setVarHOLFinite (ofString "empty") v st) :=
+    fcEntryLocals_setVar (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) h.locals_ok
+  exact fcBranchState_congr_locals_clock _ st.clock h hL
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
