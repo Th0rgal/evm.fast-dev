@@ -18,6 +18,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkSysTxLeaves
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PayloadWorldHelpers
 
 set_option autoImplicit false
+set_option Elab.async false
 set_option maxRecDepth 200000
 set_option maxHeartbeats 4000000
 set_option exponentiation.threshold 2000
@@ -9181,5 +9182,29 @@ theorem merge_set_worldStepIn {F : Type}
       unfold heapFree CellHits at *
       dsimp at h1 h2 ⊢
       omega
+
+/-- The evaluator insertion respects the caller's selected ownership witnesses. -/
+theorem merge_set_call_worldStepIn {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek ev : ExpHOL 64)
+    (tw kw iw : BitVec 64) (S Nd : List Nat)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : evalAt s ev = some (.val (.word iw)))
+    (hA : ArenaReady s) (hw : WorldTypedWith s S Nd) (htS : tw.toNat ∈ S)
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hkey : hdr s iw.toNat 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ iw.toNat)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).1) :
+    let out := evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])
+    WorldStepIn (fun _ => [tw.toNat, iw.toNat]) (bufRegions []) ["heap_ptr"]
+      stdKeep NoExtra s out.1 out.2 ∧
+      globN out.2 "scratch_ptr" ≤ globN s "scratch_ptr" := by
+  obtain ⟨he, hv, hbe, _, _⟩ := merge_set_call_flow_props s et ek ev tw kw iw
+    ht hk hi hA (hw.1.2.1 tw.toNat htS).1
+      (fun i him => ((hw.1.2.1 tw.toNat htS).2 i him).1) hfr
+  exact merge_set_worldStepIn hA hw htS he hbe hbs ht0 htbs hkey hf hv
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
