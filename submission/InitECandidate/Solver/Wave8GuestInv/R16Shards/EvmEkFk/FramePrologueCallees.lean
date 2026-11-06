@@ -9247,6 +9247,18 @@ theorem precompile_sha256_init_nonzero_of_sequence {F : Type}
   precompile_sha256_init_nonzero_of_flow s ptr stp hi hp
     (precompile_seq_flows_left s _ cont hflow)
 
+theorem precompile_sha256_body_state_nonzero {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (hi : GuestInv s)
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hflow : R13.FlowsOrResumes
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256)).1) :
+    stp.toNat ≠ 0 := by
+  change R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq
+    (.call (some (none,none)) (ofString "sha256_state_init")
+      [.var .global (ofString "sha_st")]) _)).1 at hflow
+  exact precompile_sha256_init_nonzero_of_sequence s _ stp _ hi
+    (by simp [evalHOLFinite,evalHOLExact,hs]) hflow
+
 theorem precompile_sha256_init_call_effect {F : Type}
     (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (ptr : ExpHOL 64)
     (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
