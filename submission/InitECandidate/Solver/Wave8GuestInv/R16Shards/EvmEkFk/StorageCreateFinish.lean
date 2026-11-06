@@ -9420,6 +9420,32 @@ theorem nodedb_lookup_ret_evm_witness_so {F : Type}
   · rw [heff]
     exact hb
 
+theorem nodedb_lookup_strong_so :
+    FunSpec (fun s => EvmInv s ∧ WitnessDbOK s ∧ globN s "ws" ≠ 0 ∧
+      ∃ db : BitVec 64, s.locals.lookup (ofString "db") = some (.val (.word db)) ∧
+        db.toNat = memW s (globN s "ws") ∧ db.toNat ≠ 0)
+      (fun s r post => Resumes r → EvmStep [] s post ∧ WitnessDbOK post ∧
+        ∀ rv, r = some (.returned rv) → ∃ found p n : BitVec 64,
+          rv = .rStruct [.val (.word found), .val (.word p), .val (.word n)] ∧
+          (found ≠ 0 → Inside (p.toNat, n.toNat) sourceBase (globN post "heap_ptr") ∧
+            n.toNat < 2 ^ 40)) (ofString "nodedb_lookup") := by
+  refine ⟨_, _, _, lookup_nodedb_lookup_so, ?_⟩
+  intro F s hc hpre hex hnt hr
+  obtain ⟨params, body, rs, hlk, hf⟩ := nodedb_lookup_evm_witness_so
+  have heq := hlk.symm.trans lookup_nodedb_lookup_so
+  obtain ⟨rfl, rfl, rfl⟩ := Option.some.inj heq
+  obtain ⟨hstep, hdbpost⟩ := hf s hc ⟨hpre.1, hpre.2.1⟩ hex hnt hr
+  refine ⟨hstep, hdbpost, ?_⟩
+  intro rv hret
+  obtain ⟨db, hdb, ht, hnz⟩ := hpre.2.2.2
+  obtain ⟨vals, hl⟩ := hex
+  obtain ⟨db', hash, _, hdb', hhash⟩ := lookupCode_two_words_so (by decide) lookup_nodedb_lookup_so hl
+  have hsame : db' = db := by rw [hdb] at hdb'; injection hdb' with h; cases h; rfl
+  subst db'
+  have hres := nodedb_lookup_ret_evm_witness_so s _ db hash rv hc hpre.1 hpre.2.1
+    hpre.2.2.1 ht hnz hdb hhash ⟨vals, hl⟩ (by rw [← hret])
+  exact hres.2.2
+
 end StorageOriginal
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
