@@ -8045,4 +8045,32 @@ theorem sameTypedCells_of_sk_make {F : Type}
     rcases hs with hs | hs | hs | hs <;> try dsimp only at hs
     all_goals omega
 
+/-- World typing and fixed-object identities follow from the key-builder
+frame and arena readiness, with no intermediate world-typing premise. -/
+theorem worldTypedWith_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post) (hWT : WorldTypedWith s S Nd)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hd : ∀ i ∈ worldTypedIvls s S Nd, Disj i (globN s "sk_buf", 52)) :
+    WorldTypedWith post S Nd ∧ fixedObjects post = fixedObjects s := by
+  have hcells := sameTypedCells_of_sk_make hc hma hfit v hb hd
+  have hfixed := fixedObjects_eq_of_sk_make_typed_cells hAs hWT hcells hc hma hfit v hb
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  have hg : ∀ name, globN post name = globN s name := by
+    intro name
+    unfold globN
+    rw [heff.globals]
+  have hhp : globN s "heap_ptr" ≤ globN post "heap_ptr" := by rw [hg]
+  have hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by rw [hg]
+  have hFT := fixedTyped_of_eq hAp hWT.2.2.1 hhp hsp hfixed
+  exact ⟨(worldTypedWith_congr_w1 hAs hAp hhp hsp (fun g _ => hg g) hcells hWT
+    ⟨hFT, fun o ho => Or.inl (by rw [← hfixed]; exact ho)⟩).1, hfixed⟩
+
 end HeadStore
