@@ -12594,6 +12594,23 @@ theorem precompile_sha256_blocks_large_no_normal_exit {F : Type}
       exact ⟨he.2,j+64,he.1,(precompile_sha256_block_index_add_bound j hja).1⟩
     · exact False.elim (hc.2 hr)
 
+theorem precompile_sha256_blocks_input_bound_of_normal_exit {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (i len : BitVec 64)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (halign : i.toNat % 64 = 0)
+    (hr : (evaluateHOLFiniteState s
+      (.while (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"),.const 64]))
+        (.seq (.call (some (none,none)) (ofString "sha256_block")
+          [.var .global (ofString "sha_st"),
+            .op .add [.var .local (ofString "p"),.var .local (ofString "i")]])
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"),.const 64]))))).1 = none) :
+    len.toNat + 64 < 2^64 := by
+  by_contra hlen
+  exact precompile_sha256_blocks_large_no_normal_exit s i len hi hl halign hlen hr
+
 theorem pre_sha256_body_step_of_input_bound {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
     (hbound : ∀ msg : ValueHOL 64, @evalHOLExact 64 F _ s.toExact
