@@ -394,6 +394,13 @@ private theorem lookup_htr_new_payload_request :
   lookup_of_guestAst_getElem 218 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn_htr_new_payload_request) rfl
 
+private theorem lookup_payload_header :
+    originalRuntimeCode.lookup (ofString "payload_header") =
+      some ([(ofString "si", .one)],
+        sourceFnBody Guest.Software.guestFn_payload_header, .one) :=
+  lookup_of_guestAst_getElem 864 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_payload_header) rfl
+
 private theorem funByteEff_htr_u64_at :
     FunByteEff (ofString "htr_u64_at")
       (fun vals _ => [(valWordNat (vals[1]?.getD (.rStruct [])), 32)]) := by
@@ -14960,5 +14967,150 @@ theorem worldEff_to_heapByteEff {F : Type} {s post : PanSemStateFiniteExact 64 F
     · exact Or.inl ⟨bufferRegion s gs, List.mem_append_right _ (List.mem_map.2 ⟨gs, hgs, rfl⟩), hc⟩
     · exact Or.inr (Or.inl hfg)
     · exact Or.inr (Or.inr hhf)
+
+private theorem panMemStoresHOL_frame_add {dom : BitVec 64 → Prop} {dec : DecidablePred dom} :
+    ∀ (ws : List (HolWordLab 64)) (x : BitVec 64) (mem mem' : BitVec 64 → HolWordLab 64),
+      @panMemStoresHOL 64 _ x ws dom dec mem = some mem' →
+      ∀ a : BitVec 64, (∀ k, k < ws.length → a ≠ x + BitVec.ofNat 64 (8 * k)) → mem' a = mem a
+  | [], _, mem, mem', hst, a, _ => by
+    simp only [panMemStoresHOL, Option.some.injEq] at hst
+    rw [← hst]
+  | w :: ws, x, mem, mem', hst, a, hne => by
+    unfold panMemStoresHOL panMemStoreHOL at hst
+    split_ifs at hst with hdom
+    have hbw : (panBytesInWord 64 : BitVec 64) = BitVec.ofNat 64 8 := by decide
+    have ih := panMemStoresHOL_frame_add ws (x + panBytesInWord 64)
+      (fun current => if current = x then w else mem current) mem' hst a (fun k hk => by
+        have hk1 : k + 1 < (w :: ws).length := by simp; omega
+        have hne1 := hne (k + 1) hk1
+        rw [hbw]
+        intro heq
+        apply hne1
+        rw [heq, BitVec.add_assoc]
+        congr 1
+        apply BitVec.eq_of_toNat_eq
+        simp only [BitVec.toNat_add, BitVec.toNat_ofNat]
+        omega)
+    rw [ih]
+    exact if_neg (by simpa using hne 0 (by simp))
+
+/-- A store into a fresh heap block (at or above `heap_ptr s`, ending below `heapEnd`) is a
+`WorldStep` whose only output region is that block.  This is the fresh-block analogue of
+`WkSysTxLeaves.worldStep_store_in_block`; it is needed by `payload_header`, whose output header
+is allocated above the entry heap pointer. -/
+private theorem worldStep_store_fresh {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {base sz off : Nat} {w_base x : BitVec 64} {v : ValueHOL 64}
+    {mem' : BitVec 64 → HolWordLab 64}
+    (hW : WorldOK s)
+    (hbase_lu : w_base.toNat = base)
+    (hbase8 : base % 8 = 0) (_hsz8 : sz % 8 = 0) (_hoff8 : off % 8 = 0)
+    (hbase_ge : sourceBase ≤ base)
+    (hbase_end : base + sz ≤ heapEnd)
+    (hx_eq : x = w_base + BitVec.ofNat 64 off)
+    (hoff_fit : off + 8 * (flattenHOL v).length ≤ sz)
+    (hst : @panMemStoresHOL 64 _ x (flattenHOL v) s.memaddrs
+      (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem') :
+    WorldStep (fun _ => [(base, sz)]) [] stdKeep NoExtra s r { s with memory := mem' } := by
+  have h264 : heapEnd < 2 ^ 64 := by decide
+  have hoff_lt : off < 2 ^ 64 := by omega
+  have hx_nat : x.toNat = base + off := by
+    rw [hx_eq, BitVec.toNat_add, hbase_lu, BitVec.toNat_ofNat]
+    rw [Nat.mod_eq_of_lt hoff_lt]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hcell : ∀ a : BitVec 64, ¬ CellHits a.toNat (base, sz) → mem' a = s.memory a := by
+    intro a hnh
+    apply panMemStoresHOL_frame_add (flattenHOL v) x s.memory mem' hst a
+    intro k hk h_eq
+    apply hnh
+    have ha_nat : a.toNat = base + off + 8 * k := by
+      rw [h_eq, BitVec.toNat_add, hx_nat, BitVec.toNat_ofNat]
+      have hk_lt : 8 * k < 2 ^ 64 := by
+        have hoffk : off + 8 * k ≤ sz := by
+          have hlen : 8 * k < 8 * (flattenHOL v).length := by omega
+          omega
+        omega
+      rw [Nat.mod_eq_of_lt hk_lt]
+      exact Nat.mod_eq_of_lt (by omega)
+    unfold CellHits
+    rw [ha_nat]
+    exact ⟨by omega, by omega⟩
+  refine InitECandidate.Solver.Wave8Contracts.M08.worldStep_of_region_writes
+    (r := r) (R := fun _ => [(base, sz)]) hW
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+    (fun a hkeep _ => hcell a (hkeep (base, sz) (by simp)))
+    (fun b hb64 hnb => ?_)
+    (fun a hne => panMemStoresHOL_dom_of_ne (flattenHOL v) x s.memory mem' hst a hne)
+  unfold memB
+  dsimp only
+  have hal_eq : mem' (panByteAlignHOL (BitVec.ofNat 64 b)) =
+      s.memory (panByteAlignHOL (BitVec.ofNat 64 b)) := by
+    apply hcell
+    intro ⟨hc1, hc2⟩
+    have hal_nat : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat = b / 8 * 8 := by
+      rw [panByteAlign_toNat64, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb64]
+    rw [hal_nat] at hc1 hc2
+    exact hnb (base, sz) (by simp) ⟨by omega, by omega⟩
+  rw [hal_eq]
+
+/-- Entry scratch regions of `payload_header` (the `R` component of its `C08` contract). -/
+private def phR : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl :=
+  fun s =>
+    [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+     (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+     (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40),
+     (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16),
+     (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128),
+     (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)]
+
+/-- Reduces `«wk_payload_header»` to a single `HeapByteEff` for the compiled body plus the
+return-typing fact.  Once the body effect is proved this is a one-line application. -/
+theorem «wk_payload_header_of_heapByteEff»
+    (hbody : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), InputReady s →
+      WkBlockTxEnc.HeapByteEff s
+        (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).2
+        (phR s) ["heap_ptr", "scratch_ptr", "wd_rlp_slices"])
+    (hQ : ∀ {F : Type} (s post : PanSemStateFiniteExact 64 F)
+      (r : Option (PanSemResultExact 64)) (S Nd : List Nat),
+      WorldTypedWith s S Nd → WorldTypedWith post S Nd →
+      worldOwned post S Nd = worldOwned s S Nd → RetHeader s r post S Nd) :
+    WorldKeeps InputReady phR ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
+      stdKeep RetHeader (ofString "payload_header") := by
+  refine ⟨[(ofString "si", .one)], sourceFnBody Guest.Software.guestFn_payload_header, .one,
+    lookup_payload_header, ?_⟩
+  intro F s hc hIR ⟨vals, hl⟩ hnt hres
+  exact PayloadWorldStepScratch.heapByteEff_to_worldStep_payload (R := phR)
+    (gw := ["heap_ptr", "scratch_ptr", "wd_rlp_slices"])
+    (B := []) (by intro gs hgs; cases hgs) (by intro g hg; simp only [List.mem_cons, List.not_mem_nil, or_false] at hg; rcases hg with rfl | rfl | rfl <;> simp)
+    (inputReady_worldOK s hIR) (hbody s hIR)
+    (fun S Nd hWT hWTp hown => hQ s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).2
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).1
+      S Nd hWT hWTp hown)
+
+/-- Cutover wrapper: the strong-guard htr export under a distinct name, ready to be
+renamed once `ContractParts/C08.lean` carries `HtrNewPayloadReady`. -/
+theorem «wk_htr_new_payload_request_cutover» :
+    WorldKeeps HtrNewPayloadReady
+      (fun s => [(locN s "out", 32),
+                 (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "htr_new_payload_request") :=
+  «wk_htr_new_payload_request_strong»
+
+/-- Cutover wrapper: the strong-guard validate_header export under a distinct name, ready to be
+renamed once `ContractParts/C08.lean` carries `ValidateHeaderReady`. -/
+theorem «wk_validate_header_cutover» :
+    WorldKeeps ValidateHeaderReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "validate_header") :=
+  «wk_validate_header_strong»
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
