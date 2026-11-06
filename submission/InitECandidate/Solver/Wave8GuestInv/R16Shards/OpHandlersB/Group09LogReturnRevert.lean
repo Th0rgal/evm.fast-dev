@@ -16100,4 +16100,55 @@ theorem op_log_no_growth_invariant_g09 {F : Type}
     hhobj hhwf hFW (fun ec he => hnewMsg ec (htailMem ec he))
     hfields hcont hheader hslots hrecords hold hnew hnewOld holdWorld hnewWorld
 
+/-- Separation supplies all suspended-frame readback needed by append reconstruction. -/
+theorem op_log_no_growth_readback_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tail : List Ivl) (l p n log : BitVec 64)
+    (hl : l.toNat + 24 ≤ 2^64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2^64)
+    (hprotected : ∀ ec ∈ evmChain s, ∀ o ∈ ([(ec.1, 280), (ec.2, 104)] : List Ivl),
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8))
+    (htail : ∀ ec ∈ tail, ∀ o ∈ ([(memW s (ec.1 + 88), 24),
+        (memW s (memW s (ec.1 + 88)), 8 * memW s (memW s (ec.1 + 88) + 8))] : List Ivl),
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8))
+    (hrecords : ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let o := (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40)
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    (∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → memW post (ec.1 + k) = memW s (ec.1 + k)) ∧
+    (∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 → memW post (ec.2 + k) = memW s (ec.2 + k)) ∧
+    (∀ ec ∈ tail, ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k)) ∧
+    (∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8 * i)) ∧
+    (∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k) =
+        memW s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k)) := by
+  dsimp only
+  have read : ∀ o : Ivl, o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧
+      Disj o (p.toNat, 8 * n.toNat + 8) → ∀ k, k + 8 ≤ o.2 →
+      memW {s with memory := fun a => if a = p + n * 8#64 then .word log
+        else if a = l + 8#64 then .word (n + 1#64) else s.memory a} (o.1 + k) = memW s (o.1 + k) := by
+    intro o ho
+    exact log_no_growth_protected_words_g09 s l p n log o hl hp ho.1 ho.2.1 ho.2.2
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · intro ec he k hk
+    exact read (ec.1, 280) (hprotected ec he _ (by simp)) k hk
+  · intro ec he k hk
+    exact read (ec.2, 104) (hprotected ec he _ (by simp)) k hk
+  · intro ec he k hk
+    exact read (memW s (ec.1 + 88), 24) (htail ec he _ (by simp)) k hk
+  · intro ec he i hi
+    exact read (memW s (memW s (ec.1 + 88)), 8 * memW s (memW s (ec.1 + 88) + 8))
+      (htail ec he _ (by simp)) (8*i) (by omega)
+  · intro ec he i hi k hk
+    have hkbound : k + 8 ≤ 40 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+    exact read (memW s (memW s (memW s (ec.1 + 88)) + 8*i), 40)
+      (hrecords ec he i hi) k hkbound
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
