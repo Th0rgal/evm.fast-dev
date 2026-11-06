@@ -11521,4 +11521,74 @@ theorem create_cost_binding_then_charge_g10 {F : Type}
   exact ⟨bound_cost_local_positive_g10 caller name cost hpos,
     charge_positive_local_then_child_g10 s0 name cont charged hchild⟩
 
+theorem words_shift_return_bound_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (cw : BitVec 64)
+    (hc : s.locals.lookup (ofString "c") = some (.val (.word cw)))
+    (v : ValueHOL 64)
+    (hr : (evaluateHOLFiniteState s
+      (.return (.shift .lsr (.var .local (ofString "c")) (.const 5#64)))).1 = some (.returned v)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat < 2 ^ 59 := by
+  have h5 : (5#64 : BitVec 64).toNat = 5 := rfl
+  have hsh : wordShiftHOL .lsr cw 5 = some (cw >>> (5 : Nat)) := by simp [wordShiftHOL]
+  rw [evaluateHOLFiniteState_return] at hr
+  have he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.shift .lsr (.var .local (ofString "c")) (.const 5#64)) =
+      some (.val (.word (cw >>> (5 : Nat)))) := by
+    simp [evalHOLExact, hc, h5, hsh]
+  rw [he] at hr
+  dsimp only at hr
+  split at hr
+  · injection hr with hh
+    injection hh with hv
+    refine ⟨cw >>> (5 : Nat), hv.symm, ?_⟩
+    rw [BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
+    have := cw.isLt
+    omega
+  · simp at hr
+
+theorem words_of_return_bound_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (nw : BitVec 64)
+    (hcode : s.code = originalRuntimeCode)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word nw)))
+    (v : ValueHOL 64)
+    (hr : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_words_of)).1 =
+      some (.returned v)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat < 2 ^ 59 := by
+  have hb : sourceFnBody Guest.Software.guestFn_words_of =
+      .decCall (ofString "c") .one (ofString "ceil32") [.var .local (ofString "n")]
+        (.return (.shift .lsr (.var .local (ofString "c")) (.const 5#64))) := rfl
+  rw [hb, evaluateHOLFiniteState_decCall_fixClockRewrite] at hr
+  have ha : evalListHOLFinite s (h := fun x => Classical.propDecidable (s.memaddrs x))
+      [.var .local (ofString "n")] = some [.val (.word nw)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hn]
+  rw [ha] at hr
+  dsimp only at hr
+  have hl := pan_one_word_lookup s.code.lookup (ofString "ceil32") (ofString "v")
+    (sourceFnBody Guest.Software.guestFn_ceil32) nw
+    (by rw [hcode]; exact Group10.lookup_ceil32)
+  rw [hl] at hr
+  dsimp only at hr
+  split at hr
+  · simp at hr
+  · rcases he : evaluateHOLFiniteState
+        (callEntryStateHOLFinite s (HolFiniteMapExact.empty.update (ofString "v", .val (.word nw))))
+        (sourceFnBody Guest.Software.guestFn_ceil32) with ⟨rb, pb⟩
+    rw [he] at hr
+    cases rb with
+    | none => simp at hr
+    | some rb =>
+      cases rb with
+      | returned vb =>
+        cases vb with
+        | val scalar =>
+          cases scalar with
+          | word cw =>
+            dsimp only at hr
+            split at hr
+            · apply words_shift_return_bound_g10 _ cw _ v hr
+              simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+            · simp at hr
+        | _ => simp [shapeOfHOLExact, shapeEqHOL] at hr
+      | _ => simp at hr
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
