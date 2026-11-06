@@ -7160,4 +7160,32 @@ theorem get_code_cache_tail_return_strong {F : Type} (s : PanSemStateFiniteExact
       {post with locals := s.locals}) db' hash' _ _ (hc.trans hcode) hA' ha' hW' he'
   exact hfallback _
 
+theorem get_code_body_eq :
+    sourceFnBody Guest.Software.guestFn_get_code =
+      .decCall (ofString "eq") .one (ofString "memeq")
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32]
+        (.seq (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+          (.return (.rstruct [.const 0, .const 0])) .skip) getCodeCacheTail) := by rfl
+
+/-- Full `get_code` return composition. The empty-hash branch needs no cache
+invariant; the cache contract is required only after a zero comparison. -/
+theorem get_code_return_of_cache_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcache : ∀ values body callee ret post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned (.val (.word 0))), post) →
+      Ret (setVarHOLFinite (ofString "eq") (.val (.word 0)) {post with locals := s.locals})
+        getCodeCacheTail (fun v _ => ∃ code code_n : BitVec 64,
+          v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40)) :
+    Ret s (sourceFnBody Guest.Software.guestFn_get_code)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  rw [get_code_body_eq]
+  apply ws_get_code_compare_return_of_tail
+  intro values body callee ret eqw post ha hl hb hz
+  subst eqw
+  exact hcache values body callee ret post ha hl hb
+
 end HeadStore
