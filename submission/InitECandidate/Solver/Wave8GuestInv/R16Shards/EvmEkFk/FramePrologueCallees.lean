@@ -10305,6 +10305,29 @@ theorem precompile_sha256_blocks_exit_remainder {F : Type}
   rw [hadd] at hexit
   omega
 
+theorem precompile_sha256_blocks_active_bound {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len i : BitVec 64)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hle : i.toNat ≤ len.toNat) (hbound : len.toNat + 64 < 2^64)
+    (ha : LoopActive (.cmp .notLower (.var .local (ofString "len"))
+      (.op .add [.var .local (ofString "i"), .const 64])) s) :
+    i.toNat + 64 ≤ len.toNat := by
+  have hadd : (i+(64 : BitVec 64)).toNat = i.toNat+64 := by
+    rw [BitVec.toNat_add]
+    change (i.toNat+64) % 2^64 = i.toNat+64
+    exact Nat.mod_eq_of_lt (by omega)
+  obtain ⟨v, hv, hn⟩ := ha
+  simp [evalHOLFinite, evalHOLExact, evalListHOLExact, hl, hx, valueIsWord, valueWord,
+    wordOpHOL, wordOp, Compiler.Encoders.Asm.wordCmpHOL] at hv
+  by_cases h : i+(64 : BitVec 64) ≤ len
+  · change (i+(64 : BitVec 64)).toNat ≤ len.toNat at h
+    rw [hadd] at h
+    exact h
+  · change ¬ i+64#64 ≤ len at h
+    simp [h] at hv
+    exact False.elim (hn hv.symm)
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
