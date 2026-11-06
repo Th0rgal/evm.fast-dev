@@ -18097,4 +18097,26 @@ theorem phase2_ct_fresh_message_separation {ι F : Type}
     obtain ⟨_, S, Nd, _, hb, _⟩ := hp.2.2.2.2.2 i
     exact Or.inr (Or.inr (Or.inl (hb.1.2.trans hstart)))
 
+/-- Restoring `ct` retains readiness and exposes its separation from saved data. -/
+theorem phase2_ct_alloc_ready_separated (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat)
+    (hs : ∀ n ∈ names, ofString "ct" ≠ ofString n) :
+    DecCallResumeOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (fun s => PtxMessageTableStoreReady buffers contents ("ct" :: names) aa ak s ∧
+        Disj (locN s "m", 176) (locN s "ct", 20) ∧
+        ∀ i, Disj (buffers i) (locN s "ct", 20))
+      (ofString "ct") (ofString "alloc") [.const 24] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have ht := phase2_alloc_message_table_word_ready h buffers contents names aa ak "ct" _
+    (by decide) (by decide) (by decide) (by decide) hs
+    (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+        rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+    s vs body callee ret v post hc hp he hl hb
+  obtain ⟨w, rfl, hf⟩ := phase2_ct_alloc_fresh h s vs body callee ret v post hc hp.1.1.1.1 he hl hb
+  have hd := phase2_ct_fresh_message_separation buffers contents s post callee w.toNat hp.1.1 hf
+  refine ⟨ht, ?_⟩
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "ct" ≠ ofString "m" by decide] using hd
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
