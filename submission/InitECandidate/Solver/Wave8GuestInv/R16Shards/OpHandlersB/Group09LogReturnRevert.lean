@@ -17772,4 +17772,40 @@ theorem op_log_fresh_disj_world_owned_g09 {F : Type}
   · exact Or.inr (Or.inl hz)
   · exact op_log_fresh_disj_allocated_g09 hlo hhi ha
 
+/-- Allocation layout supplies the complete detached log ownership package against the old state. -/
+theorem op_log_detached_ownership_package_g09 {F : Type}
+    {s record : PanSemStateFiniteExact 64 F} {S : List Nat}
+    {log address topics data nt size : Nat}
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (h0 : memW record log = address) (h8 : memW record (log + 8) = topics)
+    (h16 : memW record (log + 16) = nt) (h24 : memW record (log + 24) = data)
+    (h32 : memW record (log + 32) = size)
+    (ht : topics + 32 * nt ≤ log) (hl : log + 40 ≤ address) (ha : address + 20 ≤ data)
+    (hfresh : ∀ x ∈ ([(log, 40), (address, 20), (topics, 32*nt), (data, size)] : List Ivl),
+      globN s "heap_ptr" ≤ x.1 ∧ x.1 + x.2 ≤ heapLimit) :
+    (logOwnedIvls record log).Pairwise Disj ∧
+      IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls record log) ∧
+      (∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls record log,
+        Disj (memW s (ec.1 + 112), 176) o) ∧
+      (∀ Nd, WorldTypedWith s S Nd →
+        IvlsDisj (logOwnedIvls record log) (worldOwned s S Nd)) := by
+  obtain ⟨hpw, hchain⟩ := op_log_detached_chain_ownership_g09
+    hA hinv h0 h8 h16 h24 h32 ht hl ha hfresh
+  have hmem : ∀ o ∈ logOwnedIvls record log,
+      o ∈ ([(log, 40), (address, 20), (topics, 32*nt), (data, size)] : List Ivl) := by
+    intro o ho
+    have ho' := (List.mem_filter.1 ho).1
+    simpa only [logRecordIvls, h0, h8, h16, h24, h32] using ho'
+  refine ⟨hpw, hchain, ?_, ?_⟩
+  · intro ec hec o ho
+    exact op_log_fresh_disj_chain_messages_g09 hA hinv
+      (hfresh o (hmem o ho)).1 (hfresh o (hmem o ho)).2 ec hec
+  · intro Nd hWT o ho i hi
+    have hlim : heapLimit ≤ scratchStart := by
+      rw [R11Shards.heapLimit_val, R11Shards.scratchStart_val]
+    have hsp : scratchStart ≤ globN s "scratch_ptr" :=
+      le_trans hA.2.2.2.1 hA.2.2.2.2.1
+    exact op_log_fresh_disj_world_owned_g09 hWT (hfresh o (hmem o ho)).1
+      (le_trans (hfresh o (hmem o ho)).2 (le_trans hlim hsp)) i hi
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
