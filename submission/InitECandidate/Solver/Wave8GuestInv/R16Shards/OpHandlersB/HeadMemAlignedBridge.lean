@@ -15617,4 +15617,29 @@ theorem fcKind2ErrTail_incorporate_step {F : Type}
     rw [evaluateHOLFiniteState_seq_line780]
     dsimp only
     rw [hf]
+
+/-- Rung 21: refund-ite resolution of the kind-2 error tail.  The
+`new_account_charged ≠ 0` test controlling the `credit_state_gas_refund`
+call splits on the charged word alone: zero charged takes the `skip` arm
+finishing immediately, nonzero charged takes the refund call. -/
+theorem fcKind2ErrTail_refund_ite_eq {F : Type} (t : PanSemStateFiniteExact 64 F)
+    {nacv : BitVec 64}
+    (hnac : t.locals.lookup (ofString "new_account_charged") = some (.val (.word nacv))) :
+    evaluateHOLFiniteState t
+        (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged")) (.const 0#64))
+          (.call (some (none, none)) (ofString "credit_state_gas_refund") [.const 183600#64])
+          .skip) =
+      if nacv = 0#64 then (none, t)
+      else evaluateHOLFiniteState t
+          (.call (some (none, none)) (ofString "credit_state_gas_refund") [.const 183600#64]) := by
+  rw [evaluateHOLFiniteState_ite]
+  have hcmp : @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a))
+      (.cmp .notEqual (.var .local (ofString "new_account_charged")) (.const 0#64)) =
+      some (.val (.word (if Flapjack.Compiler.Encoders.Asm.wordCmpHOL .notEqual nacv 0#64
+        then 1 else 0))) := by
+    simp [evalHOLExact, hnac, Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+  rw [hcmp]
+  dsimp only
+  simp only [Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+  by_cases h : nacv = 0#64 <;> simp [h]
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
