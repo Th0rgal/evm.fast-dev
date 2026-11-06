@@ -15105,6 +15105,22 @@ private def phR : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl :=
      (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128),
      (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)]
 
+/-- `RetHeader` from the three facts the body effect establishes about the returned
+`alloc(248)` header cell: it is a header word block, lies in the source heap, and is
+disjoint from the exit world.  This is the `hQ` half of the `payload_header` reduction. -/
+private theorem retHeader_of_header_cell {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {r : Option (PanSemResultExact 64)} {S Nd : List Nat} {w : BitVec 64}
+    (hr : r = some (.returned (.val (.word w))))
+    (hH : HeaderAt post w.toNat)
+    (hin : Inside (w.toNat, 248) sourceBase (globN post "heap_ptr"))
+    (hdisj : IvlsDisj [(w.toNat, 248)] (worldOwned post S Nd)) :
+    RetHeader s r post S Nd := by
+  intro v hv
+  rw [hr] at hv
+  cases hv
+  exact ⟨w, rfl, hH, hin, hdisj⟩
+
 /-- Reduces `«wk_payload_header»` to a single `HeapByteEff` for the compiled body plus the
 return-typing fact.  Once the body effect is proved this is a one-line application. -/
 theorem «wk_payload_header_of_heapByteEff»
