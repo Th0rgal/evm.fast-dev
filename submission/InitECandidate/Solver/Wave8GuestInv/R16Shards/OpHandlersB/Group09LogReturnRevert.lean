@@ -15298,4 +15298,35 @@ theorem op_log_data_stores_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F
     evalHOLExact, evalListHOLExact, hl, hd, hn, valueIsWord, valueWord,
     wordOpHOL, wordOp, flattenHOL, panMemStoresHOL, panMemStoreHOL, hd24, hd32]
 
+/-- The log expansion call preserves all caller-local operands. -/
+theorem op_log_expand_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (cw ebw : BitVec 64) (P : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
+    (cont : ProgHOL 64)
+    (hcont : HandlerRun s0 (fun t => P t.locals) true cont) :
+    HandlerRun s0 (fun t => P t.locals ∧
+      t.locals.lookup (ofString "x") = some (.rStruct [.val (.word cw), .val (.word ebw)]) ∧
+      (ebw = 0#64 ∨
+        (memW t (globN t "ev" + 32) + ebw.toNat < 2 ^ 37 ∧
+         (memW t (globN t "ev" + 32) + ebw.toNat) % 8 = 0 ∧
+         memW t (globN t "ev" + 24) + memW t (globN t "ev" + 40) = globN t "frame_mem_ptr"))) true
+      (.seq (.call (some (none, none)) (ofString "extend_memory")
+        [.rfield 1 (.var .local (ofString "x"))]) cont) := by
+  apply HandlerRun.seq_call (Q := fun t => P t.locals) eps_extend_memory_length_g09
+  · intro t values body callee ret hc hInv hP hargs hl
+    have hev : evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a))
+        [.rfield 1 (.var .local (ofString "x"))] = some [.val (.word ebw)] := by
+      simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hP.2.1]
+    rw [hev] at hargs
+    injection hargs with hvs
+    subst hvs
+    rw [hc] at hl
+    obtain ⟨_, _, w, heq, hw⟩ := one_word_arg_lookup lookup_extend_memory hl
+    injection heq with h1
+    injection h1 with h2
+    subst h2
+    exact ⟨ebw, hw, hP.2.2⟩
+  · intro t values body callee ret v post hInv hP hargs hl hPost hchain hQc
+    exact hP.1
+  · exact hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
