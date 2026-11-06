@@ -8825,6 +8825,25 @@ theorem precompile_seq_flow_cases {F : Type}
     · cases h
     · exact h
 
+theorem precompile_seq_nonzero_or_early {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (first cont : ProgHOL 64)
+    (pad : BitVec 64) (Rl : List Ivl) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (he : R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s first).2 Rl)
+    (hc : ∀ t : PanSemStateFiniteExact 64 F, GuestInv t →
+      t.globals.lookup (ofString "sha_pad") = some (.val (.word pad)) →
+      R13.FlowsOrResumes (evaluateHOLFiniteState t cont).1 → pad.toNat ≠ 0)
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq first cont)).1) :
+    pad.toNat ≠ 0 ∨
+      (evaluateHOLFiniteState s first).1 = some .break ∨
+      (evaluateHOLFiniteState s first).1 = some .continue ∨
+      Resumes (evaluateHOLFiniteState s first).1 := by
+  rcases precompile_seq_flow_cases s first cont hr with ⟨hn,hflow⟩ | hctrl
+  · left
+    exact hc _ (guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi)
+      (by rw [he.globals]; exact hp) hflow
+  · exact Or.inr hctrl
+
 theorem precompile_memzero_null_128 {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hi : GuestInv s)
     (hp : s.locals.lookup (ofString "dst") = some (.val (.word 0)))
