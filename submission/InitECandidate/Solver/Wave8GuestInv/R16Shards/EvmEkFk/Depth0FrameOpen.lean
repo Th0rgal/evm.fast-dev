@@ -8436,4 +8436,33 @@ theorem ws_code_load_after_access_exit {F : Type}
     simpa only [hr.1] using hr.2
   · exact he
 
+/-- Concrete access execution supplies the resumed witness lookup, with
+all root-load evidence taken before the call. -/
+theorem witness_return_after_access_execution_preload {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db hash : BitVec 64) (t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (h : CodeDbPayloadStrong s S db.toNat) (hdb : db.toNat ∈ S) (ht : t ∈ S)
+    (hne : db.toNat ≠ t) (hloc : locN (callEntryStateHOLFinite s callee) "t" = t)
+    (hc : s.code = originalRuntimeCode) (values : List (ValueHOL 64)) (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "htab_set") values =
+      some (sourceFnBody Guest.Software.guestFn_htab_set, callee, .one))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (sourceFnBody Guest.Software.guestFn_htab_set) = (some (.returned v), post))
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hws : globN s "ws" ≠ 0)
+    (hload : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (hhash : s.locals.lookup (ofString "code_hash") = some (.val (.word hash))) :
+    Ret {post with locals := s.locals}
+      (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+        [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  have hx := access_set_exit_of_execution (callEntryStateHOLFinite s callee) post hc
+    (access_argWF_of_world s S t callee hAs hW ht hloc) values v hl hb
+  exact witness_return_after_access_execution db hash t callee hAs hW h hdb ht hne hloc
+    hc values v hl hb hshape
+    (ws_code_load_after_access_exit t callee hAs hW ht hloc hws hx _ hload) hhash
+
 end HeadStore
