@@ -8871,6 +8871,52 @@ theorem precompile_while_no_loop_control {F : Type}
   · simp
 termination_by s.clock
 
+theorem precompile_while_not_resumes {F : Type}
+    (cond : ExpHOL 64) (body : ProgHOL 64)
+    (hb : ∀ t : PanSemStateFiniteExact 64 F,
+      ¬ Resumes (evaluateHOLFiniteState t body).1)
+    (s : PanSemStateFiniteExact 64 F) :
+    ¬ Resumes (evaluateHOLFiniteState s (.while cond body)).1 := by
+  rw [evaluateHOLFiniteState_while_total]
+  split
+  · split
+    · split
+      · simp [Resumes]
+      · dsimp only
+        rw [fixClockHOLFinite_evaluateState]
+        have hn := hb (decClockHOLFinite s)
+        have hle := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+        rcases run : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r,m⟩
+        rw [run] at hn hle
+        have hlt : m.clock < s.clock := by
+          change m.clock ≤ s.clock - 1 at hle
+          omega
+        cases r with
+        | none => exact precompile_while_not_resumes cond body hb m
+        | some r =>
+          cases r with
+          | «continue» => exact precompile_while_not_resumes cond body hb m
+          | _ => simpa [Resumes] using hn
+    · simp [Resumes]
+  · simp [Resumes]
+termination_by s.clock
+
+theorem precompile_seq_while_flows_right {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (cond : ExpHOL 64) (body cont : ProgHOL 64)
+    (hb : ∀ t : PanSemStateFiniteExact 64 F,
+      ¬ Resumes (evaluateHOLFiniteState t body).1)
+    (hr : R13.FlowsOrResumes
+      (evaluateHOLFiniteState s (.seq (.while cond body) cont)).1) :
+    (evaluateHOLFiniteState s (.while cond body)).1 = none ∧
+      R13.FlowsOrResumes (evaluateHOLFiniteState
+        (evaluateHOLFiniteState s (.while cond body)).2 cont).1 := by
+  rcases precompile_seq_flow_cases s (.while cond body) cont hr with h | h
+  · exact h
+  · rcases h with h | h | h
+    · exact False.elim ((precompile_while_no_loop_control s cond body).1 h)
+    · exact False.elim ((precompile_while_no_loop_control s cond body).2 h)
+    · exact False.elim (precompile_while_not_resumes cond body hb s h)
+
 theorem precompile_memzero_null_128 {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hi : GuestInv s)
     (hp : s.locals.lookup (ofString "dst") = some (.val (.word 0)))
