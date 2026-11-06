@@ -17635,4 +17635,37 @@ theorem journal_cut_memory_tail_entry {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+open private journalAppendTailProg journal_append_block_step
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The return-only cut exposes a world-typed journal entry with exactly the cut memory. -/
+theorem journal_cut_world_entry {F : Type}
+    (s cur cut : PanSemStateFiniteExact 64 F)
+    (trapCode : BitVec 64) (e16 : ExpHOL 64) (tw kw f0 f1 w16 : BitVec 64)
+    (hW : WorldOK s) (heff : WorldEff s cur [] [] ["heap_ptr"])
+    (hg : ∀ k : MlS, cur.globals.lookup k = s.globals.lookup k)
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : cur.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (ho : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (he : ∀ st : PanSemStateFiniteExact 64 F,
+      st.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]) →
+      @evalHOLExact 64 F _ st.toExact (fun a => Classical.propDecidable (st.memaddrs a)) e16 = some (.val (.word w16)))
+    (htw : ∀ S, TablesTyped s S → tw.toNat ∈ S ∧
+      ∀ p ∈ (tw.toNat, journalRole s tw.toNat) ::
+        (if w16.toNat ≠ 0 ∧ journalRole s tw.toNat = "ts+32" then [(f1.toNat, "ts.inner")] else []),
+        p ∈ worldRoleSlots s)
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut)) :
+    ∃ mid, WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid ∧
+      mid.locals.lookup (ofString "t") = some (.val (.word tw)) ∧ cut.memory = mid.memory := by
+  obtain ⟨mid, u, hw, ht', _, _, hu, hc⟩ := journal_append_block_step s cur trapCode e16 tw kw f0 f1 w16
+    hW heff hg ht hk ho he htw hr
+  refine ⟨mid, hw, ht', ?_⟩
+  have hm : cut.memory = u.memory := by rw [hc]
+  exact hm.trans (return_memory_eq hu)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
