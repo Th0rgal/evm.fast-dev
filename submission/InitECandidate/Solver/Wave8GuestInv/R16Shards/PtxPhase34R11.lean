@@ -16779,4 +16779,26 @@ theorem journal_alloc_body_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Retain allocator effects when restoring the journal caller and binding its key pointer. -/
+theorem journal_alloc_restored_effect {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} {jrec : Ivl} (p n : BitVec 64) (v : ValueHOL 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hr : evaluateHOLFiniteState
+      (callEntryStateHOLFinite cur (HolFiniteMapExact.empty.update (ofString "n", .val (.word n))))
+      (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    v = .val (.word p) ∧
+      WorldEff s (setVarHOLFinite (ofString "kc") v {post with locals := cur.locals}) [jrec] [] ["heap_ptr"] ∧
+      globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + n.toNat ≤ heapLimit := by
+  have he := heff.locals_clock (HolFiniteMapExact.empty.update (ofString "n", .val (.word n))) (cur.clock - 1)
+  obtain ⟨hv, ha, hlo, hhi⟩ := journal_alloc_body_effect p n v he hp
+    (by simp [HolFiniteMapExact.lookup_update, FUPDATE]) hr
+  refine ⟨hv, ?_, hlo, hhi⟩
+  exact ha.locals_clock _ _
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
