@@ -15048,4 +15048,66 @@ theorem htab_set_tx_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open private EvmEkFk.acct_new_params
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
+
+/-- Account construction only writes fresh storage and preserves old headers. -/
+theorem acct_new_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (b : Ivl)
+    (hA : ArenaReady s)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "acct_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : Allocated post b ∧ IvlUnhit s post b := by
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "acct_new")
+    _ _ body _ ret vs callee EvmEkFk.lookup_acct_new (by rwa [← hA.1.code])
+  have hret := lookupCodeHOLFinite_installed_return s (ofString "acct_new")
+    _ _ _ _ ret vs callee (by rw [hA.1.code]; exact EvmEkFk.lookup_acct_new) hl
+  subst body ret
+  have hl' := hl
+  rw [hA.1.code] at hl'
+  obtain ⟨wn, wc, vb, hsh, hn, hbal, hc⟩ := EvmEkFk.acct_new_params hl'
+  have he := EvmEkFk.worldEff_acct_new s (callEntryStateHOLFinite s callee)
+    (Rl := []) (B := []) (gw := ["heap_ptr"]) (by decide)
+    ((WorldEff.refl s [] [] ["heap_ptr"] hA hA.1.code).locals_clock callee (s.clock - 1))
+    hsh hn hbal hc (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at he
+  exact worldEff_allocated_frame b hA.2 he hb hb1 hb2
+
+/-- The missing-account branch of lookup has an allocation-only effect. -/
+theorem acct_empty_body_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hA : ArenaReady s)
+    (hnt : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_acct_empty)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_acct_empty)).1) :
+    WorldEff s (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_acct_empty)).2
+      [] [] ["heap_ptr"] := by
+  have he := WorldEff.refl s [] [] ["heap_ptr"] hA hA.1.code
+  change WorldEff s (evaluateHOLFiniteState s
+    (.decCall (ofString "a") .one (ofString "acct_new")
+      [.const 0, .rstruct [.const 0, .const 0, .const 0, .const 0],
+        .var .global (ofString "empty_code_hash")]
+      (.return (.var .local (ofString "a"))))).2 [] [] ["heap_ptr"]
+  apply worldEff_decCall_eff he (ofString "a") .one (ofString "acct_new") _ _ _ _
+    EvmEkFk.lookup_acct_new
+  · intro callee vals _ hl
+    dsimp only
+    intro hntc hrc
+    have hl' := hl
+    rw [hA.1.code] at hl'
+    obtain ⟨wn, wc, vb, hsh, hn, hb, hc⟩ := EvmEkFk.acct_new_params hl'
+    exact EvmEkFk.worldEff_acct_new s (callEntryStateHOLFinite s callee)
+      (by decide) (he.locals_clock _ _) hsh hn hb hc hntc hrc
+  · intro callee vals rv post _ _ _ _ hepost
+    dsimp only
+    intro _ _
+    exact worldEff_return (hepost.locals_clock _ _) _
+  · exact hnt
+  · exact Or.inr (Or.inr (Or.inr hr))
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
