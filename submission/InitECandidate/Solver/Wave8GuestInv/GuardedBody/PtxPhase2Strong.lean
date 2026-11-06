@@ -18234,4 +18234,22 @@ theorem phase2_contract_writes_disjoint_typed {F : Type}
   · exact R10Shards.P26_P28.untypedBuf_disj_worldTypedIvls hw
       ("keccak_st", 200) (by decide) (by decide) i hi
 
+/-- The fresh address output is separated from every previously allocated
+interval, including intervals allocated in the scratch arena. -/
+theorem phase2_ct_fresh_disjoint_allocated {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (p : Nat)
+    (ha : ArenaOK s) (hap : ArenaOK post)
+    (hf : FreshBlock s post p 24) (i : Ivl) (hi : i = (0, 0) ∨ Allocated s i) :
+    Disj (p, 20) i := by
+  have h := hf.2.1
+  change globN s "heap_ptr" ≤ p ∧ p + 24 ≤ globN post "heap_ptr" at h
+  rcases hi with rfl | hh | hs
+  · simp [Disj]
+  · exact Or.inr (Or.inr (Or.inr (hh.2.trans h.1)))
+  · have hlim := hap.2.1
+    have hsc := ha.2.2.1
+    have hfm := ha.2.2.2.1
+    have hsep : heapLimit ≤ InitE.scratchStart := by decide
+    exact Or.inr (Or.inr (Or.inl (by have := hs.1; dsimp at *; omega)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
