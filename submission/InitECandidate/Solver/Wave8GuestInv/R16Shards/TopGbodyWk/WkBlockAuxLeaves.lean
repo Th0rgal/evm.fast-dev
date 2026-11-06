@@ -9247,4 +9247,40 @@ theorem merge_set_call_union_entry_with {F : Type}
   · rw [hb.2, ← htbs]
     exact hm.2
 
+/-- Caller-selected heap effects fit the withdrawal frame without losing ownership guards. -/
+theorem merge_heap_stepIn_withdrawal
+    {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {r : Option (PanSemResultExact 64)}
+    (h : WorldStepIn T (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post) :
+    WorldStepIn T (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s r post := by
+  obtain ⟨hA, hhp, hG, hK, hW⟩ := h
+  refine ⟨hA, hhp, ?_, ?_, ?_⟩
+  · intro k hk
+    apply hG k
+    intro hm
+    apply hk
+    have he : k = ofString "heap_ptr" := by simpa using hm
+    simp [withdrawalGlobals, he]
+  · intro rec hrec hn k hk hno
+    have hkeep : ∃ ks, (rec.1, ks) ∈ stdKeep ∧ k ∈ ks := by
+      simp only [withdrawalKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+      rcases hrec with rfl | rfl | rfl | rfl
+      · exact ⟨_, by simp [stdKeep], hk⟩
+      · exact ⟨_, by simp [stdKeep], hk⟩
+      · cases hk
+      · exact ⟨_, by simp [stdKeep], hk⟩
+    obtain ⟨ks, hks, hk'⟩ := hkeep
+    exact hK (rec.1, ks) hks hn k hk' (by simp [bufRegions])
+  · intro S Nd hw ht _
+    obtain ⟨S', Nd', hsub, hw', hg, hframe, hq⟩ := hW S Nd hw ht (by simp [bufRegions, IvlsDisj])
+    refine ⟨S', Nd', hsub, hw', hg, ?_, hq⟩
+    intro a ha hfree
+    apply hframe a _ hfree
+    intro i hi hhit
+    simp only [bufRegions, List.map_nil, List.append_nil] at hi
+    rcases List.mem_append.1 hi with hi | hi
+    · exact ha i (List.mem_append_left _ (List.mem_append_left _ hi)) hhit
+    · exact ha i (List.mem_append_right _ hi) hhit
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
