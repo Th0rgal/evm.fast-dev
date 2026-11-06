@@ -16861,4 +16861,28 @@ theorem journal_alloc_copy_prefix_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- The concrete journal record address evaluates without wrapping under its allocation bound. -/
+theorem journal_record_address_eval {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (j n : BitVec 64)
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hbound : j.toNat + 32 * n.toNat + 32 < 2 ^ 64) :
+    @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.op .add [.var .global (ofString "journal"),
+        .panop .mul [.var .global (ofString "journal_n"), .const 32#64]]) =
+      some (.val (.word (j + n * 32#64))) ∧
+      (j + n * 32#64).toNat = j.toNat + 32 * n.toNat := by
+  constructor
+  · simp [evalHOLExact, evalListHOLExact, hj, hn, wordOpHOL, wordOp, valueIsWord, valueWord,
+      panOpHOL]
+  · have hm : (n * 32#64).toNat = 32 * n.toNat := by
+      rw [BitVec.toNat_mul]
+      change (n.toNat * 32) % 2 ^ 64 = 32 * n.toNat
+      rw [Nat.mul_comm, Nat.mod_eq_of_lt (by omega)]
+    rw [BitVec.toNat_add, hm, Nat.mod_eq_of_lt (by omega)]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
