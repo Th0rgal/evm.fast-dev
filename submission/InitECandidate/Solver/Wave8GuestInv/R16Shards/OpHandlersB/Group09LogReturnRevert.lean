@@ -17386,4 +17386,51 @@ theorem op_log_no_growth_store_domains_g09 {F : Type}
     apply BitVec.eq_of_toNat_eq
     simp [BitVec.toNat_add, BitVec.toNat_mul, Nat.mul_comm, Nat.add_mod, Nat.mul_mod]
 
+/-- Existing whole-chain ownership protects every frame and continuation from append writes. -/
+theorem op_log_no_growth_frame_protection_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {head : Ivl} {tail : List Ivl}
+    (l p n cap : BitVec 64) (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) :
+    ∀ ec ∈ evmChain s, ∀ o ∈ ([(ec.1, 280), (ec.2, 104)] : List Ivl),
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧
+        Disj o (p.toNat, 8 * n.toNat + 8) := by
+  obtain ⟨_, _, hFW, hpw, _⟩ := op_log_old_ownership_g09 hinv
+  rw [hcons, List.map_cons, List.flatten_cons, List.pairwise_append] at hpw
+  have hh : (l.toNat, 24) ∈ frameObjects s head := by simp [frameObjects, hl]
+  have hb : frameLogs s head = (p.toNat, 8 * cap.toNat) := by
+    simp [frameLogs, hl, hm0, hm16]
+  have shrink : ∀ o, Disj o (p.toNat, 8 * cap.toNat) →
+      Disj o (p.toNat, 8 * n.toNat + 8) := by
+    intro o ho
+    unfold Disj at ho ⊢
+    dsimp only at ho ⊢
+    rcases ho with ho | ho | ho | ho <;> omega
+  intro ec hec o ho
+  have bounds := frameWF_bounds hA.2 (hFW ec hec)
+  have ho' : o = (ec.1, 280) ∨ o = (ec.2, 104) := by simpa using ho
+  have hbnd : o.1 + o.2 ≤ 2^64 := by
+    rcases ho' with rfl | rfl
+    · exact bounds.1
+    · exact bounds.2.1
+  refine ⟨hbnd, ?_⟩
+  rw [hcons, List.mem_cons] at hec
+  rcases hec with rfl | hec
+  · have hp := hpw.1
+    simp only [frameObjects, List.pairwise_append, List.pairwise_cons] at hp
+    rcases ho' with rfl | rfl
+    · exact ⟨hp.1.1 _ (by simp [hl]), shrink _ (by
+        rw [← hb]; exact hp.1.1 _ (by simp))⟩
+    · exact ⟨hp.1.2.1 _ (by simp [hl]), shrink _ (by
+        rw [← hb]; exact hp.1.2.1 _ (by simp))⟩
+  · have hom : o ∈ (tail.map (frameObjects s)).flatten := by
+      apply List.mem_flatten.2
+      refine ⟨frameObjects s ec, List.mem_map.2 ⟨ec, hec, rfl⟩, ?_⟩
+      rcases ho' with rfl | rfl <;> simp [frameObjects]
+    exact ⟨R11Shards.Disj.symm (hpw.2.2 _ hh _ hom), shrink _
+      (R11Shards.Disj.symm (hpw.2.2 _ (by rw [← hb]; simp [frameObjects]) _ hom))⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
