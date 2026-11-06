@@ -4460,8 +4460,12 @@ abbrev pmcSysTxKeep : List (String × List Nat) :=
    ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
    ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
 
+abbrev incSysTxBufs : BufList :=
+  [("bal_key_buf", 64), ("keccak_pad", 136), ("keccak_st", 200),
+   ("mpt_nib_scratch", 64), ("sk_buf", 52)]
+
 abbrev incSysTxGlobals : List String :=
-  ["bn_expw", "bn_gamma", "cur_cont", "ev", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
+  ["heap_ptr", "scratch_ptr"]
 
 theorem validBufList_pmcSysTxBufs : ValidBufList pmcSysTxBufs := by
   intro p hp
@@ -5437,6 +5441,827 @@ theorem sysTxCopyRetBodyProg_step {F : Type}
             ⟨(tablesTyped_with_locals s_seq s_body.locals s_seq.clock S').2 hWT'.1,
               hWT'.2.1, hWT'.2.2.1, hWT'.2.2.2.1, hWT'.2.2.2.2.1, hWT'.2.2.2.2.2⟩
           exact ⟨S', Nd', hsub, hWT_b, hOG, hFO, hd_out⟩
+
+theorem worldStep_of_msgTables_and_postPmc {F : Type}
+    {s0 s_pmc post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {w_m w_aa w_ak : BitVec 64}
+    (hW0 : WorldOK s0)
+    (hmt : SysTxMsgTablesStep s0 s_pmc w_m [(w_aa.toNat, 20), (w_ak.toNat, 52)])
+    (hm152 : memW s_pmc (w_m.toNat + 152) = w_aa.toNat)
+    (hm160 : memW s_pmc (w_m.toNat + 160) = w_ak.toNat)
+    (hA_post : ArenaReady post)
+    (hhp_post : globN s_pmc "heap_ptr" ≤ globN post "heap_ptr")
+    (hG_post : GlobalsKept sysTxGlobals s_pmc post)
+    (hK_post : RecordsKept (fun st => (w_m.toNat, 176) :: bufRegions sysTxBufs st) sysTxKeep s_pmc post)
+    (hW_post : ∀ S Nd,
+      WorldTypedWith s_pmc S Nd →
+      memW s_pmc (w_m.toNat + 152) ∈ S →
+      memW s_pmc (w_m.toNat + 160) ∈ S →
+      IvlsDisj ((w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc) (worldTypedIvls s_pmc S Nd) →
+      ∃ S' Nd',
+        (∀ t ∈ S, t ∈ S') ∧
+        WorldTypedWith post S' Nd' ∧
+        OwnedGrows s_pmc post (worldOwned s_pmc S Nd) (worldOwned post S' Nd') ∧
+        FrameOutside s_pmc post
+          (worldOwned s_pmc S Nd ++ ((w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc) ++ [freeGap s_pmc])
+          (heapFree s_pmc)) :
+    WorldStep (bufRegions sysTxBufs) sysTxGlobals sysTxKeep NoExtra s0 r post := by
+  obtain ⟨hA0, S0w, hS0w⟩ := hW0
+  obtain ⟨Nd0w, hWT0w⟩ := (worldTyped_iff_with s0 S0w).1 hS0w
+  have hF0 := hWT0w.2.2.1
+  obtain ⟨hp_mt, hm8, hin_m, htabs_step⟩ := hmt
+  have hbuf_eq : bufRegions sysTxBufs s_pmc = bufRegions sysTxBufs s0 :=
+    bufRegions_sysTx_eq_of_prefix hp_mt
+  obtain ⟨⟨hA_pmc, hhp01, hG01, hK01, _⟩, hfmp01, hsp01, _, _⟩ := hp_mt
+  have hfmp_sp0 : globN s0 "frame_mem_ptr" ≤ globN s0 "scratch_ptr" := hA0.2.2.2.2.1
+  have hfmp_sp_pmc : globN s_pmc "frame_mem_ptr" ≤ globN s_pmc "scratch_ptr" := hA_pmc.2.2.2.2.1
+  have hhp_pmc_lim : globN s_pmc "heap_ptr" ≤ heapLimit := hA_pmc.2.2.1
+  refine ⟨hA_post, le_trans hhp01 hhp_post,
+    fun k hk => (hG01 k hk).trans (hG_post k hk), ?_, ?_⟩
+  · intro rec hrec hnz off hoff hno
+    have hg_rec : globN s_pmc rec.1 = globN s0 rec.1 := by
+      simp only [sysTxKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+      rcases hrec with rfl | rfl | rfl | rfl
+      · exact globN_eq_of_lookup (hG01 (ofString "ws") (by decide))
+      · exact globN_eq_of_lookup (hG01 (ofString "bs") (by decide))
+      · cases hoff
+      · exact globN_eq_of_lookup (hG01 (ofString "bo") (by decide))
+    have hrec_sz : ∃ sz, (rec.1, sz) ∈ typedRecords ∧ off % 8 = 0 ∧ off + 8 ≤ sz := by
+      simp only [sysTxKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+      rcases hrec with rfl | rfl | rfl | rfl
+      · refine ⟨40, by simp [typedRecords], ?_⟩
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+        rcases hoff with rfl | rfl | rfl | rfl | rfl <;> omega
+      · refine ⟨80, by simp [typedRecords], ?_⟩
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+        rcases hoff with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega
+      · cases hoff
+      · refine ⟨88, by simp [typedRecords], ?_⟩
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+        rcases hoff with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega
+    obtain ⟨sz, htr, hoff8, hoff_sz⟩ := hrec_sz
+    have hmf : (globN s0 rec.1, sz) ∈ fixedObjects s0 := by
+      have hm := typedRecord_mem_fixedObjects s0 htr
+      simpa [hnz] using hm
+    rcases hF0.1 _ hmf with h0 | ⟨hal, hwords⟩
+    · omega
+    · have hg8 : globN s0 rec.1 % 8 = 0 := hwords.1
+      have hdisj_m : Disj (globN s0 rec.1, sz) (w_m.toNat, 176) := by
+        rcases hal with hheap | hscr
+        · exact Or.inr (Or.inr (Or.inl (le_trans hheap.2 hin_m.1)))
+        · have hsep : heapLimit ≤ scratchStart := by decide
+          have := hA0.2.2.2.1; have := hA0.2.2.2.2.1
+          exact Or.inr (Or.inr (Or.inr (by dsimp only [Inside] at hin_m hscr ⊢; omega)))
+      have hno_pmc : ∀ i ∈ (w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc,
+          ¬ CellHits (globN s_pmc rec.1 + off) i := by
+        intro i hi
+        rw [hg_rec]
+        rcases List.mem_cons.1 hi with rfl | hi_buf
+        · exact InitECandidate.Solver.Wave8Contracts.M08.not_cellHits_of_disj
+            (i := (globN s0 rec.1, sz)) (by omega) hm8 ⟨by omega, by omega⟩ hdisj_m
+        · rw [hbuf_eq] at hi_buf
+          exact hno i hi_buf
+      have h2 := hK_post rec hrec (by rw [hg_rec]; exact hnz) off hoff hno_pmc
+      rw [hg_rec] at h2
+      exact h2.trans (hK01 rec hrec hnz off hoff hno)
+  · intro S0 Nd0 hWT0 hD0
+    obtain ⟨S_pmc, Nd_pmc, hsub01, hWT_pmc, hOG01, hFO01, hdisj_m, htabs⟩ :=
+      htabs_step S0 Nd0 hWT0 hD0
+    obtain ⟨haa_S, _, _⟩ := htabs (w_aa.toNat, 20) (by simp)
+    obtain ⟨hak_S, _, _⟩ := htabs (w_ak.toNat, 52) (by simp)
+    have hD_pmc : IvlsDisj ((w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc)
+        (worldTypedIvls s_pmc S_pmc Nd_pmc) := by
+      intro i hi j hj
+      rcases List.mem_cons.1 hi with rfl | hi_buf
+      · exact hdisj_m (w_m.toNat, 176) (by simp) j
+          (worldTypedIvls_sub_worldOwned_sysTx s_pmc S_pmc Nd_pmc j hj)
+      · exact validBufList_disj validBufList_sysTxBufs hWT_pmc i hi_buf j hj
+    obtain ⟨S', Nd', hsub12, hWT', hOG12, hFO12⟩ :=
+      hW_post S_pmc Nd_pmc hWT_pmc (by rw [hm152]; exact haa_S)
+        (by rw [hm160]; exact hak_S) hD_pmc
+    refine ⟨S', Nd', fun t ht => hsub12 t (hsub01 t ht), hWT',
+      ownedGrows_trans_sysTx hhp01 hhp_post hOG01 hOG12, ?_, trivial⟩
+    intro a ha hhf0
+    have hm01 : s_pmc.memory a = s0.memory a := hFO01 a ha hhf0
+    have hm12 : post.memory a = s_pmc.memory a := by
+      apply hFO12 a
+      · intro i hi ⟨hc1, hc2⟩
+        rcases List.mem_append.1 hi with hi1 | hfg1
+        · rcases List.mem_append.1 hi1 with hwo1 | hR1
+          · rcases hOG01 i hwo1 with rfl | ⟨k, hk, hin_ik⟩ | hin_i01
+            · dsimp only at hc2; omega
+            · exact ha k (List.mem_append_left _ (List.mem_append_left _ hk))
+                ⟨by dsimp only [Inside] at hin_ik; omega,
+                 by dsimp only [Inside] at hin_ik; omega⟩
+            · exact hhf0 ⟨by unfold heapFree; dsimp only [Inside] at hin_i01 ⊢; omega,
+                         by unfold heapFree; dsimp only [Inside] at hin_i01 ⊢; omega⟩
+          · rcases List.mem_cons.1 hR1 with rfl | hbuf1
+            · exact hhf0 ⟨by unfold heapFree; dsimp only [Inside] at hin_m ⊢; omega,
+                         by unfold heapFree; dsimp only [Inside] at hin_m ⊢; omega⟩
+            · rw [hbuf_eq] at hbuf1
+              exact ha i (List.mem_append_left _ (List.mem_append_right _ hbuf1)) ⟨hc1, hc2⟩
+        · simp only [List.mem_singleton] at hfg1
+          subst hfg1
+          exact ha (freeGap s0) (List.mem_append_right _ (List.mem_singleton.2 rfl))
+            ⟨by
+              have hc1' : a.toNat + 8 > globN s_pmc "frame_mem_ptr" := hc1
+              change a.toNat + 8 > globN s0 "frame_mem_ptr"; omega,
+             by
+              have hc2' : a.toNat < globN s_pmc "frame_mem_ptr" + (globN s_pmc "scratch_ptr" - globN s_pmc "frame_mem_ptr") := hc2
+              change a.toNat < globN s0 "frame_mem_ptr" + (globN s0 "scratch_ptr" - globN s0 "frame_mem_ptr")
+              omega⟩
+      · intro ⟨hc1, hc2⟩
+        exact hhf0 ⟨by
+          have hc1' : a.toNat + 8 > globN s_pmc "heap_ptr" := hc1
+          change a.toNat + 8 > globN s0 "heap_ptr"; omega,
+         by
+          have hc2' : a.toNat < globN s_pmc "heap_ptr" + (heapLimit - globN s_pmc "heap_ptr") := hc2
+          change a.toNat < globN s0 "heap_ptr" + (heapLimit - globN s0 "heap_ptr")
+          omega⟩
+    exact hm12.trans hm01
+
+theorem worldStep_of_sysTxPostPmcStep {F : Type}
+    {s0 s_pmc post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {w_m w_aa w_ak w_out : BitVec 64}
+    (hW0 : WorldOK s0)
+    (hmt : SysTxMsgTablesStep s0 s_pmc w_m [(w_aa.toNat, 20), (w_ak.toNat, 52)])
+    (hm152 : memW s_pmc (w_m.toNat + 152) = w_aa.toNat)
+    (hm160 : memW s_pmc (w_m.toNat + 160) = w_ak.toNat)
+    (hpost : SysTxPostPmcStep s_pmc r post w_m w_out) :
+    WorldStep (bufRegions sysTxBufs) sysTxGlobals sysTxKeep NoExtra s0 r post := by
+  obtain ⟨hA_post, hhp_post, _, _, hG_post, hK_post, _, _, _, hW_post⟩ := hpost
+  exact worldStep_of_msgTables_and_postPmc hW0 hmt hm152 hm160 hA_post hhp_post hG_post hK_post
+    (fun S Nd hWT hm152' hm160' hD =>
+      let ⟨S', Nd', hsub, hWT', hOG, hFO, _⟩ := hW_post S Nd hWT hm152' hm160' hD
+      ⟨S', Nd', hsub, hWT', hOG, hFO⟩)
+
+theorem pmcSysTxBufs_sub_sysTxBufs : ∀ p ∈ pmcSysTxBufs, p ∈ sysTxBufs := by
+  intro p hp
+  simp only [pmcSysTxBufs, sysTxBufs, List.mem_cons, List.not_mem_nil, or_false] at hp ⊢
+  rcases hp with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
+      rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> simp
+
+theorem pmcSysTxGlobals_sub_sysTxGlobals : ∀ g ∈ pmcSysTxGlobals, g ∈ sysTxGlobals := by
+  intro g hg
+  simp only [pmcSysTxGlobals, sysTxGlobals, List.mem_cons, List.not_mem_nil, or_false] at hg ⊢
+  rcases hg with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> simp
+
+theorem incSysTxBufs_sub_sysTxBufs : ∀ p ∈ incSysTxBufs, p ∈ sysTxBufs := by
+  intro p hp
+  simp only [incSysTxBufs, sysTxBufs, List.mem_cons, List.not_mem_nil, or_false] at hp ⊢
+  rcases hp with rfl | rfl | rfl | rfl | rfl <;> simp
+
+theorem validBufList_incSysTxBufs : ValidBufList incSysTxBufs :=
+  fun p hp => validBufList_sysTxBufs p (incSysTxBufs_sub_sysTxBufs p hp)
+
+theorem incSysTxGlobals_sub_sysTxGlobals : ∀ g ∈ incSysTxGlobals, g ∈ sysTxGlobals := by
+  intro g hg
+  simp only [incSysTxGlobals, sysTxGlobals, List.mem_cons, List.not_mem_nil, or_false] at hg ⊢
+  rcases hg with rfl | rfl <;> simp
+
+theorem keepSub_sysTxKeep_pmcSysTxKeep : KeepSub sysTxKeep pmcSysTxKeep := by
+  intro r hr
+  simp only [sysTxKeep, List.mem_cons, List.not_mem_nil, or_false] at hr
+  rcases hr with rfl | rfl | rfl | rfl
+  · exact ⟨[0, 8, 16, 24, 32], by simp [pmcSysTxKeep], fun _ h => h⟩
+  · exact ⟨[0, 8, 16, 24, 32, 40, 48, 72], by simp [pmcSysTxKeep], fun _ h => h⟩
+  · exact ⟨[0, 8, 16, 24, 32, 40, 48, 56, 64], by simp [pmcSysTxKeep], fun _ h => by cases h⟩
+  · exact ⟨[0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80], by simp [pmcSysTxKeep], fun _ h => h⟩
+
+theorem pmc_lookup_msg_sysTx
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)}
+    {body' : ProgHOL 64} {ret' : ShapeHOL} {w_m : BitVec 64}
+    (hlk' : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "process_message_call")
+      [.val (.word w_m)] = some (body', callee, ret')) :
+    callee.lookup (ofString "msg") = some (.val (.word w_m)) := by
+  obtain ⟨b_pmc, hpmc_lk⟩ : ∃ b_pmc, originalRuntimeCode.lookup (ofString "process_message_call") =
+      some ([(ofString "msg", .one)], b_pmc, .one) :=
+    ⟨_, GuestTrapAndLookup.lookup_process_message_call⟩
+  have hpan := pan_one_word_lookup originalRuntimeCode.lookup (ofString "process_message_call")
+    (ofString "msg") b_pmc w_m hpmc_lk
+  rw [hpan] at hlk'
+  injection hlk' with htuple
+  injection htuple with _ hrest
+  injection hrest with hcal _
+  rw [← hcal]
+  simp [HolFiniteMapExact.lookup_update, FUPDATE]
+
+theorem pmc_sysTx_exc_worldStep {F : Type}
+    {s0 s_pmc cpost : PanSemStateFiniteExact 64 F}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)}
+    {w_m w_aa w_ak : BitVec 64} {eid : MlS} {ev : ValueHOL 64}
+    (hW0 : WorldOK s0)
+    (hmt : SysTxMsgTablesStep s0 s_pmc w_m [(w_aa.toNat, 20), (w_ak.toNat, 52)])
+    (hm152 : memW s_pmc (w_m.toNat + 152) = w_aa.toNat)
+    (hm160 : memW s_pmc (w_m.toNat + 160) = w_ak.toNat)
+    (hl_msg : callee.lookup (ofString "msg") = some (.val (.word w_m)))
+    (hwstep : WorldStepIn
+      (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)])
+      (fun s => (locN s "msg", 176) :: bufRegions pmcSysTxBufs s)
+      pmcSysTxGlobals pmcSysTxKeep RetSysTxPmc
+      (callEntryStateHOLFinite s_pmc callee) (some (.exception eid ev)) cpost) :
+    WorldStep (bufRegions sysTxBufs) sysTxGlobals sysTxKeep NoExtra s0
+      (some (.exception eid ev)) (emptyLocalsHOLFinite cpost) := by
+  let ent := callEntryStateHOLFinite s_pmc callee
+  have hloc_msg : locN ent "msg" = w_m.toNat := by
+    simp [ent, callEntryStateHOLFinite, decClockHOLFinite, locN, hl_msg]
+  have hsubR : ∀ i ∈ (locN ent "msg", 176) :: bufRegions pmcSysTxBufs ent,
+      i ∈ (w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc := by
+    intro i hi
+    rcases List.mem_cons.1 hi with rfl | hi_buf
+    · rw [hloc_msg]; exact List.mem_cons_self ..
+    · obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hi_buf
+      exact List.mem_cons_of_mem _ (List.mem_map.2 ⟨p, pmcSysTxBufs_sub_sysTxBufs p hp, rfl⟩)
+  obtain ⟨hA_cp, hhp_cp, hG_cp, hK_cp, hW_cp⟩ := hwstep
+  set post_ex : PanSemStateFiniteExact 64 F := emptyLocalsHOLFinite cpost
+  have hA_ex : ArenaReady post_ex := localsFree_arenaReady cpost HolFiniteMapExact.empty cpost.clock hA_cp
+  have hG_ex : GlobalsKept sysTxGlobals s_pmc post_ex := by
+    intro k hk'
+    apply hG_cp k
+    intro hm
+    obtain ⟨g, hg, rfl⟩ := List.mem_map.1 hm
+    exact hk' (List.mem_map.2 ⟨g, pmcSysTxGlobals_sub_sysTxGlobals g hg, rfl⟩)
+  have hK_ex : RecordsKept (fun st => (w_m.toNat, 176) :: bufRegions sysTxBufs st) sysTxKeep s_pmc post_ex := by
+    have hK1 : RecordsKept (fun st => (w_m.toNat, 176) :: bufRegions sysTxBufs st) pmcSysTxKeep s_pmc post_ex :=
+      fun rec hrec hnz off hoff hno =>
+        hK_cp rec hrec hnz off hoff (fun i hi => hno i (hsubR i hi))
+    exact recordsKept_mono_keep keepSub_sysTxKeep_pmcSysTxKeep hK1
+  refine worldStep_of_msgTables_and_postPmc hW0 hmt hm152 hm160 hA_ex hhp_cp hG_ex hK_ex
+    (fun S Nd hWT hm152' hm160' hD => ?_)
+  have hWT_ent : WorldTypedWith ent S Nd :=
+    ⟨(tablesTyped_with_locals s_pmc callee (s_pmc.clock - 1) S).2 hWT.1,
+      hWT.2.1, hWT.2.2.1, hWT.2.2.2.1, hWT.2.2.2.2.1, hWT.2.2.2.2.2⟩
+  have hTS_ent : ∀ t ∈ [memW ent (locN ent "msg" + 152), memW ent (locN ent "msg" + 160)], t ∈ S := by
+    intro t ht
+    rw [hloc_msg] at ht
+    change t ∈ [memW s_pmc (w_m.toNat + 152), memW s_pmc (w_m.toNat + 160)] at ht
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
+    rcases ht with rfl | rfl
+    · exact hm152'
+    · exact hm160'
+  have hD_ent : IvlsDisj ((locN ent "msg", 176) :: bufRegions pmcSysTxBufs ent)
+      (worldTypedIvls ent S Nd) :=
+    fun i hi j hj => hD i (hsubR i hi) j hj
+  obtain ⟨S', Nd', hsub, hWT', hOG, hFO, _⟩ := hW_cp S Nd hWT_ent hTS_ent hD_ent
+  have hWT_ex : WorldTypedWith post_ex S' Nd' :=
+    ⟨(tablesTyped_with_locals cpost HolFiniteMapExact.empty cpost.clock S').2 hWT'.1,
+      hWT'.2.1, hWT'.2.2.1, hWT'.2.2.2.1, hWT'.2.2.2.2.1, hWT'.2.2.2.2.2⟩
+  have hFO_ex : FrameOutside s_pmc post_ex
+      (worldOwned s_pmc S Nd ++ ((w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc) ++ [freeGap s_pmc])
+      (heapFree s_pmc) := by
+    intro a ha hhf
+    apply hFO a _ hhf
+    intro i hi
+    rcases List.mem_append.1 hi with hi1 | hfg
+    · rcases List.mem_append.1 hi1 with hwo | hR
+      · exact ha i (List.mem_append_left _ (List.mem_append_left _ hwo))
+      · exact ha i (List.mem_append_left _ (List.mem_append_right _ (hsubR i hR)))
+    · exact ha i (List.mem_append_right _ hfg)
+  exact ⟨S', Nd', hsub, hWT_ex, hOG, hFO_ex⟩
+
+theorem pmc_sysTx_ret_postStep {F : Type}
+    {s0 s_pmc cpost : PanSemStateFiniteExact 64 F}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)}
+    {w_m w_aa w_ak : BitVec 64} {v : ValueHOL 64}
+    (hW0 : WorldOK s0)
+    (hmt : SysTxMsgTablesStep s0 s_pmc w_m [(w_aa.toNat, 20), (w_ak.toNat, 52)])
+    (hm152 : memW s_pmc (w_m.toNat + 152) = w_aa.toNat)
+    (hm160 : memW s_pmc (w_m.toNat + 160) = w_ak.toNat)
+    (hl_msg : callee.lookup (ofString "msg") = some (.val (.word w_m)))
+    (hwstep : WorldStepIn
+      (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)])
+      (fun s => (locN s "msg", 176) :: bufRegions pmcSysTxBufs s)
+      pmcSysTxGlobals pmcSysTxKeep RetSysTxPmc
+      (callEntryStateHOLFinite s_pmc callee) (some (.returned v)) cpost) :
+    ∃ w_out : BitVec 64,
+      v = .val (.word w_out) ∧
+      SysTxPostPmcStep s_pmc none
+        (setVarHOLFinite (ofString "out") (.val (.word w_out)) { cpost with locals := s_pmc.locals })
+        w_m w_out := by
+  let ent := callEntryStateHOLFinite s_pmc callee
+  have hloc_msg : locN ent "msg" = w_m.toNat := by
+    simp [ent, callEntryStateHOLFinite, decClockHOLFinite, locN, hl_msg]
+  have hsubR : ∀ i ∈ (locN ent "msg", 176) :: bufRegions pmcSysTxBufs ent,
+      i ∈ (w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc := by
+    intro i hi
+    rcases List.mem_cons.1 hi with rfl | hi_buf
+    · rw [hloc_msg]; exact List.mem_cons_self ..
+    · obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hi_buf
+      exact List.mem_cons_of_mem _ (List.mem_map.2 ⟨p, pmcSysTxBufs_sub_sysTxBufs p hp, rfl⟩)
+  obtain ⟨hA_cp, hhp_cp, hG_cp, hK_cp, hW_cp⟩ := hwstep
+  obtain ⟨_, S0w, hS0w⟩ := hW0
+  obtain ⟨Nd0w, hWT0w⟩ := (worldTyped_iff_with s0 S0w).1 hS0w
+  obtain ⟨_, _, _, htabs_step⟩ := hmt
+  obtain ⟨S_p, Nd_p, _, hWT_p, _, _, hdisj_m_p, htabs_p⟩ :=
+    htabs_step S0w Nd0w hWT0w (validBufList_disj validBufList_sysTxBufs hWT0w)
+  obtain ⟨haa_Sp, _, _⟩ := htabs_p (w_aa.toNat, 20) (by simp)
+  obtain ⟨hak_Sp, _, _⟩ := htabs_p (w_ak.toNat, 52) (by simp)
+  have hWT_ent0 : WorldTypedWith ent S_p Nd_p :=
+    ⟨(tablesTyped_with_locals s_pmc callee (s_pmc.clock - 1) S_p).2 hWT_p.1,
+      hWT_p.2.1, hWT_p.2.2.1, hWT_p.2.2.2.1, hWT_p.2.2.2.2.1, hWT_p.2.2.2.2.2⟩
+  have hTS_ent0 : ∀ t ∈ [memW ent (locN ent "msg" + 152), memW ent (locN ent "msg" + 160)], t ∈ S_p := by
+    intro t ht
+    rw [hloc_msg] at ht
+    change t ∈ [memW s_pmc (w_m.toNat + 152), memW s_pmc (w_m.toNat + 160)] at ht
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
+    rcases ht with rfl | rfl
+    · rw [hm152]; exact haa_Sp
+    · rw [hm160]; exact hak_Sp
+  have hD_p : IvlsDisj ((w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc)
+      (worldTypedIvls s_pmc S_p Nd_p) := by
+    intro i hi j hj
+    rcases List.mem_cons.1 hi with rfl | hi_buf
+    · exact hdisj_m_p (w_m.toNat, 176) (by simp) j
+        (worldTypedIvls_sub_worldOwned_sysTx s_pmc S_p Nd_p j hj)
+    · exact validBufList_disj validBufList_sysTxBufs hWT_p i hi_buf j hj
+  have hD_ent0 : IvlsDisj ((locN ent "msg", 176) :: bufRegions pmcSysTxBufs ent)
+      (worldTypedIvls ent S_p Nd_p) :=
+    fun i hi j hj => hD_p i (hsubR i hi) j hj
+  obtain ⟨_, _, _, _, _, _, hret0⟩ := hW_cp S_p Nd_p hWT_ent0 hTS_ent0 hD_ent0
+  obtain ⟨hrmo0, hfmp_cp, hsp_cp, hextra0⟩ := hret0
+  obtain ⟨w_out, hv_eq, hw_out_cp, _, _, _⟩ := hrmo0 v rfl
+  obtain ⟨w_out', hv_eq', hin_out_cp, hmk_cp⟩ := hextra0 v rfl
+  have hw_eq : w_out' = w_out := by
+    rw [hv_eq] at hv_eq'
+    injection hv_eq' with h1
+    injection h1 with h2
+    exact h2.symm
+  cases hw_eq
+  subst hv_eq
+  set s1 : PanSemStateFiniteExact 64 F :=
+    setVarHOLFinite (ofString "out") (.val (.word w_out)) { cpost with locals := s_pmc.locals }
+  have hA_s1 : ArenaReady s1 := localsFree_arenaReady cpost s1.locals cpost.clock hA_cp
+  have hw_out_s1 : WordsOK s1 (w_out.toNat, 96) :=
+    InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hA_cp.1 hA_s1.1 hw_out_cp
+  have hG_s1 : GlobalsKept sysTxGlobals s_pmc s1 := by
+    intro k hk'
+    apply hG_cp k
+    intro hm
+    obtain ⟨g, hg, rfl⟩ := List.mem_map.1 hm
+    exact hk' (List.mem_map.2 ⟨g, pmcSysTxGlobals_sub_sysTxGlobals g hg, rfl⟩)
+  have hK_s1 : RecordsKept (fun st => (w_m.toNat, 176) :: bufRegions sysTxBufs st) sysTxKeep s_pmc s1 := by
+    have hK1 : RecordsKept (fun st => (w_m.toNat, 176) :: bufRegions sysTxBufs st) pmcSysTxKeep s_pmc s1 :=
+      fun rec hrec hnz off hoff hno =>
+        hK_cp rec hrec hnz off hoff (fun i hi => hno i (hsubR i hi))
+    exact recordsKept_mono_keep keepSub_sysTxKeep_pmcSysTxKeep hK1
+  refine ⟨w_out, rfl, hA_s1, hhp_cp, hfmp_cp, hsp_cp, hG_s1, hK_s1, hw_out_s1, hin_out_cp, hmk_cp,
+    fun S Nd hWT hm152' hm160' hD => ?_⟩
+  have hWT_ent : WorldTypedWith ent S Nd :=
+    ⟨(tablesTyped_with_locals s_pmc callee (s_pmc.clock - 1) S).2 hWT.1,
+      hWT.2.1, hWT.2.2.1, hWT.2.2.2.1, hWT.2.2.2.2.1, hWT.2.2.2.2.2⟩
+  have hTS_ent : ∀ t ∈ [memW ent (locN ent "msg" + 152), memW ent (locN ent "msg" + 160)], t ∈ S := by
+    intro t ht
+    rw [hloc_msg] at ht
+    change t ∈ [memW s_pmc (w_m.toNat + 152), memW s_pmc (w_m.toNat + 160)] at ht
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
+    rcases ht with rfl | rfl
+    · exact hm152'
+    · exact hm160'
+  have hD_ent : IvlsDisj ((locN ent "msg", 176) :: bufRegions pmcSysTxBufs ent)
+      (worldTypedIvls ent S Nd) :=
+    fun i hi j hj => hD i (hsubR i hi) j hj
+  obtain ⟨S', Nd', hsub, hWT', hOG, hFO, hret_S⟩ := hW_cp S Nd hWT_ent hTS_ent hD_ent
+  obtain ⟨w_out2, hv2, _, _, hd_out2, _⟩ := hret_S.1 (.val (.word w_out)) rfl
+  have hw2 : w_out2 = w_out := by
+    injection hv2 with h1
+    injection h1 with h2
+    exact h2.symm
+  subst hw2
+  have hWT_s1 : WorldTypedWith s1 S' Nd' :=
+    ⟨(tablesTyped_with_locals cpost s1.locals cpost.clock S').2 hWT'.1,
+      hWT'.2.1, hWT'.2.2.1, hWT'.2.2.2.1, hWT'.2.2.2.2.1, hWT'.2.2.2.2.2⟩
+  have hFO_s1 : FrameOutside s_pmc s1
+      (worldOwned s_pmc S Nd ++ ((w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc) ++ [freeGap s_pmc])
+      (heapFree s_pmc) := by
+    intro a ha hhf
+    apply hFO a _ hhf
+    intro i hi
+    rcases List.mem_append.1 hi with hi1 | hfg
+    · rcases List.mem_append.1 hi1 with hwo | hR
+      · exact ha i (List.mem_append_left _ (List.mem_append_left _ hwo))
+      · exact ha i (List.mem_append_left _ (List.mem_append_right _ (hsubR i hR)))
+    · exact ha i (List.mem_append_right _ hfg)
+  exact ⟨S', Nd', hsub, hWT_s1, hOG, hFO_s1, hd_out2⟩
+
+theorem pmc_decCall_sysTx_step {F : Type}
+    {s0 s_pmc : PanSemStateFiniteExact 64 F}
+    {w_m w_aa w_ak : BitVec 64} {cont : ProgHOL 64}
+    (hW0 : WorldOK s0)
+    (hmt : SysTxMsgTablesStep s0 s_pmc w_m [(w_aa.toNat, 20), (w_ak.toNat, 52)])
+    (_hW_pmc : WorldOK s_pmc)
+    (hc_pmc : s_pmc.code = originalRuntimeCode)
+    (hl_m : s_pmc.locals.lookup (ofString "m") = some (.val (.word w_m)))
+    (hm152 : memW s_pmc (w_m.toNat + 152) = w_aa.toNat)
+    (hm160 : memW s_pmc (w_m.toNat + 160) = w_ak.toNat)
+    (hmsg : ∀ callee : HolFiniteMapExact MlS (ValueHOL 64),
+      callee.lookup (ofString "msg") = some (.val (.word w_m)) →
+      MsgReady (callEntryStateHOLFinite s_pmc callee))
+    (hpmc : WorldKeepsIn MsgReady
+      (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)])
+      (fun s => (locN s "msg", 176) :: bufRegions pmcSysTxBufs s)
+      pmcSysTxGlobals pmcSysTxKeep RetSysTxPmc (ofString "process_message_call"))
+    (hnt : (evaluateHOLFiniteState s_pmc
+      (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] cont)).1 ≠
+      some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s_pmc
+      (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] cont)).1) :
+    (WorldStep (bufRegions sysTxBufs) sysTxGlobals sysTxKeep NoExtra s0
+      (evaluateHOLFiniteState s_pmc
+        (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] cont)).1
+      (evaluateHOLFiniteState s_pmc
+        (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] cont)).2 ∧
+     ∃ e ev, (evaluateHOLFiniteState s_pmc
+       (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] cont)).1 =
+       some (.exception e ev)) ∨
+    ∃ (w_out : BitVec 64) (s1 : PanSemStateFiniteExact 64 F),
+      SysTxPostPmcStep s_pmc none s1 w_m w_out ∧
+      s1.code = originalRuntimeCode ∧
+      s1.locals.lookup (ofString "out") = some (.val (.word w_out)) ∧
+      (evaluateHOLFiniteState s1 cont).1 ≠ some .timeOut ∧
+      FlowingOrResumes (evaluateHOLFiniteState s1 cont).1 ∧
+      (evaluateHOLFiniteState s_pmc
+        (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] cont)).1 =
+        (evaluateHOLFiniteState s1 cont).1 ∧
+      (evaluateHOLFiniteState s_pmc
+        (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] cont)).2 =
+        { (evaluateHOLFiniteState s1 cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState s1 cont).2.locals
+            (ofString "out", s_pmc.locals.lookup (ofString "out")) } := by
+  have hargs : evalListHOLFinite s_pmc (h := fun a => Classical.propDecidable (s_pmc.memaddrs a))
+      [.var .local (ofString "m")] = some [.val (.word w_m)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hl_m]
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hfr ⊢
+  rw [hargs] at hnt hfr ⊢; dsimp only at hnt hfr ⊢
+  rcases hlk : lookupCodeHOLFinite s_pmc.code.lookup (ofString "process_message_call")
+      [.val (.word w_m)] with _ | ⟨body', callee, ret'⟩
+  · simp [hlk] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [hlk] at hnt hfr ⊢
+    by_cases hz : s_pmc.clock = 0
+    · simp [hz] at hnt
+    · rw [if_neg hz] at hnt hfr ⊢
+      have hlk' : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "process_message_call")
+          [.val (.word w_m)] = some (body', callee, ret') := by
+        simpa [hc_pmc] using hlk
+      have hl_msg : callee.lookup (ofString "msg") = some (.val (.word w_m)) :=
+        pmc_lookup_msg_sysTx hlk'
+      let ent := callEntryStateHOLFinite s_pmc callee
+      have hMsg_ent : MsgReady ent := hmsg callee hl_msg
+      have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata ent body').1
+      rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+      simp only [ent] at hrun hmeta
+      simp only [hrun] at hmeta hnt hfr ⊢
+      have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+        simp only [ent, hrun]; rintro rfl; simp at hnt
+      cases res with
+      | none => exact absurd hfr not_flowingOrResumes_error
+      | some cr =>
+        cases cr with
+        | timeOut => simp at hnt
+        | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+        | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+        | exception eid ev =>
+          left
+          dsimp only at hfr ⊢
+          have hres_ex : Resumes (some (.exception eid ev)) := by
+            rcases hfr with h | h | h | hr <;> try simp at h
+            exact hr
+          have hspec := FunSpec.at_lookup hpmc s_pmc hc_pmc [.val (.word w_m)] body' callee ret' hlk hMsg_ent hnt_c
+          simp only [ent, hrun] at hspec
+          exact ⟨pmc_sysTx_exc_worldStep hW0 hmt hm152 hm160 hl_msg (hspec hres_ex), eid, ev, rfl⟩
+        | returned v =>
+          dsimp only at hnt hfr ⊢
+          by_cases hsh : (shapeEqHOL (shapeOfHOLExact v) .one && shapeEqHOL (shapeOfHOLExact v) ret') = true
+          · right
+            simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+            have hspec := FunSpec.at_lookup hpmc s_pmc hc_pmc [.val (.word w_m)] body' callee ret' hlk hMsg_ent hnt_c
+            simp only [ent, hrun] at hspec
+            obtain ⟨w_out, hv_eq, hstep_s1⟩ :=
+              pmc_sysTx_ret_postStep hW0 hmt hm152 hm160 hl_msg (hspec (Or.inl ⟨v, rfl⟩))
+            subst hv_eq
+            set s1 : PanSemStateFiniteExact 64 F :=
+              setVarHOLFinite (ofString "out") (.val (.word w_out)) { cpost with locals := s_pmc.locals }
+            have hs1_code : s1.code = originalRuntimeCode := hmeta.trans hc_pmc
+            have hl_out1 : s1.locals.lookup (ofString "out") = some (.val (.word w_out)) := by
+              simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+            exact ⟨w_out, s1, hstep_s1, hs1_code, hl_out1, hnt, hfr, rfl, rfl⟩
+          · simp [hsh] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+abbrev RetSysTxIncorporate : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
+    Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s _ post _ _ =>
+    globN post "scratch_ptr" ≤ globN s "scratch_ptr"
+
+theorem bufRegions_incSysTx_eq_of_postPmc {F : Type}
+    {s_pmc s : PanSemStateFiniteExact 64 F}
+    (hG : GlobalsKept sysTxGlobals s_pmc s) :
+    bufRegions incSysTxBufs s = bufRegions incSysTxBufs s_pmc := by
+  unfold bufRegions
+  apply List.map_congr_left
+  intro p hp
+  simp only [incSysTxBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
+  rcases hp with rfl | rfl | rfl | rfl | rfl
+  · simp [bufferRegion, globN_eq_of_lookup (hG (ofString "bal_key_buf") (by decide))]
+  · simp [bufferRegion, globN_eq_of_lookup (hG (ofString "keccak_pad") (by decide))]
+  · simp [bufferRegion, globN_eq_of_lookup (hG (ofString "keccak_st") (by decide))]
+  · simp [bufferRegion, globN_eq_of_lookup (hG (ofString "mpt_nib_scratch") (by decide))]
+  · simp [bufferRegion, globN_eq_of_lookup (hG (ofString "sk_buf") (by decide))]
+
+theorem recordsKept_postPmc_trans_incSysTx {F : Type}
+    {s_pmc s1 s2 : PanSemStateFiniteExact 64 F}
+    {w_m : BitVec 64}
+    (hG01 : GlobalsKept sysTxGlobals s_pmc s1)
+    (hK01 : RecordsKept (fun st => (w_m.toNat, 176) :: bufRegions sysTxBufs st) sysTxKeep s_pmc s1)
+    (hK12 : RecordsKept (bufRegions incSysTxBufs) stdKeep s1 s2) :
+    RecordsKept (fun st => (w_m.toNat, 176) :: bufRegions sysTxBufs st) sysTxKeep s_pmc s2 := by
+  have hbuf_eq : bufRegions incSysTxBufs s1 = bufRegions incSysTxBufs s_pmc :=
+    bufRegions_incSysTx_eq_of_postPmc hG01
+  have hK12' := recordsKept_mono_keep keepSub_sysTxKeep_stdKeep hK12
+  intro rec hrec hnz off hoff hno
+  have hg_rec : globN s1 rec.1 = globN s_pmc rec.1 := by
+    simp only [sysTxKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+    rcases hrec with rfl | rfl | rfl | rfl
+    · exact globN_eq_of_lookup (hG01 (ofString "ws") (by decide))
+    · exact globN_eq_of_lookup (hG01 (ofString "bs") (by decide))
+    · cases hoff
+    · exact globN_eq_of_lookup (hG01 (ofString "bo") (by decide))
+  have hno1 : ∀ i ∈ bufRegions incSysTxBufs s1, ¬ CellHits (globN s1 rec.1 + off) i := by
+    intro i hi
+    rw [hbuf_eq] at hi
+    rw [hg_rec]
+    obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hi
+    exact hno (bufferRegion s_pmc p)
+      (List.mem_cons_of_mem _ (List.mem_map.2 ⟨p, incSysTxBufs_sub_sysTxBufs p hp, rfl⟩))
+  have h2 := hK12' rec hrec (by rw [hg_rec]; exact hnz) off hoff hno1
+  rw [hg_rec] at h2
+  exact h2.trans (hK01 rec hrec hnz off hoff hno)
+
+theorem inc_sysTx_exc_worldStep {F : Type}
+    {s0 s_pmc s cpost : PanSemStateFiniteExact 64 F}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)}
+    {w_m w_aa w_ak w_out : BitVec 64} {eid : MlS} {ev : ValueHOL 64}
+    (hW0 : WorldOK s0)
+    (hA_pmc : ArenaReady s_pmc)
+    (hmt : SysTxMsgTablesStep s0 s_pmc w_m [(w_aa.toNat, 20), (w_ak.toNat, 52)])
+    (hm152 : memW s_pmc (w_m.toNat + 152) = w_aa.toNat)
+    (hm160 : memW s_pmc (w_m.toNat + 160) = w_ak.toNat)
+    (hstep : SysTxPostPmcStep s_pmc none s w_m w_out)
+    (hwstep : WorldStep (bufRegions incSysTxBufs) incSysTxGlobals stdKeep RetSysTxIncorporate
+      (callEntryStateHOLFinite s callee) (some (.exception eid ev)) cpost) :
+    WorldStep (bufRegions sysTxBufs) sysTxGlobals sysTxKeep NoExtra s0
+      (some (.exception eid ev)) (emptyLocalsHOLFinite cpost) := by
+  let ent := callEntryStateHOLFinite s callee
+  obtain ⟨hAs, hhp, hfmp, hsp, hG, hK, _, _, _, hW⟩ := hstep
+  obtain ⟨hA_cp, hhp_cp, hG_cp, hK_cp, hW_cp⟩ := hwstep
+  set post_ex : PanSemStateFiniteExact 64 F := emptyLocalsHOLFinite cpost
+  have hA_ex : ArenaReady post_ex := localsFree_arenaReady cpost HolFiniteMapExact.empty cpost.clock hA_cp
+  have hG_ex : GlobalsKept sysTxGlobals s_pmc post_ex := by
+    intro k hk
+    refine (hG k hk).trans (hG_cp k fun hm => ?_)
+    obtain ⟨g, hg, rfl⟩ := List.mem_map.1 hm
+    exact hk (List.mem_map.2 ⟨g, incSysTxGlobals_sub_sysTxGlobals g hg, rfl⟩)
+  have hK_ex : RecordsKept (fun st => (w_m.toNat, 176) :: bufRegions sysTxBufs st) sysTxKeep s_pmc post_ex :=
+    recordsKept_postPmc_trans_incSysTx hG hK hK_cp
+  have hbuf_eq : bufRegions incSysTxBufs s = bufRegions incSysTxBufs s_pmc :=
+    bufRegions_incSysTx_eq_of_postPmc hG
+  refine worldStep_of_msgTables_and_postPmc hW0 hmt hm152 hm160 hA_ex (le_trans hhp hhp_cp) hG_ex hK_ex
+    (fun S Nd hWT hm152' hm160' hD => ?_)
+  obtain ⟨S1, Nd1, hsub01, hWT1, hOG01, hFO01, _⟩ := hW S Nd hWT hm152' hm160' hD
+  have hWT1_ent : WorldTypedWith ent S1 Nd1 :=
+    ⟨(tablesTyped_with_locals s callee (s.clock - 1) S1).2 hWT1.1,
+      hWT1.2.1, hWT1.2.2.1, hWT1.2.2.2.1, hWT1.2.2.2.2.1, hWT1.2.2.2.2.2⟩
+  have hD1_ent : IvlsDisj (bufRegions incSysTxBufs ent) (worldTypedIvls ent S1 Nd1) :=
+    validBufList_disj validBufList_incSysTxBufs hWT1_ent
+  obtain ⟨S2, Nd2, hsub12, hWT2_cp, hOG12_cp, hFO12_cp, _⟩ := hW_cp S1 Nd1 hWT1_ent hD1_ent
+  have hWT2 : WorldTypedWith post_ex S2 Nd2 :=
+    ⟨(tablesTyped_with_locals cpost HolFiniteMapExact.empty cpost.clock S2).2 hWT2_cp.1,
+      hWT2_cp.2.1, hWT2_cp.2.2.1, hWT2_cp.2.2.2.1, hWT2_cp.2.2.2.2.1, hWT2_cp.2.2.2.2.2⟩
+  have hFO_tot : FrameOutside s_pmc post_ex
+      (worldOwned s_pmc S Nd ++ ((w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc) ++ [freeGap s_pmc])
+      (heapFree s_pmc) :=
+    frameOutside_postPmc_trans_free_writes hA_pmc hAs hhp hfmp hsp hOG01 hFO01 hFO12_cp
+      (fun i hi => by
+        change i ∈ bufRegions incSysTxBufs s at hi
+        rw [hbuf_eq] at hi
+        obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hi
+        exact Or.inl ⟨bufferRegion s_pmc p,
+          List.mem_cons_of_mem _ (List.mem_map.2 ⟨p, incSysTxBufs_sub_sysTxBufs p hp, rfl⟩),
+          ⟨le_rfl, le_rfl⟩⟩)
+  exact ⟨S2, Nd2, fun t ht => hsub12 t (hsub01 t ht), hWT2,
+    ownedGrows_trans_sysTx hhp hhp_cp hOG01 hOG12_cp, hFO_tot⟩
+
+theorem inc_sysTx_ret_postStep {F : Type}
+    {s0 s_pmc s cpost : PanSemStateFiniteExact 64 F}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)}
+    {w_m w_aa w_ak w_out : BitVec 64} {v : ValueHOL 64}
+    (hW0 : WorldOK s0)
+    (hA_pmc : ArenaReady s_pmc)
+    (hmt : SysTxMsgTablesStep s0 s_pmc w_m [(w_aa.toNat, 20), (w_ak.toNat, 52)])
+    (hm152 : memW s_pmc (w_m.toNat + 152) = w_aa.toNat)
+    (hm160 : memW s_pmc (w_m.toNat + 160) = w_ak.toNat)
+    (hstep : SysTxPostPmcStep s_pmc none s w_m w_out)
+    (hwstep : WorldStep (bufRegions incSysTxBufs) incSysTxGlobals stdKeep RetSysTxIncorporate
+      (callEntryStateHOLFinite s callee) (some (.returned v)) cpost) :
+    SysTxPostPmcStep s_pmc none { cpost with locals := s.locals } w_m w_out := by
+  let ent := callEntryStateHOLFinite s callee
+  obtain ⟨_, S_u, Nd_u, hWT_u, hd_u⟩ := sysTxPostPmcStep_worldOK hW0 hmt hm152 hm160 hstep
+  obtain ⟨hAs, hhp, hfmp, hsp, hG, hK, hw_out, hin_out, hmk, hW⟩ := hstep
+  obtain ⟨hA_cp, hhp_cp, hG_cp, hK_cp, hW_cp⟩ := hwstep
+  set s_inc : PanSemStateFiniteExact 64 F := { cpost with locals := s.locals }
+  have hA_inc : ArenaReady s_inc := localsFree_arenaReady cpost s.locals cpost.clock hA_cp
+  have hfmp_inc : globN s_inc "frame_mem_ptr" = globN s "frame_mem_ptr" :=
+    globN_eq_of_lookup (s := s) (post := s_inc) (hG_cp (ofString "frame_mem_ptr") (by decide))
+  have hG_inc : GlobalsKept sysTxGlobals s_pmc s_inc := by
+    intro k hk
+    refine (hG k hk).trans (hG_cp k fun hm => ?_)
+    obtain ⟨g, hg, rfl⟩ := List.mem_map.1 hm
+    exact hk (List.mem_map.2 ⟨g, incSysTxGlobals_sub_sysTxGlobals g hg, rfl⟩)
+  have hK_inc : RecordsKept (fun st => (w_m.toNat, 176) :: bufRegions sysTxBufs st) sysTxKeep s_pmc s_inc :=
+    recordsKept_postPmc_trans_incSysTx hG hK hK_cp
+  have hbuf_eq : bufRegions incSysTxBufs s = bufRegions incSysTxBufs s_pmc :=
+    bufRegions_incSysTx_eq_of_postPmc hG
+  have hWT_u_ent : WorldTypedWith ent S_u Nd_u :=
+    ⟨(tablesTyped_with_locals s callee (s.clock - 1) S_u).2 hWT_u.1,
+      hWT_u.2.1, hWT_u.2.2.1, hWT_u.2.2.2.1, hWT_u.2.2.2.2.1, hWT_u.2.2.2.2.2⟩
+  have hD_u_ent : IvlsDisj (bufRegions incSysTxBufs ent) (worldTypedIvls ent S_u Nd_u) :=
+    validBufList_disj validBufList_incSysTxBufs hWT_u_ent
+  obtain ⟨S_u', Nd_u', _, _, _, hFO_u, hsp_inc_le⟩ := hW_cp S_u Nd_u hWT_u_ent hD_u_ent
+  have hlo_pmc : sourceBase ≤ globN s_pmc "heap_ptr" := hA_pmc.2.1
+  have hin_s : Inside (w_out.toNat, 96) sourceBase (globN s "heap_ptr") :=
+    ⟨le_trans hlo_pmc hin_out.1, hin_out.2⟩
+  have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hAs.2.2.1
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hin_bound : w_out.toNat + 96 ≤ 2 ^ 64 := by unfold Inside at hin_s; omega
+  have hunhit_out : InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s s_inc (w_out.toNat, 96) := by
+    intro a ha8 ha1 ha2
+    apply hFO_u a
+    · intro j hj ⟨hc1, hc2⟩
+      rcases List.mem_append.1 hj with hj12 | hfg
+      · rcases List.mem_append.1 hj12 with hj_ow | hj_R
+        · have hj_ow_s : j ∈ worldOwned s S_u Nd_u := hj_ow
+          have hd_oj := hd_u (w_out.toNat, 96) (by simp) j hj_ow_s
+          rcases j with ⟨j1, j2⟩
+          by_cases hj2z : j2 = 0
+          · have hj0 := worldOwned_zero_base_sysTx hWT_u hj_ow_s hj2z
+            cases hj0
+            dsimp only at hc2; omega
+          · rcases hd_oj with h0 | h0 | hle | hle <;> dsimp only at * <;> omega
+        · obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hj_R
+          have hbr_eq : bufferRegion (callEntryStateHOLFinite s callee) p = bufferRegion s p := rfl
+          rw [hbr_eq] at hc1 hc2
+          by_cases hgz : globN s p.1 = 0
+          · simp [bufferRegion, hgz] at hc2
+          · obtain ⟨fsz, hgb, _, hle_sz⟩ := validBufList_incSysTxBufs p hp
+            have hp2_pos : 0 < p.2 := by
+              simp only [incSysTxBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
+              rcases hp with rfl | rfl | rfl | rfl | rfl <;> decide
+            have hm_fo : (globN s p.1, fsz) ∈ worldOwned s S_u Nd_u := by
+              apply List.mem_append_left; apply List.mem_append_right
+              unfold fixedObjects
+              apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+              have hm : (fun r : String × Nat => (globN s r.1, if globN s r.1 = 0 then 0 else r.2))
+                  (p.1, fsz) ∈
+                  globalBuffers.map (fun r => (globN s r.1, if globN s r.1 = 0 then 0 else r.2)) :=
+                List.mem_map.2 ⟨(p.1, fsz), hgb, rfl⟩
+              simpa [hgz] using hm
+            have hd_ob := hd_u (w_out.toNat, 96) (by simp) (globN s p.1, fsz) hm_fo
+            simp only [bufferRegion, hgz, ↓reduceIte] at hc1 hc2
+            rcases hd_ob with h0 | h0 | hle | hle <;> dsimp only at * <;> omega
+      · simp only [List.mem_singleton] at hfg
+        subst j
+        have hsep : heapLimit ≤ scratchStart := by decide
+        have hfmp_ge : scratchStart ≤ globN s "frame_mem_ptr" := hAs.2.2.2.1
+        have hfmp_ent : (freeGap (callEntryStateHOLFinite s callee)).1 = globN s "frame_mem_ptr" := rfl
+        rw [hfmp_ent] at hc2
+        unfold Inside at hin_s
+        omega
+    · intro ⟨hc1, _⟩
+      change a.toNat + 8 > globN s "heap_ptr" at hc1
+      unfold Inside at hin_s
+      omega
+  have hw_out_inc : WordsOK s_inc (w_out.toNat, 96) :=
+    InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hAs.1 hA_inc.1 hw_out
+  have hm80 : memW s_inc (w_out.toNat + 80) = memW s (w_out.toNat + 80) :=
+    InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit hunhit_out
+      (by have := hw_out.1; omega) hin_bound ⟨by omega, by omega⟩
+  have hm88 : memW s_inc (w_out.toNat + 88) = memW s (w_out.toNat + 88) :=
+    InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit hunhit_out
+      (by have := hw_out.1; omega) hin_bound ⟨by omega, by omega⟩
+  have hm48 : memW s_inc (w_out.toNat + 48) = memW s (w_out.toNat + 48) :=
+    InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit hunhit_out
+      (by have := hw_out.1; omega) hin_bound ⟨by omega, by omega⟩
+  refine ⟨hA_inc, le_trans hhp hhp_cp,
+    by rw [hfmp_inc]; exact hfmp,
+    le_trans hsp_inc_le hsp,
+    hG_inc, hK_inc, hw_out_inc,
+    ⟨hin_out.1, le_trans hin_out.2 hhp_cp⟩,
+    by rw [hm80, hm88, hm48]; exact hmk,
+    fun S Nd hWT hm152' hm160' hD => ?_⟩
+  obtain ⟨S1, Nd1, hsub01, hWT1, hOG01, hFO01, hd_out1⟩ := hW S Nd hWT hm152' hm160' hD
+  have hWT1_ent : WorldTypedWith ent S1 Nd1 :=
+    ⟨(tablesTyped_with_locals s callee (s.clock - 1) S1).2 hWT1.1,
+      hWT1.2.1, hWT1.2.2.1, hWT1.2.2.2.1, hWT1.2.2.2.2.1, hWT1.2.2.2.2.2⟩
+  have hD1_ent : IvlsDisj (bufRegions incSysTxBufs ent) (worldTypedIvls ent S1 Nd1) :=
+    validBufList_disj validBufList_incSysTxBufs hWT1_ent
+  obtain ⟨S2, Nd2, hsub12, hWT2_cp, hOG12_cp, hFO12_cp, _⟩ := hW_cp S1 Nd1 hWT1_ent hD1_ent
+  have hWT2 : WorldTypedWith s_inc S2 Nd2 :=
+    ⟨(tablesTyped_with_locals cpost s.locals cpost.clock S2).2 hWT2_cp.1,
+      hWT2_cp.2.1, hWT2_cp.2.2.1, hWT2_cp.2.2.2.1, hWT2_cp.2.2.2.2.1, hWT2_cp.2.2.2.2.2⟩
+  have hFO_tot : FrameOutside s_pmc s_inc
+      (worldOwned s_pmc S Nd ++ ((w_m.toNat, 176) :: bufRegions sysTxBufs s_pmc) ++ [freeGap s_pmc])
+      (heapFree s_pmc) :=
+    frameOutside_postPmc_trans_free_writes hA_pmc hAs hhp hfmp hsp hOG01 hFO01 hFO12_cp
+      (fun i hi => by
+        change i ∈ bufRegions incSysTxBufs s at hi
+        rw [hbuf_eq] at hi
+        obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hi
+        exact Or.inl ⟨bufferRegion s_pmc p,
+          List.mem_cons_of_mem _ (List.mem_map.2 ⟨p, incSysTxBufs_sub_sysTxBufs p hp, rfl⟩),
+          ⟨le_rfl, le_rfl⟩⟩)
+  refine ⟨S2, Nd2, fun t ht => hsub12 t (hsub01 t ht), hWT2,
+    ownedGrows_trans_sysTx hhp hhp_cp hOG01 hOG12_cp, hFO_tot, ?_⟩
+  intro i hi o ho
+  simp only [List.mem_singleton] at hi; subst i
+  rcases hOG12_cp o ho with rfl | ⟨j, hj, hin_oj⟩ | hfresh
+  · exact InitECandidate.Solver.Wave8Contracts.M08.disj_zero_right _
+  · exact InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_right hin_oj
+      (hd_out1 (w_out.toNat, 96) (by simp) j hj)
+  · exact Or.inr (Or.inr (Or.inl (le_trans hin_out.2 hfresh.1)))
+
+theorem sysTxPostPmc_incorporate_step {F : Type}
+    {s0 s_pmc s : PanSemStateFiniteExact 64 F}
+    {w_m w_aa w_ak w_out : BitVec 64}
+    (hinc : WorldKeeps WorldOK (bufRegions incSysTxBufs) incSysTxGlobals stdKeep
+      RetSysTxIncorporate (ofString "incorporate_tx_into_block"))
+    (hW0 : WorldOK s0)
+    (hA_pmc : ArenaReady s_pmc)
+    (hmt : SysTxMsgTablesStep s0 s_pmc w_m [(w_aa.toNat, 20), (w_ak.toNat, 52)])
+    (hm152 : memW s_pmc (w_m.toNat + 152) = w_aa.toNat)
+    (hm160 : memW s_pmc (w_m.toNat + 160) = w_ak.toNat)
+    (hc : s.code = originalRuntimeCode)
+    (hl_out : s.locals.lookup (ofString "out") = some (.val (.word w_out)))
+    (hstep : SysTxPostPmcStep s_pmc none s w_m w_out)
+    (hnt : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "incorporate_tx_into_block") [])).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "incorporate_tx_into_block") [])).1) :
+    let res := evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "incorporate_tx_into_block") [])
+    (WorldStep (bufRegions sysTxBufs) sysTxGlobals sysTxKeep NoExtra s0 res.1 res.2 ∧
+      ∃ eid ev, res.1 = some (.exception eid ev)) ∨
+    (res.1 = none ∧
+      SysTxPostPmcStep s_pmc none res.2 w_m w_out ∧
+      res.2.code = originalRuntimeCode ∧
+      res.2.locals.lookup (ofString "out") = some (.val (.word w_out))) := by
+  have hWs : WorldOK s := (sysTxPostPmcStep_worldOK hW0 hmt hm152 hm160 hstep).1
+  have hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) [] = some [] := rfl
+  rw [evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rw [hargs] at hnt hfr ⊢; dsimp only at hnt hfr ⊢
+  rcases hlk : lookupCodeHOLFinite s.code.lookup (ofString "incorporate_tx_into_block") [] with
+    _ | ⟨body', callee, ret'⟩
+  · simp [hlk] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [hlk] at hnt hfr ⊢
+    by_cases hz : s.clock = 0
+    · simp [hz] at hnt
+    · rw [if_neg hz] at hnt hfr ⊢
+      let ent := callEntryStateHOLFinite s callee
+      have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hWs
+      have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata ent body').1
+      rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+      simp only [ent] at hrun hmeta
+      simp only [hrun] at hmeta hnt hfr ⊢
+      have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+        simp only [ent, hrun]; rintro rfl; simp at hnt
+      cases res with
+      | none => exact absurd hfr not_flowingOrResumes_error
+      | some cr =>
+        cases cr with
+        | timeOut => simp at hnt
+        | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+        | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+        | exception eid ev =>
+          left
+          dsimp only at hfr ⊢
+          have hres_ex : Resumes (some (.exception eid ev)) := by
+            rcases hfr with h | h | h | hr <;> try simp at h
+            exact hr
+          have hspec := FunSpec.at_lookup hinc s hc [] body' callee ret' hlk hWent hnt_c
+          simp only [ent, hrun] at hspec
+          exact ⟨inc_sysTx_exc_worldStep hW0 hA_pmc hmt hm152 hm160 hstep (hspec hres_ex), eid, ev, rfl⟩
+        | returned v =>
+          dsimp only at hnt hfr ⊢
+          by_cases hsh : shapeEqHOL (shapeOfHOLExact v) ret' = true
+          · right
+            simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+            have hspec := FunSpec.at_lookup hinc s hc [] body' callee ret' hlk hWent hnt_c
+            simp only [ent, hrun] at hspec
+            have hstep_inc := inc_sysTx_ret_postStep hW0 hA_pmc hmt hm152 hm160 hstep (hspec (Or.inl ⟨v, rfl⟩))
+            have hcode_inc : ({ cpost with locals := s.locals } : PanSemStateFiniteExact 64 F).code =
+                originalRuntimeCode := by
+              dsimp only
+              rw [hmeta]
+              exact hc
+            exact ⟨trivial, hstep_inc, hcode_inc, hl_out⟩
+          · simp [hsh] at hfr; exact absurd hfr not_flowingOrResumes_error
 
 theorem «wk_process_checked_system_transaction_of_unchecked»
     (h_unchecked :

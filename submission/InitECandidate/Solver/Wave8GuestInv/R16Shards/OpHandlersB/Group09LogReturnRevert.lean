@@ -13206,4 +13206,32 @@ theorem evmInvAt_of_log_growth_new_objects_g09 {F : Type}
   exact evmInvAt_of_log_growth_cells_g09 hAs hAp hinv hWT hheap hscratch hglobals
     hcell hchain hfields hcont hframes hpairwise hdisj hobjects hlogs
 
+/-- Reconstructed log-growth invariants give the handler-facing invariant,
+potential equality and memory alignment directly from unchanged frame records. -/
+theorem log_growth_handler_post_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hA : ArenaReady post) (hinv : EvmInvAt post S)
+    (hchain : evmChain post = evmChain s)
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hev : globN post "ev" = globN s "ev")
+    (hframe : globN post "frame_mem_ptr" = globN s "frame_mem_ptr")
+    (hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s)
+    (hHM : HeadMemAligned s) :
+    EvmInv post ∧ evmR post = evmR s ∧ HeadMemAligned post := by
+  refine ⟨⟨hA, S, hinv.1, hinv.2⟩, ?_, ?_⟩
+  · unfold evmR
+    rw [hchain]
+    congr 1
+    apply List.map_congr_left
+    intro ec hec
+    rw [hfields ec hec 64 (by omega) (by omega),
+      hfields ec hec 192 (by omega) (by omega)]
+  · have hm24 := hfields _ hhead 24 (by omega) (by omega)
+    have hm32 := hfields _ hhead 32 (by omega) (by omega)
+    have hm40 := hfields _ hhead 40 (by omega) (by omega)
+    unfold HeadMemAligned at hHM ⊢
+    rw [hev, hm24, hm32, hm40, hframe]
+    exact hHM
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

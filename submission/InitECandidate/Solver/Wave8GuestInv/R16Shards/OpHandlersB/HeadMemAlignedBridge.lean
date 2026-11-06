@@ -11641,4 +11641,114 @@ theorem laInv_append_callee_contents {F : Type} (s u : PanSemStateFiniteExact 64
         · exact Or.inr hh) hc1
   exact Ret.mono hrun (fun _ _ hp => hp.2)
 
+/-- Evaluate the actual child-array load used as `log_append`'s second argument. -/
+theorem ev_child_log_slot {F : Type} (u : PanSemStateFiniteExact 64 F)
+    (p i lg : BitVec 64)
+    (hp : u.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hi : u.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hd : u.memaddrs (p + i * 8)) (hm : u.memory (p + i * 8) = .word lg) :
+    ev u (.load .one (.op .add [.var .local (ofString "p"),
+      .panop .mul [.var .local (ofString "i"), .const 8]])) = some (.val (.word lg)) := by
+  have hmul := ev_mulE u (.var .local (ofString "i")) (.const 8) i 8
+    (by rw [ev_loc]; exact hi) (ev_const u 8)
+  have hadd := ev_add2 u (.var .local (ofString "p"))
+    (.panop .mul [.var .local (ofString "i"), .const 8]) p (i * 8)
+    (by rw [ev_loc]; exact hp) hmul
+  simp only [ev] at hadd ⊢
+  rw [evalHOLExact, hadd]
+  simp only [memLoadHOLExact]
+  rw [if_pos hd]
+  simp [hm]
+  exact hm
+
+/-- The source-load pointer agrees with the entry-state child contents once
+the loop frame preserves its source cell. -/
+theorem laInv_child_log_value {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (L arr0 cap0 n0 nc p i lg : BitVec 64)
+    (h : LAInv s L arr0 cap0 n0 nc u)
+    (hm : u.memory (p + i * 8) = .word lg)
+    (hw : p.toNat + 8 * i.toNat < 2 ^ 64)
+    (harr : ¬ CellHits (p.toNat + 8 * i.toNat) (arr0.toNat, 8 * cap0.toNat))
+    (hregion : p.toNat + 8 * i.toNat + 8 ≤ globN s "heap_ptr" ∨
+      heapLimit ≤ p.toNat + 8 * i.toNat)
+    (h0 : p + i * 8 ≠ L) (h8 : p + i * 8 ≠ L + 8) (h16 : p + i * 8 ≠ L + 16) :
+    lg.toNat = memW s (p.toNat + 8 * i.toNat) := by
+  have heq : BitVec.ofNat 64 (p.toNat + 8 * i.toNat) = p + i * 8 := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hw, log_slot_toNat p i hw]
+  have hkeep := laInv_source_memW h hw harr hregion
+    (by rwa [heq]) (by rwa [heq]) (by rwa [heq])
+  have hval : memW u (p.toNat + 8 * i.toNat) = lg.toNat := by
+    simp only [memW, heq, hm]
+  exact hval.symm.trans hkeep
+
+/-- Concrete child-log iteration: the second call argument is the actual
+`load(p + i*8)`, and its entry-state value discharges the append obligation. -/
+theorem la_step_child_contents {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (e L arr0 cap0 n0 nc p : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hp : u.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hd88 : s.memaddrs (e + 88)) (hm88 : s.memory (e + 88) = .word L)
+    (h88 : ¬ CellHits (e + 88).toNat (arr0.toNat, 8 * cap0.toNat) ∧
+      ((e + 88).toNat + 8 ≤ globN s "heap_ptr" ∨ heapLimit ≤ (e + 88).toNat) ∧
+      e + 88 ≠ L ∧ e + 88 ≠ L + 8 ∧ e + 88 ≠ L + 16)
+    (hd0 : s.memaddrs L) (hd8 : s.memaddrs (L + 8)) (hd16 : s.memaddrs (L + 16))
+    (hLw : L.toNat + 24 ≤ 2 ^ 64)
+    (hLd : L.toNat + 24 ≤ arr0.toNat ∨ arr0.toNat + 8 * cap0.toNat ≤ L.toNat)
+    (hLh : L.toNat + 24 ≤ globN s "heap_ptr" ∨ heapLimit ≤ L.toNat)
+    (hold : arr0.toNat + 8 * cap0.toNat ≤ globN s "heap_ptr" ∨
+      (heapLimit ≤ arr0.toNat ∧ arr0.toNat + 8 * cap0.toNat < 2 ^ 64))
+    (hsum : n0.toNat + nc.toNat < 2 ^ 58)
+    (hsource : ∀ i : BitVec 64, i.toNat < nc.toNat →
+      p.toNat + 8 * i.toNat < 2 ^ 64 ∧
+      ¬ CellHits (p.toNat + 8 * i.toNat) (arr0.toNat, 8 * cap0.toNat) ∧
+      (p.toNat + 8 * i.toNat + 8 ≤ globN s "heap_ptr" ∨ heapLimit ≤ p.toNat + 8 * i.toNat) ∧
+      p + i * 8 ≠ L ∧ p + i * 8 ≠ L + 8 ∧ p + i * 8 ≠ L + 16)
+    (h : LAInvContents s L arr0 cap0 n0 nc
+      (fun k => memW s (p.toNat + 8 * k)) u)
+    (hact : InitECandidate.Solver.Wave8M19.LoopActive
+      (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n"))) u) :
+    Flw (decClockHOLFinite u)
+      (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .load .one (.op .add [.var .local (ofString "p"),
+          .panop .mul [.var .local (ofString "i"), .const 8]])])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun _ post => LAInvContents s L arr0 cap0 n0 nc
+        (fun k => memW s (p.toNat + 8 * k)) post) := by
+  apply la_step_contents s e L arr0 cap0 n0 nc _ _ he hd88 hm88 h88
+    hd0 hd8 hd16 hLw hLd hLh hsum (fun t v hv => ev_load_word t _ v hv) u h hact
+  intro i lg hi hload
+  obtain ⟨_, _, uA, _, uh, un, j, arr, cap, uj, hjle, _, _, _, _, _, _, _, _, hfr⟩ := h.1
+  have hji : j = i := by have hh := uj.symm.trans hi; cases hh; rfl
+  subst j
+  have hilt := la_active u i nc hi un hjle (by omega) hact
+  obtain ⟨hw, harr, hregion, h0, h8, h16⟩ := hsource i hilt
+  have hmul := ev_mulE (decClockHOLFinite u) (.var .local (ofString "i")) (.const 8) i 8
+    (by rw [ev_loc]; exact hi) (ev_const _ 8)
+  have hadd := ev_add2 (decClockHOLFinite u) (.var .local (ofString "p"))
+    (.panop .mul [.var .local (ofString "i"), .const 8]) p (i * 8)
+    (by rw [ev_loc]; exact hp) hmul
+  have hmem : u.memory (p + i * 8) = .word lg := by
+    simp only [ev] at hadd hload
+    rw [evalHOLExact, hadd] at hload
+    simp only [memLoadHOLExact] at hload
+    split at hload
+    · split at hload
+      · simpa only [Option.some.injEq, ValueHOL.val.injEq, decClockHOLFinite] using hload
+      · cases hload
+    · cases hload
+  have hvalue := laInv_child_log_value s u L arr0 cap0 n0 nc p i lg h.1 hmem
+    hw harr hregion h0 h8 h16
+  have hparent : u.memory (e + 88) = .word L := by
+    rw [hfr _ h88.1 (by
+      have hb : globN u "heap_ptr" ≤ 2952790016 := uA.2.2.1
+      unfold CellHits; dsimp only
+      rcases h88.2.1 with hh | hh
+      · omega
+      · change 2952790016 ≤ (e + 88).toNat at hh; omega)
+      h88.2.2.1 h88.2.2.2.1 h88.2.2.2.2]
+    exact hm88
+  exact laInv_append_callee_contents s u e L arr0 cap0 n0 nc i lg _ h hi hvalue
+    hd88 hparent hd0 hd8 hd16 hLw hLd hLh hold hsum
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge

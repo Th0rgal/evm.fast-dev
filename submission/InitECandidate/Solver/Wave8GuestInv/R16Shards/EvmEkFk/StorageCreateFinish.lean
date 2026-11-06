@@ -9149,6 +9149,182 @@ theorem witness_htab_get_ret_slice_so {F : Type}
   rw [← htw]
   exact hptr hf
 
+theorem lookup_nodedb_lookup_so :
+    originalRuntimeCode.lookup (ofString "nodedb_lookup") =
+      some ([(ofString "db", .one), (ofString "hash", .one)],
+        sourceFnBody Guest.Software.guestFn_nodedb_lookup, .comb [.one, .one, .one]) :=
+  lookup_of_guestAst_getElem 254 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_nodedb_lookup) rfl
+
+/-- Read a word from a typed slice header, keeping the natural-address view
+used by the witness invariant. -/
+theorem eval_load_word_of_wordAt_so {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (e : ExpHOL 64) (a : BitVec 64)
+    (he : @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x)) e =
+      some (.val (.word a)))
+    (ha : WordAt s a.toNat) :
+    @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x)) (.load .one e) =
+      some (.val (.word (BitVec.ofNat 64 (memW s a.toNat)))) := by
+  obtain ⟨w, hdom, hw⟩ := ha
+  have heq : BitVec.ofNat 64 a.toNat = a := by simp
+  rw [heq] at hdom hw
+  have hm : memW s a.toNat = w.toNat := by simp [memW, heq, hw]
+  simp [evalHOLExact, he, panMemLoadHOL, memLoadHOLExact, hdom, hw, hm]
+
+/-- The public witness lookup returns either absence or the bounded payload
+of a typed slice from the witness database. -/
+theorem nodedb_lookup_ret_slice_so {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (db hash : BitVec 64) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hAR : ArenaReady s)
+    (hwf : HtabWF s db.toNat)
+    (hvals : ∀ v ∈ htabValues s db.toNat, WitnessSliceOK s v)
+    (hdb : s.locals.lookup (ofString "db") = some (.val (.word db)))
+    (hhash : s.locals.lookup (ofString "hash") = some (.val (.word hash)))
+    (hret : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_nodedb_lookup)).1 =
+      some (.returned rv)) :
+    ∃ found p n : BitVec 64,
+      rv = .rStruct [.val (.word found), .val (.word p), .val (.word n)] ∧
+      (found ≠ 0 → Inside (p.toNat, n.toNat) sourceBase (globN s "heap_ptr") ∧ n.toNat < 2 ^ 40) := by
+  have hbody : sourceFnBody Guest.Software.guestFn_nodedb_lookup =
+      .decCall (ofString "r") (.comb [.one, .one]) (ofString "htab_get")
+        [.var .local (ofString "db"), .var .local (ofString "hash")]
+        (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0#64))
+          (.return (.rstruct [.const 0#64, .const 0#64, .const 0#64])) .skip)
+          (.return (.rstruct [.const 1#64,
+            .load .one (.rfield 1 (.var .local (ofString "r"))),
+            .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8#64])]))) := rfl
+  have hresume : Resumes (evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_nodedb_lookup)).1 :=
+    Or.inl ⟨rv, hret⟩
+  rw [hbody] at hret hresume
+  obtain ⟨values, body, callee, rs, hcz, hargs, hlk, hexn | ⟨v, cp, hrun, hsh, hres, hr, hpost⟩⟩ :=
+    R14Shards.decCall_resumes_inv hresume
+  · obtain ⟨eid, ev, hrun, hne, hr⟩ := hexn
+    have hex := congrArg Prod.fst hr
+    rw [hret] at hex
+    cases hex
+  · have hvalues : values = [.val (.word db), .val (.word hash)] := by
+      simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, hdb, hhash] using hargs.symm
+    subst values
+    have hlk0 : lookupCodeHOLFinite s.code.lookup (ofString "htab_get")
+        [.val (.word db), .val (.word hash)] = some
+          (sourceFnBody Guest.Software.guestFn_htab_get,
+            (HolFiniteMapExact.empty.update (ofString "t", .val (.word db))).update
+              (ofString "key", .val (.word hash)), .comb [.one, .one]) := by
+      rw [hc]
+      have hlookup := EvmFrameSpecs.lookup_htab_get
+      have hexact : lookupCodeHOLExact originalRuntimeCode.lookup (ofString "htab_get")
+          [.val (.word db), .val (.word hash)] = some
+          (sourceFnBody Guest.Software.guestFn_htab_get,
+            ((HolFiniteMapExact.empty.update (ofString "t", .val (.word db))).update
+              (ofString "key", .val (.word hash))).lookup, .comb [.one, .one]) := by
+        simp only [lookupCodeHOLExact, hlookup]
+        have hne : ofString "t" ≠ ofString "key" := by decide
+        simp only [List.map_cons, List.map_nil, List.nodup_cons, List.mem_cons,
+          List.not_mem_nil, or_false, List.nodup_nil, not_false_eq_true,
+          hne, and_self, List.length_cons, List.length_nil, List.zip_cons_cons,
+          List.zip_nil_left, List.all_cons, List.all_nil, shapeOfHOLExact,
+          shapeEqHOL, Bool.and_self, ↓reduceIte, List.foldl_cons, List.foldl_nil]
+        congr 2
+        refine Prod.ext ?_ (by rfl)
+        funext x
+        simp only [HolFiniteMapExact.lookup_update, HolFiniteMapExact.empty, FUPDATE,
+          beq_iff_eq]
+        by_cases hkx : x = ofString "key"
+        · subst x; simp only [ite_true, ite_false, hne, Ne.symm hne]
+        · by_cases htx : x = ofString "t"
+          · subst x; simp only [ite_true, ite_false, hne, Ne.symm hne]
+          · simp only [hkx, htx, Ne.symm hkx, Ne.symm htx, ite_false]
+      unfold PanSemStateFiniteExact.lookupCodeHOLFinite
+      split
+      · rename_i hh
+        rw [hexact] at hh
+        cases hh
+      · rename_i b l r hh
+        rw [hexact] at hh
+        cases hh
+        congr 2
+    rw [hlk0] at hlk
+    obtain ⟨rfl, rfl, rfl⟩ := Option.some.inj hlk.symm
+    let ent := callEntryStateHOLFinite s
+      ((HolFiniteMapExact.empty.update (ofString "t", .val (.word db))).update
+        (ofString "key", .val (.word hash)))
+    have ht : ent.locals.lookup (ofString "t") = some (.val (.word db)) := by
+      simp [ent, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "key" ≠ ofString "t" by decide]
+    have hk : ent.locals.lookup (ofString "key") = some (.val (.word hash)) := by
+      simp [ent, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    have hwf' : HtabWF ent db.toNat := (htabWF_with_locals s ent.locals ent.clock _).2 hwf
+    obtain ⟨f, ptr, hv, hin⟩ := WkBal.htab_get_ret_in_values ent db hash hc ht hk hwf' v
+      (by rw [hrun])
+    have hro := FunSpec.at_lookup EvmFrameSpecs.ro_htab_get s hc _ _ _ _ hlk0
+      (guestInv_callEntry s _ hAR.1) (by rw [hrun]; simp)
+    have hcp := hro (by rw [hrun]; exact Or.inl ⟨v, rfl⟩)
+    rw [hrun] at hcp
+    dsimp only at hcp
+    rw [hret] at hr
+    rw [hv] at hrun hres hr
+    let mid := setVarHOLFinite (ofString "r")
+      (.rStruct [.val (.word f), .val (.word ptr)]) { cp with locals := s.locals }
+    have hmid : mid = { s with locals := mid.locals, clock := mid.clock } := by
+      dsimp only [mid, setVarHOLFinite]; rw [hcp]; rfl
+    have hlr : mid.locals.lookup (ofString "r") =
+        some (.rStruct [.val (.word f), .val (.word ptr)]) := by
+      simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    have hres' := hr.symm
+    change (evaluateHOLFiniteState mid _).1 = some (.returned rv) at hres'
+    rw [evaluateHOLFiniteState_seq_line780] at hres'
+    by_cases hf : f = 0#64
+    · subst f
+      simp [evaluateHOLFiniteState_ite, evaluateHOLFiniteState_return, evalHOLExact,
+        evalListHOLExact, hlr, Compiler.Encoders.Asm.wordCmpHOL, shapeOfHOLExact,
+        sizeOfShapeWithContextHOL] at hres'
+      subst rv
+      exact ⟨0, 0, 0, rfl, fun h => (h rfl).elim⟩
+    · have hvok : WitnessSliceOK mid ptr.toNat := by
+        rw [hmid]
+        exact witnessSliceOK_with_locals_clock (hvals ptr.toNat (hin hf)) _ _
+      have hp64 : ptr.toNat + 8 < 2 ^ 64 := by
+        have := hvok.2.1.2
+        have := hAR.2.2.1
+        have : globN mid "heap_ptr" = globN s "heap_ptr" := by rw [hmid]; rfl
+        have : heapLimit < 2 ^ 64 := by decide
+        omega
+      have hptr8 : (ptr + 8#64).toNat = ptr.toNat + 8 := BitVec.toNat_add_of_lt hp64
+      have hload0 := eval_load_word_of_wordAt_so mid (.rfield 1 (.var .local (ofString "r"))) ptr
+        (by simp [evalHOLExact, hlr]) (by simpa using hvok.1.2.2 0 (by norm_num))
+      have hload8 := eval_load_word_of_wordAt_so mid
+        (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8#64]) (ptr + 8#64)
+        (by simp [evalHOLExact, evalListHOLExact, hlr, valueIsWord, valueWord, wordOpHOL, wordOp])
+        (by rw [hptr8]; simpa using hvok.1.2.2 1 (by norm_num))
+      simp only [hptr8] at hload8
+      have hcond : @evalHOLExact 64 F _ mid.toExact (fun x => Classical.propDecidable (mid.memaddrs x))
+          (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0#64)) =
+          some (.val (.word 0#64)) := by
+        simp [evalHOLExact, hlr, Compiler.Encoders.Asm.wordCmpHOL, hf]
+      simp only [evaluateHOLFiniteState_ite, hcond] at hres'
+      simp [evaluateHOLFiniteState_skip] at hres'
+      have hev : @evalHOLExact 64 F _ mid.toExact (fun x => Classical.propDecidable (mid.memaddrs x))
+          (.rstruct [.const 1#64, .load .one (.rfield 1 (.var .local (ofString "r"))),
+            .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8#64])]) =
+          some (.rStruct [.val (.word 1#64), .val (.word (BitVec.ofNat 64 (memW mid ptr.toNat))),
+            .val (.word (BitVec.ofNat 64 (memW mid (ptr.toNat + 8))))]) := by
+        change Option.map ValueHOL.rStruct (@evalListHOLExact 64 F _ mid.toExact
+          (fun x => Classical.propDecidable (mid.memaddrs x)) _) = _
+        simp only [evalListHOLExact, hload0, hload8]
+        rfl
+      rw [hev] at hres'
+      simp [shapeOfHOLExact, sizeOfShapeWithContextHOL] at hres'
+      subst rv
+      refine ⟨1, _, _, rfl, fun _ => ?_⟩
+      have hbound : memW mid ptr.toNat + memW mid (ptr.toNat + 8) ≤ heapLimit :=
+        le_trans hvok.2.2.2.2 (by rw [hmid]; exact hAR.2.2.1)
+      have hlim : heapLimit < 2 ^ 64 := by decide
+      simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show memW mid ptr.toNat < 2 ^ 64 by omega),
+        Nat.mod_eq_of_lt (show memW mid (ptr.toNat + 8) < 2 ^ 64 by omega)]
+      have hheap : globN mid "heap_ptr" = globN s "heap_ptr" := by rw [hmid]; rfl
+      exact ⟨⟨hvok.2.2.2.1, by simpa only [hheap] using hvok.2.2.2.2⟩, hvok.2.2.1⟩
+
 end StorageOriginal
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
