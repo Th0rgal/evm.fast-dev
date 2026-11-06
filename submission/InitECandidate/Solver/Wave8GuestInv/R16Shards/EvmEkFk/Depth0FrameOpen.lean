@@ -10435,4 +10435,195 @@ theorem frameNewRich_locIns {F : Type} (s : PanSemStateFiniteExact 64 F) (m : Bi
   simp only [key]
   exact hc
 
+/-! ### The record-cell ledger
+
+The run of `frame_new` writes the record fields one store at a time, but the exit bundle
+`FrameNewRich` needs all of them at the final state.  The ledger `FNRL` threads the finalized
+cells through the stores: `fv` is the intended final field map (a function of the entry state
+and the allocation results), and `keep` lists the cells that already hold their final value.
+Ledger cells are 8-aligned record cells in `[e, e + 280)`, and all 22 stores of the body write
+distinct offsets, so a store whose word is the final value of its cell preserves every ledger
+entry: a miss rewrites nothing, a hit rewrites the same final value. -/
+
+/-- A store at the record cell `e + k` (`k < 280`) changes only that cell. -/
+theorem store_upd_frame {F : Type} {t : PanSemStateFiniteExact 64 F} {e : BitVec 64}
+    {k : Nat} {w : BitVec 64} (hk : k < 280) (hlt : e.toNat + 280 < 2 ^ 64) :
+    (∀ a : BitVec 64, ¬ CellHits a.toNat (e.toNat, 280) →
+        (updW t.memory (e + BitVec.ofNat 64 k) w) a = t.memory a) ∧
+      memW { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } (e.toNat + k) = w.toNat := by
+  have hlt2 : e.toNat + k < 2 ^ 64 := by omega
+  have hne : ∀ a : BitVec 64, ¬ CellHits a.toNat (e.toNat, 280) →
+      a ≠ e + BitVec.ofNat 64 k := by
+    intro a ha heq
+    apply ha
+    have hc := congrArg BitVec.toNat heq
+    rw [toNat_add_ofNat e k hlt2] at hc
+    unfold CellHits
+    omega
+  exact ⟨fun a ha => updW_ne _ _ _ _ (hne a ha), memW_upd_eq e k w rfl⟩
+
+/-- A store at the record cell `e + k` preserves `FNR`: the record lies inside the entry fresh
+scratch zone, so the write frame (the effect conjunct) still covers it. -/
+theorem FNR.storeStep {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    (h : FNR s t m e) (k : Nat) (hk : k < 280) (w : BitVec 64) :
+    FNR s { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } m e := by
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15⟩ := h
+  have hlt : e.toNat + 280 < 2 ^ 64 := by have := scratchEnd_lt64; omega
+  obtain ⟨hout, -⟩ := store_upd_frame hk hlt
+  have hgt : ∀ n, globN ({ t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } :
+      PanSemStateFiniteExact 64 F) n = globN t n := fun n => rfl
+  refine ⟨h1, h2, h3, ⟨guestInv_congr (s := t) rfl rfl rfl rfl h4.1, arenaOK_congr rfl h4.2⟩,
+    h5, h6, h7, h8, h9, h10, h11, ?_, ?_, h14, h15⟩
+  · intro k' a b c; exact h12 k' a b c
+  · intro a ha1 ha2
+    refine (hout a ?_).trans (h13 a ha1 ha2)
+    unfold CellHits at ha1 ⊢
+    have := hgt "scratch_ptr"
+    omega
+
+/-- `FNR` plus a ledger of record cells already holding their final value: `fv` is the
+intended field map, `keep` the finalized cells. -/
+def FNRL {F : Type} (s t : PanSemStateFiniteExact 64 F) (m e : BitVec 64)
+    (fv : Nat → Nat) (keep : List Nat) : Prop :=
+  FNR s t m e ∧ ∀ a ∈ keep, a % 8 = 0 ∧ e.toNat ≤ a ∧ a + 8 ≤ e.toNat + 280 ∧
+    memW t a = fv a
+
+theorem FNRL.facts {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep) :
+    e.toNat + 280 < 2 ^ 64 ∧ m.toNat + 176 ≤ scratchStart ∧ scratchStart ≤ e.toNat :=
+  h.1.facts
+
+theorem FNRL.fvCongr {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv fv' : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep)
+    (hag : ∀ a ∈ keep, fv' a = fv a) : FNRL s t m e fv' keep := by
+  obtain ⟨hf, hled⟩ := h
+  refine ⟨hf, fun a ha => ?_⟩
+  obtain ⟨h1, h2, h3, h4⟩ := hled a ha
+  exact ⟨h1, h2, h3, h4.trans (hag a ha).symm⟩
+
+/-- A store at `e + k` with the final value extends the ledger by `e + k`. -/
+theorem FNRL.storeLedger {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep)
+    (k : Nat) (hk : k < 280) (hk8 : k % 8 = 0) (w : BitVec 64)
+    (hwv : w.toNat = fv (e.toNat + k)) :
+    ∀ a ∈ keep ++ [e.toNat + k], a % 8 = 0 ∧ e.toNat ≤ a ∧ a + 8 ≤ e.toNat + 280 ∧
+      memW ({ t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } :
+        PanSemStateFiniteExact 64 F) a = fv a := by
+  have hlt : e.toNat + 280 < 2 ^ 64 := h.facts.1
+  obtain ⟨hfr, hled⟩ := h
+  have h9 : e.toNat % 8 = 0 := hfr.2.2.2.2.2.2.2.2.1
+  have heq : memW ({ t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } :
+      PanSemStateFiniteExact 64 F) (e.toNat + k) = w.toNat := memW_upd_eq e k w rfl
+  have hne : ∀ n : Nat, n < 2 ^ 64 → n ≠ e.toNat + k →
+      BitVec.ofNat 64 n ≠ e + BitVec.ofNat 64 k := by
+    intro n hn hnea heq2
+    have hc := congrArg BitVec.toNat heq2
+    rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt n hn, toNat_add_ofNat e k (by omega)] at hc
+    omega
+  intro a ha
+  simp only [List.mem_append, List.mem_singleton] at ha
+  rcases ha with ha | ha
+  · obtain ⟨h8a, hge, hhi, hval⟩ := hled a ha
+    refine ⟨h8a, hge, hhi, ?_⟩
+    by_cases hac : a = e.toNat + k
+    · rw [hac, heq]; exact hwv
+    · exact (memW_upd_ne a rfl (hne a (by omega) hac)).trans hval
+  · subst ha
+    refine ⟨by omega, by omega, by omega, ?_⟩
+    rw [heq]; exact hwv
+
+/-- The ledger after a finalizing store at `e + k`. -/
+theorem FNRL.storeTransport {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep)
+    (k : Nat) (hk : k < 280) (hk8 : k % 8 = 0) (w : BitVec 64)
+    (hwv : w.toNat = fv (e.toNat + k)) :
+    FNRL s { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } m e fv
+      (keep ++ [e.toNat + k]) :=
+  ⟨FNR.storeStep h.1 k hk w, FNRL.storeLedger h k hk hk8 w hwv⟩
+
+/-- The shared store step: a word store at the record cell `e + k` whose value is the final
+field value `fv (e + k)`; the continuation receives the concrete store state. -/
+theorem FNRL.storeCore {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep)
+    (k : Nat) (hk : k < 280) (hk8 : k % 8 = 0) (w : BitVec 64)
+    (hwv : w.toNat = fv (e.toNat + k))
+    {val : ExpHOL 64} {b : ProgHOL 64} {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hw : ev t val = some (.val (.word w)))
+    (hb : ∀ t' : PanSemStateFiniteExact 64 F, FNRL s t' m e fv (keep ++ [e.toNat + k]) →
+      t'.locals = t.locals → (∃ w' : BitVec 64, t'.memory = updW t.memory
+        (e + BitVec.ofNat 64 k) w') → Ret t' b Φ) :
+    Ret t (.seq (.store (.op .add [.var .local (ofString "e"), .const (BitVec.ofNat 64 k)]) val) b) Φ := by
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15⟩ := h.1
+  refine Ret.seq_storeWv (e + BitVec.ofNat 64 k) (ev_addr t (ofString "e") e _ h15)
+    (fun v hv => ⟨w, by rw [hw] at hv; exact (Option.some.inj hv).symm⟩) ?_
+  intro w' hv' _
+  have hww : w' = w := by
+    rw [hw] at hv'
+    simp only [Option.some.injEq, ValueHOL.val.injEq, HolWordLab.word.injEq] at hv'
+    exact hv'.symm
+  rw [hww]
+  exact hb { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w }
+    (FNRL.storeTransport h k hk hk8 w hwv) rfl ⟨w, rfl⟩
+
+/-- Store the message word at `m + mk` into the record cell `e + k`, whose final value is
+`fv (e + k) = memW s (m + mk)` (the message record is never written by the body). -/
+theorem FNRL.storeStepLd {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep)
+    (k mk : Nat) (hk : k < 280) (hk8 : k % 8 = 0) (hmk : mk + 8 ≤ 176)
+    (hvf : fv (e.toNat + k) = memW s (m.toNat + mk))
+    {b : ProgHOL 64} {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hb : ∀ t' : PanSemStateFiniteExact 64 F, FNRL s t' m e fv (keep ++ [e.toNat + k]) →
+      t'.locals = t.locals → (∃ w' : BitVec 64, t'.memory = updW t.memory
+        (e + BitVec.ofNat 64 k) w') → Ret t' b Φ) :
+    Ret t (.seq (.store (.op .add [.var .local (ofString "e"), .const (BitVec.ofNat 64 k)])
+      (.load .one (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 mk)]))) b) Φ := by
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15⟩ := h.1
+  have hlt : m.toNat + mk < 2 ^ 64 := by
+    have hm := h.facts.2.1
+    have hsc := h.facts.2.2
+    have hf1 := h.facts.1
+    omega
+  refine Ret.seq_storeWv (e + BitVec.ofNat 64 k) (ev_addr t (ofString "e") e _ h15)
+    (ev_load_isWord t _) ?_
+  intro w hv _
+  obtain ⟨w', hww, hmem⟩ := ev_load_msg h14 (BitVec.ofNat 64 mk) _ hv
+  simp only [ValueHOL.val.injEq, HolWordLab.word.injEq] at hww
+  have hw1 : memW t (m.toNat + mk) = w'.toNat := memW_word t m mk w' hmem
+  have hw2 : w.toNat = fv (e.toNat + k) := by
+    rw [hww]
+    exact hw1.symm.trans (h.1.msg_word mk hmk) |>.trans hvf.symm
+  exact hb { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w }
+    (FNRL.storeTransport h k hk hk8 w hw2) rfl ⟨w, rfl⟩
+
+/-- Store at `e + k` for an offset whose final value is not tracked: the ledger is unchanged,
+so no ledger cell may sit at `e + k`. -/
+theorem FNRL.storeStepU {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep)
+    (k : Nat) (hk : k < 280) (hnu : ∀ a ∈ keep, a ≠ e.toNat + k)
+    {val : ExpHOL 64} {b : ProgHOL 64} {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hw : ∀ v, ev t val = some v → ∃ w, v = .val (.word w))
+    (hb : ∀ t' : PanSemStateFiniteExact 64 F, FNRL s t' m e fv keep →
+      (∃ w' : BitVec 64, t'.memory = updW t.memory (e + BitVec.ofNat 64 k) w') → Ret t' b Φ) :
+    Ret t (.seq (.store (.op .add [.var .local (ofString "e"), .const (BitVec.ofNat 64 k)]) val) b) Φ := by
+  have hlt : e.toNat + 280 < 2 ^ 64 := h.facts.1
+  obtain ⟨hfr, hled⟩ := h
+  have h15 : t.locals.lookup (ofString "e") = some (.val (.word e)) :=
+    hfr.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+  refine Ret.seq_storeWv (e + BitVec.ofNat 64 k)
+    (ev_addr t (ofString "e") e _ h15) hw ?_
+  intro w hv _
+  refine hb { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w }
+    ⟨FNR.storeStep hfr k hk w, ?_⟩ ⟨w, rfl⟩
+  intro a ha
+  obtain ⟨h8a, hge, hhi, hval⟩ := hled a ha
+  refine ⟨h8a, hge, hhi, ?_⟩
+  have hne : BitVec.ofNat 64 a ≠ e + BitVec.ofNat 64 k := by
+    intro heq2
+    have halt : a < 2 ^ 64 := by omega
+    have hc := congrArg BitVec.toNat heq2
+    rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt a halt,
+      toNat_add_ofNat e k (by omega)] at hc
+    exact hnu a ha hc
+  exact (memW_upd_ne a rfl hne).trans hval
+
 end FrameOpenRich
