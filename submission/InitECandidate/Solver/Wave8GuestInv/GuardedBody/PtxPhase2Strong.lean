@@ -16360,4 +16360,48 @@ theorem phase2_decCall_saved_tables
             · simp at hrun
           | _ => simp [emptyLocalsHOLFinite] at hrun
 
+/-- Recording a pre-state read preserves the full guard needed by the following lookup. -/
+theorem phase2_record_pre_state_read_saved_guard
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat)
+    (args : List (ExpHOL 64)) :
+    Hoare (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (.call (some (none, none)) (ofString "record_pre_state_read") args)
+      (fun r s => r = none → ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+        Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr")) := by
+  refine ⟨fun s hc hp hn hr => ?_⟩
+  have ht := (phase2_record_pre_state_read_call_saved_tables saved aa ak args).run s hc hp hn hr
+  obtain ⟨S, Nd, hw, _⟩ := hp.2.1
+  have hw0 := (worldTypedWith_with_locals s saved s.clock S Nd).mp hw
+  have hs := R16WkAcctWs.progWStep_call0 (B := []) (gw := ["heap_ptr"])
+    (fun _ h => h) (fun _ h => h) R16WkAcctWs.wkSc_record_pre_state_read
+    (args := args) s hc ⟨hp.1, S, (worldTyped_iff_with s S).mpr ⟨Nd, hw0⟩⟩ hn (Or.inl hr)
+  refine ⟨hs.1.1, ht, ?_⟩
+  have hg := hs.1.2.1
+  have hi := hp.2.2
+  dsimp [Inside, locN] at hi ⊢
+  omega
+
+/-- The pre-state cache-miss path records the read and returns a world-state lookup safely. -/
+theorem phase2_pre_state_account_tail_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat) :
+    Hoare (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (.seq (.call (some (none, none)) (ofString "record_pre_state_read")
+        [.var .local (ofString "addr")])
+        (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+          [.var .local (ofString "addr")] (.return (.var .local (ofString "a")))))
+      (fun r s => (∃ v, r = some (.returned v)) → PtxMessageTables {s with locals := saved} aa ak) := by
+  apply Hoare.seq (R := fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+    Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+  · refine ⟨fun s hc hp hn => ⟨?_, ?_⟩⟩
+    · exact (phase2_record_pre_state_read_saved_guard saved aa ak _).run s hc hp hn
+    · intro _ hr
+      obtain ⟨v, hv⟩ := hr
+      exact (phase2_call0_ne_returned s (ofString "record_pre_state_read")
+        [.var .local (ofString "addr")] v hv).elim
+  · exact phase2_decCall_saved_tables saved aa ak
+      (phase2_ws_get_account_optional_resume_saved_tables saved aa ak _ _)
+      (phase2_return_saved_tables saved aa ak _)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
