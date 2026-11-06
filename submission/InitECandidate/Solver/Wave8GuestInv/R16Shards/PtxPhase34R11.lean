@@ -17175,4 +17175,31 @@ theorem htab_set_local_fixed_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The table mutation and return tail of jset preserve nonempty fixed objects. -/
+theorem htab_set_local_return_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl)
+    (t : BitVec 64) (key value result : ExpHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (ht : t.toNat ∈ S)
+    (hlt : s.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hr : evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "htab_set")
+      [.var .local (ofString "t"), key, value]) (.return result)) =
+        (some (.returned rv), post)) : IvlUnhit s post b := by
+  obtain ⟨mid, hc, hr⟩ := seq_call0_ret_inv hr
+  have hf := htab_set_local_fixed_frame s mid S Nd b t key value hA hT hb hbpos ht hlt hc
+  rw [evaluateHOLFiniteState_return] at hr
+  split at hr
+  · cases hr
+  split at hr
+  · have he := (Prod.mk.inj hr).2
+    subst post
+    exact hf
+  · cases hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
