@@ -10146,4 +10146,46 @@ theorem payload_tables_disjoint_of_htab_exit {F : Type}
   · exact Or.inr (Or.inl ⟨j,Or.inl ⟨u,hu,hj⟩,hin⟩)
   · exact Or.inr (Or.inr hf)
 
+/-- A typed table mutation leaves every nonempty fixed object untouched. -/
+theorem fixed_ivl_unhit_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    (i : Ivl) (hi : i ∈ fixedObjects s) (hn : i.2 ≠ 0) :
+    Fast_C08WkShard03.IvlUnhit s post i := by
+  obtain ⟨hal,hw⟩ := (hW.2.2.1.1 i hi).resolve_left hn
+  have htw := (hW.1.2.1 (locN s "t") ht).1
+  apply ivlUnhit_of_frameOutside ⟨hw.1,hw.2.1⟩ hx.2.2.2.2.2.2.1
+  · intro j hj
+    exact ⟨(htw.1 j hj).2.1,(htw.1 j hj).2.2.1⟩
+  · have hs := hAs.2.2.2.2.2.2.1
+    have hp := hx.1.2.2.2.2.2.2.1
+    exact ⟨hs,by omega⟩
+  · intro j hj
+    exact Disj.flip (((hW.1.2.1 _ ht).2 j hj).2 i hi)
+  · exact disj_fresh_of_allocated hAs.2 hx.1.2 hx.2.2.2.2.1 hal
+
+/-- The block-output layout survives a typed table mutation. -/
+theorem blockOutObjects_eq_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post) :
+    blockOutObjects post = blockOutObjects s := by
+  have hg : globN post "bo" = globN s "bo" := by
+    have he := hx.2.2.2.2.2.2.2 (ofString "bo") (by decide)
+    unfold globN
+    rw [he]
+  apply (Fast_C08WkShard03.blockOutObjects_eq_of_bo_unhit hAs.2 hW.2.2.1 hg
+    hW.1.2.2.2.2.2.2.2.2.2.2.1 ?_ ?_).1
+  · intro hn
+    apply fixed_ivl_unhit_of_htab_exit hAs hW ht hx
+    · simpa [hn] using Fast_C08WkShard03.typedRecord_mem_fixedObjects s (r := ("bo",88)) (by simp [typedRecords])
+    · simp
+  · intro i hi h24
+    apply fixed_ivl_unhit_of_htab_exit hAs hW ht hx
+    · unfold fixedObjects
+      apply List.mem_append_left
+      exact List.mem_append_right _ hi
+    · omega
+
 end HeadStore
