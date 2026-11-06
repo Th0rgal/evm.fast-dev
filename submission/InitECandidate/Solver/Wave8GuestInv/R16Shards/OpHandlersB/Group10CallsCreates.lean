@@ -10575,4 +10575,21 @@ theorem Group10.headMemChainWF_push {F : Type}
     rw [(hmem _ hh).1, (hmem _ hh).2.2.1, hmark]
     exact hs.2.1
 
+/-- Account emptiness is read-only, including its memory and integer helpers. -/
+theorem epsA_acct_is_empty :
+    EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "acct_is_empty") :=
+  epsA_of_readOnly 384 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_acct_is_empty rfl opRoCallees opRoCallees_good rfl
+
+/-- Strict resource decrease suffices even when a successful call adds a frame. -/
+theorem opDispatchPostA_return_of_resource_drop {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (v : ValueHOL 64)
+    (hi : EvmInv post) (hw : Group10.HeadMemChainWF post)
+    (hr : evmR post < evmR s) :
+    OpDispatchPostA s (some (.returned v)) post := by
+  refine ⟨fun _ => ⟨⟨hi, hw⟩, evmPot_lt_of_evmR_lt hi hr⟩, ?_⟩
+  rintro ⟨ev, he⟩
+  cases he
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

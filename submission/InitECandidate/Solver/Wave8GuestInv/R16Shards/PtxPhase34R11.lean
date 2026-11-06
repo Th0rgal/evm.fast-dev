@@ -15495,4 +15495,170 @@ theorem ws_get_account_optional_return_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Expose a successful ignored call and its exact caller-local restoration. -/
+theorem ignored_call_fall_inv_args {F : Type} {s t : PanSemStateFiniteExact 64 F}
+    {fname : MlS} {args : List (ExpHOL 64)}
+    (h : evaluateHOLFiniteState s (.call (some (none, none)) fname args) = (none, t)) :
+    ∃ values body callee retShape rv post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values ∧
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, retShape) ∧
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned rv), post) ∧
+      t = {post with locals := s.locals} := by
+  rw [evaluateHOLFiniteState_call] at h
+  split at h
+  · cases h
+  · split at h
+    · cases h
+    · rename_i optvalues values hargs optbody body callee retShape hl
+      split at h
+      · cases h
+      · rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => cases h
+        | some r =>
+          cases r <;> try simp at h
+          rename_i rv
+          split at h
+          · exact ⟨_, body, callee, retShape, rv, post, hargs, hl, hr, (Prod.mk.inj h).2.symm⟩
+          · cases h
+
+end PtxP34
+
+namespace PtxP34
+
+/-- The actual ignored read-recording call preserves transaction backing words. -/
+theorem record_pre_state_read_call_header_words {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "record_pre_state_read") [.var .local (ofString "addr")]) = (none, mid)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨vs, body, callee, ret, v, cp, _, hl, hr, hm⟩ := ignored_call_fall_inv_args hc
+  subst mid
+  apply tx_header_words_of_fixed_frame hW hT
+  intro b hb hn
+  exact record_pre_state_read_fixed_frame s cp vs body callee ret v S Nd b hW.1.1 hT hb hn hl hr
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- The concrete read-recording call retains the world-step contract. -/
+theorem record_pre_state_read_call_worldStep {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (hW : WorldOK s)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "record_pre_state_read") [.var .local (ofString "addr")]) = (none, mid)) :
+    WorldStep (fun _ => []) ["heap_ptr"] R10Shards.P26_P28.stdKeep NoExtra s none mid := by
+  obtain ⟨vs, body, callee, ret, v, cp, _, hl, hr, hm⟩ := ignored_call_fall_inv_args hc
+  have hwc : WorldOK (callEntryStateHOLFinite s callee) := by
+    exact (WkBal.worldOK_with_locals s callee (s.clock - 1)).2 hW
+  have hs := PtxP1.funSpec_at_lookup wkSc_record_pre_state_read s hW.1.1.code
+    vs body callee ret hl hwc (by rw [hr]; simp)
+  rw [hr] at hs
+  have hs' := hs (Or.inl ⟨v, rfl⟩)
+  have hs'' := hs'.of_pre_locals_clock
+  subst mid
+  simpa only [WorldStep, RecordsKept, R16WkAcctWs.bufRegions, List.map_nil] using
+    (hs''.with_locals_clock (r' := none) s.locals cp.clock).1
+
+end PtxP34
+
+namespace PtxP34
+
+theorem record_pre_state_read_call_txWorld {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "record_pre_state_read") [.var .local (ofString "addr")]) = (none, mid)) :
+    TxWorld mid ∧ ∃ S' Nd', WorldTypedWith mid S' Nd' := by
+  have hs := record_pre_state_read_call_worldStep s mid hW.1 hc
+  obtain ⟨S', Nd', _, hT', _⟩ := hs.2.2.2.2 S Nd hT (by intro i hi; cases hi)
+  have hl := (ignored_call_fall_locals s mid _ _ hc).1
+  have he := txEnv_preserved_by_worldStep hs (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp [R10Shards.P26_P28.stdKeep])
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+    (by intro i hi; cases hi) (bo_words hT.2.2.1 hW.2.bo_nz).2.1
+    (by intro i hi; cases hi) hW.2 (locals := mid.locals) (by rw [hl])
+  exact ⟨⟨PtxP1.worldOK_of_parts hs.1 hT', he⟩, S', Nd', hT'⟩
+
+/-- The full recorded trie fallback preserves both transaction backing words. -/
+theorem recorded_trie_lookup_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "record_pre_state_read") [.var .local (ofString "addr")])
+        (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+          [.var .local (ofString "addr")] (.return (.var .local (ofString "a"))))) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨mid, hc, _, _, ht⟩ := ignored_call_seq_returned hr
+  obtain ⟨hW', S', Nd', hT'⟩ := record_pre_state_read_call_txWorld s mid S Nd hW hT hc
+  have hs := record_pre_state_read_call_worldStep s mid hW.1 hc
+  have hroots := worldStep_empty_tx_header_roots hs hW (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by simp [R10Shards.P26_P28.stdKeep])
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl <;> simp)
+  exact tx_header_words_trans hroots.1 hroots.2
+    (record_pre_state_read_call_header_words s mid S Nd hW hT hc)
+    (ws_get_account_optional_return_header_words mid post S' Nd' v hW' hT' ht)
+
+end PtxP34
+
+namespace PtxP34
+
+/-- An early-return guard either leaves memory intact or executes its tail. -/
+theorem early_return_or_tail_memory {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {cond e : ExpHOL 64}
+    {tail : ProgHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.seq (.ite cond (.return e) .skip) tail) =
+      (some (.returned v), post)) :
+    post.memory = s.memory ∨ evaluateHOLFiniteState s tail = (some (.returned v), post) := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hr
+  split at hr
+  · split at hr
+    · exact Or.inr (by simpa only [evaluateHOLFiniteState_skip] using hr)
+    · rcases ht : evaluateHOLFiniteState s (.return e) with ⟨r, t⟩
+      rw [ht] at hr
+      cases r with
+      | none =>
+        rw [evaluateHOLFiniteState_return] at ht
+        split at ht <;> try cases ht
+        split at ht <;> cases ht
+      | some r =>
+        have he := Prod.mk.inj hr
+        cases he.1
+        exact Or.inl ((congrArg (fun st => st.memory) he.2.symm).trans (return_memory_eq ht))
+  · cases hr
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Both the cached-account early return and recorded trie fallback retain backing. -/
+theorem guarded_recorded_trie_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (cond e : ExpHOL 64) (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.ite cond (.return e) .skip)
+        (.seq (.call (some (none, none)) (ofString "record_pre_state_read") [.var .local (ofString "addr")])
+          (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+            [.var .local (ofString "addr")] (.return (.var .local (ofString "a")))))) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  rcases early_return_or_tail_memory hr with hm | ht
+  · intro k hk
+    simp only [memW, hm]
+  · exact recorded_trie_lookup_header_words s post S Nd v hW hT ht
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

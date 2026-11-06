@@ -15234,15 +15234,17 @@ theorem phase2_message_initialized_ready {ι F : Type}
     hp.2.2.1 hp.2.2.2.1 hp.2.2.2.2
 
 open R10Shards.P26_P28 in
-/-- Insertion into the non-value transaction table preserves all world and journal roles. -/
-theorem phase2_htabExit_ts8_roles {F : Type} {s post : PanSemStateFiniteExact 64 F}
+/-- Insertion into any non-value table preserves all world and journal roles. -/
+theorem phase2_htabExit_nonValue_roles {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
-    (hts : globN s "ts" ≠ 0) (hn : memW s (globN s "ts" + 8) ≠ 0)
-    (ht : locN s "t" = memW s (globN s "ts" + 8)) (hx : HtabExit s post) :
+    (hnv : locN s "t" ∈ S ∧
+      (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ locN s "t") ∧
+      (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ locN s "t") ∧
+      globN s "bal_accounts" ≠ locN s "t" ∧
+      (∀ ad ∈ balRecords s, memW s ad ≠ locN s "t") ∧
+      (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ locN s "t"))
+    (hx : HtabExit s post) :
     worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
-  have hnv := R16WkAcctWs.nonValueSlot_ts8 s S hw.1 hts hn
-  simp only [show (8 : BitVec 64).toNat = 8 by decide] at hnv
-  rw [← ht] at hnv
   have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
     intro g hg
     have hne : ofString g ≠ ofString "heap_ptr" := by revert g hg; decide
@@ -15303,6 +15305,26 @@ theorem phase2_htabExit_ts8_roles {F : Type} {s post : PanSemStateFiniteExact 64
       dsimp at h1
       omega
   exact ⟨hlow 0 (by decide), hlow 8 (by decide), hlow 16 (by decide)⟩
+
+/-- Transaction-table insertion is an instance of non-value role preservation. -/
+theorem phase2_htabExit_ts8_roles {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hts : globN s "ts" ≠ 0) (hn : memW s (globN s "ts" + 8) ≠ 0)
+    (ht : locN s "t" = memW s (globN s "ts" + 8)) (hx : HtabExit s post) :
+    worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
+  apply phase2_htabExit_nonValue_roles hs hw _ hx
+  rw [ht]
+  exact R16WkAcctWs.nonValueSlot_ts8 s S hw.1 hts hn
+
+/-- Recording a pre-state read preserves all world and journal roles. -/
+theorem phase2_htabExit_bs72_roles {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hbs : globN s "bs" ≠ 0) (hn : memW s (globN s "bs" + 72) ≠ 0)
+    (ht : locN s "t" = memW s (globN s "bs" + 72)) (hx : HtabExit s post) :
+    worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
+  apply phase2_htabExit_nonValue_roles hs hw _ hx
+  rw [ht]
+  exact R16WkAcctWs.nonValueSlot_bs72 s S hw.1 hbs hn
 
 /-- Warming the transaction table retains the complete private-table witness. -/
 theorem phase2_htabExit_ts8_message_tables {F : Type}
@@ -15863,5 +15885,113 @@ theorem phase2_acct_empty_resume_message_tables
     rw [hr] at ht
     exact phase2_message_tables_with_locals _ _ _ ht
       (by simp [HolFiniteMapExact.update, FUPDATE, hne])
+
+/-- The pre-state read table is distinct from both private message tables. -/
+theorem phase2_message_tables_ne_bs72 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (ht : PtxMessageTables s aa ak) (hbs : globN s "bs" ≠ 0)
+    (hn : memW s (globN s "bs" + 72) ≠ 0) :
+    aa ≠ memW s (globN s "bs" + 72) ∧ ak ≠ memW s (globN s "bs" + 72) := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := ht
+  have hm := R16WkAcctWs.mem_worldRoleSlots_recRole s "bs" 72 "bs+72" hbs hn
+    (by simp [recRoles, hbs])
+  exact ⟨Ne.symm (haf _ (List.mem_append_left _ hm)),
+    Ne.symm (hkf _ (List.mem_append_left _ hm))⟩
+
+/-- Recording a pre-state read retains the complete private-table witness. -/
+theorem phase2_htabExit_bs72_message_tables {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (hm : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hl : locN post "m" = locN s "m") (hbe : post.be = s.be)
+    (hbs : globN s "bs" ≠ 0) (hn : memW s (globN s "bs" + 72) ≠ 0)
+    (ht : locN s "t" = memW s (globN s "bs" + 72))
+    (hx : HtabExit s post) : PtxMessageTables post aa ak := by
+  have hne := phase2_message_tables_ne_bs72 hm hbs hn
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := hm
+  have hm : PtxMessageTables s aa ak := ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩
+  have hroles := phase2_htabExit_bs72_roles hs hw hbs hn ht hx
+  have hmem : locN s "t" ∈ S := by
+    rw [ht]
+    exact (R16WkAcctWs.nonValueSlot_bs72 s S hw.1 hbs hn).1
+  apply phase2_message_tables_world_step s post hm hin hl hroles.1 hroles.2
+    (phase2_htabExit_other_table_header hs hw hmem hx ha
+      (by rw [ht]; exact hne.1) 0 (by decide))
+    (phase2_htabExit_other_table_header hs hw hmem hx hk
+      (by rw [ht]; exact hne.2) 0 (by decide))
+  have hstep := R16WkAcctWs.worldStepSc_of_htabExit_nonValue
+    (r := none) (gw := ["heap_ptr"])
+    ⟨hs, S, (worldTyped_iff_with s S).mpr ⟨Nd, hw⟩⟩ hbe hx.2.2.2.2.2.2.2
+    hx.2.2.2.2.2.2.2
+    (t0 := locN s "t") (fun S hT => by
+      rw [ht]
+      exact R16WkAcctWs.nonValueSlot_bs72 s S hT hbs hn)
+    hx.1 hx.2.1 hx.2.2.1 hx.2.2.2.2.1 hx.2.2.2.2.2.1 hx.2.2.2.2.2.2.1
+  intro S Nd hw
+  obtain ⟨S', Nd', hsub, hw', hg, _⟩ := hstep.1.2.2.2.2 S Nd hw
+    (by simp [R16WkAcctWs.bufRegions, IvlsDisj])
+  exact ⟨S', Nd', hsub, hw', hg⟩
+
+/-- Restore private tables after inserting into the pre-state read table. -/
+theorem phase2_htab_set_bs72_message_tables
+    (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+      Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const 72]), key, value])
+      (fun r s => r = none → PtxMessageTables s aa ak) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ := hp.2.1
+  obtain ⟨v1, _, _, he1, _, _, hct, _, _⟩ := R16WkAcctWs.callee_param_three s
+    (ofString "htab_set") (ofString "t") (ofString "key") (ofString "value")
+    .one .one .one _ _ (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set)
+    _ _ _ vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw, hbs⟩ := R16WkAcctWs.evalAt_loadG_nz s hp.1.1 "bs" 72
+    (by decide) v1 he1
+  have ht : locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s "bs" + 72) := by
+    simp [locN, callEntryStateHOLFinite, hct, htw]
+  have hn := FunSpec.at_lookup EvmFrameSpecs.nz_htab_set s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1) (by rw [hr]; simp)
+  rw [hr] at hn
+  have hnz : memW s (globN s "bs" + 72) ≠ 0 := by
+    rw [← ht]; exact hn (Or.inl ⟨v, rfl⟩)
+  have hmem := (R16WkAcctWs.nonValueSlot_bs72 s S hw.1 hbs hnz).1
+  have harg : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1, ?_, ?_⟩
+    · rw [ht]
+      exact (htabWF_with_locals s callee (s.clock - 1) _).mpr (hw.1.2.1 _ hmem).1
+    · rw [ht]
+      exact fun i hi => ((hw.1.2.1 _ hmem).2 i hi).1
+  have hx := FunSpec.at_lookup htab_set_spec s hc vs body callee ret hl harg (by rw [hr]; simp)
+  rw [hr] at hx
+  have hx := hx v rfl
+  let pre := setVarHOLFinite (ofString "t") (.val (.word tw)) s
+  have hmp : pre.locals.lookup (ofString "m") = s.locals.lookup (ofString "m") := by
+    simp [pre, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "t" ≠ ofString "m" by decide]
+  have hmt : locN pre "m" = locN s "m" := by
+    exact locN_congr s pre.locals s.clock "m" hmp
+  have hpt : locN pre "t" = locN (callEntryStateHOLFinite s callee) "t" := by
+    simp [pre, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, callEntryStateHOLFinite, hct]
+  have hxp : HtabExit pre {post with locals := s.locals} := by
+    change ArenaReady _ ∧ HtabWF _ _ ∧ _
+    refine ⟨(arenaReady_with_locals post s.locals post.clock).mpr hx.1,
+      (htabWF_with_locals post s.locals post.clock _).mpr (hpt.symm ▸ hx.2.1), ?_⟩
+    change hdr post (locN pre "t") 0 = hdr s (locN pre "t") 0 ∧ _
+    rw [hpt]
+    exact hx.2.2
+  have hbe := (PanRunBounded.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).2.2.1
+  rw [hr] at hbe
+  apply phase2_htabExit_bs72_message_tables (s := pre) (post := {post with locals := s.locals})
+    ((arenaReady_with_locals s pre.locals s.clock).mpr hp.1)
+    (phase2_message_tables_with_locals s pre.locals s.clock
+      ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ hmp)
+    (by
+      change Inside (locN pre "m", 176) InitE.sourceBase (globN s "heap_ptr")
+      rw [hmt]
+      exact hp.2.2)
+    hmt.symm hbe hbs hnz (hpt.trans ht) hxp
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

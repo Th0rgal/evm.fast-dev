@@ -8443,6 +8443,32 @@ private theorem precompile_step_locals_right {F : Type} {gw : List String}
     (evmChain_with_locals post ls k).trans h.1.2.2.2⟩, ?_⟩
   exact h.2
 
+theorem precompile_call0_locals_on_flow {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fn : MlS) (args : List (ExpHOL 64))
+    (hr : (evaluateHOLFiniteState s (.call (some (none, none)) fn args)).1 = none) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) fn args)).2.locals = s.locals := by
+  rw [evaluateHOLFiniteState_call] at hr ⊢
+  simp only [evalListHOLFinite_eq_toExact] at hr ⊢
+  rcases ha : @evalListHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · simp [ha] at hr
+  · simp only [ha] at hr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fn vals with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hr
+      · simp only [hz, ↓reduceIte] at hr ⊢
+        rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, post⟩
+        simp only [run] at hr ⊢
+        cases res with
+        | none => simp at hr
+        | some r =>
+          cases r <;> try simp at hr
+          case returned v =>
+            dsimp only at hr ⊢
+            split at hr <;> simp_all
+
 theorem precompile_step_call0 {fname : MlS}
     (hk : EvmKeeps EvmInv frameStartGw fname) (hc : ChainCellsKept EvmInv fname)
     (args : List (ExpHOL 64)) :
@@ -8534,14 +8560,21 @@ theorem precompile_step_dec (name : MlS) (shape : ShapeHOL) (init : ExpHOL 64)
     · simp only [hsh, Bool.false_eq_true, ↓reduceIte] at hfr
       exact absurd hfr bad
 
-theorem precompile_step_decCall_ro {fn : MlS} (hf : ReadOnlyFn fn)
-    (name : MlS) (shape : ShapeHOL) (args : List (ExpHOL 64)) {cont : ProgHOL 64}
-    (hc : EvmProgStep frameStartGw cont) :
-    EvmProgStep frameStartGw (.decCall name shape fn args cont) := by
+theorem precompile_step_decCall_ro_at {fn : MlS} (hf : ReadOnlyFn fn)
+    (name : MlS) (shape : ShapeHOL) (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (hInv : EvmInv s)
+    (hc : ∀ (v : ValueHOL 64) (k : Nat),
+      let mid := {s with locals := (setVarHOLFinite name v s).locals, clock := k}
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut →
+      R13.FlowsOrResumes (evaluateHOLFiniteState mid cont).1 →
+      EvmStepCC frameStartGw mid (evaluateHOLFiniteState mid cont).2)
+    (hnt : (evaluateHOLFiniteState s (.decCall name shape fn args cont)).1 ≠ some .timeOut)
+    (hfr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.decCall name shape fn args cont)).1) :
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s (.decCall name shape fn args cont)).2 := by
   have bad : ¬ R13.FlowsOrResumes (some (.error : PanSemResultExact 64)) := by
     rintro (h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩) <;> cases h
   obtain ⟨params, body, ret, hlook, hspec⟩ := hf
-  intro F s hcode hInv hnt hfr
   rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hfr ⊢
   rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
   · simp only [ha] at hfr; exact absurd hfr bad
@@ -8578,15 +8611,13 @@ theorem precompile_step_decCall_ro {fn : MlS} (hf : ReadOnlyFn fn)
                 (guestInv_callEntry s callee hInv.1.1) hex
                 (by rw [run]; simp) (by rw [run]; exact Or.inl ⟨v, rfl⟩)
               rw [run] at ro
+              dsimp only at ro
               have postEq := state_trans_locals_clock entry ro
-              let mid := setVarHOLFinite name v {post with locals := s.locals}
-              have midEq : mid = {s with locals := mid.locals, clock := mid.clock} := by
-                have hh : mid = {post with locals := mid.locals, clock := post.clock} := by cases post; rfl
-                exact state_trans_locals_clock postEq hh
-              have hi : EvmInv mid := by rw [midEq]; exact localsFree_evmInv s _ _ hInv
-              have hcodeMid : mid.code = originalRuntimeCode := by rw [midEq]; exact hcode
-              have hh := hc mid hcodeMid hi hnt hfr
-              conv at hh => arg 2; rw [midEq]
+              have midEq : setVarHOLFinite name v {post with locals := s.locals} =
+                  {s with locals := (setVarHOLFinite name v s).locals, clock := post.clock} := by
+                rw [postEq]; cases s; rfl
+              rw [midEq] at hnt hfr ⊢
+              have hh := hc v post.clock hnt hfr
               exact precompile_step_locals_right _ _ (precompile_step_locals_left _ _ hh)
             · simp only [hsh, Bool.false_eq_true, ↓reduceIte] at hfr
               exact absurd hfr bad
@@ -8609,6 +8640,15 @@ theorem precompile_step_decCall_ro {fn : MlS} (hf : ReadOnlyFn fn)
             intro ec hec; exact ⟨rfl, rfl, rfl, rfl⟩
           | timeOut => simp at hnt
           | _ => rcases hfr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
+
+theorem precompile_step_decCall_ro {fn : MlS} (hf : ReadOnlyFn fn)
+    (name : MlS) (shape : ShapeHOL) (args : List (ExpHOL 64)) {cont : ProgHOL 64}
+    (hc : EvmProgStep frameStartGw cont) :
+    EvmProgStep frameStartGw (.decCall name shape fn args cont) := by
+  intro F s hcode hInv hnt hfr
+  apply precompile_step_decCall_ro_at hf name shape args cont s hcode hInv _ hnt hfr
+  intro v k
+  exact hc _ hcode (localsFree_evmInv s _ _ hInv)
 
 theorem precompile_ro_add_sat : ReadOnlyFn (ofString "add_sat") := by
   refine R13.readOnlyFn_of_guestAst 441 (by rw [guestAst_len]; decide)
@@ -8674,6 +8714,84 @@ private theorem dispatch_step_seq {a b : ProgHOL 64}
     rw [hr] at hs
     exact hs
 
+theorem precompile_step_seq_at {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b : ProgHOL 64)
+    (ha : (evaluateHOLFiniteState s a).1 ≠ some .timeOut →
+      R13.FlowsOrResumes (evaluateHOLFiniteState s a).1 →
+        EvmStepCC frameStartGw s (evaluateHOLFiniteState s a).2)
+    (hb : (evaluateHOLFiniteState s a).1 = none →
+      (evaluateHOLFiniteState (evaluateHOLFiniteState s a).2 b).1 ≠ some .timeOut →
+      R13.FlowsOrResumes (evaluateHOLFiniteState (evaluateHOLFiniteState s a).2 b).1 →
+      EvmStepCC frameStartGw (evaluateHOLFiniteState s a).2
+        (evaluateHOLFiniteState (evaluateHOLFiniteState s a).2 b).2)
+    (hnt : (evaluateHOLFiniteState s (.seq a b)).1 ≠ some .timeOut)
+    (hfr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq a b)).1) :
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s (.seq a b)).2 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases hr : evaluateHOLFiniteState s a with ⟨r, mid⟩
+  simp only [hr] at ha hb hnt hfr ⊢
+  cases r with
+  | none => exact dispatch_step_trans (ha (by simp) (Or.inl rfl)) (hb rfl hnt hfr)
+  | some r => exact ha hnt hfr
+
+theorem precompile_store_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (addr val : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.store addr val)).2.locals = s.locals := by
+  rw [evaluateHOLFiniteState_store]
+  split <;> (try split) <;> (try split) <;> rfl
+
+theorem precompile_identity_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (args : List (ExpHOL 64)) (n : BitVec 64)
+    (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n))) :
+    let p : ProgHOL 64 := .seq (.call (some (none, none)) (ofString "charge_gas") args)
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 120])
+        (.load .one (.op .add [.var .local (ofString "msg"), .const 88])))
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 128])
+        (.var .local (ofString "n"))) (.return (.const 0))))
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    R13.FlowsOrResumes (evaluateHOLFiniteState s p).1 →
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s p).2 := by
+  dsimp only
+  intro hnt hfr
+  apply precompile_step_seq_at s _ _ _ _ hnt hfr
+  · exact precompile_charge_gas_call_step args s hcode hi
+  · intro hflow hnt hfr
+    let mid := (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "charge_gas") args)).2
+    have hs := precompile_charge_gas_call_step args s hcode hi
+      (by rw [hflow]; simp) (Or.inl hflow)
+    have hmcode : mid.code = originalRuntimeCode :=
+      ((evaluateHOLFiniteState_metadata s _).1).trans hcode
+    have hmn : mid.locals.lookup (ofString "n") = some (.val (.word n)) := by
+      dsimp only [mid]
+      rw [precompile_call0_locals_on_flow s _ _ hflow]
+      exact hn
+    apply precompile_step_seq_at mid _ _ _ _ hnt hfr
+    · exact precompile_store_output_step 120 (Or.inl rfl) _
+        (fun s v hv => EvmFrameSpecs.word_of_load_one s _ v hv) mid hmcode hs.1.1
+    · intro hstore hnt hfr
+      change (evaluateHOLFiniteState mid (.store
+        (.op .add [.var .global (ofString "ev"), .const 120#64])
+        (.load .one (.op .add [.var .local (ofString "msg"), .const 88])))).1 = none at hstore
+      let post := (evaluateHOLFiniteState mid (.store
+        (.op .add [.var .global (ofString "ev"), .const 120])
+        (.load .one (.op .add [.var .local (ofString "msg"), .const 88])))).2
+      have ht := precompile_store_output_step 120 (Or.inl rfl) _
+        (fun s v hv => EvmFrameSpecs.word_of_load_one s _ v hv) mid hmcode hs.1.1
+        (by rw [hstore]; simp) (Or.inl hstore)
+      have hpcode : post.code = originalRuntimeCode :=
+        ((evaluateHOLFiniteState_metadata mid _).1).trans hmcode
+      have hpn : post.locals.lookup (ofString "n") = some (.val (.word n)) := by
+        dsimp only [post]; rw [precompile_store_locals]; exact hmn
+      apply precompile_step_seq_at post _ _ _ _ hnt hfr
+      · intro _ hfr
+        exact precompile_store_output_local_at post 128 (Or.inr rfl) _ n ht.1.1 hpn hfr
+      · intro hstore hnt hfr
+        have hu := precompile_store_output_local_at post 128 (Or.inr rfl) _ n ht.1.1 hpn
+          (Or.inl hstore)
+        exact dispatch_step_ro (ReadOnlyProg.ret _) _
+          (((evaluateHOLFiniteState_metadata post _).1).trans hpcode) hu.1.1 hnt hfr
+
 private theorem dispatch_step_ite (cond : ExpHOL 64) {a b : ProgHOL 64}
     (ha : EvmProgStep frameStartGw a) (hb : EvmProgStep frameStartGw b) :
     EvmProgStep frameStartGw (.ite cond a b) := by
@@ -8689,6 +8807,81 @@ private theorem dispatch_step_ite (cond : ExpHOL 64) {a b : ProgHOL 64}
       simp only [hz, ↓reduceIte] at hfr ⊢
       exact ha s hcode hInv hnt hfr
   · rcases hfr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> cases h
+
+theorem precompile_step_dec_at {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : MlS) (shape : ShapeHOL) (init : ExpHOL 64) (body : ProgHOL 64)
+    (hb : ∀ v, @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) init = some v →
+      shapeEqHOL shape (shapeOfHOLExact v) = true →
+      (evaluateHOLFiniteState (setVarHOLFinite name v s) body).1 ≠ some .timeOut →
+      R13.FlowsOrResumes (evaluateHOLFiniteState (setVarHOLFinite name v s) body).1 →
+      EvmStepCC frameStartGw (setVarHOLFinite name v s)
+        (evaluateHOLFiniteState (setVarHOLFinite name v s) body).2)
+    (hnt : (evaluateHOLFiniteState s (.dec name shape init body)).1 ≠ some .timeOut)
+    (hfr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.dec name shape init body)).1) :
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s (.dec name shape init body)).2 := by
+  have bad : ¬ R13.FlowsOrResumes (some (.error : PanSemResultExact 64)) := by
+    rintro (h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩) <;> cases h
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  dsimp only at hnt hfr ⊢
+  revert hnt hfr
+  split <;> intro hnt hfr
+  · exact absurd hfr bad
+  · rename_i v hv
+    by_cases hsh : shapeEqHOL shape (shapeOfHOLExact v) = true
+    · simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+      have hh := hb v hv hsh hnt hfr
+      have hset : setVarHOLFinite name v s =
+          {s with locals := (setVarHOLFinite name v s).locals, clock := s.clock} := by cases s; rfl
+      rw [hset] at hh
+      exact precompile_step_locals_right _ _ (precompile_step_locals_left _ _ hh)
+    · simp only [hsh, Bool.false_eq_true, ↓reduceIte] at hfr
+      exact absurd hfr bad
+
+theorem pre_identity_body_step :
+    EvmProgStep frameStartGw (sourceFnBody Guest.Software.guestFn_pre_identity) := by
+  dsimp only [sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_pre_identity,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural]
+  apply precompile_step_dec
+  intro F s hcode hInv hnt hfr
+  apply precompile_step_dec_at s _ _ _ _ _ hnt hfr
+  intro v hv hshape hnt hfr
+  obtain ⟨n, rfl⟩ := EvmFrameSpecs.word_of_load_one s _ v hv
+  let mid := setVarHOLFinite (ofString "n") (.val (.word n)) s
+  have hmid : mid = {s with locals := mid.locals, clock := s.clock} := by cases s; rfl
+  have hi : EvmInv mid := by rw [hmid]; exact localsFree_evmInv s _ _ hInv
+  have hn : mid.locals.lookup (ofString "n") = some (.val (.word n)) := by
+    simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  apply precompile_step_decCall_ro_at precompile_ro_words_of _ _ _ _ mid hcode hi _ hnt hfr
+  intro v k
+  dsimp only
+  apply precompile_identity_tail_at
+    {mid with locals := (setVarHOLFinite (ofString "w") v mid).locals, clock := k}
+    _ n hcode (localsFree_evmInv mid _ k hi)
+  change (setVarHOLFinite (ofString "w") v mid).locals.lookup (ofString "n") = _
+  simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+    show ofString "w" ≠ ofString "n" by decide] using hn
+
+theorem lookup_pre_identity :
+    originalRuntimeCode.lookup (ofString "pre_identity") =
+      some ([], sourceFnBody Guest.Software.guestFn_pre_identity, .one) :=
+  lookup_of_guestAst_getElem 823 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_pre_identity) rfl
+
+theorem ek_cc_pre_identity :
+    EvmKeeps EvmInv frameStartGw (ofString "pre_identity") ∧
+      ChainCellsKept EvmInv (ofString "pre_identity") := by
+  constructor
+  · refine ⟨_, _, _, lookup_pre_identity, ?_⟩
+    intro F s hcode hi hex hnt hres
+    exact (pre_identity_body_step s hcode hi hnt (Or.inr (Or.inr (Or.inr hres)))).1
+  · refine ⟨_, _, _, lookup_pre_identity, ?_⟩
+    intro F s hcode hi hex hnt hres
+    exact (pre_identity_body_step s hcode hi hnt (Or.inr (Or.inr (Or.inr hres)))).2
+
+theorem pre_identity_call_step :
+    EvmProgStep frameStartGw (.call (some (none, none)) (ofString "pre_identity") []) :=
+  precompile_step_call0 ek_cc_pre_identity.1 ek_cc_pre_identity.2 []
 
 theorem run_precompile_body_step_of_dispatch (h : PrecompileDispatchSpecs) :
     EvmProgStep frameStartGw (sourceFnBody Guest.Software.guestFn_run_precompile) := by
