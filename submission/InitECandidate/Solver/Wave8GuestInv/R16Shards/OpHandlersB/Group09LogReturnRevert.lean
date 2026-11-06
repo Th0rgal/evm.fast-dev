@@ -13360,4 +13360,37 @@ theorem log_no_growth_semantic_post_g09 {F : Type}
   · simpa only [hl, hn, h0] using hstore
   · exact hlog
 
+/-- In-place append preserves the backing-array extent and reconstructs the
+containing frame from its unchanged structural fields and semantic list result. -/
+theorem frameWF_of_log_no_growth_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl}
+    (hFW : FrameWF s S ec)
+    (hdom : post.memaddrs = s.memaddrs)
+    (hglobals : post.globals = s.globals)
+    (hfields : ∀ k ∈ ([8, 16, 24, 32, 40, 88, 112, 136, 144, 168, 176, 216, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hptr : memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)))
+    (hcap : memW post (memW s (ec.1 + 88) + 16) = memW s (memW s (ec.1 + 88) + 16))
+    (hlen : memW post (memW s (ec.1 + 88) + 8) ≤ memW post (memW s (ec.1 + 88) + 16))
+    (hlist : LogsListOK post (memW s (ec.1 + 88)))
+    (hmsg : MsgOwned post S (memW s (ec.1 + 112))) :
+    FrameWF post S ec ∧ frameLogs post ec = frameLogs s ec := by
+  have hg := globN_congr hglobals
+  have hbuffer : frameLogs post ec = frameLogs s ec := by
+    unfold frameLogs
+    rw [hfields 88 (by simp), hptr, hcap]
+  have hcap_old := hFW.2.2.2.2.2.2.2.2.2.2.1
+  have hinside_old := hFW.2.2.2.2.2.2.2.2.2.2.2.2.1
+  have hwords_old := hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  refine ⟨frameWF_of_log_growth_g09 hFW hdom
+    (congrFun hg "scratch_ptr") (congrFun hg "frame_mem_ptr")
+    (by rw [congrFun hg "heap_ptr"]) (congrFun hg "evm_empty") hfields
+    ?_ hlist hlen ?_ ?_ hmsg, hbuffer⟩
+  · rw [hcap]
+    exact hcap_old
+  · rw [hbuffer, congrFun hg "heap_ptr", congrFun hg "scratch_ptr"]
+    exact hinside_old
+  · rw [hbuffer]
+    exact (wordsOK_congr_of_dom_g09 hdom).2 hwords_old
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
