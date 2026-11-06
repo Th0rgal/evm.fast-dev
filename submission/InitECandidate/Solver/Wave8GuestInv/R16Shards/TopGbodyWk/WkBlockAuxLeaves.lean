@@ -10879,4 +10879,34 @@ theorem eval_merge_storage_suffix_nonzero {F : Type} (s : PanSemStateFiniteExact
       obtain ⟨tw, rfl, htw, hbs⟩ := evalAt_loadG_nz s hW.1.1 "bs" 32#64 (by decide) _ het
       exact eval_merge_storage_suffix_loaded s tw ow hc hW heo het (by simpa [htw] using hb) hnt hfr
 
+/-- A zero-table lookup cannot return into its continuation; resumable exits
+retain the read-only frame. -/
+theorem eval_merge_get_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (x : MlS) (tExp keyExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : ∀ tw : BitVec 64, evalAt s tExp = some (.val (.word tw)) → tw = 0)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1
+        (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).2 := by
+  apply eval_decCall_readOnly_with_return s x _ _ _ cont (fun _ => False)
+    hc hW InitECandidate.Solver.Wave8Contracts.M15.ro_htab_get ?_ ?_ hnt hfr
+  · intro vs body callee ret v post ha hl hr
+    rw [hc] at hl
+    obtain ⟨rfl, rfl, tw, kw, rfl, htw, hkw⟩ :=
+      lookup_two_word_result (by decide) WkBal.lookup_htab_get hl
+    have he : evalAt s tExp = some (.val (.word tw)) := by
+      obtain ⟨v1, rest, hh, hv⟩ := Wave8M19.Htab.evalList_cons_inv s _ _ ha
+      cases hh
+      exact hv
+    exact WkBal.htab_get_t_nonzero (callEntryStateHOLFinite s callee) tw kw
+      (guestInv_callEntry s callee hW.1.1) htw hkw v (congrArg Prod.fst hr) (ht tw he)
+  · intro v ck hv
+    exact hv.elim
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
