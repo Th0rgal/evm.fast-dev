@@ -9431,6 +9431,20 @@ theorem precompile_sha256_finish_call_effect {F : Type}
   subst b
   exact precompile_sha256_finish_effect entry out hce hge hbe hob
 
+theorem precompile_sha256_padding_byte_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad rem : BitVec 64)
+    (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hr : s.locals.lookup (ofString "rem") = some (.val (.word rem)))
+    (hrem : rem.toNat < 64) (hpad : pad.toNat + 128 ≤ heapEnd) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.storeByte (.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "rem")])
+        (.const 128))).2 [(pad.toNat,128)] := by
+  apply R10Shards.P26_P28.byteEff_storeByte_at hi _ _ pad rem.toNat 128 hpad
+    (fun _ => ⟨(pad.toNat,128), List.mem_singleton.mpr rfl, le_rfl, le_rfl⟩) (by omega)
+  simp [evalHOLExact, evalListHOLExact, hp, hr, valueIsWord, valueWord,
+    wordOpHOL, wordOp]
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
