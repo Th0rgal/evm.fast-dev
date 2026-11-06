@@ -7925,4 +7925,36 @@ theorem htabFootprint_eq_of_sk_make {F : Type}
   rcases hd with hz | hz | hz | hz <;> try dsimp only at hz
   all_goals omega
 
+/-- Old-world fixed-object separation discharges key-builder preservation
+of every typed table's values and footprint. -/
+theorem typed_tables_preserved_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hW : WorldTyped s S)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post)) :
+    ∀ db ∈ S, htabValues post db = htabValues s db ∧
+      htabFootprint post db = htabFootprint s db := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, hnz, _⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  have hmem : (globN s "sk_buf", 64) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.mpr
+    exact ⟨("sk_buf", 64), by decide, by simp [hnz]⟩
+  intro db hdb
+  have hw := (hW.1.2.1 db hdb).1
+  have hd : ∀ i ∈ htabFootprint s db, Disj i (globN s "sk_buf", 52) := by
+    intro i hi
+    have hh := ((hW.1.2.1 db hdb).2 i hi).2 _ hmem
+    rcases hh with hh | hh | hh | hh <;> try dsimp only at hh
+    all_goals unfold Disj; omega
+  exact ⟨htabValues_eq_of_sk_make db hc hma hfit v hb hw hd,
+    htabFootprint_eq_of_sk_make db hc hma hfit v hb hw (hd _ (by simp [htabFootprint]))⟩
+
 end HeadStore

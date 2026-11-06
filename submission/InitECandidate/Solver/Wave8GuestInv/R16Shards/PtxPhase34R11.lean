@@ -15562,4 +15562,27 @@ theorem record_pre_state_read_call_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- The concrete read-recording call retains the world-step contract. -/
+theorem record_pre_state_read_call_worldStep {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (hW : WorldOK s)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "record_pre_state_read") [.var .local (ofString "addr")]) = (none, mid)) :
+    WorldStep (fun _ => []) ["heap_ptr"] R10Shards.P26_P28.stdKeep NoExtra s none mid := by
+  obtain ⟨vs, body, callee, ret, v, cp, _, hl, hr, hm⟩ := ignored_call_fall_inv_args hc
+  have hwc : WorldOK (callEntryStateHOLFinite s callee) := by
+    exact (WkBal.worldOK_with_locals s callee (s.clock - 1)).2 hW
+  have hs := PtxP1.funSpec_at_lookup wkSc_record_pre_state_read s hW.1.1.code
+    vs body callee ret hl hwc (by rw [hr]; simp)
+  rw [hr] at hs
+  have hs' := hs (Or.inl ⟨v, rfl⟩)
+  have hs'' := hs'.of_pre_locals_clock
+  subst mid
+  simpa only [WorldStep, RecordsKept, R16WkAcctWs.bufRegions, List.map_nil] using
+    (hs''.with_locals_clock (r' := none) s.locals cp.clock).1
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
