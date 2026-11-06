@@ -14600,4 +14600,24 @@ theorem log_append_growth_execution_post_g09 {F : Type}
     unfold HeadMemAligned at hpost ⊢
     exact hpost.2.2
 
+/-- Every live entry of a well-formed frame has at most four topics.
+Function lookup for op_log only checks the word shape of ntopics, so a
+handler proof must obtain this bound from its call-site precondition. -/
+theorem frameWF_live_log_topic_bound_g09 {F : Type}
+    {post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl} {i log : Nat}
+    (hf : FrameWF post S ec)
+    (hnonnull : memW post (ec.1 + 88) ≠ 0)
+    (hi : i < memW post (memW post (ec.1 + 88) + 8))
+    (hslot : memW post (memW post (memW post (ec.1 + 88)) + 8 * i) = log) :
+    memW post (log + 16) ≤ 4 := by
+  have hl : LogsListOK post (memW post (ec.1 + 88)) := by
+    unfold FrameWF at hf
+    dsimp only at hf
+    exact hf.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  rcases hl with hz | ⟨_, _, _, _, hentries⟩
+  · exact False.elim (hnonnull hz)
+  · have he := (hentries i hi).2
+    rw [hslot] at he
+    exact he.2.2.1
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

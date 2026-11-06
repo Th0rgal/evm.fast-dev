@@ -16393,4 +16393,132 @@ theorem journal_append_blockOut_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open EvmEkFk R10Shards.P26_P28
+
+/-- Retain backing preservation from the journal implementation's narrow effect. -/
+theorem journal_worldEff_blockOut_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {b : Ivl} {n : Nat} {gw : List String}
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hn : n < globN s "journal_cap")
+    (heff : WorldEff s post [(globN s "journal" + 32 * n, 32)] [] gw) :
+    IvlUnhit s post b := by
+  apply journal_append_blockOut_frame s post b n hA hfix hb hal hb1 hb2 hn
+  intro x hx
+  simpa only [List.mem_singleton, exists_eq_left, List.not_mem_nil,
+    false_and, exists_false, false_or, Fast_C08WkShard03.CellHitsPos,
+    CellHitsPos] using heff.cell_frame x hx
+
+end PtxP34
+
+namespace PtxP34
+open private trap_with_call_no_none_resumes from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- A journal capacity guard can fall through only with space for the next record. -/
+theorem journal_guard_capacity {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s
+      (.ite (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap")))
+        (.call (some (none, none)) (ofString "trap_with") [.const trapCode]) .skip) = (none, post)) :
+    jn.toNat < jc.toNat := by
+  by_contra hn
+  have hc : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = true := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  have he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap"))) =
+      some (.val (.word 1#64)) := by
+    simp [evalHOLExact, hjn, hjc, hc]
+  rw [evaluateHOLFiniteState_ite, he] at hr
+  simp at hr
+  have hh := (trap_with_call_no_none_resumes s trapCode hcode).1
+  rw [hr] at hh
+  exact hh rfl
+
+end PtxP34
+
+namespace PtxP34
+
+/-- A successful journal guard leaves the entire state unchanged and establishes capacity. -/
+theorem journal_guard_fallthrough {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s
+      (.ite (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap")))
+        (.call (some (none, none)) (ofString "trap_with") [.const trapCode]) .skip) = (none, post)) :
+    globN s "journal_n" < globN s "journal_cap" ∧ post = s := by
+  have hn := journal_guard_capacity s post jn jc trapCode hcode hjn hjc hr
+  have hc : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  have he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap"))) =
+      some (.val (.word 0#64)) := by
+    simp [evalHOLExact, hjn, hjc, hc]
+  rw [evaluateHOLFiniteState_ite, he] at hr
+  simp [evaluateHOLFiniteState_skip] at hr
+  exact ⟨by simpa [globN, hjn, hjc] using hn, hr.symm⟩
+
+end PtxP34
+
+namespace PtxP34
+open private worldEff_call0_memcpy from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Copying the journal key into fresh heap space retains the narrow record effect. -/
+theorem journal_key_copy_effect {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} {jrec : Ivl}
+    (p n : BitVec 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.locals.lookup (ofString "kc") = some (.val (.word p)))
+    (hn : cur.locals.lookup (ofString "klen") = some (.val (.word n)))
+    (hlo : globN s "heap_ptr" ≤ p.toNat)
+    (hhi : p.toNat + n.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "kc"), .var .local (ofString "key"), .var .local (ofString "klen")]) =
+      (none, post)) : WorldEff s post [jrec] [] ["heap_ptr"] := by
+  have hm := worldEff_call0_memcpy heff
+    (.var .local (ofString "kc")) (.var .local (ofString "key")) (.var .local (ofString "klen"))
+    (by rw [hr]; simp) (by rw [hr]; exact Or.inl rfl)
+    (fun dw sw nw hd _ hn' _ => by
+      simp [evalHOLExact, hp] at hd
+      subst hd
+      simp [evalHOLExact, hn] at hn'
+      subst hn'
+      exact Or.inr (Or.inr (Or.inr ⟨hlo, hhi⟩)))
+  rw [hr] at hm
+  exact hm
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Each word store contained in the journal record retains its narrow effect. -/
+theorem journal_record_store_effect {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} {jrec : Ivl}
+    (dst value : ExpHOL 64) (address word : BitVec 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hd : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) dst =
+      some (.val (.word address)))
+    (hv : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) value =
+      some (.val (.word word)))
+    (hlo : jrec.1 ≤ address.toNat) (hhi : address.toNat + 8 ≤ jrec.1 + jrec.2)
+    (hr : evaluateHOLFiniteState cur (.store dst value) = (none, post)) :
+    WorldEff s post [jrec] [] ["heap_ptr"] := by
+  have hm := worldEff_store_word heff dst value
+    (fun v h => by rw [hv] at h; exact ⟨word, (Option.some.inj h).symm⟩)
+    (fun x h _ => by
+      rw [hd] at h
+      have hx : address = x := by injection h with h; injection h with h; injection h
+      subst x
+      exact Or.inl ⟨jrec, by simp, hlo, hhi⟩)
+  rw [hr] at hm
+  exact hm
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
