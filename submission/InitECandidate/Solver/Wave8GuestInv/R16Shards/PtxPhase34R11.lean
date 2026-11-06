@@ -15223,4 +15223,30 @@ theorem record_pre_state_read_body_fixed_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Lift the concrete pre-state read frame to its installed callee interface. -/
+theorem record_pre_state_read_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat) (b : Ivl)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "record_pre_state_read") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : IvlUnhit s post b := by
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "record_pre_state_read") _ _ body _ ret vs callee
+    R16WkAcctWs.lookup_record_pre_state_read (by rwa [← hA.1.code])
+  subst body
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (sourceFnBody Guest.Software.guestFn_record_pre_state_read) = (some (.returned v), post) at hr
+  exact record_pre_state_read_body_fixed_frame (callEntryStateHOLFinite s callee) post S Nd b v
+    ((arenaReady_with_locals s callee (s.clock - 1)).2 hA)
+    ((R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).2 hT) hb hbpos hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
