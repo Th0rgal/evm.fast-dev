@@ -8871,6 +8871,46 @@ theorem precompile_funByteEff_sha256_block :
   obtain ⟨p, b, rfl, hp, hb⟩ := R10Shards.P26_P28.lookupCode_two_words (by decide) hl hlook
   exact precompile_sha256_block_effect s p hc hi hp
 
+theorem precompile_byteEff_while_inv {F : Type}
+    (P : PanSemStateFiniteExact 64 F → Prop) (cond : ExpHOL 64) (body : ProgHOL 64)
+    (Rl : List Ivl)
+    (hdec : ∀ s, P s → P (decClockHOLFinite s))
+    (hb : ∀ (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode → GuestInv s → P s →
+      R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s body).2 Rl ∧
+      ((evaluateHOLFiniteState s body).1 = none ∨
+        (evaluateHOLFiniteState s body).1 = some .continue →
+        P (evaluateHOLFiniteState s body).2))
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (hi : GuestInv s) (hp : P s) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s (.while cond body)).2 Rl := by
+  rw [evaluateHOLFiniteState_while_total]
+  split
+  · split
+    · split
+      · exact (R10Shards.P26_P28.ByteEff.refl s Rl).locals_clock _ s.clock
+      · dsimp only
+        rw [fixClockHOLFinite_evaluateState]
+        have hgd : GuestInv (decClockHOLFinite s) := guestInv_congr (s := s) rfl rfl rfl rfl hi
+        obtain ⟨he, hP⟩ := hb (decClockHOLFinite s) hc hgd (hdec s hp)
+        have rem := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+        rcases run : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r, mid⟩
+        rw [run] at he hP rem
+        have hlt : mid.clock < s.clock := by change mid.clock ≤ s.clock - 1 at rem; omega
+        have heff : R10Shards.P26_P28.ByteEff s mid Rl :=
+          ((R10Shards.P26_P28.ByteEff.refl s Rl).locals_clock _ _).trans he
+        have hgm : GuestInv mid := guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hi
+        cases r with
+        | none => exact heff.trans (precompile_byteEff_while_inv P cond body Rl hdec hb
+            mid (heff.code.trans hc) hgm (hP (Or.inl rfl)))
+        | some r =>
+          cases r with
+          | «continue» => exact heff.trans (precompile_byteEff_while_inv P cond body Rl hdec hb
+              mid (heff.code.trans hc) hgm (hP (Or.inr rfl)))
+          | _ => exact heff
+    · exact R10Shards.P26_P28.ByteEff.refl s Rl
+  · exact R10Shards.P26_P28.ByteEff.refl s Rl
+termination_by s.clock
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
