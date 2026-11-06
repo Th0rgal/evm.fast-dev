@@ -3440,7 +3440,12 @@ theorem transfer_alloc_log_address_prefix {F : Type}
             (.var .global (ofString "vm_system_address"))) cont))).2 =
         { (evaluateHOLFiniteState mid cont).2 with
           locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
-            (ofString "log", s.locals.lookup (ofString "log")) } := by
+            (ofString "log", s.locals.lookup (ofString "log")) } ∧
+      mid.be = s.be ∧
+      (∀ k, k ≠ ofString "log" → mid.locals.lookup k = s.locals.lookup k) ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) := by
   obtain ⟨allocated, hx, hhp, hwords, hstep, hr, hs, hm, hb, hl⟩ :=
     transfer_decCall_alloc_exact_spec s (ofString "log") _ p 40 (Or.inl rfl) hInv hp hres
   have hsys' : allocated.globals.lookup (ofString "vm_system_address") = some (.val (.word sysw)) :=
@@ -3462,7 +3467,11 @@ theorem transfer_alloc_log_address_prefix {F : Type}
   change ByteRegionEffect allocated mid [(p.toNat, 40)] at heff
   change EvmStepCC ["heap_ptr"] s mid at hstore_step
   rw [hseq] at hr hs
-  refine ⟨mid, hloc ▸ hx, ?_, haddr, ?_, hstore_step, hr ▸ hres, hr, hs⟩
+  have frames := evmStepCC_of_accumulated_heap_effect hInv hstep hb
+    (fun a _ => congrFun hm a) (fun b _ _ => by simp only [memB, hm, hb]) heff
+    (fun i hi => by rcases List.mem_singleton.mp hi with rfl; exact hin)
+  refine ⟨mid, hloc ▸ hx, ?_, haddr, ?_, hstore_step, hr ▸ hres, hr, hs,
+    heff.be.trans hb, fun k hk => by rw [hloc]; exact hl k hk, frames.2.1, frames.2.2⟩
   · simpa only [globN, heff.globals] using hhp
   · apply wordsOK_of_inside_heap _ hstore_step.1.1.1.1.memaddrs
     · exact hwords.1
@@ -7737,6 +7746,99 @@ theorem transfer_data_tail_fresh_step {F : Type}
   · exact ⟨hin.1, le_trans hin.2 mono⟩
   · exact ⟨htop.1, le_trans htop.2 mono⟩
   · exact ⟨by rw [← inCur]; exact hstep.1.2.1, by omega⟩
+
+theorem transfer_topics_data_tail_step {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (p topic sender recipient logw evw : BitVec 64)
+    (av : ValueHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (htopic : cur.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hsender : cur.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrecipient : cur.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (ha : cur.locals.lookup (ofString "amount") = some av)
+    (hl : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (hev : cur.globals.lookup (ofString "ev") = some (.val (.word evw)))
+    (hw : WordsOK cur (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hsys : Inside (globN cur "vm_system_address", 20) sourceBase (globN cur "heap_ptr"))
+    (haddr : memW cur logw.toNat = globN cur "vm_system_address")
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+        (transferTopicWrites (transferRecordPairWrites 8 (ofString "topics") 3 transferDataTail)))).1) :
+    EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState cur
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+        (transferTopicWrites (transferRecordPairWrites 8 (ofString "topics") 3 transferDataTail)))).2 := by
+  apply transfer_accumulated_topics_record_step s cur p topic sender recipient logw transferDataTail
+    hInv hstep hbe hout hbyte hp htopic hsender hrecipient hl hw hin hr
+  intro mid ht heap step be words addr tp tn loc out bytes resum
+  obtain ⟨data, hd⟩ : ∃ data : BitVec 64,
+      mid.globals.lookup (ofString "heap_ptr") = some (.val (.word data)) :=
+    globalWord_of_globN_pos mid "heap_ptr"
+      (by have h := step.1.1.1.2.1; rw [sourceBase_val] at h; omega)
+  have hdata : data.toNat = globN mid "heap_ptr" := by simp [globN, hd]
+  have gp : globN cur "heap_ptr" = p.toNat := by simp [globN, hp]
+  have globals (name : String) (hn : ofString name ≠ ofString "heap_ptr") :
+      cur.globals.lookup (ofString name) = mid.globals.lookup (ofString name) :=
+    (hstep.1.2.2.1 _ (by simpa using hn)).symm.trans (step.1.2.2.1 _ (by simpa using hn))
+  have sys : globN mid "vm_system_address" = globN cur "vm_system_address" := by
+    unfold globN; rw [globals "vm_system_address" (by decide)]
+  apply transfer_data_tail_fresh_step s mid data logw evw p.toNat av hInv step be out bytes
+    ((loc _ (by decide)).trans ha) ((loc _ (by decide)).trans hl)
+    ((globals "ev" (by decide)).symm.trans hev) words
+    ⟨hin.1, by rw [heap]; have h := hin.2; omega⟩ hd
+    ⟨by rw [sys]; exact hsys.1, by rw [sys, heap]; have h := hsys.2; omega⟩
+    ⟨by rw [← gp]; exact hstep.1.2.1, by rw [heap]⟩
+    (by rw [addr, haddr, sys]) tp tn
+    (by have h := hin.2; omega) (by rw [hdata, heap]) resum
+
+def transferLogTail : ProgHOL 64 :=
+  .decCall (ofString "log") .one (ofString "alloc") [.const 40]
+    (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+      (.var .global (ofString "vm_system_address")))
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+        (transferTopicWrites (transferRecordPairWrites 8 (ofString "topics") 3 transferDataTail))))
+
+theorem transfer_log_tail_step {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p sysw topic sender recipient evw : BitVec 64)
+    (av : ValueHOL 64) (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hsysw : s.globals.lookup (ofString "vm_system_address") = some (.val (.word sysw)))
+    (htopic : s.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hsender : s.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrecipient : s.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (ha : s.locals.lookup (ofString "amount") = some av)
+    (hev : s.globals.lookup (ofString "ev") = some (.val (.word evw)))
+    (hsys : Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState s transferLogTail).1) :
+    EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState s transferLogTail).2 := by
+  obtain ⟨mid, hl, heap, addr, words, step, resum, er, es, be, loc, out, bytes⟩ :=
+    transfer_alloc_log_address_prefix s p sysw _ hInv hp hsysw hr
+  obtain ⟨topics, ht⟩ : ∃ topics : BitVec 64,
+      mid.globals.lookup (ofString "heap_ptr") = some (.val (.word topics)) :=
+    globalWord_of_globN_pos mid "heap_ptr"
+      (by have h := step.1.1.1.2.1; rw [sourceBase_val] at h; omega)
+  have g (name : String) (hn : ofString name ≠ ofString "heap_ptr") :
+      mid.globals.lookup (ofString name) = s.globals.lookup (ofString name) :=
+    (step.1.2.2.1 _ (by simpa using hn)).symm
+  have sys : globN mid "vm_system_address" = globN s "vm_system_address" := by
+    unfold globN; rw [g _ (by decide)]
+  have tail := transfer_topics_data_tail_step s mid topics topic sender recipient p evw av hInv step
+    be out bytes ht ((g _ (by decide)).trans htopic)
+    ((loc _ (by decide)).trans hsender) ((loc _ (by decide)).trans hrecipient)
+    ((loc _ (by decide)).trans ha) hl ((g _ (by decide)).trans hev) words
+    ⟨by simp [globN, hp], by rw [heap]⟩
+    ⟨by rw [sys]; exact hsys.1, by rw [sys]; exact le_trans hsys.2 step.1.2.1⟩ addr resum
+  change EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState s
+    (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+      (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+        (.var .global (ofString "vm_system_address"))) _))).2
+  rw [es]
+  exact ⟨⟨localsFree_evmInv _ _ _ tail.1.1, tail.1.2.1, tail.1.2.2.1,
+    (evmChain_with_locals _ _ _).trans tail.1.2.2.2⟩, tail.2⟩
 
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
