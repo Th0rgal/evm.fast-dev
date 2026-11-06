@@ -15642,4 +15642,134 @@ theorem fcKind2ErrTail_refund_ite_eq {F : Type} (t : PanSemStateFiniteExact 64 F
   dsimp only
   simp only [Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
   by_cases h : nacv = 0#64 <;> simp [h]
+
+/-- Rung 22: set_retdata-peel of the kind-2 error tail.  At a state `t`
+carrying the arena, the `ev`/`evm_empty` globals and the child retdata
+pointer/size words, the `set_retdata [child+120, child+128]` call heading
+the tail-end of the kind-2 error branch never returns; when it finishes
+quietly the remaining `stack_push` runs from the call post state `m3`,
+which keeps code/memaddrs, the arena, all globals except `heap_ptr`
+(monotonically raised), and every memory cell outside the copy window
+`(d, nw)` and the cells `ev+144/152/216`; a terminal outcome propagates. -/
+theorem fcKind2ErrTail_set_retdata_step {F : Type}
+    (t : PanSemStateFiniteExact 64 F) (e pv nw : BitVec 64)
+    (hA : ArenaReady t)
+    (hcode : t.code = originalRuntimeCode)
+    (he : t.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hp : evalAt t (.load .one
+        (.op .add [.var .local (ofString "child"), .const 120#64])) = some (.val (.word pv)))
+    (hn : evalAt t (.load .one
+        (.op .add [.var .local (ofString "child"), .const 128#64])) = some (.val (.word nw)))
+    (hn_small : nw.toNat + 32 < 2 ^ 63)
+    (hbuf : ∀ d0 cap : BitVec 64, t.memory (e + 144) = .word d0 → t.memory (e + 216) = .word cap →
+      nw.toNat ≤ cap.toNat → d0.toNat + nw.toNat < 2 ^ 64)
+    (hnt : (evaluateHOLFiniteState t
+        (.call (some (none, none)) (ofString "set_retdata")
+          [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).1 ≠
+      some .timeOut) :
+    (∀ u, (evaluateHOLFiniteState t
+        (.call (some (none, none)) (ofString "set_retdata")
+          [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).1 ≠
+      some (.returned u)) ∧
+    ((evaluateHOLFiniteState t
+        (.call (some (none, none)) (ofString "set_retdata")
+          [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).1 = none →
+      ∃ m3, m3 = (evaluateHOLFiniteState t
+          (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).2 ∧
+        m3.code = t.code ∧
+        m3.memaddrs = t.memaddrs ∧
+        ArenaReady m3 ∧
+        (∀ k : MlS, k ≠ ofString "heap_ptr" →
+          m3.globals.lookup k = t.globals.lookup k) ∧
+        globN t "heap_ptr" ≤ globN m3 "heap_ptr" ∧
+        (∃ d : BitVec 64,
+          (nw = 0 ∨ (t.memory (e + 144) = .word d ∧
+              ∃ cap : BitVec 64, t.memory (e + 216) = .word cap ∧ nw.toNat ≤ cap.toNat) ∨
+            (globN t "heap_ptr" ≤ d.toNat ∧ d.toNat + nw.toNat ≤ globN m3 "heap_ptr")) ∧
+          ∀ a : BitVec 64, ¬ Wave8M19.CellHits a.toNat (d.toNat, nw.toNat) →
+            a ≠ e + 144 → a ≠ e + 152 → a ≠ e + 216 →
+            m3.memory a = t.memory a) ∧
+        evaluateHOLFiniteState t
+            (.seq (.call (some (none, none)) (ofString "set_retdata")
+                [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                 .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+              (.call (some (none, none)) (ofString "stack_push")
+                [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])) =
+          evaluateHOLFiniteState m3
+            (.call (some (none, none)) (ofString "stack_push")
+              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])) ∧
+    (∀ f, (evaluateHOLFiniteState t
+        (.call (some (none, none)) (ofString "set_retdata")
+          [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).1 = some f →
+      evaluateHOLFiniteState t
+          (.seq (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+            (.call (some (none, none)) (ofString "stack_push")
+              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])) =
+        evaluateHOLFiniteState t
+          (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])) := by
+  classical
+  obtain ⟨hnret, hnone_facts, _⟩ :=
+    call0_outcome_fc (fname := ofString "set_retdata")
+      (args := [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+        .load .one (.op .add [.var .local (ofString "child"), .const 128#64])]) hnt
+  refine ⟨hnret, ?_, ?_⟩
+  · intro hfin
+    obtain ⟨values, body, callee, ret, v, cpost, hargs, hl, hrun, hpost⟩ := hnone_facts hfin
+    have hargs2 : evalListHOLFinite t
+        (h := fun a => Classical.propDecidable (t.memaddrs a))
+        [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+         .load .one (.op .add [.var .local (ofString "child"), .const 128#64])] =
+      some [.val (.word pv), .val (.word nw)] := by
+      simp [evalListHOLFinite, evalListHOLExact, evalAt] at hp hn ⊢
+      simp [hp, hn]
+    have hv := Option.some.inj (hargs2.symm.trans hargs)
+    subst hv
+    have hlook := pan_two_word_lookup t.code.lookup (ofString "set_retdata")
+      (ofString "p") (ofString "n") (sourceFnBody Guest.Software.guestFn_set_retdata) pv nw
+      (by decide) (by rw [hcode]; exact lookup_set_retdata_fc)
+    rw [hlook] at hl
+    injection hl with hl1
+    injection hl1 with hl2 hl3
+    injection hl3 with hl4 hl5
+    subst hl2; subst hl4; subst hl5
+    set cmap : HolFiniteMapExact MlS (ValueHOL 64) :=
+      (HolFiniteMapExact.empty.update (ofString "p", ValueHOL.val (.word pv))).update
+        (ofString "n", ValueHOL.val (.word nw)) with hcmap
+    set entry : PanSemStateFiniteExact 64 F := callEntryStateHOLFinite t cmap with hentry
+    have hent_p : entry.locals.lookup (ofString "p") = some (.val (.word pv)) := by
+      have h1 : ofString "n" ≠ ofString "p" := by decide
+      simp [hentry, hcmap, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, h1]
+    have hent_n : entry.locals.lookup (ofString "n") = some (.val (.word nw)) := by
+      simp [hentry, hcmap, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    have hA_e : ArenaReady entry :=
+      ⟨guestInv_callEntry t cmap hA.1, arenaOK_congr (s := t) rfl hA.2⟩
+    have he_e : entry.globals.lookup (ofString "ev") = some (.val (.word e)) := he
+    obtain ⟨ee, hee, _⟩ := glob_of_words t hA.2 "evm_empty" (by decide)
+    have hev_e : entry.globals.lookup (ofString "evm_empty") = some (.val (.word ee)) := hee
+    have hsrd : SrdPost entry e nw (evaluateHOLFiniteState entry
+        (sourceFnBody Guest.Software.guestFn_set_retdata)).2 :=
+      set_retdata_run entry e pv nw hA_e hcode he_e hent_p hent_n hn_small
+        (fun d0 cap h1 h2 h3 => hbuf d0 cap h1 h2 h3) v (congrArg Prod.fst hrun)
+    rw [congrArg Prod.snd hrun] at hsrd
+    refine ⟨{ cpost with locals := t.locals }, hpost.symm, hsrd.1, hsrd.2.1,
+      arenaReady_locals cpost t.locals hsrd.2.2.1, hsrd.2.2.2.1, hsrd.2.2.2.2.1,
+      hsrd.2.2.2.2.2, ?_⟩
+    rw [evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [hfin]
+    rw [hpost]
+  · intro f hf
+    rw [evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [hf]
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
