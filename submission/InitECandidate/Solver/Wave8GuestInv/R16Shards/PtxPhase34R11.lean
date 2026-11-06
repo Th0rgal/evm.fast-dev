@@ -15629,4 +15629,32 @@ theorem recorded_trie_lookup_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- An early-return guard either leaves memory intact or executes its tail. -/
+theorem early_return_or_tail_memory {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {cond e : ExpHOL 64}
+    {tail : ProgHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.seq (.ite cond (.return e) .skip) tail) =
+      (some (.returned v), post)) :
+    post.memory = s.memory ∨ evaluateHOLFiniteState s tail = (some (.returned v), post) := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hr
+  split at hr
+  · split at hr
+    · exact Or.inr (by simpa only [evaluateHOLFiniteState_skip] using hr)
+    · rcases ht : evaluateHOLFiniteState s (.return e) with ⟨r, t⟩
+      rw [ht] at hr
+      cases r with
+      | none =>
+        rw [evaluateHOLFiniteState_return] at ht
+        split at ht <;> try cases ht
+        split at ht <;> cases ht
+      | some r =>
+        have he := Prod.mk.inj hr
+        cases he.1
+        exact Or.inl ((congrArg (fun st => st.memory) he.2.symm).trans (return_memory_eq ht))
+  · cases hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
