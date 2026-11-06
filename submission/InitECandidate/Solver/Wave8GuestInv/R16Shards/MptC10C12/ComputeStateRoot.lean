@@ -7891,6 +7891,120 @@ private theorem csrW_worldEff_of_worldStep {F : Type}
       dsimp only [heapFree]
       constructor <;> omega
 
+private theorem csrW_evaluate_eshapes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (prog : ProgHOL 64) :
+    (evaluateHOLFiniteState s prog).2.eshapes = s.eshapes := by
+  have invariant := evaluateInvariantsHOLFinite prog
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite s)
+    (evaluateHOLFiniteState s prog).1
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite (evaluateHOLFiniteState s prog).2) (by
+      simp only [PanPropsEvalStateFiniteExact.evaluateHOLFinitePair,
+        PanPropsEvalStateFiniteExact.toPanSemFinite_ofPanSemFinite])
+  exact invariant.2.2.2.1
+
+private theorem csrW_evaluate_be {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (prog : ProgHOL 64) :
+    (evaluateHOLFiniteState s prog).2.be = s.be := by
+  have invariant := evaluateInvariantsHOLFinite prog
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite s)
+    (evaluateHOLFiniteState s prog).1
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite (evaluateHOLFiniteState s prog).2) (by
+      simp only [PanPropsEvalStateFiniteExact.evaluateHOLFinitePair,
+        PanPropsEvalStateFiniteExact.toPanSemFinite_ofPanSemFinite])
+  exact invariant.2.2.1
+
+/-- Callee-side factory for `mpt_root` via `csrW_worldEff_of_mptObjStep`. -/
+private theorem csrW_hcallee_mpt_root {F : Type} {s cur : PanSemStateFiniteExact 64 F}
+    (hspec : MptKeeps MptObjReady
+      (fun t => [(locN t "out", 32),
+                 (globN t "keccak_pad", if globN t "keccak_pad" = 0 then 0 else 136),
+                 (globN t "keccak_st", if globN t "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_root"))
+    {params : List (MlS × ShapeHOL)} {fbody : ProgHOL 64} {retSh : ShapeHOL}
+    (hlook : originalRuntimeCode.lookup (ofString "mpt_root") = some (params, fbody, retSh))
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)} {vals : List (ValueHOL 64)}
+    (hlk : PanSemStateFiniteExact.lookupCodeHOLFinite cur.code.lookup (ofString "mpt_root") vals =
+      some (fbody, callee, retSh))
+    {Rl : List Ivl} {S Nd Nm : List Nat}
+    (hmr : MptObjReady (callEntryStateHOLFinite cur callee))
+    (hW : WorldTypedWith (callEntryStateHOLFinite cur callee) S Nd)
+    (hm : MptObjInWith (callEntryStateHOLFinite cur callee) S Nm
+      (locN (callEntryStateHOLFinite cur callee) "m"))
+    (hd : IvlsDisj (mptObjIvls (callEntryStateHOLFinite cur callee) Nm
+      (locN (callEntryStateHOLFinite cur callee) "m")) (nodeExtents (callEntryStateHOLFinite cur callee) Nd))
+    (hR : IvlsDisj ((fun t => [(locN t "out", 32),
+                 (globN t "keccak_pad", if globN t "keccak_pad" = 0 then 0 else 136),
+                 (globN t "keccak_st", if globN t "keccak_st" = 0 then 0 else 200)])
+        (callEntryStateHOLFinite cur callee))
+      (worldTypedIvls (callEntryStateHOLFinite cur callee) S Nd ++
+        mptObjIvls (callEntryStateHOLFinite cur callee) Nm (locN (callEntryStateHOLFinite cur callee) "m")))
+    (hRN : IvlsDisj ((fun t => [(locN t "out", 32),
+                 (globN t "keccak_pad", if globN t "keccak_pad" = 0 then 0 else 136),
+                 (globN t "keccak_st", if globN t "keccak_st" = 0 then 0 else 200)])
+        (callEntryStateHOLFinite cur callee))
+      (nodeExtents (callEntryStateHOLFinite cur callee) Nd))
+    (hA : ArenaOK cur) (hhp : globN cur "heap_ptr" < heapLimit)
+    (hsp : globN cur "frame_mem_ptr" < globN cur "scratch_ptr")
+    (hout : ∀ a : BitVec 64, (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).2.memory a ≠
+      (callEntryStateHOLFinite cur callee).memory a → (callEntryStateHOLFinite cur callee).memaddrs a)
+    (hsp_le : globN (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).2 "scratch_ptr" ≤
+      globN (callEntryStateHOLFinite cur callee) "scratch_ptr")
+    (halign : ∀ i ∈ worldOwned (callEntryStateHOLFinite cur callee) S Nd ++
+        mptObjIvls (callEntryStateHOLFinite cur callee) Nm (locN (callEntryStateHOLFinite cur callee) "m") ++
+        ((fun t => [(locN t "out", 32),
+                 (globN t "keccak_pad", if globN t "keccak_pad" = 0 then 0 else 136),
+                 (globN t "keccak_st", if globN t "keccak_st" = 0 then 0 else 200)])
+          (callEntryStateHOLFinite cur callee)),
+        i.1 % 8 = 0 ∧ i.2 % 8 = 0)
+    (hwiden : ∀ i ∈ worldOwned (callEntryStateHOLFinite cur callee) S Nd ++
+        mptObjIvls (callEntryStateHOLFinite cur callee) Nm (locN (callEntryStateHOLFinite cur callee) "m") ++
+        ((fun t => [(locN t "out", 32),
+                 (globN t "keccak_pad", if globN t "keccak_pad" = 0 then 0 else 136),
+                 (globN t "keccak_st", if globN t "keccak_st" = 0 then 0 else 200)])
+          (callEntryStateHOLFinite cur callee)),
+        ∃ j ∈ Rl, 0 < j.2 ∧ j.1 = i.1 ∧ i.2 ≤ j.2)
+    (h : R16Shards.WorldEff s cur Rl [] ["heap_ptr", "scratch_ptr"])
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1) :
+    R16Shards.WorldEff s
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).2
+      Rl [] ["heap_ptr", "scratch_ptr"] := by
+  obtain ⟨params0, body0, retSh0, hlook0, hspec'⟩ := hspec
+  have hsame := lookupCodeHOLFinite_installed_body
+    cur.code.lookup (ofString "mpt_root") params0 body0 fbody retSh0 retSh
+    vals callee (by rw [h.code]; exact hlook0) hlk
+  cases hsame
+  have hret_eq := lookupCodeHOLFinite_installed_return
+    cur (ofString "mpt_root") params0 fbody fbody retSh0 retSh vals callee
+    (by rw [h.code]; exact hlook0) hlk
+  cases hret_eq
+  have hex : ∃ vs, PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup
+      (ofString "mpt_root") vs = some (fbody, (callEntryStateHOLFinite cur callee).locals, retSh) :=
+    ⟨vals, by simpa only [h.code, callEntryStateHOLFinite] using hlk⟩
+  have hstep := hspec' (callEntryStateHOLFinite cur callee) h.code hmr hex hnt hres
+  have hno_gb : ∀ gs ∈ globalBuffers, ofString gs.1 ∉ ["heap_ptr", "scratch_ptr"].map ofString := by
+    unfold globalBuffers
+    decide
+  have hstep_eff : R16Shards.WorldEff (callEntryStateHOLFinite cur callee)
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).2
+      Rl [] ["heap_ptr", "scratch_ptr"] :=
+    csrW_worldEff_of_mptObjStep (s := callEntryStateHOLFinite cur callee)
+      (guestInv_callEntry cur callee h.arena.1) hA hhp hstep
+      hW hm hd hR hRN (csrW_evaluate_eshapes _ _) (csrW_evaluate_be _ _)
+      hout hno_gb rfl hsp hsp_le halign hwiden
+  have hent : R16Shards.WorldEff s (callEntryStateHOLFinite cur callee) Rl []
+      ["heap_ptr", "scratch_ptr"] :=
+    h.locals_clock callee (cur.clock - 1)
+  have hbuf : FreshBufsOK s
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).2 :=
+    freshBufsOK_of_no_globalBuf_writes
+      (fun k hk => (hent.gw_kept k hk).trans (hstep_eff.gw_kept k hk)) (by decide)
+  exact R16Shards.WorldEff.trans hent hstep_eff (fun gs hgs => by simp at hgs) hbuf
+
 end WkWalk
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
