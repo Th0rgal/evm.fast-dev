@@ -15428,4 +15428,55 @@ theorem phase2_htab_set_ts8_message_suffix_bound (h : PtxCallees)
     exact guestInv_callEntry s callee hp.1.1.1.1.1
   · exact phase2_htab_set_ts8_message_suffix buffers contents names aa ak key value
 
+/-- Newly allocated role targets cannot alias either existing private access table. -/
+theorem phase2_message_tables_fresh_roles {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (ht : PtxMessageTables s aa ak)
+    (hr : ∀ a ∈ worldRoleSlots post ++ journalRoleSlots post,
+      (∃ b ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 = b.1) ∨
+        (globN s "heap_ptr" ≤ a.1 ∧ a.1 < heapLimit)) :
+    (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ aa) ∧
+    (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ ak) := by
+  obtain ⟨S, Nd, hw, ha, hk, _, _, haf, hkf, _⟩ := ht
+  have hbound : ∀ u ∈ S, u < globN s "heap_ptr" ∨ heapLimit ≤ u := by
+    intro u hu
+    have hi : (u, 88) ∈ htabFootprint s u := by simp [htabFootprint]
+    have hb := ((hw.1.2.1 u hu).2 (u, 88) hi).1
+    rcases hb with hb | hb
+    · have hb := hb.2
+      dsimp at hb
+      exact Or.inl (by omega)
+    · have hlo := hs.2.2.2.1
+      have hsp := hs.2.2.2.2.1
+      have hsep : heapLimit ≤ InitE.scratchStart := by decide
+      exact Or.inr (by dsimp [Inside] at *; omega)
+  constructor
+  · intro a ham heq
+    rcases hr a ham with ⟨b, hb, he⟩ | hf
+    · exact haf b hb (he.symm.trans heq)
+    · have := hbound aa ha
+      omega
+  · intro a ha heq
+    rcases hr a ha with ⟨b, hb, he⟩ | hf
+    · exact hkf b hb (he.symm.trans heq)
+    · have := hbound ak hk
+      omega
+
+/-- World growth may introduce fresh roles while preserving the private-table witness. -/
+theorem phase2_message_tables_world_step_fresh_roles {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) {aa ak : Nat}
+    (ha : ArenaReady s) (ht : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hm : locN post "m" = locN s "m")
+    (hr : ∀ a ∈ worldRoleSlots post ++ journalRoleSlots post,
+      (∃ b ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 = b.1) ∨
+        (globN s "heap_ptr" ≤ a.1 ∧ a.1 < heapLimit))
+    (haa : hdr post aa 0 = hdr s aa 0) (hak : hdr post ak 0 = hdr s ak 0)
+    (hs : ∀ S Nd, WorldTypedWith s S Nd →
+      ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+        OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd')) :
+    PtxMessageTables post aa ak := by
+  have hf := phase2_message_tables_fresh_roles ha ht hr
+  exact phase2_message_tables_world_step_roles s post ht hin hm hf.1 hf.2 haa hak hs
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
