@@ -16760,4 +16760,72 @@ theorem op_log_growth_buffer_post_g09 {F : Type}
     hheader hfresh hl hcap hbound hlen hgrow hfit hwords hlo hq hframe
   exact ⟨by rw [h16]; omega, by rw [h8, h16]; omega, hi, hw, hs⟩
 
+/-- Concrete growing head reconstruction derives both list validity and message ownership. -/
+theorem op_log_growth_concrete_head_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (head : Ivl) (S Nd : List Nat)
+    (l p n cap q log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S head) (hWT : WorldTypedWith s S Nd)
+    (hpw : (frameObjects s head).Pairwise Disj)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat) (hnonnull : l.toNat ≠ 0)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] (frameObjects s head))
+    (hl_bound : l.toNat + 24 ≤ 2^64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hcopy : ∀ i, i < n.toNat →
+      memW copy (p.toNat + 8*i) = memW s (memW s l.toNat + 8*i))
+    (heff : ByteRegionEffect s copy [(p.toNat, q.toNat - p.toNat)])
+    (hheap : globN s "heap_ptr" ≤ globN copy "heap_ptr")
+    (hheap_bound : globN copy "heap_ptr" ≤ 2^64)
+    (hwords : WordsOK copy (p.toNat, q.toNat - p.toNat))
+    (hlo : sourceBase ≤ p.toNat) (hq : q.toNat ≤ globN copy "heap_ptr")
+    (hlog : LogEntryOK copy log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, q.toNat - p.toNat)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then HolWordLab.word p else copy.memory a}
+    ArenaReady post → SameTypedCells s post S Nd →
+    AllocatorGrows s post →
+    (∀ g ∈ coreWorldGlobals, globN post g = globN s g) →
+    fixedObjects post = fixedObjects s →
+    (∀ t ∈ S, htabFootprint post t = htabFootprint s t) →
+    evmChain post = evmChain s →
+    (∀ ec ∈ evmChain s, ec = head ∨ ec ∈ (evmChain s).tail) →
+    (∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec) →
+    (∀ k ∈ ([8, 16, 24, 32, 40, 88, 112, 136, 144, 168, 176, 216, 232] : List Nat),
+      memW post (head.1 + k) = memW s (head.1 + k)) →
+    Disj (memW s (head.1 + 112), 176) (frameLogs post head) →
+    (∀ o ∈ logOwnedIvls copy log.toNat, Disj (memW s (head.1 + 112), 176) o) →
+    FrameWF post S head ∧
+      frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log.toNat := by
+  dsimp only
+  intro hAp hcell hgrows hcore hfixed hfoot hchain hcases htail hfields hmsgBuffer hmsgNew
+  have hframe := (hfields 88 (by simp)).trans hl
+  obtain ⟨hlist, hlogs⟩ := op_log_growth_list_post_g09 s copy head S l p n cap q log
+    hA hFW hpw hl hn hnonnull hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit
+    hcopy heff hheap hheap_bound hwords hlo hq hlog hdheader hdbuffer hframe
+  have hheader : (l.toNat, 24) ∈ frameObjects s head := by simp [frameObjects, hl]
+  obtain ⟨hc, hn', hi, hw, _⟩ := op_log_growth_buffer_post_g09 copy head l p n cap q log
+    (frameObjects s head) hheader hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit
+    hwords hlo hq hframe
+  obtain ⟨_, _, _, hmul, _, _, _, _, hslot, _⟩ :=
+    log_growth_word_bounds_g09 hcap_pos hcap_bound hlen hgrow hfit
+  rw [hmul] at hslot
+  have hg : ∀ g, globN copy g = globN s g := by
+    intro g; unfold globN; rw [heff.globals]
+  obtain ⟨_, _, _, howned⟩ := log_growth_header_and_new_record_g09 s copy head S l p n cap q log
+    hA hFW hl heff.memaddrs hheap (by rw [hg]) hl_bound hslot hheap_bound hlog hdheader hdbuffer
+  rw [← howned] at hlogs
+  refine ⟨?_, hlogs⟩
+  apply op_log_growth_head_frame_g09 hA hAp hFW hWT hcell hcore heff.memaddrs hgrows
+    hfixed hfoot hchain hcases htail (hg _) (hg _) (hg _) hfields
+    (by rwa [hl]) (by rw [hl]; rwa [hframe] at hlist) (by rwa [hl]) (Or.inl hi) hw hlogs hmsgBuffer
+  intro o ho
+  rw [howned] at ho
+  exact hmsgNew o ho
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
