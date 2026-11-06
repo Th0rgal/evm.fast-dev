@@ -8145,6 +8145,24 @@ private def finishWriteLen {F : Type} (s : PanSemStateFiniteExact 64 F)
           (memW s (node + 56))
       else nodeRefBytes s (memW s (node + 48))
 
+private theorem rlpBytesLenPure_lt_iff (fb gb n : Nat) :
+    rlpBytesLenPure fb n < rlpBytesLenPure gb n ↔
+      n = 1 ∧ fb < 128 ∧ 128 ≤ gb := by
+  by_cases hn : n = 1
+  · subst n
+    by_cases hf : fb < 128 <;> by_cases hg : gb < 128 <;>
+      simp [rlpBytesLenPure, rlpHeaderLenPure, hf, hg]; try omega
+  · simp [rlpBytesLenPure, hn]
+
+private theorem rlpBytesLenPure_growth_exact (fb gb n : Nat)
+    (hg : rlpBytesLenPure fb n < rlpBytesLenPure gb n) :
+    n = 1 ∧ fb < 128 ∧ 128 ≤ gb ∧
+      rlpBytesLenPure gb n = rlpBytesLenPure fb n + 1 := by
+  obtain ⟨rfl, hf, hb⟩ := (rlpBytesLenPure_lt_iff fb gb n).mp hg
+  refine ⟨rfl, hf, hb, ?_⟩
+  have hgb : ¬ gb < 128 := by omega
+  simp [rlpBytesLenPure, rlpHeaderLenPure, hf, hgb]
+
 private theorem rlpBytesLenPure_le_high (fb n : Nat) :
     rlpBytesLenPure fb n ≤ rlpBytesLenPure 128 n := by
   have h := (rlpBytesLenPure_bounds fb n).2.1
