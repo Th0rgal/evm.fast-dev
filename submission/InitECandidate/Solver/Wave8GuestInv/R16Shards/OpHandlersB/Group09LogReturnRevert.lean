@@ -16471,4 +16471,168 @@ theorem op_log_growth_list_post_g09 {F : Type}
     hframe hhw hha hslots hlogPost
   exact ⟨hlist, by rw [hlogs, howned]⟩
 
+/-- Reconstruct the growing head frame, deriving message ownership from object cases. -/
+theorem op_log_growth_head_frame_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {head : Ivl} {log : Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hFW : FrameWF s S head) (hWT : WorldTypedWith s S Nd)
+    (hcell : SameTypedCells s post S Nd)
+    (hglobals : ∀ g ∈ coreWorldGlobals, globN post g = globN s g)
+    (hdom : post.memaddrs = s.memaddrs) (hgrows : AllocatorGrows s post)
+    (hfixed : fixedObjects post = fixedObjects s)
+    (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hchain : evmChain post = evmChain s)
+    (hhead : ∀ ec ∈ evmChain s, ec = head ∨ ec ∈ (evmChain s).tail)
+    (htail : ∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec)
+    (hscratch : globN post "scratch_ptr" = globN s "scratch_ptr")
+    (hframe : globN post "frame_mem_ptr" = globN s "frame_mem_ptr")
+    (hempty : globN post "evm_empty" = globN s "evm_empty")
+    (hfields : ∀ k ∈ ([8, 16, 24, 32, 40, 88, 112, 136, 144, 168, 176, 216, 232] : List Nat),
+      memW post (head.1 + k) = memW s (head.1 + k))
+    (hcapacity : 1 ≤ memW post (memW s (head.1 + 88) + 16))
+    (hlist : LogsListOK post (memW s (head.1 + 88)))
+    (hlen : memW post (memW s (head.1 + 88) + 8) ≤
+      memW post (memW s (head.1 + 88) + 16))
+    (hbuffer : Inside (frameLogs post head) sourceBase (globN post "heap_ptr") ∨
+      Inside (frameLogs post head) (globN post "scratch_ptr") scratchEnd)
+    (hwords : WordsOK post (frameLogs post head))
+    (hlogs : frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log)
+    (hmsgBuffer : Disj (memW s (head.1 + 112), 176) (frameLogs post head))
+    (hmsgNew : ∀ o ∈ logOwnedIvls post log, Disj (memW s (head.1 + 112), 176) o) :
+    FrameWF post S head := by
+  have hsmall : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (head.1 + k) = memW s (head.1 + k) := by
+    intro k hk
+    apply hfields k
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+    rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp
+  have hret : frameRet post head = frameRet s head := by
+    unfold frameRet
+    rw [hfields 144 (by simp), hfields 216 (by simp)]
+  have hmsg := msgOwned_of_head_log_growth_g09 hAs hAp hWT hcell hglobals hdom hgrows
+    hfixed hfoot hchain hhead htail hsmall hret hlogs hmsgBuffer hmsgNew
+    hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+  exact frameWF_of_log_growth_g09 hFW hdom hscratch hframe hgrows.1 hempty
+    hfields hcapacity hlist hlen hbuffer hwords hmsg
+
+/-- Suspended frames retain structural validity even when log allocation advances the heap. -/
+theorem op_log_growth_tail_frame_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl}
+    (hFW : FrameWF s S ec) (hdom : post.memaddrs = s.memaddrs)
+    (hgrows : AllocatorGrows s post)
+    (hscratch : globN post "scratch_ptr" = globN s "scratch_ptr")
+    (hframe : globN post "frame_mem_ptr" = globN s "frame_mem_ptr")
+    (hempty : globN post "evm_empty" = globN s "evm_empty")
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hfields : ∀ k, k + 8 ≤ 280 → memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hheader : ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hslots : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8*i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8*i))
+    (hrecords : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (memW s (memW s (memW s (ec.1 + 88)) + 8*i) + k) =
+        memW s (memW s (memW s (memW s (ec.1 + 88)) + 8*i) + k))
+    (hmsg : MsgOwned post S (memW s (ec.1 + 112))) : FrameWF post S ec := by
+  have hwAt : ∀ a, WordAt post a ↔ WordAt s a := by
+    intro a
+    unfold WordAt
+    rw [hdom]
+    constructor
+    · rintro ⟨_, hd, _⟩
+      cases hm : s.memory (BitVec.ofNat 64 a) with
+      | word w => exact ⟨w, hd, rfl⟩
+    · rintro ⟨_, hd, _⟩
+      cases hm : post.memory (BitVec.ofNat 64 a) with
+      | word w => exact ⟨w, hd, rfl⟩
+  have hw : ∀ o, WordsOK post o ↔ WordsOK s o := by
+    intro o; unfold WordsOK; simp only [hwAt]
+  have h0 : memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) := by
+    simpa only [Nat.add_zero] using hheader 0 (by omega)
+  obtain ⟨_, hb⟩ := log_no_growth_tail_objects_congr_g09 hsys hfields hheader hslots hrecords
+  have hlist : LogsListOK post (memW s (ec.1 + 88)) := by
+    have hs := hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+    rcases hs with hn | ⟨hwords, halloc, hn, hcap, hentries⟩
+    · exact Or.inl hn
+    · right
+      refine ⟨(hw _).2 hwords, hgrows.allocated halloc, ?_, ?_, ?_⟩
+      · rw [hheader 8 (by omega)]; exact hn
+      · rw [hheader 8 (by omega), hheader 16 (by omega)]; exact hcap
+      · intro i hi
+        rw [hheader 8 (by omega)] at hi
+        obtain ⟨hword, hentry⟩ := hentries i hi
+        rw [h0]
+        refine ⟨(hwAt _).2 hword, ?_⟩
+        rw [hslots i hi]
+        exact logEntryOK_of_record_agree_g09 hdom hgrows.1 (hrecords i hi) hentry
+  apply frameWF_of_log_growth_g09 hFW hdom hscratch hframe hgrows.1 hempty
+    _ _ hlist _ _ _ hmsg
+  · intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+      exact hfields _ (by omega)
+  · rw [hheader 16 (by omega)]
+    exact hFW.2.2.2.2.2.2.2.2.2.2.1
+  · rw [hheader 8 (by omega), hheader 16 (by omega)]
+    exact hFW.2.2.2.2.2.2.2.2.2.2.2.1
+  · rw [hb, hscratch]
+    rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.1 with hh | hs
+    · exact Or.inl ⟨hh.1, le_trans hh.2 hgrows.1⟩
+    · exact Or.inr hs
+  · rw [hb]; exact (hw _).2 hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+
+/-- Reconstruct all suspended growing-append frames, deriving each message's ownership. -/
+theorem op_log_growth_all_frames_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {head : Ivl} {log : Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hWT : WorldTypedWith s S Nd) (hcell : SameTypedCells s post S Nd)
+    (hglobals : ∀ g ∈ coreWorldGlobals, globN post g = globN s g)
+    (hdom : post.memaddrs = s.memaddrs) (hgrows : AllocatorGrows s post)
+    (hfixed : fixedObjects post = fixedObjects s)
+    (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hchain : evmChain post = evmChain s)
+    (hhead : ∀ ec ∈ evmChain s, ec = head ∨ ec ∈ (evmChain s).tail)
+    (htail : ∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec)
+    (hscratch : globN post "scratch_ptr" = globN s "scratch_ptr")
+    (hframe : globN post "frame_mem_ptr" = globN s "frame_mem_ptr")
+    (hempty : globN post "evm_empty" = globN s "evm_empty")
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hheader : ∀ ec ∈ (evmChain s).tail, ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hslots : ∀ ec ∈ (evmChain s).tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8*i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8*i))
+    (hrecords : ∀ ec ∈ (evmChain s).tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (memW s (memW s (memW s (ec.1 + 88)) + 8*i) + k) =
+        memW s (memW s (memW s (memW s (ec.1 + 88)) + 8*i) + k))
+    (hheadMem : head ∈ evmChain s)
+    (hlogs : frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log)
+    (hmsgBuffer : ∀ ec ∈ evmChain s, Disj (memW s (ec.1 + 112), 176) (frameLogs post head))
+    (hmsgNew : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls post log,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hFW : ∀ ec ∈ evmChain s, FrameWF s S ec)
+    (hheadWF : FrameWF post S head) :
+    ∀ ec ∈ evmChain s, FrameWF post S ec := by
+  have hsmall : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (head.1 + k) = memW s (head.1 + k) := by
+    intro k hk
+    apply hfields head hheadMem
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+  have hret : frameRet post head = frameRet s head := by
+    unfold frameRet
+    rw [hfields head hheadMem 144 (by omega), hfields head hheadMem 216 (by omega)]
+  intro ec hec
+  rcases hhead ec hec with rfl | heTail
+  · exact hheadWF
+  · have hmsg := msgOwned_of_head_log_growth_g09 hAs hAp hWT hcell hglobals hdom hgrows
+      hfixed hfoot hchain hhead htail hsmall hret hlogs (hmsgBuffer ec hec) (hmsgNew ec hec)
+      (hFW ec hec).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+    exact op_log_growth_tail_frame_g09 (hFW ec hec) hdom hgrows hscratch hframe hempty hsys
+      (hfields ec hec) (hheader ec heTail) (hslots ec heTail) (hrecords ec heTail) hmsg
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

@@ -12258,4 +12258,61 @@ theorem epsA_alloc_g10 :
     rw [hr] at hno
     exact False.elim (hno herr)
 
+theorem alloc_binding_memory_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (charged : Bool)
+    (name : MlS) (hne : name ≠ ofString "x")
+    (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (hcont : HandlerRunA s0 MemoryExpansionLocal_g10 charged cont) :
+    HandlerRunA s0 MemoryExpansionLocal_g10 charged
+      (.decCall name .one (ofString "alloc") args cont) := by
+  apply HandlerRunA.decCall epsA_alloc_g10 (Q := MemoryExpansionLocal_g10)
+  · intros; trivial
+  · intro t values body callee rs v post hi hw hp ha hl hpi hpw hch hq
+    obtain ⟨hm, p, hv, hpn⟩ := hq
+    have hev : globN post "ev" = globN t "ev" := by
+      have he := congrArg (fun l => l.head?.map Prod.fst) hch
+      simpa [evmChain, evmChainFrom, callEntryStateHOLFinite, globN] using he
+    apply memoryExpansionLocal_transport_g10 hp
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne]
+    · exact hev
+    · change memW post _ = memW t _
+      unfold memW
+      rw [hm]
+      rfl
+  · exact hcont
+
+theorem create2_prefix_through_alloc_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hcont : HandlerRunA s0 MemoryExpansionLocal_g10 true
+      (handlerSuffix_g10 1 create2ChargedSuffix_g10)) :
+    HandlerRunA s0 (fun _ => True) false (sourceFnBody Guest.Software.guestFn_op_create2) := by
+  apply create2_prefix_memory_run_g10
+  apply HandlerRunA.weaken (Q := MemoryExpansionLocal_g10)
+  · intro t hi hp; exact hp.2
+  · exact alloc_binding_memory_sequence_g10 s0 true (ofString "salt") (by decide) _ _ hcont
+
+theorem alloc_return_buffer_bounds_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p n : BitVec 64)
+    (hi : EvmInv s) (hc : s.code = originalRuntimeCode)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    v = .val (.word p) ∧ p.toNat = globN s "heap_ptr" ∧ p.toNat % 8 = 0 ∧
+      p.toNat + n.toNat ≤ globN post "heap_ptr" ∧
+      globN post "heap_ptr" ≤ InitECandidate.Solver.HeapPotential.cMax.toNat ∧
+      globN post "heap_ptr" % 8 = 0 := by
+  have hpn : globN s "heap_ptr" = p.toNat := by unfold globN; rw [hp]
+  have hple : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat := by
+    rw [← hpn]; exact hi.1.2.2.1
+  have h := M13.evaluate_alloc_body_general s p n hc hple hp hn v
+  rw [hr] at h
+  obtain ⟨hv, hg, _, hlo, hhi, hal⟩ := h rfl
+  have hq : globN post "heap_ptr" = ((p + (n + 7)) &&& (0 - 8)).toNat := by
+    unfold globN
+    rw [hg]
+    simp only [HolFiniteMapExact.lookup_update, FUPDATE, beq_self_eq_true, ite_true]
+  refine ⟨hv, hpn.symm, ?_, hq ▸ hlo, hq ▸ hhi, hq ▸ hal⟩
+  rw [← hpn]
+  exact hi.1.2.2.2.2.2.2.1
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
