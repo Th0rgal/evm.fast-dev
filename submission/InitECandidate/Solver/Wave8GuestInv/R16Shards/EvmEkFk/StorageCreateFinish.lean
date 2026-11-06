@@ -9337,6 +9337,23 @@ theorem nodedb_lookup_ret_slice_so {F : Type}
       have hheap : globN mid "heap_ptr" = globN s "heap_ptr" := by rw [hmid]; rfl
       exact ⟨⟨hvok.2.2.2.1, by simpa only [hheap] using hvok.2.2.2.2⟩, hvok.2.2.1⟩
 
+theorem evm_witness_of_readOnly_so {fname : MlS} (hro : ReadOnlyFn fname) :
+    FunSpec (fun s => EvmInv s ∧ WitnessDbOK s)
+      (fun s r post => Resumes r → EvmStep [] s post ∧ WitnessDbOK post) fname := by
+  obtain ⟨params, body, rs, hlk, hro⟩ := hro
+  refine ⟨params, body, rs, hlk, ?_⟩
+  intro F s hc hpre hex hnt hr
+  have heq := hro s hc hpre.1.1.1 hex hnt hr
+  rw [heq]
+  exact ⟨evmStep_with_locals_clock (evmStep_refl_gw hpre.1) _ _,
+    witnessDbOK_with_locals_clock hpre.2 _ _⟩
+
+theorem nodedb_lookup_evm_witness_so :
+    FunSpec (fun s => EvmInv s ∧ WitnessDbOK s)
+      (fun s r post => Resumes r → EvmStep [] s post ∧ WitnessDbOK post)
+      (ofString "nodedb_lookup") :=
+  evm_witness_of_readOnly_so R11Adapters.ReadOnlyLeaves.ro_nodedb_lookup
+
 theorem witness_nodedb_lookup_ret_slice_so {F : Type}
     (s : PanSemStateFiniteExact 64 F) (db hash : BitVec 64) (rv : ValueHOL 64)
     (hc : s.code = originalRuntimeCode) (hAR : ArenaReady s) (hW : WitnessDbOK s)
