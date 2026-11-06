@@ -7738,4 +7738,23 @@ theorem htabValues_eq_of_htab_exit {F : Type}
     exact ⟨hs, by omega⟩
   · exact hd
 
+/-- Both value preservation and payload-word preservation follow from the
+same old-world table separation at the concrete mutator exit. -/
+theorem codeDbPayloadStrong_entries_of_separated_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (h : CodeDbPayloadStrong s S db) (hAs : ArenaReady s)
+    (hW : WorldTyped s S) (hdb : db ∈ S) (ht : locN s "t" ∈ S)
+    (hne : db ≠ locN s "t") (hx : HtabExit s post) :
+    NodeDbEntriesStrong post db := by
+  have hw := (hW.1.2.1 db hdb).1
+  have htw := (hW.1.2.1 (locN s "t") ht).1
+  have hv : htabValues post db = htabValues s db := by
+    apply htabValues_eq_of_htab_exit db hw htw
+    · intro i hi
+      exact ((hW.1.2.1 db hdb).2 i hi).1
+    · exact hAs
+    · exact hx
+    · exact hW.1.2.2.1 db hdb (locN s "t") ht hne
+  exact codeDbPayloadStrong_entries_of_htab_exit db h hAs hx ht htw hv
+
 end HeadStore
