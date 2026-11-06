@@ -13313,4 +13313,51 @@ theorem log_no_growth_final_cells_g09 {F : Type}
     obtain ⟨hns, hn8', _, _⟩ := hold i hi
     simp [memW, hns, hn8']
 
+/-- Concrete in-place readback and byte framing establish the semantic append
+contract, including preservation of all pre-existing log-owned intervals. -/
+theorem log_no_growth_semantic_post_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) (hn_bound : n.toNat + 1 < 2 ^ 64)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hp_bound : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hrecords : ∀ x ∈ ([(l.toNat + 8, 8), (p.toNat + 8 * n.toNat, 8)] : List Ivl),
+      ∀ i, i < n.toNat → Disj x (memW s (p.toNat + 8 * i), 40)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    memW post (ec.1 + 88) = l.toNat →
+    WordsOK post (l.toNat, 24) → Allocated post (l.toNat, 24) →
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8 * i)) →
+    LogEntryOK post log.toNat →
+    LogsListOK post (memW post (ec.1 + 88)) ∧
+      frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log.toNat := by
+  dsimp only
+  intro hframe hwords hallocated hslots hlog
+  have heff := log_no_growth_final_effect_g09 s l p n log hA.1.memaddrs
+    hd8 hdslot hl_bound hp_bound
+  obtain ⟨h0, h8, h16, hstore, hprefix⟩ :=
+    log_no_growth_final_cells_g09 s l p n cap log hl_bound hp_bound hdisj hn_bound hm0 hm16
+  apply log_append_post_of_frame_effect_g09 hA hFW heff (le_refl _) rfl
+  · simpa only [hl, hn, hm0] using hrecords
+  · exact hframe.trans hl.symm
+  · simpa only [hl] using hwords
+  · simpa only [hl] using hallocated
+  · simpa only [hl, hn] using h8
+  · rw [hl, hn, h16]; omega
+  · intro i hi
+    rw [hl, hn] at hi
+    simp only [hl, h0, hm0]
+    exact ⟨hslots i (Nat.le_of_lt hi), hprefix i hi⟩
+  · simpa only [hl, hn, h0] using hslots n.toNat (le_refl _)
+  · simpa only [hl, hn, h0] using hstore
+  · exact hlog
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
