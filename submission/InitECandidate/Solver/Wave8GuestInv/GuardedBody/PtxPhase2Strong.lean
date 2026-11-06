@@ -16264,4 +16264,100 @@ theorem phase2_record_pre_state_read_call_saved_tables
   rw [hr] at ht
   exact ht
 
+/-- World-state lookup preserves tables in an outer saved environment, independently of result locals. -/
+theorem phase2_ws_get_account_optional_resume_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat)
+    (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => PtxMessageTables {s with locals := saved} aa ak)
+      name (ofString "ws_get_account_optional") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "ws_get_account_optional")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.lookup_ws_get_account_optional_top] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  have hb := phase2_ws_get_account_optional_callEntry_message_tables
+    {s with locals := saved} callee hc
+    ((arenaReady_with_locals s saved s.clock).mpr hp.1) hp.2.1 hp.2.2
+    (by change (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) _).1 ≠ _; rw [hr]; simp)
+    (by change Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) _).1
+        rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  change PtxMessageTables {(evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2
+      with locals := saved} aa ak at hb
+  rw [hr] at hb
+  exact hb
+
+/-- Returning a local account result does not disturb any saved private-table witness. -/
+theorem phase2_return_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat) (e : ExpHOL 64) :
+    Hoare (fun s => PtxMessageTables {s with locals := saved} aa ak) (.return e)
+      (fun r s => (∃ v, r = some (.returned v)) →
+        PtxMessageTables {s with locals := saved} aa ak) := by
+  refine ⟨fun s _ hp _ _ => ?_⟩
+  rw [evaluateHOLFiniteState_return]
+  split
+  · exact hp
+  · split <;> exact hp
+
+/-- Compose a returning call with a continuation over saved private tables. -/
+theorem phase2_decCall_saved_tables
+    {P R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat)
+    {name fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hcall : DecCallResumeOn P R name fname args)
+    (hcont : Hoare R cont (fun r s => (∃ v, r = some (.returned v)) →
+      PtxMessageTables {s with locals := saved} aa ak)) :
+    Hoare P (.decCall name .one fname args cont)
+      (fun r s => (∃ v, r = some (.returned v)) →
+        PtxMessageTables {s with locals := saved} aa ak) := by
+  refine ⟨fun {F} s hcode hP _ hr => ?_⟩
+  obtain ⟨vout, hr⟩ := hr
+  rcases hrun : evaluateHOLFiniteState s (.decCall name .one fname args cont) with ⟨r, post⟩
+  rw [hrun] at hr
+  dsimp only at hr
+  subst r
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hrun
+  rcases hargs : evalListHOLFinite s
+      (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | values
+  · rw [hargs] at hrun; simp at hrun
+  · rw [hargs] at hrun; dsimp only at hrun
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · rw [hl] at hrun; simp at hrun
+    · rw [hl] at hrun; dsimp only at hrun
+      by_cases hz : s.clock = 0
+      · rw [if_pos hz] at hrun; simp at hrun
+      · rw [if_neg hz] at hrun
+        have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata
+          (callEntryStateHOLFinite s callee) body').1
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨bres, bpost⟩
+        rw [hb] at hrun hmeta
+        dsimp only at hmeta
+        cases bres with
+        | none => simp at hrun
+        | some br =>
+          cases br with
+          | returned v =>
+            dsimp only at hrun
+            split at hrun
+            · set resumed := setVarHOLFinite name v { bpost with locals := s.locals }
+              have hresR : R resumed := hcall s values body' callee ret' v bpost hcode hP hargs hl hb
+              have hresCode : resumed.code = originalRuntimeCode := hmeta.trans hcode
+              rcases hc : evaluateHOLFiniteState resumed cont with ⟨cres, cpost⟩
+              rw [hc] at hrun
+              dsimp only at hrun
+              obtain ⟨rfl, hpost_eq⟩ := Prod.mk.inj hrun
+              have hQc := hcont.run resumed hresCode hresR (by rw [hc]; simp)
+              rw [hc] at hQc
+              dsimp only
+              rw [← hpost_eq]
+              exact hQc ⟨vout, rfl⟩
+            · simp at hrun
+          | _ => simp [emptyLocalsHOLFinite] at hrun
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
