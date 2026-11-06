@@ -8795,6 +8795,26 @@ theorem precompile_store_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [evaluateHOLFiniteState_store]
   split <;> (try split) <;> (try split) <;> rfl
 
+theorem precompile_sha256_state_init_null {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "stp") = some (.val (.word 0))) :
+    evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_state_init) =
+      (some .error,s) := by
+  have hd : ¬ s.memaddrs (0 : BitVec 64) := by
+    rw [hi.memaddrs,Wave8Contracts.M08.ordinaryDomain_iff]
+    change ¬ (0 % 8 = 0 ∧ sourceBase ≤ 0 ∧ 0 < heapEnd)
+    norm_num [sourceBase]
+  have hd' : ¬ s.memaddrs (BitVec.ofNat 64 0) := hd
+  dsimp only [sourceFnBody,sourceFunctionEntry,Guest.Software.guestFn_sha256_state_init,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural]
+  rw [evaluateHOLFiniteState_seq_line780,evaluateHOLFiniteState_store]
+  simp [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    evalHOLExact,evalListHOLExact,hp,panMemStoresHOL,panMemStoreHOL,
+    valueIsWord,valueWord,wordOpHOL,wordOp,flattenHOL,hd']
+
 theorem precompile_sha256_state_init_effect {F : Type} (s : PanSemStateFiniteExact 64 F)
     (p : BitVec 64) (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
     (hp : s.locals.lookup (ofString "stp") = some (.val (.word p))) :
