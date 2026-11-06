@@ -17495,4 +17495,54 @@ theorem dec_return_replace_tail_memory {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Declared-call continuation replacement retains a predicate on the resulting memory. -/
+theorem decCall_return_replace_tail_memory {F : Type}
+    {s out : PanSemStateFiniteExact 64 F} {x fname : MlS} {sh : ShapeHOL}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64} {v : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (some (.returned v), out))
+    (cont' : ProgHOL 64) (v' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → Prop)
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F), evaluateHOLFiniteState entry cont = (some (.returned v), u) →
+      ∃ u', evaluateHOLFiniteState entry cont' = (some (.returned v'), u') ∧ P u'.memory) :
+    ∃ out', evaluateHOLFiniteState s (.decCall x sh fname args cont') = (some (.returned v'), out') ∧ P out'.memory := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h ⊢
+  split at h
+  · simp at h
+  · rename_i valuesOpt values ha
+    split at h
+    · simp at h
+    · rename_i bodyOpt body callee ret hl
+      split at h
+      · simp at h
+      · rename_i hclock
+        simp only [hclock, ↓reduceIte]
+        dsimp only at h ⊢
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => simp at h
+        | some r =>
+          cases r <;> try simp at h
+          rename_i rv
+          dsimp only at h ⊢
+          split at h
+          · rename_i hshape
+            simp only [hshape]
+            rcases ht : evaluateHOLFiniteState (setVarHOLFinite x rv {post with locals := s.locals}) cont with ⟨rc, u⟩
+            rw [ht] at h
+            cases rc with
+            | none => simp at h
+            | some r =>
+              cases r <;> try simp at h
+              rename_i w
+              obtain ⟨rfl, _⟩ := h
+              obtain ⟨u', hu, hP⟩ := hc _ _ ht
+              rw [hu]
+              exact ⟨_, rfl, hP⟩
+          · simp at h
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
