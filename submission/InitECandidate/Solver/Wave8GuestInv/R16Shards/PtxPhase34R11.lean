@@ -17284,4 +17284,26 @@ theorem journal_table_tail_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Replace a returning declaration body at its concrete entry state. -/
+theorem dec_return_replace_tail {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {nm : MlS} {init : ExpHOL 64}
+    {body : ProgHOL 64} {rv : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.dec nm .one init body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (hbody : ∀ w mid,
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) init = some (.val (.word w)) →
+      evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body = (some (.returned rv), mid) →
+      ∃ mid', evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body' = (some (.returned rv'), mid')) :
+    ∃ post', evaluateHOLFiniteState s (.dec nm .one init body') = (some (.returned rv'), post') := by
+  obtain ⟨w, he, mid, hb, _⟩ := dec_ret_inv h
+  obtain ⟨mid', hb'⟩ := hbody w mid he hb
+  rw [evaluateHOLFiniteState_dec_total]
+  simp only [he]
+  simp [shapeEqHOL, shapeOfHOLExact, hb']
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
