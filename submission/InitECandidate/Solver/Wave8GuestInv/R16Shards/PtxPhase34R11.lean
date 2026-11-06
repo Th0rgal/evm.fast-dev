@@ -18140,4 +18140,28 @@ theorem journal_alloc_copy_prefix_table_local {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private seq_store_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- All locals survive the four journal stores and counter increment. -/
+theorem journal_store_suffix_locals {F : Type}
+    (cur out : PanSemStateFiniteExact 64 F)
+    (d0 e0 d1 e1 d2 e2 d3 e3 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.store d0 e0) (.seq (.store d1 e1) (.seq (.store d2 e2) (.seq (.store d3 e3)
+        (.seq (.assign .global (ofString "journal_n")
+          (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail))))) =
+      (some (.returned rv), out)) :
+    ∃ mid, mid.locals = cur.locals ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨m1, h1, hr1⟩ := seq_store_ret_inv hr
+  obtain ⟨m2, h2, hr2⟩ := seq_store_ret_inv hr1
+  obtain ⟨m3, h3, hr3⟩ := seq_store_ret_inv hr2
+  obtain ⟨m4, h4, hr4⟩ := seq_store_ret_inv hr3
+  obtain ⟨mid, _, hl, ht⟩ := journal_counter_tail_frame tail rv hr4
+  exact ⟨mid, hl.trans ((store_fall_locals h4).trans ((store_fall_locals h3).trans
+    ((store_fall_locals h2).trans (store_fall_locals h1)))), ht⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
