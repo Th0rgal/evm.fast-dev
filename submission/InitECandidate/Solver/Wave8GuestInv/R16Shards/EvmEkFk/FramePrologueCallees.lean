@@ -9137,6 +9137,44 @@ theorem precompile_sha256_block_call_effect {F : Type}
       exact ⟨(stp.toNat,64), List.mem_singleton.mpr rfl, le_rfl, le_rfl⟩
     · simp at hv
 
+theorem precompile_sha256_init_call_null_not_resumes {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ptr : ExpHOL 64) (hi : GuestInv s)
+    (hp : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) ptr =
+      some (.val (.word 0))) :
+    ¬ Resumes (evaluateHOLFiniteState s
+      (.call (some (none,none)) (ofString "sha256_state_init") [ptr])).1 := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256_state_init") =
+      some ([(ofString "stp",.one)],sourceFnBody Guest.Software.guestFn_sha256_state_init,.one) :=
+    lookup_of_guestAst_getElem 92 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256_state_init) rfl
+  rw [evaluateHOLFiniteState_call]
+  have hv : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) [ptr] =
+      some [.val (.word 0)] := by
+    change @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) ptr = _ at hp
+    simp [evalListHOLFinite,evalListHOLExact,hp]
+  rw [hv]
+  dsimp only
+  rcases hlook : PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup
+      (ofString "sha256_state_init") [.val (.word 0)] with _ | ⟨body,callee,ret⟩
+  · simp [Resumes]
+  · dsimp only
+    have heq := lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ body _ ret _ callee
+      (by rw [hi.code]; exact hl) hlook
+    subst heq
+    have heq := lookupCodeHOLFinite_installed_return s _ _ _ _ .one ret _ callee
+      (by rw [hi.code]; exact hl) hlook
+    subst heq
+    obtain ⟨p,hvals,hpe⟩ := R10Shards.P26_P28.lookupCode_one_word hl
+      (by simpa only [hi.code] using hlook)
+    have hp0 : p = 0 := by simpa using hvals.symm
+    subst p
+    by_cases hz : s.clock = 0
+    · simp [hz,Resumes]
+    · rw [if_neg hz]
+      rw [precompile_sha256_state_init_null _ (guestInv_callEntry s callee hi) hpe]
+      simp [Resumes]
+
 theorem precompile_sha256_init_call_effect {F : Type}
     (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (ptr : ExpHOL 64)
     (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
