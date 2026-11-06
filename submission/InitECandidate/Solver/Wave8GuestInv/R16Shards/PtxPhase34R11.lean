@@ -19710,4 +19710,38 @@ theorem jdel_absent_guard_resume {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Values of the outer storage table have the inner-table role needed by deletion journaling. -/
+theorem ts32_value_worldRole {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S : List Nat) (t v : Nat)
+    (hTS : TablesTyped s S) (hts : globN s "ts" ≠ 0)
+    (ht : t = memW s (globN s "ts" + 32)) (htn : t ≠ 0)
+    (hv : v ∈ htabValues s t) : (v, "ts.inner") ∈ worldRoleSlots s := by
+  have htS : memW s (globN s "ts" + 32) ∈ S :=
+    (EvmEkFk.ts32Slot_disj s S hTS hts (by rwa [← ht])).1
+  have hvS : v ∈ S := by
+    have hi : HtabValuesIn s (memW s (globN s "ts" + 32)) S :=
+      hTS.2.2.2.2.2.2.2.2.1 hts htS
+    have hv' : v ∈ htabValues s (memW s (globN s "ts" + 32)) := by rwa [← ht]
+    obtain ⟨idx, hm, he⟩ := List.mem_map.1 hv'
+    rw [← he]
+    exact hi idx (List.mem_range.1 hm)
+  have hn : v ≠ 0 := by
+    intro hz
+    have hw : HtabWF s 0 := hz ▸ (hTS.2.1 _ hvS).1
+    have hh := (hw.1 (0, 88) (by unfold htabFootprint; simp)).1
+    unfold Inside sourceBase at hh
+    omega
+  unfold worldRoleSlots
+  rw [List.mem_filter]
+  refine ⟨?_, by simp [hn]⟩
+  have hnr : (v, "ts.inner") ∈ nestRoles s "ts" "ts.inner" := by
+    unfold nestRoles
+    rw [if_neg hts, if_neg (by rwa [← ht])]
+    exact List.mem_map.2 ⟨v, by rwa [← ht], rfl⟩
+  exact List.mem_append_left _ (List.mem_append_right _ hnr)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
