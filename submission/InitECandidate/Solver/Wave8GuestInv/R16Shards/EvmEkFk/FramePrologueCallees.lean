@@ -8795,6 +8795,53 @@ theorem precompile_store_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [evaluateHOLFiniteState_store]
   split <;> (try split) <;> (try split) <;> rfl
 
+theorem precompile_seq_flows_left {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (first cont : ProgHOL 64)
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq first cont)).1) :
+    R13.FlowsOrResumes (evaluateHOLFiniteState s first).1 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases he : evaluateHOLFiniteState s first with ⟨r,t⟩
+  cases r with
+  | none => exact Or.inl rfl
+  | some r => simpa only [he] using hr
+
+theorem precompile_memzero_null_128 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : GuestInv s)
+    (hp : s.locals.lookup (ofString "dst") = some (.val (.word 0)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word 128))) :
+    ¬ R13.FlowsOrResumes
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_memzero)).1 := by
+  have hd : ¬ s.memaddrs (BitVec.ofNat 64 0) := by
+    rw [hi.memaddrs,Wave8Contracts.M08.ordinaryDomain_iff]
+    norm_num [InitE.sourceBase]
+  dsimp only [sourceFnBody,sourceFunctionEntry,Guest.Software.guestFn_memzero,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural]
+  rw [evaluateHOLFiniteState_dec_total]
+  simp only [evalHOLExact,shapeOfHOLExact,shapeEqHOL,Bool.true_eq,ite_true]
+  intro hr
+  have hr := precompile_seq_flows_left _ _ _ hr
+  rw [evaluateHOLFiniteState_ite] at hr
+  simp [evalHOLExact,evalListHOLExact,setVarHOLFinite,
+    HolFiniteMapExact.lookup_update,FUPDATE,hp,valueIsWord,valueWord,
+    wordOpHOL,wordOp,Compiler.Encoders.Asm.wordCmpHOL] at hr
+  have hr := precompile_seq_flows_left _ _ _ hr
+  rw [evaluateHOLFiniteState_while_total] at hr
+  simp [evalHOLExact,evalListHOLExact,setVarHOLFinite,
+    HolFiniteMapExact.lookup_update,FUPDATE,hp,hn,valueIsWord,valueWord,
+    wordOpHOL,wordOp,Compiler.Encoders.Asm.wordCmpHOL] at hr
+  norm_num [show ofString "i" ≠ ofString "n" by decide] at hr
+  rw [evaluateHOLFiniteState_seq_line780,evaluateHOLFiniteState_store] at hr
+  simp [evalHOLExact,evalListHOLExact,decClockHOLFinite,
+    HolFiniteMapExact.lookup_update,FUPDATE,hp,valueIsWord,valueWord,
+    wordOpHOL,wordOp,panMemStoresHOL,panMemStoreHOL,flattenHOL,hd,
+    show ofString "i" ≠ ofString "dst" by decide] at hr
+  split at hr <;> simp_all [R13.FlowsOrResumes,Resumes]
+
 theorem precompile_sha256_state_init_null {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hi : GuestInv s)
     (hp : s.locals.lookup (ofString "stp") = some (.val (.word 0))) :
@@ -9225,16 +9272,6 @@ theorem precompile_sha256_init_nonzero_of_flow {F : Type}
   have hzero : stp = 0 := BitVec.eq_of_toNat_eq hz
   subst stp
   exact precompile_sha256_init_call_null_not_flows s ptr hi hp hflow
-
-theorem precompile_seq_flows_left {F : Type}
-    (s : PanSemStateFiniteExact 64 F) (first cont : ProgHOL 64)
-    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq first cont)).1) :
-    R13.FlowsOrResumes (evaluateHOLFiniteState s first).1 := by
-  rw [evaluateHOLFiniteState_seq_line780] at hr
-  rcases he : evaluateHOLFiniteState s first with ⟨r,t⟩
-  cases r with
-  | none => exact Or.inl rfl
-  | some r => simpa only [he] using hr
 
 theorem precompile_sha256_init_nonzero_of_sequence {F : Type}
     (s : PanSemStateFiniteExact 64 F) (ptr : ExpHOL 64) (stp : BitVec 64)

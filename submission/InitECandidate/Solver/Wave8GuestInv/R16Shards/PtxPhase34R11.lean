@@ -18895,4 +18895,131 @@ theorem fresh_account_balance_store_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+
+/-- The world invariant supplies all journal and allocator word witnesses. -/
+theorem jset_call_ts16_world_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (tw kw : BitVec 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (ht : callee.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : callee.lookup (ofString "key") = some (.val (.word kw)))
+    (hts : globN s "ts" ≠ 0) (htw : tw.toNat = memW s (globN s "ts" + 16))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "jset") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have hA := hW.1.1
+  obtain ⟨j, hj⟩ := hA.2.2.2.2.2.2.2.2.2 "journal" (by decide)
+  obtain ⟨n, hn⟩ := hA.2.2.2.2.2.2.2.2.2 "journal_n" (by decide)
+  obtain ⟨cap, hc⟩ := hA.2.2.2.2.2.2.2.2.2 "journal_cap" (by decide)
+  obtain ⟨p, hp⟩ := hA.2.2.2.2.2.2.2.2.2 "heap_ptr" (by decide)
+  exact jset_call_ts16_return_header_words s post S Nd vs body callee ret j n cap p tw kw rv
+    hW hT hj hn hc hp ht hk hts htw hl hr
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Extract the transaction-table and key words directly from concrete jset arguments. -/
+theorem jset_ts16_args_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (key value : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 16]), key, value] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "jset") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have hcode := hW.1.1.1.code
+  obtain ⟨v1, v2, v3, he1, _, _, ht, hk, hv⟩ := R16WkAcctWs.callee_param_three s (ofString "jset")
+    (ofString "t") (ofString "key") (ofString "value") .one .one .one _ _
+    (by rw [hcode]; exact EvmEkFk.lookup_jset) _ _ _ vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw, hts⟩ := evalAt_loadG_nz s hW.1.1.1 "ts" 16#64 (by decide) v1 he1
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "jset") _ _ body _ ret vs callee EvmEkFk.lookup_jset (by rwa [← hcode])
+  have hret := lookupCodeHOLFinite_installed_return s (ofString "jset")
+    _ _ _ _ ret vs callee (by rw [hcode]; exact EvmEkFk.lookup_jset) hl
+  obtain ⟨_, kw, vw, _, _, hk', _⟩ := Fast_C08WkShard03.lookupCode_three_words
+    (by decide) (by decide) (by decide) EvmEkFk.lookup_jset
+    (by subst body ret; rwa [← hcode])
+  exact jset_call_ts16_world_header_words s post S Nd vs body callee ret tw kw rv
+    hW hT ht hk' hts htw hl hr
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+
+/-- The concrete transaction-table mutation preserves backing through call return. -/
+theorem jset_ts16_call0_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (key value : ExpHOL 64) (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "jset")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 16]), key, value]) =
+      (none, post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  classical
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases ha : evalListHOLFinite s
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 16]), key, value] with _ | vs
+  · rw [ha] at hr; cases hr
+  · simp only [ha] at hr
+    rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "jset") vs with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr
+      split at hr
+      · cases hr
+      · rcases hc : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, p⟩
+        rw [hc] at hr
+        cases r with
+        | none => cases hr
+        | some r =>
+          cases r <;> try (simp at hr)
+          rename_i v
+          split at hr
+          · have hu := jset_ts16_args_header_words s p S Nd key value vs body callee ret v hW hT ha hl hc
+            have hp := (Prod.mk.inj hr).2
+            rw [← hp]
+            exact hu
+          · cases hr
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Account installation preserves backing across journal mutation and return. -/
+theorem set_account_body_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_set_account) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "jset")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 16]),
+      .var .local (ofString "addr"), .var .local (ofString "a")]) (.return (.const 0))) = _ at hr
+  obtain ⟨mid, hm, ht⟩ := seq_call0_ret_inv hr
+  have hh := jset_ts16_call0_header_words s mid S Nd (.var .local (ofString "addr"))
+    (.var .local (ofString "a")) hW hT hm
+  have hp : post.memory = mid.memory := by
+    rw [evaluateHOLFiniteState_return] at ht
+    simp [evalHOLExact] at ht
+    split at ht <;> simp_all [emptyLocalsHOLFinite]
+    rw [← ht.2]
+  simpa only [memW, hp] using hh
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
