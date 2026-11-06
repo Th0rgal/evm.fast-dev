@@ -8846,6 +8846,31 @@ theorem precompile_sha256_block_region {F : Type} (s : PanSemStateFiniteExact 64
       [(p.toNat, 64)] :=
   precompile_byteEff_to_region (precompile_sha256_block_effect s p hc hi hp)
 
+theorem precompile_funByteEff_sha256_state_init :
+    R10Shards.P26_P28.FunByteEff (ofString "sha256_state_init")
+      (fun vals _ => [(R10Shards.P26_P28.valWordNat (vals[0]?.getD (.rStruct [])), 64)]) := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256_state_init") =
+      some ([(ofString "stp", .one)], sourceFnBody Guest.Software.guestFn_sha256_state_init, .one) :=
+    lookup_of_guestAst_getElem 92 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256_state_init) rfl
+  refine ⟨_, _, _, hl, ?_⟩
+  intro F s vals hc hi hlook hnt hres
+  obtain ⟨p, rfl, hp⟩ := R10Shards.P26_P28.lookupCode_one_word hl hlook
+  exact precompile_sha256_state_init_effect s p hc hi hp
+
+theorem precompile_funByteEff_sha256_block :
+    R10Shards.P26_P28.FunByteEff (ofString "sha256_block")
+      (fun vals _ => [(R10Shards.P26_P28.valWordNat (vals[0]?.getD (.rStruct [])), 64)]) := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256_block") =
+      some ([(ofString "stp", .one), (ofString "blk", .one)],
+        sourceFnBody Guest.Software.guestFn_sha256_block, .one) :=
+    lookup_of_guestAst_getElem 93 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256_block) rfl
+  refine ⟨_, _, _, hl, ?_⟩
+  intro F s vals hc hi hlook hnt hres
+  obtain ⟨p, b, rfl, hp, hb⟩ := R10Shards.P26_P28.lookupCode_two_words (by decide) hl hlook
+  exact precompile_sha256_block_effect s p hc hi hp
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
