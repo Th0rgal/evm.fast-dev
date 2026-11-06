@@ -14096,6 +14096,141 @@ theorem ncrFn_sp :
 def fcB1 : ProgHOL 64 := EvmEkFk.fcLeftSeq EvmEkFk.fcBranches
 def fcB2 : ProgHOL 64 := EvmEkFk.fcRightSeq EvmEkFk.fcBranches
 
+/-- Under `CreateFinishSpecs`, a finish-child core run that ends in a returned
+value or an `EvmErr` (and never times out) must fall through the prelude, and
+its remaining execution is exactly `fcAfterPrelude` from the fallthrough
+state. -/
+theorem fcCore_afterPrelude_of_createFinish (hCF : EvmEkFk.CreateFinishSpecs) {F : Type}
+    {s0 s1 : PanSemStateFiniteExact 64 F}
+    (hRel0 : EvmEkFk.PreludeRel s0 s1)
+    (hRes : (∃ v : ValueHOL 64, (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1 =
+        some (.returned v)) ∨
+      IsEvmErr (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1)
+    (hnt : (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1 ≠ some .timeOut) :
+    ∃ s2 : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState s1 EvmEkFk.fcPrelude = (none, s2) ∧
+      EvmEkFk.PreludeRel s0 s2 ∧
+      evaluateHOLFiniteState s1 EvmEkFk.fcCore =
+        evaluateHOLFiniteState s2 EvmEkFk.fcAfterPrelude := by
+  have hcore_none : ∀ s2 : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState s1 EvmEkFk.fcPrelude = (none, s2) →
+      evaluateHOLFiniteState s1 EvmEkFk.fcCore =
+        evaluateHOLFiniteState s2 EvmEkFk.fcAfterPrelude := by
+    intro s2 h
+    rw [EvmEkFk.fcCore_eq, evaluateHOLFiniteState_seq_line780, h]
+  have hcore_some : ∀ (w : PanSemResultExact 64) (s2 : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState s1 EvmEkFk.fcPrelude = (some w, s2) →
+      (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1 = some w := by
+    intro w s2 h
+    rw [EvmEkFk.fcCore_eq, evaluateHOLFiniteState_seq_line780, h]
+  rcases hpre : evaluateHOLFiniteState s1 EvmEkFk.fcPrelude with ⟨r, s2⟩
+  have hntPre : (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).1 ≠ some .timeOut := by
+    intro hc
+    rw [hpre] at hc
+    dsimp only at hc
+    exact hnt (hcore_some .timeOut s2 (by rw [hpre, hc]))
+  cases r with
+  | none =>
+    refine ⟨s2, rfl, ?_, hcore_none s2 hpre⟩
+    have hrel2 := (EvmEkFk.fcPrelude_step hCF hRel0 hntPre).1 (by rw [hpre])
+    rw [hpre] at hrel2
+    dsimp only at hrel2
+    exact hrel2
+  | some w =>
+    exfalso
+    have hcore_res : (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1 = some w :=
+      hcore_some w s2 hpre
+    rw [hcore_res] at hRes
+    rcases hRes with ⟨v, hv⟩ | herr
+    · refine EvmEkFk.fcPrelude_ne_returned s1 v ?_
+      rw [hpre]
+      exact hv
+    · refine fcPreNoErr hCF hRel0 hntPre ?_
+      obtain ⟨v, hv⟩ := herr
+      refine ⟨v, ?_⟩
+      rw [hpre]
+      exact hv
+
+/-- The same factorization composed with the concrete two-global pop: the core
+run equals the branch-and-cleanup sequence from the popped state. -/
+theorem fcCore_pop_of_createFinish (hCF : EvmEkFk.CreateFinishSpecs) {F : Type}
+    {s0 s1 : PanSemStateFiniteExact 64 F}
+    (hRel0 : EvmEkFk.PreludeRel s0 s1)
+    (hRes : (∃ v : ValueHOL 64, (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1 =
+        some (.returned v)) ∨
+      IsEvmErr (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1)
+    (hnt : (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1 ≠ some .timeOut) :
+    ∃ s2 : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState s1 EvmEkFk.fcPrelude = (none, s2) ∧
+      evaluateHOLFiniteState s1 EvmEkFk.fcCore =
+        evaluateHOLFiniteState
+          (setGlobalHOLFinite (ofString "cur_cont")
+            (.val (.word (BitVec.ofNat 64 (memW s2 (globN s2 "cur_cont" + 8)))))
+            (setGlobalHOLFinite (ofString "ev")
+              (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s2))
+          (ProgHOL.seq EvmEkFk.fcBranches EvmEkFk.fcCleanup) := by
+  obtain ⟨s2, hpre, hRel2, hrun⟩ := fcCore_afterPrelude_of_createFinish hCF hRel0 hRes hnt
+  exact ⟨s2, hpre, hrun.trans (finish_child_pop_step hRel2)⟩
+
+/-- The popped state carries the full `FcBranchState` invariant, ready for the
+branch-step lemmas. -/
+theorem fcCore_pop_branchState_of_createFinish (hCF : EvmEkFk.CreateFinishSpecs) {F : Type}
+    {s0 s1 : PanSemStateFiniteExact 64 F}
+    (hRel0 : EvmEkFk.PreludeRel s0 s1)
+    (hk0 : memW s0 (globN s0 "cur_cont" + 16) ≠ 0)
+    (hRes : (∃ v : ValueHOL 64, (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1 =
+        some (.returned v)) ∨
+      IsEvmErr (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1)
+    (hnt : (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1 ≠ some .timeOut) :
+    ∃ (s2 : PanSemStateFiniteExact 64 F) (S : List Nat),
+      evaluateHOLFiniteState s1 EvmEkFk.fcPrelude = (none, s2) ∧
+      evaluateHOLFiniteState s1 EvmEkFk.fcCore =
+        evaluateHOLFiniteState
+          (setGlobalHOLFinite (ofString "cur_cont")
+            (.val (.word (BitVec.ofNat 64 (memW s2 (globN s2 "cur_cont" + 8)))))
+            (setGlobalHOLFinite (ofString "ev")
+              (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s2))
+          (ProgHOL.seq EvmEkFk.fcBranches EvmEkFk.fcCleanup) ∧
+      EvmEkFk.FcBranchState s0
+        (setGlobalHOLFinite (ofString "cur_cont")
+          (.val (.word (BitVec.ofNat 64 (memW s2 (globN s2 "cur_cont" + 8)))))
+          (setGlobalHOLFinite (ofString "ev")
+            (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s2)) S := by
+  obtain ⟨s2, hpre, hRel2, hrun⟩ := fcCore_afterPrelude_of_createFinish hCF hRel0 hRes hnt
+  have hinv := finish_child_prelude_pop_invariants hRel2 hk0
+  dsimp only at hinv
+  obtain ⟨hAp, S', hIp, hRel, hch, hlen, hR⟩ := hinv
+  have hcc2 : globN s2 "cur_cont" = globN s0 "cur_cont" := by
+    have hh := congrArg List.head? hRel2.chain_eq
+    rw [evmChain_cons, evmChain_cons] at hh
+    exact (Prod.mk.inj (Option.some.inj hh)).2
+  have hmem0 : (globN s0 "ev", globN s0 "cur_cont") ∈ evmChain s0 := by
+    rw [evmChain_cons]; exact List.mem_cons_self
+  have hm48 : memW s2 (globN s2 "cur_cont" + 48) =
+      memW s0 (globN s0 "cur_cont" + 48) := by
+    rw [hcc2]; exact hRel2.mark_eq
+  have hm56 : memW s2 (globN s2 "cur_cont" + 56) =
+      memW s0 (globN s0 "cur_cont" + 56) := by
+    rw [hcc2]; exact (hRel2.cells _ hmem0).2.2.2
+  rw [hm48, hm56] at hRel
+  refine ⟨s2, S', hpre, hrun.trans (finish_child_pop_step hRel2), ?_⟩
+  refine ⟨hAp, hIp, hRel, ?_, hch, hlen, ?_, ?_, ?_⟩
+  · have hloc : (setGlobalHOLFinite (ofString "cur_cont")
+          (.val (.word (BitVec.ofNat 64 (memW s2 (globN s2 "cur_cont" + 8)))))
+          (setGlobalHOLFinite (ofString "ev")
+            (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s2)).locals =
+        s2.locals := rfl
+    exact EvmEkFk.fcEntryLocals_congr_locals hloc hRel2.locals_ok
+  · have := hR
+    omega
+  · intro ec hec
+    rw [hch] at hec
+    have hec0 : ec ∈ evmChain s0 := List.mem_of_mem_tail hec
+    obtain ⟨a0, b0, c0, d0⟩ := hRel2.cells ec hec0
+    exact ⟨a0, b0, c0, d0⟩
+  · simp only [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE]
+    exact Nat.mod_eq_of_lt (memW_lt s0 _)
+
 end FcNoEvmErr
 
 
