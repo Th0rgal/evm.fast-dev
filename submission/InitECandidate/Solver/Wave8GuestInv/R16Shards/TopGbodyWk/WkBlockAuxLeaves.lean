@@ -7,6 +7,8 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalRemove
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.SetLstNew
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkBalAddChanges
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkIdxStateInit
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkGetCode
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_has
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_item
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.RlpHelpers
@@ -11347,5 +11349,487 @@ theorem wk_bal_remove_change :
 theorem wk_add_balance_change :
     WorldKeeps WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
       (ofString "add_balance_change") := WkBal.wk_add_balance_change
+
+theorem worldKeepsSc_of_scratch_kept {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)} {fn : MlS}
+    (h : WorldKeeps P R gw keep NoExtra fn) (hsp : ofString "scratch_ptr" ∉ gw.map ofString) :
+    WorldKeepsSc P R gw keep NoExtra fn := by
+  obtain ⟨params, body, ret, hl, hb⟩ := h
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hp hex hnt hres
+  have hs := hb s hc hp hex hnt hres
+  refine ⟨hs, ?_⟩
+  have hg := hs.2.2.1 (ofString "scratch_ptr") hsp
+  exact Nat.le_of_eq (globN_eq_of_lookup hg)
+
+theorem wk_add_nonce_change :
+    WorldKeeps WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_nonce_change") := WkBal.wk_add_nonce_change
+
+theorem wk_add_code_change :
+    WorldKeeps WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_code_change") := WkBal.wk_add_code_change
+
+theorem wk_add_storage_write :
+    WorldKeeps WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_storage_write") := WkBal.wk_add_storage_write
+
+theorem wkSc_add_balance_change :
+    WorldKeepsSc WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_balance_change") :=
+  worldKeepsSc_of_scratch_kept wk_add_balance_change (by decide)
+
+theorem wkSc_add_nonce_change :
+    WorldKeepsSc WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_nonce_change") :=
+  worldKeepsSc_of_scratch_kept wk_add_nonce_change (by decide)
+
+theorem wkSc_add_code_change :
+    WorldKeepsSc WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_code_change") :=
+  worldKeepsSc_of_scratch_kept wk_add_code_change (by decide)
+
+theorem wkSc_add_storage_write :
+    WorldKeepsSc WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_storage_write") :=
+  worldKeepsSc_of_scratch_kept wk_add_storage_write (by decide)
+
+theorem wkSc_bal_remove_change :
+    WorldKeepsSc BalChangeArg (fun _ => []) [] stdKeep NoExtra
+      (ofString "bal_remove_change") :=
+  worldKeepsSc_of_scratch_kept wk_bal_remove_change (by decide)
+
+theorem wkSc_idx_start_account :
+    WorldKeepsSc WorldOK (bufRegions WkBalStateInit.idxBufs)
+      ["heap_ptr", "scratch_ptr"] stdKeep NoExtra (ofString "idx_start_account") :=
+  WkBalStateInit.wkSc_idx_start_account
+
+theorem wk_idx_start_account :
+    WorldKeeps WorldOK
+      (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64),
+        (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
+      ["heap_ptr", "scratch_ptr"] stdKeep NoExtra (ofString "idx_start_account") :=
+  wkSc_idx_start_account.to_worldKeeps
+
+theorem wkSc_remove_storage_write :
+    WorldKeepsSc WorldOK (fun _ => []) [] stdKeep NoExtra
+      (ofString "remove_storage_write") :=
+  worldKeepsSc_of_scratch_kept WkBal.wk_remove_storage_write (by decide)
+
+theorem wkSc_process_withdrawals_of_builder
+    (hbuilder : WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "update_builder_from_tx")) :
+    WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "process_withdrawals") :=
+  wkSc_process_withdrawals_of_incorporate
+    (wkSc_incorporate_tx_into_block_of_steps hbuilder wkSc_merge_tx_into_block)
+
+def builderStorageEntry : ProgHOL 64 :=
+  .decCall (ofString "pre_v") (.comb [.one, .one, .one, .one]) (ofString "idx_start_storage")
+    [.rfield 1 (.var .local (ofString "s2")), .rfield 1 (.var .local (ofString "e"))]
+    (.dec (ofString "post_v") (.comb [.one, .one, .one, .one])
+      (.load (.comb [.one, .one, .one, .one]) (.rfield 2 (.var .local (ofString "e"))))
+      (.decCall (ofString "eq2") .one (ofString "u256_eq")
+        [.var .local (ofString "pre_v"), .var .local (ofString "post_v")]
+        (.ite (.cmp .equal (.var .local (ofString "eq2")) (.const 0#64))
+          (.call (some (none, none)) (ofString "add_storage_write")
+            [.rfield 1 (.var .local (ofString "s2")), .rfield 1 (.var .local (ofString "e")),
+             .var .local (ofString "idx"), .var .local (ofString "post_v")])
+          (.call (some (none, none)) (ofString "remove_storage_write")
+            [.rfield 1 (.var .local (ofString "s2")), .rfield 1 (.var .local (ofString "e")),
+             .var .local (ofString "idx")]))))
+
+theorem progWStep_builderStorageEntry {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hidx : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "idx_start_storage"))
+    (heq : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "u256_eq"))
+    (hwrite : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_storage_write"))
+    (hremove : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "remove_storage_write")) :
+    ProgWStep B gw builderStorageEntry := by
+  unfold builderStorageEntry
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hidx
+  apply progWStep_dec
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) heq
+  exact progWStep_ite
+    (progWStep_call0 (fun _ h => h) (fun _ h => h) hwrite)
+    (progWStep_call0 (fun _ h => h) (fun _ h => h) hremove)
+
+def builderStorageInner : ProgHOL 64 :=
+  .while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "icap")))
+    (.decCall (ofString "e") (.comb [.one, .one, .one]) (ofString "htab_item")
+      [.var .local (ofString "inner"), .var .local (ofString "j")]
+      (.seq (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "e"))) (.const 0#64))
+        builderStorageEntry .skip)
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1#64]))))
+
+def builderStorageOuter : ProgHOL 64 :=
+  .while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+    (.decCall (ofString "s2") (.comb [.one, .one, .one]) (ofString "htab_item")
+      [.var .local (ofString "outer"), .var .local (ofString "i")]
+      (.seq (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s2"))) (.const 0#64))
+        (.dec (ofString "inner") .one (.rfield 2 (.var .local (ofString "s2")))
+          (.dec (ofString "icap") .one
+            (.load .one (.op .add [.var .local (ofString "inner"), .const 24#64]))
+            (.dec (ofString "j") .one (.const 0#64) builderStorageInner))) .skip)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1#64]))))
+
+theorem progWStep_builderStorageOuter {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hitem : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "htab_item"))
+    (hentry : ProgWStep B gw builderStorageEntry) :
+    ProgWStep B gw builderStorageOuter := by
+  have hinner : ProgWStep B gw builderStorageInner := by
+    unfold builderStorageInner
+    apply progWStep_while hB hgw
+    apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hitem
+    exact progWStep_seq hB hgw (progWStep_ite hentry (progWStep_skip _ _))
+      (progWStep_assign_local _ _ _ _)
+  unfold builderStorageOuter
+  apply progWStep_while hB hgw
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hitem
+  apply progWStep_seq hB hgw
+  · apply progWStep_ite
+    · exact progWStep_dec (progWStep_dec (progWStep_dec hinner))
+    · exact progWStep_skip _ _
+  · exact progWStep_assign_local _ _ _ _
+
+def builderStorageSuffix : ProgHOL 64 :=
+  .dec (ofString "outer") .one
+    (.load .one (.op .add [.var .global (ofString "ts"), .const 32#64]))
+    (.seq (.assign .local (ofString "cap")
+      (.load .one (.op .add [.var .local (ofString "outer"), .const 24#64])))
+      (.seq (.assign .local (ofString "i") (.const 0#64))
+        (.seq builderStorageOuter (.return (.const 0#64)))))
+
+theorem progWStep_builderStorageSuffix {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hitem : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "htab_item"))
+    (hidx : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "idx_start_storage"))
+    (heq : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "u256_eq"))
+    (hwrite : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_storage_write"))
+    (hremove : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "remove_storage_write")) :
+    ProgWStep B gw builderStorageSuffix := by
+  unfold builderStorageSuffix
+  apply progWStep_dec
+  apply progWStep_seq hB hgw (progWStep_assign_local _ _ _ _)
+  apply progWStep_seq hB hgw (progWStep_assign_local _ _ _ _)
+  exact progWStep_seq hB hgw
+    (progWStep_builderStorageOuter hB hgw hitem
+      (progWStep_builderStorageEntry hB hgw hidx heq hwrite hremove))
+    (progWStep_return _ _ _)
+
+theorem progWStep_call0_guarded {B Bf : BufList} {gw gwf : List String} {fname : MlS}
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {args : List (ExpHOL 64)}
+    (hB : ∀ p ∈ Bf, p ∈ B) (hgw : ∀ g ∈ gwf, g ∈ gw)
+    (hf : WorldKeepsSc P (bufRegions Bf) gwf stdKeep NoExtra fname)
+    (hentry : CallEntryOn WorldOK P fname args) :
+    ProgWStep B gw (.call (some (none, none)) fname args) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, hargs] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        let ent := callEntryStateHOLFinite s callee
+        have hWent : P ent := hentry s vs body' callee ret' hc hW hargs hl
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent] at hrun
+        simp only [hrun] at hnt hfr ⊢
+        have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+          simp only [ent, hrun]; rintro rfl; simp at hnt
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hfr ⊢
+            split
+            · have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+              simp only [hrun] at hspec
+              exact ((hspec (Or.inl ⟨v, rfl⟩)).mono_bufs hB hgw).from_entry
+            · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres_ex : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | hr <;> try simp at h
+              exact hr
+            have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+            simp only [hrun] at hspec
+            exact ((hspec hres_ex).mono_bufs hB hgw).from_entry
+
+theorem progWStep_callBalRemove {B : BufList} {gw : List String}
+    (addr idx : ExpHOL 64) (which esz : BitVec 64)
+    (hwe : (which.toNat = 16 ∧ esz.toNat = 40) ∨
+      (which.toNat = 24 ∧ esz.toNat = 16) ∨
+      (which.toNat = 32 ∧ esz.toNat = 24)) :
+    ProgWStep B gw (.call (some (none, none)) (ofString "bal_remove_change")
+      [addr, .const which, .const esz, idx]) :=
+  progWStep_call0_guarded (Bf := []) (by simp) (by simp) wkSc_bal_remove_change
+    (R10GbodyIdxBuilder.callEntryOn_balChangeArg addr idx which esz hwe)
+
+def builderCodeChange : ProgHOL 64 :=
+  .ite (.cmp .equal (.var .local (ofString "eq")) (.const 0#64))
+    (.decCall (ofString "code") (.comb [.one, .one]) (ofString "get_code")
+      [.var .local (ofString "post_ch"), .var .local (ofString "addr")]
+      (.call (some (none, none)) (ofString "add_code_change")
+        [.var .local (ofString "addr"), .var .local (ofString "idx"),
+         .rfield 0 (.var .local (ofString "code")), .rfield 1 (.var .local (ofString "code"))]))
+    (.call (some (none, none)) (ofString "bal_remove_change")
+      [.var .local (ofString "addr"), .const 32#64, .const 24#64, .var .local (ofString "idx")])
+
+theorem progWStep_builderCodeChange {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hget : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "get_code"))
+    (hadd : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_code_change")) :
+    ProgWStep B gw builderCodeChange := by
+  unfold builderCodeChange
+  apply progWStep_ite
+  · exact progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hget
+      (progWStep_call0 (fun _ h => h) (fun _ h => h) hadd)
+  · exact progWStep_callBalRemove _ _ _ _ (by decide)
+
+def builderBalanceChange : ProgHOL 64 :=
+  .ite (.cmp .equal (.var .local (ofString "eq")) (.const 0#64))
+    (.call (some (none, none)) (ofString "add_balance_change")
+      [.var .local (ofString "addr"), .var .local (ofString "idx"), .var .local (ofString "post_bal")])
+    (.call (some (none, none)) (ofString "bal_remove_change")
+      [.var .local (ofString "addr"), .const 16#64, .const 40#64, .var .local (ofString "idx")])
+
+def builderNonceChange : ProgHOL 64 :=
+  .ite (.cmp .notEqual (.var .local (ofString "pre_nonce")) (.var .local (ofString "post_nonce")))
+    (.call (some (none, none)) (ofString "add_nonce_change")
+      [.var .local (ofString "addr"), .var .local (ofString "idx"), .var .local (ofString "post_nonce")])
+    (.call (some (none, none)) (ofString "bal_remove_change")
+      [.var .local (ofString "addr"), .const 24#64, .const 16#64, .var .local (ofString "idx")])
+
+theorem progWStep_builderBalanceChange {B : BufList} {gw : List String}
+    (hadd : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_balance_change")) :
+    ProgWStep B gw builderBalanceChange := by
+  unfold builderBalanceChange
+  exact progWStep_ite (progWStep_call0 (fun _ h => h) (fun _ h => h) hadd)
+    (progWStep_callBalRemove _ _ _ _ (by decide))
+
+theorem progWStep_builderNonceChange {B : BufList} {gw : List String}
+    (hadd : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_nonce_change")) :
+    ProgWStep B gw builderNonceChange := by
+  unfold builderNonceChange
+  exact progWStep_ite (progWStep_call0 (fun _ h => h) (fun _ h => h) hadd)
+    (progWStep_callBalRemove _ _ _ _ (by decide))
+
+def builderAccountChanges : ProgHOL 64 :=
+  .decCall (ofString "eq") .one (ofString "u256_eq")
+    [.var .local (ofString "pre_bal"), .var .local (ofString "post_bal")]
+    (.seq builderBalanceChange (.seq builderNonceChange
+      (.seq (.call (some (some (.local, ofString "eq"), none)) (ofString "memeq")
+        [.var .local (ofString "pre_ch"), .var .local (ofString "post_ch"), .const 32#64])
+        builderCodeChange)))
+
+theorem progWStep_builderAccountChanges {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (heq : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "u256_eq"))
+    (hmem : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "memeq"))
+    (hget : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "get_code"))
+    (hbal : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_balance_change"))
+    (hnonce : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_nonce_change"))
+    (hcode : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_code_change")) :
+    ProgWStep B gw builderAccountChanges := by
+  unfold builderAccountChanges
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) heq
+  apply progWStep_seq hB hgw (progWStep_builderBalanceChange hbal)
+  apply progWStep_seq hB hgw (progWStep_builderNonceChange hnonce)
+  exact progWStep_seq hB hgw
+    (progWStep_call_local (fun _ h => h) (fun _ h => h) hmem)
+    (progWStep_builderCodeChange hB hgw hget hcode)
+
+def builderPostAccountLoad : ProgHOL 64 :=
+  .ite (.cmp .notEqual (.var .local (ofString "post")) (.const 1#64))
+    (.seq (.assign .local (ofString "post_bal")
+      (.load (.comb [.one, .one, .one, .one]) (.op .add [.var .local (ofString "post"), .const 8#64])))
+      (.seq (.assign .local (ofString "post_nonce")
+        (.load .one (.op .add [.var .local (ofString "post"), .const 0#64])))
+        (.assign .local (ofString "post_ch")
+          (.load .one (.op .add [.var .local (ofString "post"), .const 48#64]))))) .skip
+
+theorem progWStep_builderPostAccountLoad {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw) :
+    ProgWStep B gw builderPostAccountLoad := by
+  unfold builderPostAccountLoad
+  exact progWStep_ite
+    (progWStep_seq hB hgw (progWStep_assign_local _ _ _ _)
+      (progWStep_seq hB hgw (progWStep_assign_local _ _ _ _)
+        (progWStep_assign_local _ _ _ _))) (progWStep_skip _ _)
+
+def builderAccountEntry : ProgHOL 64 :=
+  .dec (ofString "addr") .one (.rfield 1 (.var .local (ofString "s")))
+    (.dec (ofString "post") .one (.rfield 2 (.var .local (ofString "s")))
+      (.decCall (ofString "pre") .one (ofString "idx_start_account") [.var .local (ofString "addr")]
+        (.dec (ofString "pre_bal") (.comb [.one, .one, .one, .one])
+          (.load (.comb [.one, .one, .one, .one]) (.op .add [.var .local (ofString "pre"), .const 16#64]))
+          (.dec (ofString "pre_nonce") .one (.load .one (.op .add [.var .local (ofString "pre"), .const 8#64]))
+            (.dec (ofString "pre_ch") .one (.op .add [.var .local (ofString "pre"), .const 48#64])
+              (.dec (ofString "post_bal") (.comb [.one, .one, .one, .one])
+                (.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64])
+                (.dec (ofString "post_nonce") .one (.const 0#64)
+                  (.dec (ofString "post_ch") .one (.var .global (ofString "empty_code_hash"))
+                    (.seq builderPostAccountLoad builderAccountChanges)))))))))
+
+theorem progWStep_builderAccountEntry {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hidx : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "idx_start_account"))
+    (hchanges : ProgWStep B gw builderAccountChanges) :
+    ProgWStep B gw builderAccountEntry := by
+  unfold builderAccountEntry
+  apply progWStep_dec
+  apply progWStep_dec
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hidx
+  repeat first | apply progWStep_dec
+  exact progWStep_seq hB hgw (progWStep_builderPostAccountLoad hB hgw) hchanges
+
+def builderAccountLoop : ProgHOL 64 :=
+  .while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+    (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item")
+      [.var .local (ofString "aw"), .var .local (ofString "i")]
+      (.seq (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0#64))
+        builderAccountEntry .skip)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1#64]))))
+
+theorem progWStep_builderAccountLoop {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hitem : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "htab_item"))
+    (hentry : ProgWStep B gw builderAccountEntry) :
+    ProgWStep B gw builderAccountLoop := by
+  unfold builderAccountLoop
+  apply progWStep_while hB hgw
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hitem
+  exact progWStep_seq hB hgw (progWStep_ite hentry (progWStep_skip _ _))
+    (progWStep_assign_local _ _ _ _)
+
+def builderBody : ProgHOL 64 :=
+  .dec (ofString "idx") .one (.var .global (ofString "bal_index"))
+    (.dec (ofString "aw") .one (.load .one (.op .add [.var .global (ofString "ts"), .const 16#64]))
+      (.dec (ofString "cap") .one (.load .one (.op .add [.var .local (ofString "aw"), .const 24#64]))
+        (.dec (ofString "i") .one (.const 0#64) (.seq builderAccountLoop builderStorageSuffix))))
+
+theorem builderBody_eq : builderBody =
+    (sourceFunctionEntry Guest.Software.guestFn_update_builder_from_tx).2.2.1 := by
+  rfl
+
+theorem progWStep_builderBody {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (haccounts : ProgWStep B gw builderAccountLoop)
+    (hstorage : ProgWStep B gw builderStorageSuffix) :
+    ProgWStep B gw builderBody := by
+  unfold builderBody
+  exact progWStep_dec (progWStep_dec (progWStep_dec (progWStep_dec
+    (progWStep_seq hB hgw haccounts hstorage))))
+
+abbrev builderBufs : BufList :=
+  [("bal_key_buf", 64), ("keccak_pad", 136), ("keccak_st", 200),
+   ("mpt_nib_scratch", 64), ("sk_buf", 52)]
+
+theorem validBufList_builder : ValidBufList builderBufs := by
+  intro p hp
+  simp only [builderBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
+  rcases hp with rfl | rfl | rfl | rfl | rfl
+  · exact ⟨64, by decide, by decide, by decide⟩
+  · exact ⟨136, by decide, by decide, by decide⟩
+  · exact ⟨200, by decide, by decide, by decide⟩
+  · exact ⟨64, by decide, by decide, by decide⟩
+  · exact ⟨64, by decide, by decide, by decide⟩
+
+theorem worldKeepsSc_mono_bufs {B1 B2 : BufList} {gw1 gw2 : List String} {fn : MlS}
+    (hB : ∀ p ∈ B1, p ∈ B2) (hgw : ∀ g ∈ gw1, g ∈ gw2)
+    (hf : WorldKeepsSc WorldOK (bufRegions B1) gw1 stdKeep NoExtra fn) :
+    WorldKeepsSc WorldOK (bufRegions B2) gw2 stdKeep NoExtra fn := by
+  obtain ⟨ps, body, ret, hl, hb⟩ := hf
+  exact ⟨ps, body, ret, hl, fun s hc hW hex hnt hres =>
+    (hb s hc hW hex hnt hres).mono_bufs hB hgw⟩
+
+theorem progWStep_builderAccountLoop_closed :
+    ProgWStep builderBufs ["heap_ptr", "scratch_ptr"] builderAccountLoop := by
+  have hB := validBufList_builder
+  have hgw : SafeStepGlobals ["heap_ptr", "scratch_ptr"] := by
+    intro g hg; simp only [List.mem_cons, List.not_mem_nil, or_false] at hg
+    rcases hg with rfl | rfl <;> simp
+  have hitem := worldKeepsSc_mono_bufs (B2 := builderBufs)
+    (gw2 := ["heap_ptr", "scratch_ptr"]) (by simp) (by simp) wkSc_htab_item
+  have heq := worldKeepsSc_mono_bufs (B2 := builderBufs)
+    (gw2 := ["heap_ptr", "scratch_ptr"]) (by simp) (by simp)
+    (worldKeepsSc_of_readOnly EvmFrameSpecs.ro_u256_eq)
+  have hmem := worldKeepsSc_mono_bufs (B2 := builderBufs)
+    (gw2 := ["heap_ptr", "scratch_ptr"]) (by simp) (by simp)
+    (worldKeepsSc_of_readOnly EvmFrameSpecs.ro_memeq)
+  have hget := worldKeepsSc_mono_bufs (B2 := builderBufs)
+    (gw2 := ["heap_ptr", "scratch_ptr"]) (by simp [builderBufs]) (by simp)
+    R16WkAcctWs.wkSc_get_code
+  have hidx := worldKeepsSc_mono_bufs (B2 := builderBufs)
+    (gw2 := ["heap_ptr", "scratch_ptr"]) (by simp [WkBalStateInit.idxBufs, builderBufs])
+    (fun _ h => h) wkSc_idx_start_account
+  apply progWStep_builderAccountLoop hB hgw hitem
+  apply progWStep_builderAccountEntry hB hgw hidx
+  apply progWStep_builderAccountChanges hB hgw heq hmem hget
+  · exact worldKeepsSc_mono_bufs (B1 := []) (by simp) (by simp) wkSc_add_balance_change
+  · exact worldKeepsSc_mono_bufs (B1 := []) (by simp) (by simp) wkSc_add_nonce_change
+  · exact worldKeepsSc_mono_bufs (B1 := []) (by simp) (by simp) wkSc_add_code_change
+
+theorem progWStep_builderBody_of_idx_storage
+    (hidx : WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "idx_start_storage")) :
+    ProgWStep builderBufs ["heap_ptr", "scratch_ptr"] builderBody := by
+  have hB := validBufList_builder
+  have hgw : SafeStepGlobals ["heap_ptr", "scratch_ptr"] := by
+    intro g hg; simp only [List.mem_cons, List.not_mem_nil, or_false] at hg
+    rcases hg with rfl | rfl <;> simp
+  apply progWStep_builderBody hB hgw progWStep_builderAccountLoop_closed
+  apply progWStep_builderStorageSuffix hB hgw
+  · exact worldKeepsSc_mono_bufs (by simp) (by simp) wkSc_htab_item
+  · exact hidx
+  · exact worldKeepsSc_mono_bufs (by simp) (by simp)
+      (worldKeepsSc_of_readOnly EvmFrameSpecs.ro_u256_eq)
+  · exact worldKeepsSc_mono_bufs (B1 := []) (by simp) (by simp) wkSc_add_storage_write
+  · exact worldKeepsSc_mono_bufs (B1 := []) (by simp) (by simp) wkSc_remove_storage_write
+
+theorem wkSc_update_builder_from_tx_of_idx_storage
+    (hidx : WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "idx_start_storage")) :
+    WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "update_builder_from_tx") := by
+  have hl : originalRuntimeCode.lookup (ofString "update_builder_from_tx") =
+      some (sourceFunctionEntry Guest.Software.guestFn_update_builder_from_tx).2 :=
+    originalRuntimeCode_lookup_of_guestAst_getElem 427 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_update_builder_from_tx) rfl
+  apply worldKeepsSc_of_progWStep hl
+  change ProgWStep builderBufs ["heap_ptr", "scratch_ptr"] builderBody
+  exact progWStep_builderBody_of_idx_storage hidx
+
+theorem wkSc_process_withdrawals_of_idx_storage
+    (hidx : WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "idx_start_storage")) :
+    WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "process_withdrawals") := by
+  apply wkSc_process_withdrawals_of_builder
+  obtain ⟨ps, body, ret, hl, hb⟩ := wkSc_update_builder_from_tx_of_idx_storage hidx
+  refine ⟨ps, body, ret, hl, ?_⟩
+  intro F s hc hW hex hnt hres
+  apply worldStepSc_mono_mask (B1 := builderBufs) (gw1 := ["heap_ptr", "scratch_ptr"])
+    (keep1 := stdKeep) (fun _ h => h) (by decide) ?_ (hb s hc hW hex hnt hres)
+  intro rec hr k hk
+  simp only [withdrawalKeep, List.mem_cons, List.not_mem_nil, or_false] at hr
+  rcases hr with rfl | rfl | rfl | rfl
+  · exact ⟨_, by simp [stdKeep], hk⟩
+  · exact ⟨_, by simp [stdKeep], hk⟩
+  · cases hk
+  · exact ⟨_, by simp [stdKeep], hk⟩
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

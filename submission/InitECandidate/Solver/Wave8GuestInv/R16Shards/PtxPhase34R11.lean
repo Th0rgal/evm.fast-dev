@@ -17406,4 +17406,815 @@ theorem journal_append_replace_tail {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- A returning journal block can be cut immediately before its original tail. -/
+theorem journal_append_cut_return {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out)) :
+    ∃ cut, evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut) := by
+  apply journal_append_replace_tail s out jn jc trapCode e16 tail _ rv _ hcode hjn hjc hr
+  intro entry u hu
+  refine ⟨entry.emptyLocalsHOLFinite, ?_⟩
+  simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+
+end PtxP34
+
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The return-only journal cut preserves allocated block-output backing. -/
+theorem jset_journal_cut_backing_frame {F : Type}
+    {s cur cut : PanSemStateFiniteExact 64 F} {S : List Nat} {b : Ivl}
+    (j n cap p t f0 f1 : BitVec 64)
+    (hA : ArenaOK s) (hJ : JournalTyped s S) (hfix : FixedTyped s)
+    (hb : b ∈ blockOutObjects s) (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (heff : WorldEff s cur [] [] ["heap_ptr"])
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hr : evaluateHOLFiniteState cur
+      (journalAppendTailProg 4#64 (.rfield 0 (.var .local (ofString "old"))) (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut)) : IvlUnhit s cut b := by
+  obtain ⟨mid, u, hf, ht, hm⟩ := jset_journal_append_backing_resume j n cap p t f0 f1 _ _
+    hA hJ hfix hb hal hb1 hb2 heff hj hn hc hp ht hold hr
+  have he := hm.trans (return_memory_eq ht)
+  intro a ha hit
+  rw [he]
+  exact hf a ha hit
+
+end PtxP34
+
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- A declaration restores only locals, so a replacement body's memory predicate survives. -/
+theorem dec_return_replace_tail_memory {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {nm : MlS} {init : ExpHOL 64}
+    {body : ProgHOL 64} {rv : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.dec nm .one init body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → Prop)
+    (hbody : ∀ w mid,
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) init = some (.val (.word w)) →
+      evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body = (some (.returned rv), mid) →
+      ∃ mid', evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body' = (some (.returned rv'), mid') ∧ P mid'.memory) :
+    ∃ post', evaluateHOLFiniteState s (.dec nm .one init body') = (some (.returned rv'), post') ∧ P post'.memory := by
+  obtain ⟨w, he, mid, hb, _⟩ := dec_ret_inv h
+  obtain ⟨mid', hb', hP⟩ := hbody w mid he hb
+  refine ⟨{mid' with locals := HolFiniteMapExact.resVarEq mid'.locals (nm, s.locals.lookup nm)}, ?_, hP⟩
+  rw [evaluateHOLFiniteState_dec_total]
+  simp only [he]
+  simp [shapeEqHOL, shapeOfHOLExact, hb']
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Declared-call continuation replacement retains a predicate on the resulting memory. -/
+theorem decCall_return_replace_tail_memory {F : Type}
+    {s out : PanSemStateFiniteExact 64 F} {x fname : MlS} {sh : ShapeHOL}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64} {v : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (some (.returned v), out))
+    (cont' : ProgHOL 64) (v' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → Prop)
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F), evaluateHOLFiniteState entry cont = (some (.returned v), u) →
+      ∃ u', evaluateHOLFiniteState entry cont' = (some (.returned v'), u') ∧ P u'.memory) :
+    ∃ out', evaluateHOLFiniteState s (.decCall x sh fname args cont') = (some (.returned v'), out') ∧ P out'.memory := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h ⊢
+  split at h
+  · simp at h
+  · rename_i valuesOpt values ha
+    split at h
+    · simp at h
+    · rename_i bodyOpt body callee ret hl
+      split at h
+      · simp at h
+      · rename_i hclock
+        simp only [hclock, ↓reduceIte]
+        dsimp only at h ⊢
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => simp at h
+        | some r =>
+          cases r <;> try simp at h
+          rename_i rv
+          dsimp only at h ⊢
+          split at h
+          · rename_i hshape
+            simp only [hshape]
+            rcases ht : evaluateHOLFiniteState (setVarHOLFinite x rv {post with locals := s.locals}) cont with ⟨rc, u⟩
+            rw [ht] at h
+            cases rc with
+            | none => simp at h
+            | some r =>
+              cases r <;> try simp at h
+              rename_i w
+              obtain ⟨rfl, _⟩ := h
+              obtain ⟨u', hu, hP⟩ := hc _ _ ht
+              rw [hu]
+              exact ⟨_, rfl, hP⟩
+          · simp at h
+
+end PtxP34
+
+namespace PtxP34
+
+theorem seq_return_replace_tail_memory {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {pre body : ProgHOL 64} {rv : ValueHOL 64}
+    (hp : evaluateHOLFiniteState s pre = (none, mid))
+    (h : evaluateHOLFiniteState s (.seq pre body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64) (P : (BitVec 64 → HolWordLab 64) → Prop)
+    (hc : evaluateHOLFiniteState mid body = (some (.returned rv), post) →
+      ∃ post', evaluateHOLFiniteState mid body' = (some (.returned rv'), post') ∧ P post'.memory) :
+    ∃ post', evaluateHOLFiniteState s (.seq pre body') = (some (.returned rv'), post') ∧ P post'.memory := by
+  rw [evaluateHOLFiniteState_seq_line780, hp] at h ⊢
+  exact hc h
+
+open private journalAppendTailProg seq_call0_ret_inv seq_store_ret_inv seq_assign_ret_inv
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Preserve a final-memory predicate while replacing the complete journal continuation. -/
+theorem journal_append_replace_tail_memory {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail tail' : ProgHOL 64) (rv rv' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → Prop)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry tail' = (some (.returned rv'), u') ∧ P u'.memory) :
+    ∃ out', evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail') = (some (.returned rv'), out') ∧ P out'.memory := by
+  unfold journalAppendTailProg at hr ⊢
+  have ⟨hn, hrest⟩ := journal_guard_seq_resume s out jn jc trapCode _ rv hcode hjn hjc hr
+  have hcmp : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  simp only [evalHOLExact, hjn, hjc, hcmp, evaluateHOLFiniteState_skip]
+  apply dec_return_replace_tail_memory hrest
+  intro w mid he hb
+  apply decCall_return_replace_tail_memory hb
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_call0_ret_inv hu
+  apply seq_return_replace_tail_memory hm hu
+  intro _
+  apply dec_return_replace_tail_memory ht
+  intro w mid he hb
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hb
+  apply seq_return_replace_tail_memory hm hb
+  intro _
+  obtain ⟨m, hm, ht'⟩ := seq_store_ret_inv ht
+  apply seq_return_replace_tail_memory hm ht
+  intro _
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv ht'
+  apply seq_return_replace_tail_memory hm ht'
+  intro _
+  obtain ⟨m, hm, ht'⟩ := seq_store_ret_inv ht
+  apply seq_return_replace_tail_memory hm ht
+  intro _
+  obtain ⟨m, hm, ht⟩ := seq_assign_ret_inv ht'
+  apply seq_return_replace_tail_memory hm ht'
+  exact hc m _
+
+end PtxP34
+
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The deterministic return-only cut has the memory of an entry executing the original tail. -/
+theorem journal_cut_memory_tail_entry {F : Type}
+    (s out cut : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut)) :
+    ∃ (entry u : PanSemStateFiniteExact 64 F), cut.memory = entry.memory ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) := by
+  obtain ⟨cut', hr', entry, u, hm, ht⟩ := journal_append_replace_tail_memory s out jn jc trapCode
+    e16 tail (.return (.const 0#64)) rv (.val (.word 0#64))
+    (fun mem => ∃ (entry u : PanSemStateFiniteExact 64 F), mem = entry.memory ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u)) hcode hjn hjc hr (by
+        intro entry u hu
+        refine ⟨entry.emptyLocalsHOLFinite, ?_, entry, u, rfl, hu⟩
+        simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact])
+  have he : cut' = cut := (Prod.mk.inj (hr'.symm.trans hcut)).2
+  subst cut'
+  exact ⟨entry, u, hm, ht⟩
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+open private journalAppendTailProg journal_append_block_step
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The return-only cut exposes a world-typed journal entry with exactly the cut memory. -/
+theorem journal_cut_world_entry {F : Type}
+    (s cur cut : PanSemStateFiniteExact 64 F)
+    (trapCode : BitVec 64) (e16 : ExpHOL 64) (tw kw f0 f1 w16 : BitVec 64)
+    (hW : WorldOK s) (heff : WorldEff s cur [] [] ["heap_ptr"])
+    (hg : ∀ k : MlS, cur.globals.lookup k = s.globals.lookup k)
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : cur.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (ho : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (he : ∀ st : PanSemStateFiniteExact 64 F,
+      st.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]) →
+      @evalHOLExact 64 F _ st.toExact (fun a => Classical.propDecidable (st.memaddrs a)) e16 = some (.val (.word w16)))
+    (htw : ∀ S, TablesTyped s S → tw.toNat ∈ S ∧
+      ∀ p ∈ (tw.toNat, journalRole s tw.toNat) ::
+        (if w16.toNat ≠ 0 ∧ journalRole s tw.toNat = "ts+32" then [(f1.toNat, "ts.inner")] else []),
+        p ∈ worldRoleSlots s)
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut)) :
+    ∃ mid, WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid ∧
+      mid.locals.lookup (ofString "t") = some (.val (.word tw)) ∧ cut.memory = mid.memory ∧
+      cut = {mid with locals := cut.locals} := by
+  obtain ⟨mid, u, hw, ht', _, _, hu, hc⟩ := journal_append_block_step s cur trapCode e16 tw kw f0 f1 w16
+    hW heff hg ht hk ho he htw hr
+  have hu' : u = mid.emptyLocalsHOLFinite := by
+    have he' : evaluateHOLFiniteState mid (.return (.const 0#64)) =
+        (some (.returned (.val (.word 0#64))), mid.emptyLocalsHOLFinite) := by
+      simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+    exact (Prod.mk.inj (hu.symm.trans he')).2
+  have hstate : cut = {mid with locals := cut.locals} := by
+    rw [hu'] at hc
+    exact hc
+  refine ⟨mid, hw, ht', ?_, hstate⟩
+  exact congrArg (fun st => st.memory) hstate
+
+end PtxP34
+
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Relate both output memories when replacing a declaration continuation. -/
+theorem dec_return_replace_memory_rel {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {nm : MlS} {init : ExpHOL 64}
+    {body : ProgHOL 64} {rv : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.dec nm .one init body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → (BitVec 64 → HolWordLab 64) → Prop)
+    (hc : ∀ (entry mid : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry body = (some (.returned rv), mid) →
+      ∃ mid', evaluateHOLFiniteState entry body' = (some (.returned rv'), mid') ∧ P mid.memory mid'.memory) :
+    ∃ post', evaluateHOLFiniteState s (.dec nm .one init body') = (some (.returned rv'), post') ∧ P post.memory post'.memory := by
+  obtain ⟨w, he, mid, hb, hout⟩ := dec_ret_inv h
+  obtain ⟨mid', hb', hP⟩ := hc _ _ hb
+  refine ⟨{mid' with locals := HolFiniteMapExact.resVarEq mid'.locals (nm, s.locals.lookup nm)}, ?_, ?_⟩
+  · rw [evaluateHOLFiniteState_dec_total]
+    simp [he, shapeEqHOL, shapeOfHOLExact, hb']
+  · simpa only [hout] using hP
+
+theorem seq_return_replace_memory_rel {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {pre body : ProgHOL 64} {rv : ValueHOL 64}
+    (hp : evaluateHOLFiniteState s pre = (none, mid))
+    (h : evaluateHOLFiniteState s (.seq pre body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → (BitVec 64 → HolWordLab 64) → Prop)
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry body = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry body' = (some (.returned rv'), u') ∧ P u.memory u'.memory) :
+    ∃ post', evaluateHOLFiniteState s (.seq pre body') = (some (.returned rv'), post') ∧ P post.memory post'.memory := by
+  rw [evaluateHOLFiniteState_seq_line780, hp] at h ⊢
+  exact hc mid post h
+
+/-- Relate original and replacement memories across declared-call local restoration. -/
+theorem decCall_return_replace_memory_rel {F : Type}
+    {s out : PanSemStateFiniteExact 64 F} {x fname : MlS} {sh : ShapeHOL}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64} {v : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (some (.returned v), out))
+    (cont' : ProgHOL 64) (v' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → (BitVec 64 → HolWordLab 64) → Prop)
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F), evaluateHOLFiniteState entry cont = (some (.returned v), u) →
+      ∃ u', evaluateHOLFiniteState entry cont' = (some (.returned v'), u') ∧ P u.memory u'.memory) :
+    ∃ out', evaluateHOLFiniteState s (.decCall x sh fname args cont') = (some (.returned v'), out') ∧ P out.memory out'.memory := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h ⊢
+  split at h
+  · simp at h
+  · rename_i valuesOpt values ha
+    split at h
+    · simp at h
+    · rename_i bodyOpt body callee ret hl
+      split at h
+      · simp at h
+      · rename_i hclock
+        simp only [hclock, ↓reduceIte]
+        dsimp only at h ⊢
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => simp at h
+        | some r =>
+          cases r <;> try simp at h
+          rename_i rv
+          dsimp only at h ⊢
+          split at h
+          · rename_i hshape
+            simp only [hshape]
+            rcases ht : evaluateHOLFiniteState (setVarHOLFinite x rv {post with locals := s.locals}) cont with ⟨rc, u⟩
+            rw [ht] at h
+            cases rc with
+            | none => simp at h
+            | some r =>
+              cases r <;> try simp at h
+              rename_i w
+              obtain ⟨rfl, hout⟩ := h
+              obtain ⟨u', hu, hP⟩ := hc _ _ ht
+              rw [hu]
+              refine ⟨_, rfl, ?_⟩
+              simpa only [← hout] using hP
+          · simp at h
+
+end PtxP34
+
+namespace PtxP34
+open private journalAppendTailProg seq_call0_ret_inv seq_store_ret_inv seq_assign_ret_inv
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Lift a relation between both output memories through the complete journal block. -/
+theorem journal_append_replace_memory_rel {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail tail' : ProgHOL 64) (rv rv' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → (BitVec 64 → HolWordLab 64) → Prop)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry tail' = (some (.returned rv'), u') ∧ P u.memory u'.memory) :
+    ∃ out', evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail') = (some (.returned rv'), out') ∧ P out.memory out'.memory := by
+  unfold journalAppendTailProg at hr ⊢
+  have ⟨hn, hrest⟩ := journal_guard_seq_resume s out jn jc trapCode _ rv hcode hjn hjc hr
+  have hcmp : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  simp only [evalHOLExact, hjn, hjc, hcmp, evaluateHOLFiniteState_skip]
+  apply dec_return_replace_memory_rel hrest
+  intro entry u hu
+  apply decCall_return_replace_memory_rel hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_call0_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  intro entry u hu
+  apply dec_return_replace_memory_rel hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_assign_ret_inv hu
+  apply seq_return_replace_memory_rel hm hu
+  exact hc
+
+end PtxP34
+
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The cut exposes an original tail execution while retaining the original output memory. -/
+theorem journal_cut_memory_tail_output {F : Type}
+    (s out cut : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut)) :
+    ∃ (entry u : PanSemStateFiniteExact 64 F), cut.memory = entry.memory ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨cut', hr', entry, u, hm, ht, hout⟩ := journal_append_replace_memory_rel s out jn jc trapCode
+    e16 tail (.return (.const 0#64)) rv (.val (.word 0#64))
+    (fun orig mem => ∃ (entry u : PanSemStateFiniteExact 64 F), mem = entry.memory ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ orig = u.memory) hcode hjn hjc hr (by
+        intro entry u hu
+        refine ⟨entry.emptyLocalsHOLFinite, ?_, entry, u, rfl, hu, rfl⟩
+        simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact])
+  have he : cut' = cut := (Prod.mk.inj (hr'.symm.trans hcut)).2
+  subst cut'
+  exact ⟨entry, u, hm, ht, hout⟩
+
+end PtxP34
+
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Transfer all cut backing frames to one original tail entry, retaining its output memory. -/
+theorem journal_cut_frames_tail_resume {F : Type}
+    (s cur out cut : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64) (bs : List Ivl)
+    (hcode : cur.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : cur.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : cur.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut))
+    (hf : ∀ b ∈ bs, IvlUnhit s cut b) :
+    ∃ entry u, (∀ b ∈ bs, IvlUnhit s entry b) ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨entry, u, hm, ht, ho⟩ := journal_cut_memory_tail_output cur out cut jn jc trapCode e16 tail rv
+    hcode hjn hjc hr hcut
+  refine ⟨entry, u, ?_, ht, ho⟩
+  intro b hb a ha hit
+  rw [← hm]
+  exact hf b hb a ha hit
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- A return-only journal cut retains its world step after enclosing locals are restored. -/
+theorem worldStepSc_return_restore {F : Type}
+    {s mid u out : PanSemStateFiniteExact 64 F}
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (hr : evaluateHOLFiniteState mid (.return (.const 0#64)) = (some (.returned (.val (.word 0#64))), u))
+    (ho : out = {u with locals := out.locals}) :
+    WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none out := by
+  have hu : u = mid.emptyLocalsHOLFinite := by
+    have he : evaluateHOLFiniteState mid (.return (.const 0#64)) =
+        (some (.returned (.val (.word 0#64))), mid.emptyLocalsHOLFinite) := by
+      simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+    exact (Prod.mk.inj (hr.symm.trans he)).2
+  rw [hu] at ho
+  rw [ho]
+  exact hw.with_locals_clock out.locals mid.clock
+
+end PtxP34
+
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Preserve relations on all nonlocal state fields across declaration replacement. -/
+theorem dec_return_replace_state_rel {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {nm : MlS} {init : ExpHOL 64}
+    {body : ProgHOL 64} {rv : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.dec nm .one init body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (P : PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hc : ∀ (entry mid : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry body = (some (.returned rv), mid) →
+      ∃ mid', evaluateHOLFiniteState entry body' = (some (.returned rv'), mid') ∧
+        P mid.emptyLocalsHOLFinite mid'.emptyLocalsHOLFinite) :
+    ∃ post', evaluateHOLFiniteState s (.dec nm .one init body') = (some (.returned rv'), post') ∧
+      P post.emptyLocalsHOLFinite post'.emptyLocalsHOLFinite := by
+  obtain ⟨w, he, mid, hb, hout⟩ := dec_ret_inv h
+  obtain ⟨mid', hb', hP⟩ := hc _ _ hb
+  refine ⟨{mid' with locals := HolFiniteMapExact.resVarEq mid'.locals (nm, s.locals.lookup nm)}, ?_, ?_⟩
+  · rw [evaluateHOLFiniteState_dec_total]
+    simp [he, shapeEqHOL, shapeOfHOLExact, hb']
+  · rw [hout]
+    exact hP
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Declared-call continuation replacement preserves relations on nonlocal state. -/
+theorem decCall_return_replace_state_rel {F : Type}
+    {s out : PanSemStateFiniteExact 64 F} {x fname : MlS} {sh : ShapeHOL}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64} {v : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (some (.returned v), out))
+    (cont' : ProgHOL 64) (v' : ValueHOL 64)
+    (P : PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F), evaluateHOLFiniteState entry cont = (some (.returned v), u) →
+      ∃ u', evaluateHOLFiniteState entry cont' = (some (.returned v'), u') ∧
+        P u.emptyLocalsHOLFinite u'.emptyLocalsHOLFinite) :
+    ∃ out', evaluateHOLFiniteState s (.decCall x sh fname args cont') = (some (.returned v'), out') ∧
+      P out.emptyLocalsHOLFinite out'.emptyLocalsHOLFinite := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h ⊢
+  split at h
+  · simp at h
+  · rename_i valuesOpt values ha
+    split at h
+    · simp at h
+    · rename_i bodyOpt body callee ret hl
+      split at h
+      · simp at h
+      · rename_i hclock
+        simp only [hclock, ↓reduceIte]
+        dsimp only at h ⊢
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => simp at h
+        | some r =>
+          cases r <;> try simp at h
+          rename_i rv
+          dsimp only at h ⊢
+          split at h
+          · rename_i hshape
+            simp only [hshape]
+            rcases ht : evaluateHOLFiniteState (setVarHOLFinite x rv {post with locals := s.locals}) cont with ⟨rc, u⟩
+            rw [ht] at h
+            cases rc with
+            | none => simp at h
+            | some r =>
+              cases r <;> try simp at h
+              rename_i w
+              obtain ⟨rfl, hout⟩ := h
+              obtain ⟨u', hu, hP⟩ := hc _ _ ht
+              rw [hu]
+              refine ⟨_, rfl, ?_⟩
+              rw [← hout]
+              exact hP
+          · simp at h
+
+end PtxP34
+
+namespace PtxP34
+open private journalAppendTailProg seq_call0_ret_inv seq_store_ret_inv seq_assign_ret_inv
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+theorem seq_return_replace_state_rel {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {pre body : ProgHOL 64} {rv : ValueHOL 64}
+    (hp : evaluateHOLFiniteState s pre = (none, mid))
+    (h : evaluateHOLFiniteState s (.seq pre body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (P : PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry body = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry body' = (some (.returned rv'), u') ∧
+        P u.emptyLocalsHOLFinite u'.emptyLocalsHOLFinite) :
+    ∃ post', evaluateHOLFiniteState s (.seq pre body') = (some (.returned rv'), post') ∧
+      P post.emptyLocalsHOLFinite post'.emptyLocalsHOLFinite := by
+  rw [evaluateHOLFiniteState_seq_line780, hp] at h ⊢
+  exact hc mid post h
+
+/-- Lift a relation on all nonlocal state fields through the complete journal block. -/
+theorem journal_append_replace_state_rel {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail tail' : ProgHOL 64) (rv rv' : ValueHOL 64)
+    (P : PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry tail' = (some (.returned rv'), u') ∧
+        P u.emptyLocalsHOLFinite u'.emptyLocalsHOLFinite) :
+    ∃ out', evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail') = (some (.returned rv'), out') ∧
+      P out.emptyLocalsHOLFinite out'.emptyLocalsHOLFinite := by
+  unfold journalAppendTailProg at hr ⊢
+  have ⟨hn, hrest⟩ := journal_guard_seq_resume s out jn jc trapCode _ rv hcode hjn hjc hr
+  have hcmp : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  simp only [evalHOLExact, hjn, hjc, hcmp, evaluateHOLFiniteState_skip]
+  apply dec_return_replace_state_rel hrest
+  intro entry u hu
+  apply decCall_return_replace_state_rel hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_call0_ret_inv hu
+  apply seq_return_replace_state_rel hm hu
+  intro entry u hu
+  apply dec_return_replace_state_rel hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_state_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_state_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_state_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hu
+  apply seq_return_replace_state_rel hm hu
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_assign_ret_inv hu
+  apply seq_return_replace_state_rel hm hu
+  exact hc
+
+end PtxP34
+
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The cut and original tail entry agree on every nonlocal field, retaining the original output. -/
+theorem journal_cut_state_tail_output {F : Type}
+    (s out cut : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut)) :
+    ∃ (entry u : PanSemStateFiniteExact 64 F),
+      cut.emptyLocalsHOLFinite = entry.emptyLocalsHOLFinite ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧
+      out.emptyLocalsHOLFinite = u.emptyLocalsHOLFinite := by
+  obtain ⟨cut', hr', hP⟩ := journal_append_replace_state_rel s out jn jc trapCode e16 tail
+    (.return (.const 0#64)) rv (.val (.word 0#64))
+    (fun orig st => ∃ (entry u : PanSemStateFiniteExact 64 F),
+      st = entry.emptyLocalsHOLFinite ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ orig = u.emptyLocalsHOLFinite)
+    hcode hjn hjc hr (by
+      intro entry u hu
+      refine ⟨entry.emptyLocalsHOLFinite, ?_, entry, u, rfl, hu, rfl⟩
+      simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact])
+  have he : cut' = cut := (Prod.mk.inj (hr'.symm.trans hcut)).2
+  simpa only [he] using hP
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs
+
+/-- Combine the cut world step and backing frames at the same original tail entry. -/
+theorem journal_worldStep_frames_of_cut {F : Type}
+    (s mid cut entry : PanSemStateFiniteExact 64 F) (bs : List Ivl)
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (hm : cut = {mid with locals := cut.locals})
+    (he : cut.emptyLocalsHOLFinite = entry.emptyLocalsHOLFinite)
+    (hf : ∀ b ∈ bs, IvlUnhit s cut b) :
+    WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none entry ∧
+      (∀ b ∈ bs, IvlUnhit s entry b) := by
+  have hs : entry = {mid with locals := entry.locals} := by
+    have hh := congrArg (fun st : PanSemStateFiniteExact 64 F => {st with locals := entry.locals}) he
+    rw [hm] at hh
+    exact hh.symm
+  constructor
+  · rw [hs]
+    exact hw.with_locals_clock entry.locals mid.clock
+  · have hmem : cut.memory = entry.memory := congrArg (fun st => st.memory) he
+    intro b hb a ha hit
+    rw [← hmem]
+    exact hf b hb a ha hit
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Resume the original tail with both world typing and backing frames at its actual entry. -/
+theorem journal_cut_world_frames_tail_output {F : Type}
+    (s cur out cut mid : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64) (bs : List Ivl)
+    (hcode : cur.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : cur.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : cur.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut))
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (hm : cut = {mid with locals := cut.locals})
+    (hf : ∀ b ∈ bs, IvlUnhit s cut b) :
+    ∃ (entry u : PanSemStateFiniteExact 64 F),
+      WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none entry ∧
+      (∀ b ∈ bs, IvlUnhit s entry b) ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨entry, u, he, ht, ho⟩ := journal_cut_state_tail_output cur out cut jn jc trapCode e16 tail rv
+    hcode hjn hjc hr hcut
+  obtain ⟨hw', hf'⟩ := journal_worldStep_frames_of_cut s mid cut entry bs hw hm he hf
+  exact ⟨entry, u, hw', hf', ht, congrArg (fun st => st.memory) ho⟩
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Allocation and key copying retain the table local for the journal suffix. -/
+theorem journal_alloc_copy_prefix_table_local {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {jrec : Ivl} (p n tw : BitVec 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : cur.locals.lookup (ofString "klen") = some (.val (.word n)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hr : evaluateHOLFiniteState cur
+      (.decCall (ofString "kc") .one (ofString "alloc") [.var .local (ofString "klen")]
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "kc"), .var .local (ofString "key"), .var .local (ofString "klen")]) tail)) =
+      (some (.returned rv), out)) :
+    ∃ mid u, WorldEff s mid [jrec] [] ["heap_ptr"] ∧
+      mid.locals.lookup (ofString "t") = some (.val (.word tw)) ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨mid, u, he, hl, hr', hm⟩ := journal_alloc_copy_prefix_effect p n tail rv heff hp hn hr
+  refine ⟨mid, u, he, ?_, hr', hm⟩
+  simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, ht,
+    show ofString "kc" ≠ ofString "t" by decide]
+
+end PtxP34
+
+namespace PtxP34
+open private seq_store_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- All locals survive the four journal stores and counter increment. -/
+theorem journal_store_suffix_locals {F : Type}
+    (cur out : PanSemStateFiniteExact 64 F)
+    (d0 e0 d1 e1 d2 e2 d3 e3 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.store d0 e0) (.seq (.store d1 e1) (.seq (.store d2 e2) (.seq (.store d3 e3)
+        (.seq (.assign .global (ofString "journal_n")
+          (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail))))) =
+      (some (.returned rv), out)) :
+    ∃ mid, mid.locals = cur.locals ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨m1, h1, hr1⟩ := seq_store_ret_inv hr
+  obtain ⟨m2, h2, hr2⟩ := seq_store_ret_inv hr1
+  obtain ⟨m3, h3, hr3⟩ := seq_store_ret_inv hr2
+  obtain ⟨m4, h4, hr4⟩ := seq_store_ret_inv hr3
+  obtain ⟨mid, _, hl, ht⟩ := journal_counter_tail_frame tail rv hr4
+  exact ⟨mid, hl.trans ((store_fall_locals h4).trans ((store_fall_locals h3).trans
+    ((store_fall_locals h2).trans (store_fall_locals h1)))), ht⟩
+
+end PtxP34
+
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The address declaration and journal writes retain the table local at the tail. -/
+theorem journal_address_suffix_table_local {F : Type}
+    (cur out : PanSemStateFiniteExact 64 F) (addr e16 : ExpHOL 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64) (tw : BitVec 64)
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hr : evaluateHOLFiniteState cur
+      (.dec (ofString "r") .one addr
+        (.seq (.store (.var .local (ofString "r")) (.var .local (ofString "t")))
+          (.seq (.store (.op .add [.var .local (ofString "r"), .const 8#64]) (.var .local (ofString "kc")))
+            (.seq (.store (.op .add [.var .local (ofString "r"), .const 16#64]) e16)
+              (.seq (.store (.op .add [.var .local (ofString "r"), .const 24#64]) (.rfield 1 (.var .local (ofString "old"))))
+                (.seq (.assign .global (ofString "journal_n")
+                  (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail)))))) =
+      (some (.returned rv), out)) :
+    ∃ (entry u : PanSemStateFiniteExact 64 F), entry.locals.lookup (ofString "t") = some (.val (.word tw)) ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨w, _, u, hb, ho⟩ := dec_ret_inv hr
+  obtain ⟨entry, hl, he⟩ := journal_store_suffix_locals _ _ _ _ _ _ _ _ _ _ tail rv hb
+  refine ⟨entry, u, ?_, he, ?_⟩
+  · simp [hl, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, ht,
+      show ofString "r" ≠ ofString "t" by decide]
+  · rw [ho]
+
+end PtxP34
+
+namespace PtxP34
+open private seq_store_ret_inv seq_assign_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Identify the cut state and retained locals at one concrete journal suffix entry. -/
+theorem journal_store_suffix_cut_entry {F : Type}
+    (cur out cut : PanSemStateFiniteExact 64 F)
+    (d0 e0 d1 e1 d2 e2 d3 e3 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.store d0 e0) (.seq (.store d1 e1) (.seq (.store d2 e2) (.seq (.store d3 e3)
+        (.seq (.assign .global (ofString "journal_n")
+          (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail))))) =
+      (some (.returned rv), out))
+    (hc : evaluateHOLFiniteState cur
+      (.seq (.store d0 e0) (.seq (.store d1 e1) (.seq (.store d2 e2) (.seq (.store d3 e3)
+        (.seq (.assign .global (ofString "journal_n")
+          (.op .add [.var .global (ofString "journal_n"), .const 1#64])) (.return (.const 0#64))))))) =
+      (some (.returned (.val (.word 0#64))), cut)) :
+    ∃ entry, entry.locals = cur.locals ∧ cut = entry.emptyLocalsHOLFinite ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), out) := by
+  obtain ⟨m1, h1, hr1⟩ := seq_store_ret_inv hr
+  obtain ⟨m2, h2, hr2⟩ := seq_store_ret_inv hr1
+  obtain ⟨m3, h3, hr3⟩ := seq_store_ret_inv hr2
+  obtain ⟨m4, h4, hr4⟩ := seq_store_ret_inv hr3
+  obtain ⟨entry, ha, ht⟩ := seq_assign_ret_inv hr4
+  simp only [evaluateHOLFiniteState_seq_line780, h1, h2, h3, h4, ha] at hc
+  have he : evaluateHOLFiniteState entry (.return (.const 0#64)) =
+      (some (.returned (.val (.word 0#64))), entry.emptyLocalsHOLFinite) := by
+    simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+  have hl0 : entry.locals = m4.locals := by
+    rw [evaluateHOLFiniteState_assign] at ha
+    split at ha
+    · simp at ha
+    · split at ha
+      · have hh := (Prod.mk.inj ha).2
+        rw [← hh]
+        rfl
+      · simp at ha
+  exact ⟨entry, hl0.trans ((store_fall_locals h4).trans ((store_fall_locals h3).trans
+    ((store_fall_locals h2).trans (store_fall_locals h1)))), (Prod.mk.inj (hc.symm.trans he)).2, ht⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
