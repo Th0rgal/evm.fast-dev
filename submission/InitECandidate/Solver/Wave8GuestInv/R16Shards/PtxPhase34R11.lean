@@ -18923,4 +18923,37 @@ theorem jset_call_ts16_world_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Extract the transaction-table and key words directly from concrete jset arguments. -/
+theorem jset_ts16_args_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (key value : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 16]), key, value] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "jset") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have hcode := hW.1.1.1.code
+  obtain ⟨v1, v2, v3, he1, _, _, ht, hk, hv⟩ := R16WkAcctWs.callee_param_three s (ofString "jset")
+    (ofString "t") (ofString "key") (ofString "value") .one .one .one _ _
+    (by rw [hcode]; exact EvmEkFk.lookup_jset) _ _ _ vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw, hts⟩ := evalAt_loadG_nz s hW.1.1.1 "ts" 16#64 (by decide) v1 he1
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "jset") _ _ body _ ret vs callee EvmEkFk.lookup_jset (by rwa [← hcode])
+  have hret := lookupCodeHOLFinite_installed_return s (ofString "jset")
+    _ _ _ _ ret vs callee (by rw [hcode]; exact EvmEkFk.lookup_jset) hl
+  obtain ⟨_, kw, vw, _, _, hk', _⟩ := Fast_C08WkShard03.lookupCode_three_words
+    (by decide) (by decide) (by decide) EvmEkFk.lookup_jset
+    (by subst body ret; rwa [← hcode])
+  exact jset_call_ts16_world_header_words s post S Nd vs body callee ret tw kw rv
+    hW hT ht hk' hts htw hl hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
