@@ -8340,4 +8340,24 @@ theorem fixed_word_after_htab_exit {F : Type}
     apply InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.disj_of_inside_left hin hd
   · exact hx
 
+/-- The witness-code root is a protected word of the fixed witness record. -/
+theorem ws_code_root_after_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hws : globN s "ws" ≠ 0)
+    (hx : HtabExit s post) :
+    memW post (globN s "ws" + 16) = memW s (globN s "ws" + 16) := by
+  have hi : (globN s "ws", 40) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    exact List.mem_map.2 ⟨("ws", 40), by decide, by simp [hws]⟩
+  have hw := ((hW.2.2.1.1 _ hi).resolve_left (by norm_num)).2
+  have hal : globN s "ws" % 8 = 0 := hw.1
+  apply fixed_word_after_htab_exit _ (globN s "ws", 40) hAs hW ht hi
+  · unfold Inside; dsimp; omega
+  · omega
+  · exact hx
+
 end HeadStore

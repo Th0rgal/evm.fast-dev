@@ -16097,4 +16097,90 @@ theorem acct_empty_local_call_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+theorem local_call_return_memory {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {name fname : MlS} {args : List (ExpHOL 64)} {e : ExpHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.seq (.call (some (some (.local, name), none)) fname args) (.return e)) =
+      (some (.returned v), post)) :
+    ∃ mid, evaluateHOLFiniteState s (.call (some (some (.local, name), none)) fname args) = (none, mid) ∧
+      post.memory = mid.memory := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hc : evaluateHOLFiniteState s (.call (some (some (.local, name), none)) fname args) with ⟨r, mid⟩
+  rw [hc] at hr
+  cases r with
+  | none => exact ⟨mid, rfl, return_memory_eq hr⟩
+  | some r =>
+    have he := (Prod.mk.inj hr).1
+    cases he
+    rw [evaluateHOLFiniteState_call] at hc
+    split at hc
+    · cases hc
+    · split at hc
+      · cases hc
+      · split at hc
+        · cases hc
+        · rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s _) _ with ⟨r, cp⟩
+          rw [hb] at hc
+          cases r with
+          | none => cases hc
+          | some r =>
+            cases r <;> try simp at hc
+            split at hc
+            · split at hc <;> cases hc
+            · cases hc
+
+theorem conditional_acct_empty_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (cond e : ExpHOL 64) (name : MlS) (args : List (ExpHOL 64))
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.ite cond (.call (some (some (.local, name), none)) (ofString "acct_empty") args) .skip)
+        (.return e)) = (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hr
+  split at hr
+  · split at hr
+    · have hm := return_memory_eq (by simpa only [evaluateHOLFiniteState_skip] using hr)
+      intro k hk
+      simp only [memW, hm]
+    · have hh : evaluateHOLFiniteState s
+          (.seq (.call (some (some (.local, name), none)) (ofString "acct_empty") args) (.return e)) =
+          (some (.returned v), post) := by
+        rw [evaluateHOLFiniteState_seq_line780]
+        exact hr
+      obtain ⟨mid, hc, hm⟩ := local_call_return_memory hh
+      have hf := acct_empty_local_call_header_words s mid S Nd name args hW hT hc
+      intro k hk
+      simpa only [memW, hm] using hf k hk
+  · cases hr
+
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Complete account lookup, including conditional allocation, preserves backing. -/
+theorem get_account_body_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_get_account) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  change evaluateHOLFiniteState s (.decCall _ _ (ofString "get_account_optional") _ _) = _ at hr
+  obtain ⟨vs, body, callee, ret, rv, cp, u, _, hl, hb, ht, hm⟩ := dec_call_return_inv_args hr
+  have hf := get_account_optional_call_header_words s cp vs body callee ret rv S Nd hW hT hl hb
+  have hs := get_account_optional_restored_worldStep s cp vs body callee ret rv hW.1 hl hb
+  have hs0 := (hs.with_locals_clock (r' := none) s.locals cp.clock).1
+  obtain ⟨hW', S', Nd', hT'⟩ := wsAcct_step_txWorld s {cp with locals := s.locals} S Nd hW hT hs0 rfl
+  have hroots := wsAcct_step_header_roots hW hT hs.1
+  have hw := LocalsOnly.setVar localsOnly_txWorld (name := ofString "a") (by decide) rv _ hW'
+  have htw : WorldTypedWith (setVarHOLFinite (ofString "a") rv {cp with locals := s.locals}) S' Nd' :=
+    (R13Shards.worldTypedWith_with_locals _ _ _ S' Nd').2 hT'
+  have htframe := conditional_acct_empty_header_words _ u S' Nd' v _ _ _ _ hw htw ht
+  have hh := tx_header_words_trans hroots.1 hroots.2 hf htframe
+  intro k hk
+  simpa only [memW, hm] using hh k hk
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
