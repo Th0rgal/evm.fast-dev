@@ -12503,4 +12503,22 @@ theorem heap_frontier_disj_frame_g10 {F : Type}
       · exact below _ hle.2.2.2.2.2.1.2
       · exact below _ hle.2.2.2.2.2.2.2
 
+theorem heap_frontier_evm_avoids_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
+    (p n : Nat) (hp : globN s "heap_ptr" ≤ p) (hb : p + n ≤ heapLimit) :
+    EvmAvoids (fun _ => [(p,n)]) s := by
+  obtain ⟨ha, S, hs⟩ := hi
+  obtain ⟨hw, hne, hlen, hlast, hfw, hrest⟩ := hs
+  obtain ⟨Nd, htr⟩ := hw.2.2.2
+  have hwt : WorldTypedWith s S Nd := ⟨hw.1, hw.2.1, hw.2.2.1, htr⟩
+  refine ⟨ha, S, ⟨hw, hne, hlen, hlast, hfw, hrest⟩, Nd, htr, ?_⟩
+  intro j hj i hmem
+  rcases List.mem_append.1 hmem with hworld | hframes
+  · exact heap_frontier_disj_world_g10 ha.2 hwt p n hp hb j hj i hworld
+  · simp only [List.mem_singleton] at hj
+    subst j
+    obtain ⟨objs, hmap, hiobj⟩ := List.mem_flatten.1 hframes
+    obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hmap
+    exact heap_frontier_disj_frame_g10 ha.2 (hfw ec hec) p n hp hb i hiobj
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
