@@ -9741,4 +9741,29 @@ theorem protected_payload_words_of_worldStep_frame {F : Type}
       rcases ha' with rfl | rfl <;> omega)]
   exact ⟨hw p (by simp),hw (p+8) (by simp)⟩
 
+/-- Recover protected payload words from an actual account execution and separation. -/
+theorem get_account_execution_payload_words {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hWT : WorldTypedWith s S Nd) (he : CodeDbPayloadStrong s S db)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post))
+    (hsep : ∀ p ∈ htabValues s db, ∀ a ∈ [p,p+8],
+      ∀ i ∈ worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s, ¬ CellHits a i) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  have hW : WorldOK s := ⟨hA,S,(worldTyped_iff_with _ _).2 ⟨Nd,hWT⟩⟩
+  have hs := get_account_execution_world_step s values body callee ret v post hc hW hl hb
+  have hentryWT : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd := by
+    refine ⟨?_,hWT.2.1,hWT.2.2.1,hWT.2.2.2⟩
+    exact (tablesTyped_with_locals s callee (callEntryStateHOLFinite s callee).clock S).2 hWT.1
+  obtain ⟨S',Nd',_,_,_,hframe,_⟩ := hs.1.2.2.2.2 S Nd hentryWT
+    (R16WkAcctWs.validBufList_disj validBufList_wsAcctBufs hentryWT)
+  have hframe' : FrameOutside s post
+      (worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s ++ [freeGap s]) (heapFree s) := hframe
+  exact protected_payload_words_of_worldStep_frame he hA hframe' hsep
+
 end HeadStore
