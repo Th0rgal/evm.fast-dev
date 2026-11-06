@@ -17829,4 +17829,29 @@ theorem journal_cut_memory_tail_output {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Transfer all cut backing frames to one original tail entry, retaining its output memory. -/
+theorem journal_cut_frames_tail_resume {F : Type}
+    (s cur out cut : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64) (bs : List Ivl)
+    (hcode : cur.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : cur.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : cur.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut))
+    (hf : ∀ b ∈ bs, IvlUnhit s cut b) :
+    ∃ entry u, (∀ b ∈ bs, IvlUnhit s entry b) ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨entry, u, hm, ht, ho⟩ := journal_cut_memory_tail_output cur out cut jn jc trapCode e16 tail rv
+    hcode hjn hjc hr hcut
+  refine ⟨entry, u, ?_, ht, ho⟩
+  intro b hb a ha hit
+  rw [← hm]
+  exact hf b hb a ha hit
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
