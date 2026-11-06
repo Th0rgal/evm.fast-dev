@@ -16625,4 +16625,31 @@ theorem journal_first_stores_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- All four concrete jset journal stores preserve the narrow record effect. -/
+theorem journal_four_stores_effect {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} (r t kc f0 f1 : BitVec 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [(r.toNat, 32)] [] ["heap_ptr"])
+    (hrloc : cur.locals.lookup (ofString "r") = some (.val (.word r)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hk : cur.locals.lookup (ofString "kc") = some (.val (.word kc)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hbound : r.toNat + 32 < 2 ^ 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.store (.var .local (ofString "r")) (.var .local (ofString "t")))
+        (.seq (.store (.op .add [.var .local (ofString "r"), .const 8#64]) (.var .local (ofString "kc")))
+          (.seq (.store (.op .add [.var .local (ofString "r"), .const 16#64]) (.rfield 0 (.var .local (ofString "old"))))
+            (.seq (.store (.op .add [.var .local (ofString "r"), .const 24#64]) (.rfield 1 (.var .local (ofString "old")))) tail)))) =
+      (some (.returned rv), out)) :
+    ∃ mid, WorldEff s mid [(r.toNat, 32)] [] ["heap_ptr"] ∧
+      mid.locals = cur.locals ∧ evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨mid8, he8, hl8, hrest⟩ := journal_first_stores_effect r t kc _ rv heff hrloc ht hk hbound hr
+  obtain ⟨mid24, he24, hl24, htail⟩ := journal_final_stores_effect r f0 f1 tail rv he8
+    (by rw [hl8]; exact hrloc) (by rw [hl8]; exact hold) hbound hrest
+  exact ⟨mid24, he24, hl24.trans hl8, htail⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
