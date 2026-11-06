@@ -8159,4 +8159,36 @@ theorem code_entries_after_key_and_access_world {F : Type}
   have hworld : WorldTyped mid S := ⟨hWm.1, hWm.2.1, hWm.2.2.1, Nd, hWm.2.2.2⟩
   exact codeDbPayloadStrong_entries_of_separated_htab_exit db hm hAm hworld hdb ht hne hx
 
+/-- Concrete `sk_make` lookup, callee entry, and restoration of the caller
+all preserve the world and protected payload facts used by the fallback. -/
+theorem world_and_payload_after_sk_call {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} (db : Nat)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hdb : db ∈ S) (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "sk_make") values = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "k") v {post with locals := s.locals}
+    ArenaReady resumed ∧ WorldTyped resumed S ∧ CodeDbPayloadStrong resumed S db := by
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "sk_make")
+    _ _ _ _ _ values callee (by rw [hc]; exact lookup_sk_make) hl
+  subst body
+  have hW : WorldTyped s S := ⟨hWT.1, hWT.2.1, hWT.2.2.1, Nd, hWT.2.2.2⟩
+  have hWe : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd := by
+    unfold WorldTypedWith callEntryStateHOLFinite
+    simp only [tablesTyped_with_locals]
+    exact hWT
+  have hworldEntry : WorldTyped (callEntryStateHOLFinite s callee) S :=
+    (worldTyped_with_locals s _ _ S).2 hW
+  obtain ⟨hAp, hWp, hp⟩ := world_and_payload_after_sk_make db
+    (localsFree_arenaReady s _ _ hAs) hWe hworldEntry hdb h hc hma hfit v hb
+  have hworld : WorldTyped post S := ⟨hWp.1, hWp.2.1, hWp.2.2.1, Nd, hWp.2.2.2⟩
+  exact ⟨localsFree_arenaReady post _ _ hAp,
+    (worldTyped_with_locals post _ _ S).2 hworld, hp⟩
+
 end HeadStore
