@@ -7412,4 +7412,41 @@ theorem get_code_return_entry_strong {F : Type} (s : PanSemStateFiniteExact 64 F
     (get_code_cache_entry_after_compare s values body callee ret post "bs" hc hsecond hl hb)
     hfallback
 
+/-- Payload typing survives heap growth when table values and payload words
+are preserved; no preservation of unrelated memory is required. -/
+theorem nodeDbEntriesStrong_of_preserved_payloads {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {db : Nat}
+    (he : NodeDbEntriesStrong s db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hvalues : htabValues post db = htabValues s db)
+    (hwords : ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p + 8) = memW s (p + 8)) :
+    NodeDbEntriesStrong post db := by
+  intro p hp
+  rw [hvalues] at hp
+  obtain ⟨hw, hin⟩ := he p hp
+  refine ⟨wordsOK_transfer hAs.1 hAp.1 hw, ?_⟩
+  rw [(hwords p hp).1, (hwords p hp).2]
+  exact ⟨hin.1, le_trans hin.2 hhp⟩
+
+/-- Transport the actual cache lookup arguments along with its table and
+payload facts, retaining the concrete database and hash witnesses. -/
+theorem codeCacheLookupStrong_of_preserved_payloads {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (owner : String)
+    (he : CodeCacheLookupStrong s owner) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hargs : evalListHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
+      (getCodeCacheArgs owner) =
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (getCodeCacheArgs owner))
+    (hwf : ∀ db, HtabWF s db → HtabWF post db)
+    (hvalues : ∀ db, HtabWF s db → htabValues post db = htabValues s db)
+    (hwords : ∀ db, HtabWF s db → ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p + 8) = memW s (p + 8)) :
+    CodeCacheLookupStrong post owner := by
+  obtain ⟨hAs, db, hash, ha, hW, he⟩ := he
+  exact ⟨hAp, db, hash, hargs.trans ha, hwf _ hW,
+    nodeDbEntriesStrong_of_preserved_payloads he hAs hAp hhp (hvalues _ hW) (hwords _ hW)⟩
+
 end HeadStore
