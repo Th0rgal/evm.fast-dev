@@ -15645,4 +15645,42 @@ theorem phase2_ws_get_account_optional_message_tables {F : Type}
   · decide
   · decide
 
+/-- Account lookup transports the private tables across the actual call-entry boundary. -/
+theorem phase2_ws_get_account_optional_callEntry_message_tables {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hc : s.code = originalRuntimeCode) (ha : ArenaReady s)
+    {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    let post := (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2
+    PtxMessageTables {post with locals := s.locals} aa ak := by
+  have he := worldEff_ws_get_account_optional s (callEntryStateHOLFinite s callee) ha.2
+    ((WorldEff.refl s [] wsBufs wsGw ha hc).locals_clock callee (s.clock - 1)) hnt hr
+  exact phase2_worldEff_message_tables ha ht (he.locals_clock s.locals _) (by decide) (by decide) hin rfl
+
+/-- Restore the message-table witness after a concrete returning account lookup call. -/
+theorem phase2_ws_get_account_optional_resume_message_tables
+    (aa ak : Nat) (name : MlS) (hne : name ≠ ofString "m") (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+      Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => PtxMessageTables s aa ak) name (ofString "ws_get_account_optional") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "ws_get_account_optional")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.lookup_ws_get_account_optional_top] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  have hb := phase2_ws_get_account_optional_callEntry_message_tables s callee hc hp.1 hp.2.1 hp.2.2
+    (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at hb
+  exact phase2_message_tables_with_locals _ _ _ hb
+    (by simp [HolFiniteMapExact.update, FUPDATE, hne])
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
