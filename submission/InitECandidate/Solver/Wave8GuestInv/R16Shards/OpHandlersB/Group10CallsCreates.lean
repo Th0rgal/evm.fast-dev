@@ -13084,4 +13084,102 @@ theorem ccA_decCall_g10 {F : Type} {P Q : PanSemStateFiniteExact 64 F → Prop}
             refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
               fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
 
+
+/-! ## op_create suffix tail walk and aligned spec (ccA) -/
+
+/-! ## 3. Skip / ite step combinators -/
+
+
+theorem ccA_seq_skip_g10 {F : Type} {P : PanSemStateFiniteExact 64 F → Prop} {cont : ProgHOL 64}
+    (hcont : ChildContinuationA P cont) :
+    ChildContinuationA P (.seq .skip cont) := by
+  intro t hc hi hw hp hnt
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_skip] at hnt ⊢
+  dsimp only at hnt ⊢
+  exact hcont t hc hi hw hp hnt
+
+
+theorem ccA_seq_ite_g10 {F : Type} {P : PanSemStateFiniteExact 64 F → Prop}
+    {cond : ExpHOL 64} {yes no cont : ProgHOL 64}
+    (hyes : ∀ (t : PanSemStateFiniteExact 64 F) (w : BitVec 64),
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) cond = some (.val (.word w)) →
+      w ≠ 0 → ChildContinuationA P (.seq yes cont))
+    (hno : ∀ (t : PanSemStateFiniteExact 64 F),
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) cond = some (.val (.word 0)) →
+      ChildContinuationA P (.seq no cont)) :
+    ChildContinuationA P (.seq (.ite cond yes no) cont) := by
+  intro t hc hi hw hp hnt
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hnt ⊢
+  revert hnt
+  split
+  · rename_i w hcond
+    by_cases hw0 : w = 0
+    · subst hw0; simp only [↓reduceIte]
+      rw [← evaluateHOLFiniteState_seq_line780]
+      intro hnt; exact hno t hcond t hc hi hw hp hnt
+    · simp only [hw0, ↓reduceIte]
+      rw [← evaluateHOLFiniteState_seq_line780]
+      intro hnt; exact hyes t w hcond hw0 t hc hi hw hp hnt
+  · intro _; dsimp only
+    exact ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+      fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+
+
+/-! ## 4. Suffix assembly -/
+
+
+theorem createChargedSuffixTail_ccA_g10 {F : Type}
+    (hW : WorldAccountSpecsA)
+    (hcc : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "compute_contract_address"))
+    (hgc : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "generic_create")) :
+    ChildContinuationA (F := F) (fun _ => True) (handlerSuffix_g10 1 createChargedSuffix_g10) := by
+  apply ccA_dec_g10 (Q := fun _ => True) (fun t v hv hi hp => trivial)
+  apply ccA_decCall_g10 (Q := fun _ => True) hW.epsA_get_account
+    (hentry := fun t values body callee ret' hc hi hw hp ha hl => trivial)
+    (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ _ _ => trivial)
+  apply ccA_decCall_g10 (Q := fun _ => True) epsA_alloc_g10
+    (hentry := fun t values body callee ret' hc hi hw hp ha hl => trivial)
+    (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ _ _ => trivial)
+  apply ccA_seq_call_g10 (Q := fun _ => True) hcc
+    (hentry := fun t values body callee rs hc hi hw hp ha hl => trivial)
+    (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ => trivial)
+  apply ccA_decCall_g10 (Q := fun _ => True) epsA_sat_word
+    (hentry := fun t values body callee ret' hc hi hw hp ha hl => trivial)
+    (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ _ _ => trivial)
+  apply ccA_decCall_g10 (Q := fun _ => True) hgc
+    (hentry := fun t values body callee ret' hc hi hw hp ha hl => trivial)
+    (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ _ _ => trivial)
+  apply ccA_seq_ite_g10
+  · intro t w hcond hw0
+    exact ccA_seq_call_g10 (Q := fun _ => True) epsA_pc_add
+      (hentry := fun t values body callee rs hc hi hw hp ha hl => trivial)
+      (hstep := fun t values body callee rs v cpost _ _ _ _ _ _ _ => trivial)
+      (ccA_ret_g10 (.const 0#64))
+  · intro t hcond
+    exact ccA_seq_skip_g10 (ccA_ret_g10 (.const 0#64))
+
+
+theorem op_create_run_full_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hW : WorldAccountSpecsA)
+    (hcc : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "compute_contract_address"))
+    (hgc : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "generic_create")) :
+    HandlerRunA s0 (fun _ => True) false (sourceFnBody Guest.Software.guestFn_op_create) :=
+  create_prefix_through_extend_g10 s0
+    (handlerRunA_of_childContinuation_g10 s0 _ _ (createChargedSuffixTail_ccA_g10 hW hcc hgc))
+
+
+theorem op_create_specA_g10 (hW : WorldAccountSpecsA)
+    (hcc : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "compute_contract_address"))
+    (hgc : EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "generic_create")) :
+    OpHandlerSpecA (ofString "op_create") := by
+  refine opHandlerSpecA_of_run 599 (by rw [guestAst_len]; decide) Guest.Software.guestFn_op_create rfl ?_
+  intro F s0 hInv0 hWF0 hnd0
+  exact op_create_run_full_g10 s0 hW hcc hgc
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
