@@ -19448,4 +19448,34 @@ theorem journal_append_delete_tail_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private seq_store_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The deletion marker and old-value stores remain inside the journal record. -/
+theorem jdel_journal_final_stores_effect {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} (r f0 f1 : BitVec 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [(r.toNat, 32)] [] ["heap_ptr"])
+    (hrloc : cur.locals.lookup (ofString "r") = some (.val (.word r)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hbound : r.toNat + 32 < 2 ^ 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.store (.op .add [.var .local (ofString "r"), .const 16#64]) (.const 1#64))
+        (.seq (.store (.op .add [.var .local (ofString "r"), .const 24#64])
+          (.rfield 1 (.var .local (ofString "old")))) tail)) = (some (.returned rv), out)) :
+    ∃ mid, WorldEff s mid [(r.toNat, 32)] [] ["heap_ptr"] ∧
+      mid.locals = cur.locals ∧ evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨mid16, h16, hrest⟩ := seq_store_ret_inv hr
+  have hl16 := store_fall_locals h16
+  have he16 := journal_offset_store_effect r 1#64 16 (.const 1#64)
+    heff hrloc (by decide) hbound (by simp [evalHOLExact]) h16
+  obtain ⟨mid24, h24, htail⟩ := seq_store_ret_inv hrest
+  have hl24 := store_fall_locals h24
+  have he24 := journal_offset_store_effect r f1 24 (.rfield 1 (.var .local (ofString "old")))
+    he16 (by rw [hl16]; exact hrloc) (by decide) hbound
+    (by simp [evalHOLExact, hl16, hold]) h24
+  exact ⟨mid24, he24, hl24.trans hl16, htail⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
