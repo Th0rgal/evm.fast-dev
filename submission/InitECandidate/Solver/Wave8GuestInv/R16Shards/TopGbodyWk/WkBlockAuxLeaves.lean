@@ -11413,4 +11413,17 @@ theorem wk_idx_start_account :
       ["heap_ptr", "scratch_ptr"] stdKeep NoExtra (ofString "idx_start_account") :=
   wkSc_idx_start_account.to_worldKeeps
 
+theorem wkSc_remove_storage_write :
+    WorldKeepsSc WorldOK (fun _ => []) [] stdKeep NoExtra
+      (ofString "remove_storage_write") :=
+  worldKeepsSc_of_scratch_kept WkBal.wk_remove_storage_write (by decide)
+
+theorem wkSc_process_withdrawals_of_builder
+    (hbuilder : WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "update_builder_from_tx")) :
+    WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "process_withdrawals") :=
+  wkSc_process_withdrawals_of_incorporate
+    (wkSc_incorporate_tx_into_block_of_steps hbuilder wkSc_merge_tx_into_block)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
