@@ -10197,6 +10197,58 @@ theorem precompile_sha256_padding_zero_then {F : Type}
     exact hbody m (he.code.trans hc)
       (guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi) he.globals hl hntm hrm
 
+open R10Shards.P26_P28 in
+theorem precompile_sha256_padding_path_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad rem stp out : BitVec 64) (src : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hr : s.locals.lookup (ofString "rem") = some (.val (.word rem)))
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (ho : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hb : rem.toNat < 64) (hpad : pad.toNat + 128 ≤ heapEnd)
+    (hob : out.toNat + 32 < 2^64) :
+    let tail := ProgHOL.seq
+      (.call (some (none, none)) (ofString "st_be64")
+        [.op .sub [.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "total")],
+          .const 8], .shift .lsl (.var .local (ofString "len")) (.const 3)])
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"), .var .global (ofString "sha_pad")])
+        (.seq (.ite (.cmp .equal (.var .local (ofString "total")) (.const 128))
+          (.call (some (none, none)) (ofString "sha256_block")
+            [.var .global (ofString "sha_st"),
+              .op .add [.var .global (ofString "sha_pad"), .const 64]]) .skip)
+          (.seq (.call (some (none, none)) (ofString "sha256_finish")
+            [.var .global (ofString "sha_st"), .var .local (ofString "out")])
+            (.return (.const 0)))))
+    let body := ProgHOL.dec (ofString "total") .one (.const 64)
+      (.seq (.ite (.cmp .notLower (.var .local (ofString "rem")) (.const 56))
+        (.assign .local (ofString "total") (.const 128)) .skip) tail)
+    let p := ProgHOL.seq
+      (.call (some (none, none)) (ofString "memzero")
+        [.var .global (ofString "sha_pad"), .const 128])
+      (.seq (.call (some (none, none)) (ofString "memcpy")
+        [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")])
+        (.seq (.storeByte (.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "rem")])
+          (.const 128)) body))
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    ((evaluateHOLFiniteState s p).1 = none ∨ Resumes (evaluateHOLFiniteState s p).1) →
+    ByteEff s (evaluateHOLFiniteState s p).2 [(pad.toNat,128),(stp.toNat,64),(out.toNat,32)] := by
+  dsimp only
+  intro hnt hres
+  have hin : ∀ i ∈ [(pad.toNat,128)], 0 < i.2 →
+      ∃ j ∈ [(pad.toNat,128),(stp.toNat,64),(out.toNat,32)],
+        j.1 ≤ i.1 ∧ i.1+i.2 ≤ j.1+j.2 := by
+    intro i hi hpos; simp only [List.mem_singleton] at hi; subst i
+    exact ⟨_, by simp, le_rfl, le_rfl⟩
+  refine precompile_sha256_padding_zero_then s pad _ _ hc hi hp hin ?_ hnt hres
+  intro m hcm him hgm hlm hntm hrm
+  refine precompile_sha256_padding_copy_then m pad rem src _ _ hcm him
+    (by rw [hgm]; exact hp) (by rw [hlm]; exact hr) hb hin ?_ hntm hrm
+  intro n hcn hinv hgn hln hntn hrn
+  exact precompile_sha256_marker_tail_effect n pad rem stp out hcn hinv
+    (by rw [hgn, hgm]; exact hp) (by rw [hln, hlm]; exact hr)
+    (by rw [hgn, hgm]; exact hs) (by rw [hln, hlm]; exact ho) hb hpad hob hntn hrn
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
