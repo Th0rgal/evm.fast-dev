@@ -17373,4 +17373,54 @@ theorem decCall_return_replace_tail {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private journalAppendTailProg seq_call0_ret_inv seq_store_ret_inv seq_assign_ret_inv
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Replace the trailing continuation through the entire concrete journal-append block. -/
+theorem journal_append_replace_tail {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail tail' : ProgHOL 64) (rv rv' : ValueHOL 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry tail' = (some (.returned rv'), u')) :
+    ∃ out', evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail') = (some (.returned rv'), out') := by
+  unfold journalAppendTailProg at hr ⊢
+  have ⟨hn, hrest⟩ := journal_guard_seq_resume s out jn jc trapCode _ rv hcode hjn hjc hr
+  have hcmp : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  simp only [evalHOLExact, hjn, hjc, hcmp]
+  simp only [evaluateHOLFiniteState_skip]
+  apply dec_return_replace_tail hrest
+  intro w mid he hb
+  apply decCall_return_replace_tail hb
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_call0_ret_inv hu
+  apply seq_return_replace_tail hm hu
+  intro _
+  apply dec_return_replace_tail ht
+  intro w mid he hb
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hb
+  apply seq_return_replace_tail hm hb
+  intro _
+  obtain ⟨m, hm, ht'⟩ := seq_store_ret_inv ht
+  apply seq_return_replace_tail hm ht
+  intro _
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv ht'
+  apply seq_return_replace_tail hm ht'
+  intro _
+  obtain ⟨m, hm, ht'⟩ := seq_store_ret_inv ht
+  apply seq_return_replace_tail hm ht
+  intro _
+  obtain ⟨m, hm, ht⟩ := seq_assign_ret_inv ht'
+  apply seq_return_replace_tail hm ht'
+  exact hc m _
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
