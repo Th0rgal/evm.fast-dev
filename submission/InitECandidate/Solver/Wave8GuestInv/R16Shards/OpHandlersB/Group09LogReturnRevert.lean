@@ -17496,4 +17496,39 @@ theorem op_log_no_growth_tail_list_protection_g09 {F : Type}
       dsimp only at hd ⊢
       rcases hd with hd | hd | hd | hd <;> omega
 
+/-- Every enumerated record interval is an exclusive frame object, including null-list views. -/
+theorem op_log_record_is_frame_object_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {ec : Ivl} {i : Nat}
+    (hi : i < memW s (memW s (ec.1 + 88) + 8)) :
+    (memW s (memW s (memW s (ec.1 + 88)) + 8*i), 40) ∈ frameObjects s ec := by
+  apply List.mem_append_right
+  unfold frameLogObjects
+  apply List.mem_flatMap.2
+  refine ⟨i, List.mem_range.2 hi, ?_⟩
+  apply List.mem_filter.2
+  exact ⟨by simp [logRecordIvls], by simp⟩
+
+/-- Suspended record bounds and separation follow directly from frame-object ownership. -/
+theorem op_log_no_growth_tail_record_protection_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {head : Ivl} {tail : List Ivl}
+    (l p n cap : BitVec 64) (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) :
+    ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let o := (memW s (memW s (memW s (ec.1 + 88)) + 8*i), 40)
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8*n.toNat + 8) := by
+  obtain ⟨_, _, hFW, _, _⟩ := op_log_old_ownership_g09 hinv
+  intro ec hec i hi
+  have hmem : ec ∈ evmChain s := by rw [hcons]; exact List.mem_cons_of_mem _ hec
+  have ho := op_log_record_is_frame_object_g09 hi
+  have hb := (frameWF_bounds hA.2 (hFW ec hmem)).2.2.2 _ ho
+  have hd := op_log_no_growth_tail_object_protection_g09 l p n cap hinv hcons hl hm0 hm16 hlt ec hec _ ho
+  refine ⟨?_, hd⟩
+  rcases hb with hz | hb
+  · contradiction
+  · exact hb
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
