@@ -15852,4 +15852,36 @@ theorem op_log_detached_ownership_g09 {F : Type}
     rw [heq] at hi'
     exact hdj i hi' j hj
 
+/-- In-place append keeps the freshly established ownership obligations intact. -/
+theorem op_log_no_growth_owned_record_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p count log : BitVec 64)
+    (address topics data nt size : Nat) (objects : List Ivl)
+    (hl : l.toNat + 24 ≤ 2^64)
+    (hp : p.toNat + 8 * count.toNat + 8 ≤ 2^64)
+    (hb : log.toNat + 40 ≤ 2^64)
+    (hheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hbuffer : Disj (log.toNat, 40) (p.toNat, 8 * count.toNat + 8))
+    (hvalid : LogEntryOK s log.toNat)
+    (h0 : memW s log.toNat = address)
+    (h8 : memW s (log.toNat + 8) = topics)
+    (h16 : memW s (log.toNat + 16) = nt)
+    (h24 : memW s (log.toNat + 24) = data)
+    (h32 : memW s (log.toNat + 32) = size)
+    (ht : topics + 32 * nt ≤ log.toNat)
+    (hlog : log.toNat + 40 ≤ address)
+    (ha : address + 20 ≤ data)
+    (hdj : IvlsDisj [(log.toNat, 40), (address, 20), (topics, 32 * nt), (data, size)] objects) :
+    let post := {s with memory := fun a =>
+      if a = p + count * 8#64 then .word log
+      else if a = l + 8#64 then .word (count + 1#64) else s.memory a}
+    LogEntryOK post log.toNat ∧
+      logOwnedIvls post log.toNat = logOwnedIvls s log.toNat ∧
+      (logOwnedIvls post log.toNat).Pairwise Disj ∧
+      IvlsDisj (logOwnedIvls post log.toNat) objects := by
+  dsimp only
+  obtain ⟨hv, heq⟩ := log_no_growth_new_record_preserved_g09 s l p count log
+    hl hp hb hheader hbuffer hvalid
+  obtain ⟨hpair, hsep⟩ := op_log_detached_ownership_g09 h0 h8 h16 h24 h32 ht hlog ha hdj
+  exact ⟨hv, heq, heq ▸ hpair, heq ▸ hsep⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
