@@ -9018,4 +9018,53 @@ theorem global_record_load_of_wordAt {F : Type} (s : PanSemStateFiniteExact 64 F
     simp [evalHOLFinite, evalHOLExact, evalListHOLExact, hg, wordOpHOL, wordOp,
       valueIsWord, valueWord, ha, memLoadHOLExact, hd, hm]
 
+/-- Aligned fields of nonzero typed records are in-domain words. -/
+theorem typed_record_wordAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hF : FixedTyped s) (g : String) (sz k : Nat)
+    (hg : (g,sz) ∈ typedRecords) (hn : globN s g ≠ 0)
+    (hk : k % 8 = 0) (hle : k + 8 ≤ sz) : WordAt s (globN s g + k) := by
+  have hf : (globN s g, sz) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.2
+    refine ⟨(g,sz), ?_, ?_⟩
+    · exact (show ∀ r ∈ typedRecords, r ∈ globalBuffers by decide) _ hg
+    · simp [hn]
+  rcases hF.1 _ hf with hz | ⟨_,hw⟩
+  · dsimp at hz; omega
+  · have hw' := hw.2.2 (k / 8) (by omega)
+    have heq : 8 * (k / 8) = k := by omega
+    simpa only [heq] using hw'
+
+theorem typed_record_root_load {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hF : FixedTyped s) (g : String) (sz : Nat) (k : BitVec 64)
+    (hg : (g,sz) ∈ typedRecords) (hn : globN s g ≠ 0)
+    (hk : k.toNat % 8 = 0) (hle : k.toNat + 8 ≤ sz) :
+    ∃ w : BitVec 64, w.toNat = memW s (globN s g + k.toNat) ∧
+      evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString g), .const k])) = some (.val (.word w)) := by
+  exact global_record_load_of_wordAt s g k hn (typed_record_wordAt s hF g sz k.toNat hg hn hk hle)
+
+/-- Fixed-record typing and the hash binding discharge concrete cache arguments. -/
+theorem code_cache_args_of_typed_record {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hF : FixedTyped s) (owner : String) (hash : BitVec 64)
+    (ho : owner = "ts" ∨ owner = "bs") (hn : globN s owner ≠ 0)
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash))) :
+    ∃ root : BitVec 64, root.toNat = memW s (globN s owner + 48) ∧
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (getCodeCacheArgs owner) = some [.val (.word root), .val (.word hash)] := by
+  have hl : ∃ root : BitVec 64, root.toNat = memW s (globN s owner + 48) ∧
+      evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString owner), .const 48])) = some (.val (.word root)) := by
+    rcases ho with rfl | rfl
+    · exact typed_record_root_load s hF "ts" 72 48 (by decide) hn (by decide) (by decide)
+    · exact typed_record_root_load s hF "bs" 80 48 (by decide) hn (by decide) (by decide)
+  obtain ⟨root,hr,hl⟩ := hl
+  refine ⟨root,hr,?_⟩
+  unfold evalHOLFinite at hl
+  simp only [getCodeCacheArgs, evalListHOLFinite, evalListHOLExact, hl]
+  simp [evalHOLExact, hh]
+
 end HeadStore
