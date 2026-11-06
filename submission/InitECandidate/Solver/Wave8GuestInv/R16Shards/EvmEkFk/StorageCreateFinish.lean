@@ -9325,6 +9325,63 @@ theorem nodedb_lookup_ret_slice_so {F : Type}
       have hheap : globN mid "heap_ptr" = globN s "heap_ptr" := by rw [hmid]; rfl
       exact ⟨⟨hvok.2.2.2.1, by simpa only [hheap] using hvok.2.2.2.2⟩, hvok.2.2.1⟩
 
+theorem witness_nodedb_lookup_ret_slice_so {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (db hash : BitVec 64) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hAR : ArenaReady s) (hW : WitnessDbOK s)
+    (hws : globN s "ws" ≠ 0) (ht : db.toNat = memW s (globN s "ws"))
+    (hnz : db.toNat ≠ 0)
+    (hdb : s.locals.lookup (ofString "db") = some (.val (.word db)))
+    (hhash : s.locals.lookup (ofString "hash") = some (.val (.word hash)))
+    (hret : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_nodedb_lookup)).1 =
+      some (.returned rv)) :
+    ∃ found p n : BitVec 64,
+      rv = .rStruct [.val (.word found), .val (.word p), .val (.word n)] ∧
+      (found ≠ 0 → Inside (p.toNat, n.toNat) sourceBase (globN s "heap_ptr") ∧ n.toNat < 2 ^ 40) := by
+  obtain ⟨hwf, _, _, hvals⟩ := witnessDbSlices_of_ok hW hws (ht ▸ hnz)
+  apply nodedb_lookup_ret_slice_so s db hash rv hc hAR (ht ▸ hwf) ?_ hdb hhash hret
+  intro v hv
+  exact hvals v (ht ▸ hv)
+
+theorem nodedb_lookup_ret_evm_witness_so {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (db hash : BitVec 64) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hInv : EvmInv s) (hW : WitnessDbOK s)
+    (hws : globN s "ws" ≠ 0) (ht : db.toNat = memW s (globN s "ws"))
+    (hnz : db.toNat ≠ 0)
+    (hdb : s.locals.lookup (ofString "db") = some (.val (.word db)))
+    (hhash : s.locals.lookup (ofString "hash") = some (.val (.word hash)))
+    (hex : ∃ values, lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "nodedb_lookup") values =
+      some (sourceFnBody Guest.Software.guestFn_nodedb_lookup, s.locals, .comb [.one, .one, .one]))
+    (hret : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_nodedb_lookup) =
+      (some (.returned rv), post)) :
+    EvmStep [] s post ∧ WitnessDbOK post ∧
+    ∃ found p n : BitVec 64,
+      rv = .rStruct [.val (.word found), .val (.word p), .val (.word n)] ∧
+      (found ≠ 0 → Inside (p.toNat, n.toNat) sourceBase (globN post "heap_ptr") ∧ n.toNat < 2 ^ 40) := by
+  obtain ⟨found, p, n, hrv, hb⟩ := witness_nodedb_lookup_ret_slice_so s db hash rv hc hInv.1 hW
+    hws ht hnz hdb hhash (by rw [hret])
+  obtain ⟨params, body, rs, hlk, hro⟩ := R11Adapters.ReadOnlyLeaves.ro_nodedb_lookup
+  have hsame := hlk.symm.trans lookup_nodedb_lookup_so
+  obtain ⟨rfl, rfl, rfl⟩ := Option.some.inj hsame
+  have heff := hro s hc hInv.1.1 hex (by rw [hret]; simp)
+    (by rw [hret]; exact Or.inl ⟨rv, rfl⟩)
+  rw [hret] at heff
+  dsimp only at heff
+  have hstep : EvmStep [] s post := by
+    rw [heff]
+    exact evmStep_with_locals_clock (evmStep_refl_gw hInv) _ _
+  refine ⟨hstep, ?_, found, p, n, hrv, ?_⟩
+  · rw [heff]
+    obtain ⟨S, Nd, hWT, hDb⟩ := hW
+    refine ⟨S, Nd, (WkBal.worldTypedWith_with_locals s _ _ S Nd).2 hWT, ?_⟩
+    intro hws'
+    dsimp only
+    intro hnz'
+    obtain ⟨hwf, hk, hfp, hd, hvals⟩ := hDb hws' hnz'
+    exact ⟨(htabWF_with_locals s _ _ _).2 hwf, hk, hfp, hd,
+      fun v hv => ⟨witnessSliceOK_with_locals_clock (hvals v hv).1 _ _, (hvals v hv).2⟩⟩
+  · rw [heff]
+    exact hb
+
 end StorageOriginal
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
