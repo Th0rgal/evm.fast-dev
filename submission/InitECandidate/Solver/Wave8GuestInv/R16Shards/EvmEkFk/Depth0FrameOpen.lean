@@ -7799,6 +7799,28 @@ theorem fallback_witness_entries_after_access_set {F : Type}
   · rw [hlocal]; exact hne
   · exact hx
 
+/-- An update preserves well-formedness of every distinct typed world table. -/
+theorem htabWF_of_separated_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (hdb : db ∈ S) (ht : locN s "t" ∈ S)
+    (hne : db ≠ locN s "t") (hx : HtabExit s post) : HtabWF post db := by
+  have hw := (hW.1.2.1 db hdb).1
+  have htw := (hW.1.2.1 (locN s "t") ht).1
+  apply InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.htabWF_congr_unhit
+    hAs.1 hx.1.1 hw
+  intro i hi
+  right
+  apply ivlUnhit_of_frameOutside ⟨(hw.1 i hi).2.1, (hw.1 i hi).2.2.1⟩ hx.2.2.2.2.2.2.1
+  · intro j hj
+    exact ⟨(htw.1 j hj).2.1, (htw.1 j hj).2.2.1⟩
+  · have hs := hAs.2.2.2.2.2.2.1
+    have hp := hx.1.2.2.2.2.2.2.1
+    exact ⟨hs, by omega⟩
+  · exact hW.1.2.2.1 db hdb (locN s "t") ht hne i hi
+  · exact disj_fresh_of_allocated hAs.2 hx.1.2 hx.2.2.2.2.1
+      (((hW.1.2.1 db hdb).2 i hi).1)
+
 /-- The actual access-table exit supplies the witness payload fact for the
 resumed `ws_get_code` continuation; caller locals may be restored freely. -/
 theorem fallback_ws_return_after_access_set {F : Type}
@@ -7815,14 +7837,20 @@ theorem fallback_ws_return_after_access_set {F : Type}
     (hs : post.eshapes.lookup (ofString "StateErr") = some .one)
     (heval : evalHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
       (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
-    (hh : locals.lookup (ofString "code_hash") = some (.val (.word hash)))
-    (hw : HtabWF post db.toNat) :
+    (hh : locals.lookup (ofString "code_hash") = some (.val (.word hash))) :
     Ret {post with locals := locals}
       (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
         [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c"))))
       (fun v _ => ∃ code code_n : BitVec 64,
         v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
   have he := fallback_witness_entries_after_access_set hW hAs hws hts hdb ht hlocal hx
+  obtain ⟨hmdb, hmt, hne⟩ := fallback_code_roots_distinct s S hW.1 hws hts hdb ht
+  have hw : HtabWF post db.toNat := by
+    rw [hdbnat]
+    apply htabWF_of_separated_htab_exit _ hAs hW.1 hmdb
+    · rw [hlocal]; exact hmt
+    · rw [hlocal]; exact hne
+    · exact hx
   rw [← hdbnat] at he
   apply get_code_ws_fallback_return_entry_strong {post with locals := locals} db hash hc hs
     (localsFree_arenaReady post locals post.clock hx.1)
