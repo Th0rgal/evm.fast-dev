@@ -9175,4 +9175,31 @@ theorem get_code_call_return_of_world_nonzero {F : Type} (s : PanSemStateFiniteE
     hsk hws hts hbs hdn htn hcn hl
   exact get_code_call_return_entry_world_strong s _ body callee ret v post S Nd db hash tw hc he hl hb
 
+/-- The external-code suffix inherits the bound from structural caller facts. -/
+theorem ext_code_tail_of_world_nonzero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (hash addr : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S) (hWT : WorldTypedWith s S Nd)
+    (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hsk : globN s "sk_buf" ≠ 0) (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hbs : globN s "bs" ≠ 0)
+    (hdn : memW s (globN s "ws" + 16) ≠ 0)
+    (htn : memW s (globN s "ts" + 40) ≠ 0)
+    (hcn : ∀ owner, owner = "ts" ∨ owner = "bs" → memW s (globN s owner + 48) ≠ 0)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+        .var .local (ofString "addr")] = some [.val (.word hash), .val (.word addr)]) :
+    Ret s (.decCall (ofString "c") (.comb [.one,.one]) (ofString "get_code")
+      [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+        .var .local (ofString "addr")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply ext_code_tail_of_world_entry s hc
+  intro values body callee ret he hl
+  rw [ha] at he
+  cases he
+  obtain ⟨db,tw,h⟩ := get_code_entry_at_call s S Nd hash addr body callee ret hA hW hWT hc hs
+    hsk hws hts hbs hdn htn hcn hl
+  exact ⟨S,Nd,db,hash,tw,h⟩
+
 end HeadStore
