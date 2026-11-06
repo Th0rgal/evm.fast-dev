@@ -15131,4 +15131,67 @@ theorem op_log_topics_init_step_g09 {F : Type}
     · exact hn
   · exact hnt
 
+/-- Allocate the bounded topic buffer and execute its initialized loop,
+delivering separated ownership and unchanged remaining locals downstream. -/
+theorem op_log_topics_alloc_loop_g09 {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {nt : BitVec 64} {cont : ProgHOL 64}
+    (hcode : s.code = originalRuntimeCode) (hInvW : EvmInvWith s S Nd)
+    (hlen : (evmChain s).length = (evmChain s0).length) (hR : evmR s < evmR s0)
+    (hnt4 : nt.toNat ≤ 4) (hHM : HeadMemAligned s)
+    (hntlk : s.locals.lookup (ofString "ntopics") = some (.val (.word nt)))
+    (hcont : ∀ (topics qw : BitVec 64) (last : PanSemStateFiniteExact 64 F),
+      last.code = originalRuntimeCode → EvmInvWith last S Nd →
+      (evmChain last).length = (evmChain s0).length → evmR last < evmR s0 →
+      HeadMemAligned last → globN last "heap_ptr" = qw.toNat →
+      topics.toNat + (32 * nt.toNat + 8) ≤ qw.toNat → qw.toNat ≤ heapLimit →
+      topics.toNat % 8 = 0 → sourceBase ≤ topics.toNat →
+      IvlsDisj [(topics.toNat, qw.toNat - topics.toNat)]
+        (worldTypedIvls last S Nd ++ ((evmChain last).map (frameObjects last)).flatten) →
+      last.locals.lookup (ofString "topics") = some (.val (.word topics)) →
+      (∀ nm : MlS, nm ≠ ofString "i" → nm ≠ ofString "t" → nm ≠ ofString "topics" →
+        last.locals.lookup nm = s.locals.lookup nm) →
+      (evaluateHOLFiniteState last cont).1 ≠ some .timeOut →
+      OpDispatchPost s0 (evaluateHOLFiniteState last cont).1 (evaluateHOLFiniteState last cont).2)
+    (hnt : (evaluateHOLFiniteState s (.decCall (ofString "topics") .one (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "ntopics"), .const 32], .const 8]]
+      (.dec (ofString "i") .one (.const 0) (.seq opLogWhileProg cont)))).1 ≠ some .timeOut) :
+    OpDispatchPost s0
+      (evaluateHOLFiniteState s (.decCall (ofString "topics") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "ntopics"), .const 32], .const 8]]
+        (.dec (ofString "i") .one (.const 0) (.seq opLogWhileProg cont)))).1
+      (evaluateHOLFiniteState s (.decCall (ofString "topics") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "ntopics"), .const 32], .const 8]]
+        (.dec (ofString "i") .one (.const 0) (.seq opLogWhileProg cont)))).2 := by
+  have hsz : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.op .add [.panop .mul [.var .local (ofString "ntopics"), .const 32], .const 8]) =
+      some (.val (.word (nt * 32#64 + 8#64))) := by
+    simp [evalHOLExact, evalListHOLExact, hntlk, valueIsWord, valueWord, panOpHOL, wordOpHOL, wordOp]
+  have hn : (nt * 32#64 + 8#64).toNat = 32 * nt.toNat + 8 := by
+    rw [BitVec.toNat_add, BitVec.toNat_mul]
+    change ((nt.toNat * 32) % 2^64 + 8) % 2^64 = _
+    rw [Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)]
+    omega
+  apply decCall_alloc_step_g09 (s0 := s0) (s := s) (charged := true) hcode hInvW hlen hR hsz hnt
+  intro topics qw allocated hc hw hworld hframes hchain hpotential hhead hg hm hdom hl hp hq hfit hlim ha hqa hlo hwords hdj hncont
+  have hnt_a : allocated.locals.lookup (ofString "ntopics") = some (.val (.word nt)) := by
+    rw [hl]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      (by decide : ofString "topics" ≠ ofString "ntopics")] using hntlk
+  have htopics_a : allocated.locals.lookup (ofString "topics") = some (.val (.word topics)) := by
+    rw [hl]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have hfit' : topics.toNat + (32 * nt.toNat + 8) ≤ qw.toNat := by rwa [hn] at hfit
+  apply op_log_topics_init_step_g09 hc hw (by rw [hchain]; exact hlen)
+    (by rw [hpotential]; exact hR) hnt4 hfit' hlim ha hlo hdj hnt_a htopics_a
+  · intro last hcL hwL hlL hrL hpL hmL hdjL hlk hnL
+    apply hcont topics qw last hcL hwL hlL hrL (hmL (hhead hHM)) (hpL.trans hq)
+      hfit' hlim ha hlo hdjL
+    · rw [hlk (ofString "topics") (by decide) (by decide)]
+      exact htopics_a
+    · intro nm hni hnt' hntop
+      rw [hlk nm hni hnt', hl]
+      simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hntop]
+    · exact hnL
+  · exact hncont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
