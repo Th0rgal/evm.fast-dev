@@ -18613,4 +18613,78 @@ theorem jset_journal_table_tail_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+open private journalAppendTailProg callee_param_two_r16
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The complete jset body preserves nested header words for a non-inner-table
+journal role, including its initial read-only lookup and restored local scope. -/
+theorem jset_body_header_words_of_roles {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (j n cap p tw kw : BitVec 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (htw : ∀ S, TablesTyped s S → tw.toNat ∈ S ∧
+      (tw.toNat, journalRole s tw.toNat) ∈ worldRoleSlots s)
+    (hrole : journalRole s tw.toNat ≠ "ts+32")
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_jset) =
+      (some (.returned rv), out)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW out (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  change evaluateHOLFiniteState s
+    (.decCall (ofString "old") (.comb [.one, .one]) (ofString "htab_get")
+      [.var .local (ofString "t"), .var .local (ofString "key")]
+      (journalAppendTailProg 4#64 (.rfield 0 (.var .local (ofString "old")))
+        (.seq (.call (some (none, none)) (ofString "htab_set")
+          [.var .local (ofString "t"), .var .local (ofString "key"), .var .local (ofString "value")])
+          (.return (.const 0#64))))) = _ at hr
+  obtain ⟨vs, body, callee, ret, old, cp, u, ha, hl, hb, htail, hm⟩ := dec_call_return_inv_args hr
+  have hcode := hW.1.1.1.code
+  have hargs : vs = [.val (.word tw), .val (.word kw)] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, ht, hk] using ha.symm
+  subst vs
+  have hl' := hl
+  rw [hcode] at hl'
+  have hbody := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "htab_get")
+    _ _ body _ ret _ callee EvmFrameSpecs.lookup_htab_get hl'
+  obtain ⟨v1, v2, he1, he2, hct, hck⟩ := callee_param_two_r16 s (ofString "htab_get")
+    (ofString "t") (ofString "key") .one .one _ _
+    (by rw [hcode]; exact EvmFrameSpecs.lookup_htab_get)
+    (.var .local (ofString "t")) (.var .local (ofString "key")) _ _ callee ret ha hl
+  have hct' : callee.lookup (ofString "t") = some (.val (.word tw)) := by
+    have hv : v1 = .val (.word tw) := by simpa [evalHOLExact, ht] using he1.symm
+    simpa only [hv] using hct
+  have hck' : callee.lookup (ofString "key") = some (.val (.word kw)) := by
+    have hv : v2 = .val (.word kw) := by simpa [evalHOLExact, hk] using he2.symm
+    simpa only [hv] using hck
+  have hwf : HtabWF (callEntryStateHOLFinite s callee) tw.toNat :=
+    (htabWF_with_locals s callee (s.clock - 1) tw.toNat).2 (hT.1.2.1 _ (htw S hT.1).1).1
+  obtain ⟨f0, f1, rfl, _⟩ := WkBal.htab_get_ret_in_values (callEntryStateHOLFinite s callee) tw kw
+    hcode hct' hck' hwf old (by rw [← hbody, hb])
+  have he := htab_get_restored_state s cp _ body callee ret _ hW.1.1.1 hl hb
+  rw [he] at htail
+  let cur := setVarHOLFinite (ofString "old") (.rStruct [.val (.word f0), .val (.word f1)])
+    {s with clock := cp.clock}
+  have heff : WorldEff s cur [] [] ["heap_ptr"] :=
+    (WorldEff.refl s [] [] ["heap_ptr"] hW.1.1 hcode).locals_clock _ _
+  have hwords := jset_journal_table_tail_header_words s cur u S Nd j n cap p tw kw f0 f1
+    (.var .local (ofString "key")) (.var .local (ofString "value")) (.const 0#64) rv hW hT heff
+    (by intro k; rfl) hj hn hc hp
+    (by simp [cur, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, ht,
+      show ofString "old" ≠ ofString "t" by decide])
+    (by simp [cur, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hk,
+      show ofString "old" ≠ ofString "key" by decide])
+    (by simp [cur, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+    (by intro S hTS; exact ⟨(htw S hTS).1, by simpa [hrole] using (htw S hTS).2⟩) htail
+  intro k hkm
+  simpa only [memW, hm] using hwords k hkm
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
