@@ -14387,4 +14387,47 @@ theorem log_all_frames_owned_g09 {F : Type}
       (hFW ec (by rw [hcons]; exact List.mem_cons_of_mem _ hec))
       (hfields ec hec) (hheader ec hec) (hslots ec hec) (hrecords ec hec)
 
+/-- Assemble the invariant from head validity and suspended-frame readback,
+deriving all tail ownership and separation obligations from the append. -/
+theorem evmInvAt_of_log_owned_frames_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {head : Ivl} {tail newObjects : List Ivl}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hcell : SameTypedCells s post S Nd)
+    (hglobals : post.globals = s.globals) (hdom : post.memaddrs = s.memaddrs)
+    (hchain : evmChain post = evmChain s) (hcons : evmChain s = head :: tail)
+    (hhead : frameObjects post head = frameObjects s head ++ newObjects)
+    (hheadWF : FrameWF post S head)
+    (hFW : ∀ ec ∈ evmChain s, FrameWF s S ec)
+    (hnewMsg : ∀ ec ∈ tail, ∀ o ∈ newObjects, Disj (memW s (ec.1 + 112), 176) o)
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hheader : ∀ ec ∈ tail, ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hslots : ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8 * i))
+    (hrecords : ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+        memW post (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k) =
+          memW s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k))
+    (hold : ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj)
+    (hnew : newObjects.Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten newObjects)
+    (holdWorld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd))
+    (hnewWorld : IvlsDisj newObjects (worldOwned s S Nd)) :
+    EvmInvAt post S := by
+  have htailMem : ∀ ec ∈ tail, ec ∈ evmChain s := by
+    intro ec hec; rw [hcons]; exact List.mem_cons_of_mem _ hec
+  obtain ⟨hframes, hobjects, hlogs⟩ := log_all_frames_owned_g09 hAs hAp hWT hcell
+    hglobals hdom hchain hcons hhead hheadWF hFW hnewMsg
+    (fun ec hec => hfields ec (htailMem ec hec)) hheader hslots hrecords
+  exact evmInvAt_of_log_no_growth_new_objects_g09 hAs hAp hinv hWT hglobals hcell
+    hchain hcons (fun ec hec k hk _ => hfields ec hec k hk)
+    (fun ec hec k hk _ => hcont ec hec k hk)
+    hframes hhead hobjects hlogs hold hnew hnewOld holdWorld hnewWorld
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

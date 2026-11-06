@@ -49,4 +49,20 @@ theorem budget (oracles : List (Option (Spt Nat)))
   rw [collected]
   exact bounded entry hentry
 
+/-- Assemble the native compilation and the globally collected frame budget
+into the backend obligation for a concrete witness. -/
+theorem backendBound
+    (w : InitECandidate.Solver.Wave8GuestInv.LeanBridge.ConcreteOracleCompilationWitness)
+    (hlen : w.oracles.length = ConcreteCompilerWord.source.length)
+    (bodies : List (Nat × HolProg 64)) (frames : List Nat)
+    (bitmaps : AppList (BitVec 64) × Nat) (info : Spt Nat)
+    (compiled : WordToStack.Native.compileWordToStackNative riscvConfig false registers
+      ((ConcreteCompilerWord.source.zip w.oracles).map (fun p => wordFunction p.2 p.1))
+      (.list [4], 1) = (bodies, frames, bitmaps))
+    (collected : StackRawCall.collectInfo (nativeStubs ++ bodies) .ln = info)
+    (bounded : Bounded info (nativeStubs ++ bodies)) :
+    ConcreteStageTransferBridge.BackendBound w := by
+  apply backendBound_of_table w hlen bodies frames bitmaps compiled
+  exact budget w.oracles (nativeStubs ++ bodies) info collected bounded
+
 end InitECandidate.Solver.Wave8Stage.ConcreteM7313.LoweredBudget

@@ -9937,4 +9937,110 @@ theorem eval_merge_storage_body {F : Type}
         show ofString "s" ≠ ofString "bouter" by decide] using ht
     · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
 
+/-- The storage body never assigns its two outer-table pointers or cached capacity. -/
+theorem merge_storage_body_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hflow : Flowing (evaluateHOLFiniteState s mergeStorageBody).1) :
+    ∀ x ∈ [ofString "outer", ofString "bouter", ofString "cap"],
+      (evaluateHOLFiniteState s mergeStorageBody).2.locals.lookup x = s.locals.lookup x := by
+  intro x hx
+  apply evaluate_avoidsLocal_flowing x mergeStorageBody ?_ s hflow
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+  rcases hx with rfl | rfl | rfl <;> decide
+
+/-- The block outer-table pointer is stable under the withdrawal frame. -/
+theorem merge_withdrawal_bs_outer_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hbs : globN s "bs" ≠ 0)
+    (hs : WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s r post)
+    (hno : ∀ i ∈ bufRegions withdrawalBufs s, ¬ CellHits (globN s "bs" + 32) i) :
+    globN post "bs" = globN s "bs" ∧
+      memW post (globN post "bs" + 32) = memW s (globN s "bs" + 32) := by
+  have hg := globN_eq_of_lookup (hs.1.2.2.1 (ofString "bs") (by decide))
+  refine ⟨hg, ?_⟩
+  rw [hg]
+  exact hs.1.2.2.2.1 ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72])
+    (by decide) hbs 32 (by decide) hno
+
+/-- Valid withdrawal buffers cannot overlap a word within a typed record. -/
+theorem merge_record_word_avoids_buffers {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (hW : WorldOK s)
+    (g : String) (sz k : Nat) (hr : (g, sz) ∈ typedRecords)
+    (hn : globN s g ≠ 0) (hk : k + 8 ≤ sz) :
+    ∀ i ∈ bufRegions withdrawalBufs s, ¬ CellHits (globN s g + k) i := by
+  obtain ⟨S, hw⟩ := hW.2
+  obtain ⟨Nd, hw⟩ := (WkBal.worldTyped_iff_with s S).1 hw
+  have hm : (globN s g, sz) ∈ worldTypedIvls s S Nd := by
+    unfold worldTypedIvls
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_right
+    apply List.mem_map.2
+    exact ⟨(g, sz), hr, by simp [hn]⟩
+  intro i hi hh
+  have hd := validBufList_disj validBufList_withdrawal hw i hi _ hm
+  have hz : i.2 = 0 → i.1 = 0 := by
+    obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hi
+    simp only [withdrawalBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
+    rcases hp with rfl | rfl | rfl | rfl | rfl <;>
+      simp only [bufferRegion] <;> split <;> simp_all
+  unfold Disj CellHits at *
+  rcases i with ⟨lo, len⟩
+  dsimp only at *
+  omega
+
+/-- Block outer-table stability follows directly from a well-typed world. -/
+theorem merge_withdrawal_bs_outer_kept_world {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hW : WorldOK s) (hbs : globN s "bs" ≠ 0)
+    (hs : WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s r post) :
+    globN post "bs" = globN s "bs" ∧
+      memW post (globN post "bs" + 32) = memW s (globN s "bs" + 32) :=
+  merge_withdrawal_bs_outer_kept hbs hs
+    (merge_record_word_avoids_buffers hW "bs" 80 32 (by decide) hbs (by decide))
+
+def MergeStorageInv {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  WorldOK s ∧ ∃ tw ow : BitVec 64,
+    s.locals.lookup (ofString "bouter") = some (.val (.word tw)) ∧
+    s.locals.lookup (ofString "outer") = some (.val (.word ow)) ∧
+    globN s "bs" ≠ 0 ∧ tw.toNat ≠ 0 ∧
+    tw.toNat = memW s (globN s "bs" + 32) ∧ globN s "ts" ≠ 0 ∧
+    ow.toNat = memW s (globN s "ts" + 32)
+
+theorem mergeStorageInv_body_step {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hI : MergeStorageInv s)
+    (hnt : (evaluateHOLFiniteState s mergeStorageBody).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageBody).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeStorageBody).1 (evaluateHOLFiniteState s mergeStorageBody).2 := by
+  obtain ⟨hW, tw, ow, ht, ho, hbs, ht0, htbs, hts, hots⟩ := hI
+  exact eval_merge_storage_body s tw ow hc hW ht ho hbs ht0 htbs hts hots hnt hfr
+
+/-- The remaining loop-invariant obligation is precisely preservation of the transaction root. -/
+theorem mergeStorageInv_body_post {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hI : MergeStorageInv s)
+    (hnt : (evaluateHOLFiniteState s mergeStorageBody).1 ≠ some .timeOut)
+    (hflow : Flowing (evaluateHOLFiniteState s mergeStorageBody).1)
+    (hts : globN (evaluateHOLFiniteState s mergeStorageBody).2 "ts" = globN s "ts")
+    (hots : memW (evaluateHOLFiniteState s mergeStorageBody).2
+      (globN (evaluateHOLFiniteState s mergeStorageBody).2 "ts" + 32) =
+        memW s (globN s "ts" + 32)) :
+    MergeStorageInv (evaluateHOLFiniteState s mergeStorageBody).2 := by
+  have hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageBody).1 := by
+    rcases hflow with h | h | h
+    · exact Or.inl h
+    · exact Or.inr (Or.inr (Or.inl h))
+    · exact Or.inr (Or.inl h)
+  have hs := mergeStorageInv_body_step s hc hI hnt hfr
+  obtain ⟨hW, tw, ow, ht, ho, hbs, ht0, htbs, hts0, hots0⟩ := hI
+  have hb := merge_withdrawal_bs_outer_kept_world hW hbs hs
+  refine ⟨hs.worldOK_bufs validBufList_withdrawal hW, tw, ow, ?_, ?_, ?_, ht0, ?_, ?_, ?_⟩
+  · exact (merge_storage_body_roots s hflow _ (by simp)).trans ht
+  · exact (merge_storage_body_roots s hflow _ (by simp)).trans ho
+  · rwa [hb.1]
+  · exact htbs.trans hb.2.symm
+  · rwa [hts]
+  · exact hots0.trans hots.symm
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

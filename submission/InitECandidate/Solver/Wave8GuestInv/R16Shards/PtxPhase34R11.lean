@@ -15997,4 +15997,173 @@ theorem wsAcct_step_txWorld {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Account scratch writes leave both transaction header roots unchanged. -/
+theorem wsAcct_step_header_roots {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {r : Option (PanSemResultExact 64)}
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hs : WorldStep (bufRegions EvmEkFk.wsAcctBufs) ["heap_ptr", "scratch_ptr"]
+      R10Shards.P26_P28.stdKeep NoExtra s r post) :
+    globN post "bo" = globN s "bo" ∧
+      ∀ k ∈ ([40, 72] : List Nat), memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+  refine ⟨globN_eq_of_lookup (hs.2.2.1 _ (by decide)), ?_⟩
+  have hd := validBufList_disj EvmEkFk.validBufList_wsAcctBufs hT
+  intro k hk
+  apply hs.2.2.2.1 ("bo", [0,8,16,24,32,40,48,56,64,72,80]) (by simp [R10Shards.P26_P28.stdKeep]) hW.2.bo_nz k
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+    rcases hk with rfl | rfl <;> simp
+  · intro i hi
+    have hz : i.2 = 0 → i.1 % 8 = 0 := by
+      obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hi
+      apply PtxP1.bufferRegion_zero_aligned
+      simp only [EvmEkFk.wsAcctBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
+      rcases hp with rfl | rfl | rfl <;> decide
+    have ha := (bo_words hT.2.2.1 hW.2.bo_nz).2.1
+    apply R13Shards.not_cellHits_of_disj (i := (globN s "bo", 88)) _ hz _
+      (R13Shards.disj_symm (hd i hi _ (PtxP1.bo_mem_typed hW.2.bo_nz)))
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl <;> dsimp at * <;> omega
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl <;> dsimp <;> omega
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Expose the callee memory of a successful local-assignment call. -/
+theorem local_call_fall_inv_args {F : Type} {s t : PanSemStateFiniteExact 64 F}
+    {fname name : MlS} {args : List (ExpHOL 64)}
+    (h : evaluateHOLFiniteState s (.call (some (some (.local, name), none)) fname args) = (none, t)) :
+    ∃ values body callee retShape rv post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values ∧
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, retShape) ∧
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned rv), post) ∧
+      t.memory = post.memory := by
+  rw [evaluateHOLFiniteState_call] at h
+  split at h
+  · cases h
+  · split at h
+    · cases h
+    · rename_i optvalues values hargs optbody body callee retShape hl
+      split at h
+      · cases h
+      · rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => cases h
+        | some r =>
+          cases r <;> try simp at h
+          rename_i rv
+          split at h
+          · split at h
+            · exact ⟨_, body, callee, retShape, rv, post, hargs, hl, hr,
+                congrArg (fun st => st.memory) (Prod.mk.inj h).2.symm⟩
+            · cases h
+          · cases h
+
+/-- The local-assignment form of missing-account allocation preserves backing. -/
+theorem acct_empty_local_call_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (name : MlS) (args : List (ExpHOL 64))
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (.call (some (some (.local, name), none))
+      (ofString "acct_empty") args) = (none, post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨vs, body, callee, ret, rv, cp, _, hl, hc, hm⟩ := local_call_fall_inv_args hr
+  have hf := acct_empty_tx_header_words s cp vs body callee ret rv S Nd hW hT hl hc
+  intro k hk
+  simpa only [memW, hm] using hf k hk
+
+end PtxP34
+
+namespace PtxP34
+
+theorem local_call_return_memory {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {name fname : MlS} {args : List (ExpHOL 64)} {e : ExpHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.seq (.call (some (some (.local, name), none)) fname args) (.return e)) =
+      (some (.returned v), post)) :
+    ∃ mid, evaluateHOLFiniteState s (.call (some (some (.local, name), none)) fname args) = (none, mid) ∧
+      post.memory = mid.memory := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hc : evaluateHOLFiniteState s (.call (some (some (.local, name), none)) fname args) with ⟨r, mid⟩
+  rw [hc] at hr
+  cases r with
+  | none => exact ⟨mid, rfl, return_memory_eq hr⟩
+  | some r =>
+    have he := (Prod.mk.inj hr).1
+    cases he
+    rw [evaluateHOLFiniteState_call] at hc
+    split at hc
+    · cases hc
+    · split at hc
+      · cases hc
+      · split at hc
+        · cases hc
+        · rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s _) _ with ⟨r, cp⟩
+          rw [hb] at hc
+          cases r with
+          | none => cases hc
+          | some r =>
+            cases r <;> try simp at hc
+            split at hc
+            · split at hc <;> cases hc
+            · cases hc
+
+theorem conditional_acct_empty_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (cond e : ExpHOL 64) (name : MlS) (args : List (ExpHOL 64))
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.ite cond (.call (some (some (.local, name), none)) (ofString "acct_empty") args) .skip)
+        (.return e)) = (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hr
+  split at hr
+  · split at hr
+    · have hm := return_memory_eq (by simpa only [evaluateHOLFiniteState_skip] using hr)
+      intro k hk
+      simp only [memW, hm]
+    · have hh : evaluateHOLFiniteState s
+          (.seq (.call (some (some (.local, name), none)) (ofString "acct_empty") args) (.return e)) =
+          (some (.returned v), post) := by
+        rw [evaluateHOLFiniteState_seq_line780]
+        exact hr
+      obtain ⟨mid, hc, hm⟩ := local_call_return_memory hh
+      have hf := acct_empty_local_call_header_words s mid S Nd name args hW hT hc
+      intro k hk
+      simpa only [memW, hm] using hf k hk
+  · cases hr
+
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Complete account lookup, including conditional allocation, preserves backing. -/
+theorem get_account_body_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_get_account) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  change evaluateHOLFiniteState s (.decCall _ _ (ofString "get_account_optional") _ _) = _ at hr
+  obtain ⟨vs, body, callee, ret, rv, cp, u, _, hl, hb, ht, hm⟩ := dec_call_return_inv_args hr
+  have hf := get_account_optional_call_header_words s cp vs body callee ret rv S Nd hW hT hl hb
+  have hs := get_account_optional_restored_worldStep s cp vs body callee ret rv hW.1 hl hb
+  have hs0 := (hs.with_locals_clock (r' := none) s.locals cp.clock).1
+  obtain ⟨hW', S', Nd', hT'⟩ := wsAcct_step_txWorld s {cp with locals := s.locals} S Nd hW hT hs0 rfl
+  have hroots := wsAcct_step_header_roots hW hT hs.1
+  have hw := LocalsOnly.setVar localsOnly_txWorld (name := ofString "a") (by decide) rv _ hW'
+  have htw : WorldTypedWith (setVarHOLFinite (ofString "a") rv {cp with locals := s.locals}) S' Nd' :=
+    (R13Shards.worldTypedWith_with_locals _ _ _ S' Nd').2 hT'
+  have htframe := conditional_acct_empty_header_words _ u S' Nd' v _ _ _ _ hw htw ht
+  have hh := tx_header_words_trans hroots.1 hroots.2 hf htframe
+  intro k hk
+  simpa only [memW, hm] using hh k hk
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
