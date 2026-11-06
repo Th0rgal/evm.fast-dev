@@ -10286,6 +10286,110 @@ theorem precompile_sha256_remainder_then {F : Type}
   · exact hntb
   · exact hrb
 
+theorem precompile_sha256_blocks_exit_remainder {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len i : BitVec 64)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hle : i.toNat ≤ len.toNat) (hbound : len.toNat + 64 < 2^64)
+    (hexit : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a))
+      (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"), .const 64])) = some (.val (.word 0))) :
+    len.toNat - i.toNat < 64 := by
+  have hadd : (i+(64 : BitVec 64)).toNat = i.toNat+64 := by
+    rw [BitVec.toNat_add]
+    change (i.toNat+64) % 2^64 = i.toNat+64
+    exact Nat.mod_eq_of_lt (by omega)
+  simp [evalHOLFinite, evalHOLExact, evalListHOLExact, hl, hx, valueIsWord, valueWord,
+    wordOpHOL, wordOp, Compiler.Encoders.Asm.wordCmpHOL] at hexit
+  change len.toNat < (i+(64 : BitVec 64)).toNat at hexit
+  rw [hadd] at hexit
+  omega
+
+theorem precompile_sha256_blocks_active_bound {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len i : BitVec 64)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hle : i.toNat ≤ len.toNat) (hbound : len.toNat + 64 < 2^64)
+    (ha : LoopActive (.cmp .notLower (.var .local (ofString "len"))
+      (.op .add [.var .local (ofString "i"), .const 64])) s) :
+    i.toNat + 64 ≤ len.toNat := by
+  have hadd : (i+(64 : BitVec 64)).toNat = i.toNat+64 := by
+    rw [BitVec.toNat_add]
+    change (i.toNat+64) % 2^64 = i.toNat+64
+    exact Nat.mod_eq_of_lt (by omega)
+  obtain ⟨v, hv, hn⟩ := ha
+  simp [evalHOLFinite, evalHOLExact, evalListHOLExact, hl, hx, valueIsWord, valueWord,
+    wordOpHOL, wordOp, Compiler.Encoders.Asm.wordCmpHOL] at hv
+  by_cases h : i+(64 : BitVec 64) ≤ len
+  · change (i+(64 : BitVec 64)).toNat ≤ len.toNat at h
+    rw [hadd] at h
+    exact h
+  · change ¬ i+64#64 ≤ len at h
+    simp [h] at hv
+    exact False.elim (hn hv.symm)
+
+theorem precompile_sha256_blocks_increment {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len i : BitVec 64)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hb : i.toNat + 64 ≤ len.toNat) :
+    let post := (evaluateHOLFiniteState s
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64]))).2
+    post.locals.lookup (ofString "len") = some (.val (.word len)) ∧
+    post.locals.lookup (ofString "i") = some (.val (.word (i+64))) ∧
+    (i+64).toNat ≤ len.toNat := by
+  have hv : isValidValueHOLExact s.toExact .local (ofString "i")
+      (.val (.word (i+64#64))) = true := by
+    simp [isValidValueHOLExact, lookupKvarHOLExact, hx, shapeOfHOLExact, shapeEqHOL]
+  have ha : (i+(64 : BitVec 64)).toNat = i.toNat+64 := by
+    rw [BitVec.toNat_add]
+    change (i.toNat+64) % 2^64 = i.toNat+64
+    exact Nat.mod_eq_of_lt (lt_of_le_of_lt hb len.isLt)
+  dsimp only
+  constructor
+  · simp [evaluateHOLFiniteState_assign, evalHOLExact, evalListHOLExact, hx,
+      valueIsWord, valueWord, wordOpHOL, wordOp, hv, setKvarHOLFinite, setVarHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE, hl,
+      show ofString "i" ≠ ofString "len" by decide]
+  · constructor
+    · simp [evaluateHOLFiniteState_assign, evalHOLExact, evalListHOLExact, hx,
+        valueIsWord, valueWord, wordOpHOL, wordOp, hv, setKvarHOLFinite, setVarHOLFinite,
+        HolFiniteMapExact.lookup_update, FUPDATE]
+    · exact ha ▸ hb
+
+theorem precompile_sha256_blocks_body_index {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len i : BitVec 64)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hb : i.toNat + 64 ≤ len.toNat) :
+    let body := ProgHOL.seq
+      (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64]))
+    (evaluateHOLFiniteState s body).1 = none →
+    let post := (evaluateHOLFiniteState s body).2
+    post.locals.lookup (ofString "len") = some (.val (.word len)) ∧
+    post.locals.lookup (ofString "i") = some (.val (.word (i+64))) ∧
+    (i+64).toNat ≤ len.toNat := by
+  dsimp only
+  intro hr
+  rw [evaluateHOLFiniteState_seq_line780] at hr ⊢
+  rcases run : evaluateHOLFiniteState s
+    (.call (some (none, none)) (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"), .var .local (ofString "i")]]) with ⟨r,m⟩
+  cases r with
+  | none =>
+    simp only [run] at hr ⊢
+    have hloc := precompile_call0_locals_on_flow s (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"), .var .local (ofString "i")]] (by rw [run])
+    rw [run] at hloc
+    exact precompile_sha256_blocks_increment m len i (by rw [hloc]; exact hl)
+      (by rw [hloc]; exact hx) hb
+  | some r => simp [run] at hr
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
