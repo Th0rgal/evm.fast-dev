@@ -18995,4 +18995,31 @@ theorem jset_ts16_call0_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Account installation preserves backing across journal mutation and return. -/
+theorem set_account_body_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_set_account) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "jset")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 16]),
+      .var .local (ofString "addr"), .var .local (ofString "a")]) (.return (.const 0))) = _ at hr
+  obtain ⟨mid, hm, ht⟩ := seq_call0_ret_inv hr
+  have hh := jset_ts16_call0_header_words s mid S Nd (.var .local (ofString "addr"))
+    (.var .local (ofString "a")) hW hT hm
+  have hp : post.memory = mid.memory := by
+    rw [evaluateHOLFiniteState_return] at ht
+    simp [evalHOLExact] at ht
+    split at ht <;> simp_all [emptyLocalsHOLFinite]
+    rw [← ht.2]
+  simpa only [memW, hp] using hh
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
