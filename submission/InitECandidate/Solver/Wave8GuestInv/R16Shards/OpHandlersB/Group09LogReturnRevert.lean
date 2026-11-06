@@ -13887,4 +13887,53 @@ theorem log_no_growth_header_and_slots_g09 {F : Type}
   apply hbuffer.2.2 i
   omega
 
+/-- Frame reconstruction for in-place append derives header, insertion-cell,
+and structural-field validity from the original frame and write separation. -/
+theorem log_no_growth_frame_post_of_separation_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hn_bound : n.toNat + 1 < 2 ^ 64)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hp_bound : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hec : ec.1 + 280 ≤ 2 ^ 64)
+    (hecHeader : Disj (ec.1, 280) (l.toNat, 24))
+    (hecBuffer : Disj (ec.1, 280) (p.toNat, 8 * n.toNat + 8))
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    MsgOwned post S (memW s (ec.1 + 112)) →
+    FrameWF post S ec ∧ frameObjects post ec = frameObjects s ec ++ logOwnedIvls s log.toNat := by
+  dsimp only
+  intro hmsg
+  have hfields := log_no_growth_protected_words_g09 s l p n log (ec.1, 280)
+    hl_bound hp_bound hec hecHeader hecBuffer
+  have hfield_list : ∀ k ∈ ([8, 16, 24, 32, 40, 88, 112, 136, 144, 168, 176, 216, 232] : List Nat),
+      k + 8 ≤ 280 := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega
+  obtain ⟨hw, ha, hs⟩ := log_no_growth_header_and_slots_g09 s ec S l p n cap log
+    hFW hl hm0 hm16 hlt
+  obtain ⟨hWF, hb, ho⟩ := log_no_growth_frame_post_from_new_record_g09 s ec S l p n cap log
+    hA hFW hpw hl hn hm0 hm16 hnonnull hlt hn_bound hl_bound hp_bound hdisj
+    hd8 hdslot hlog hdheader hdbuffer (fun k hk => hfields k (hfield_list k hk)) hw ha hs hmsg
+  refine ⟨hWF, frameObjects_of_log_no_growth_g09 ?_ ?_ hb ho⟩
+  · intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl | rfl | rfl <;> exact hfields _ (by omega)
+  · unfold frameRet
+    rw [hfields 144 (by omega), hfields 216 (by omega)]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
