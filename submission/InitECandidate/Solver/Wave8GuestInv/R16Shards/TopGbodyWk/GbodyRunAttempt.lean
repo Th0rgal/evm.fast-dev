@@ -79,10 +79,10 @@ theorem retHeadersStrong_retHeaders {F : Type} (s post : PanSemStateFiniteExact 
   obtain ⟨a, b, heq, _, _, _, _, hh⟩ := h v hv
   exact ⟨a, b, heq, fun i hi => (hh i hi).1⟩
 
-def BlockReadyExecStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+def BlockReadyExecAttemptStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => BlockReadyStrong s ∧ InputReadyStrong s ∧ globN s "journal_cap" ≠ 0
 
-theorem localsOnly_blockReadyExecStrong : LocalsOnly ["si", "hdr"] BlockReadyExecStrong := by
+theorem localsOnly_blockReadyExecAttemptStrong : LocalsOnly ["si", "hdr"] BlockReadyExecAttemptStrong := by
   intro F s locals k hl hP
   refine ⟨localsOnly_blockReadyStrong s locals k hl hP.1, ?_, hP.2.2⟩
   exact localsOnly_inputReadyStrong s locals k (fun n hn => hl n (by simp_all)) hP.2.1
@@ -100,7 +100,7 @@ theorem inputReadyStrong_blockReady {F : Type} (s : PanSemStateFiniteExact 64 F)
 
 theorem blockReadyExecStrong_of {F : Type} (s : PanSemStateFiniteExact 64 F)
     (h : InputReadyStrong s) (hh : HeaderAt s (locN s "hdr"))
-    (hj : globN s "journal_cap" ≠ 0) : BlockReadyExecStrong s :=
+    (hj : globN s "journal_cap" ≠ 0) : BlockReadyExecAttemptStrong s :=
   ⟨⟨inputReadyStrong_blockReady s h, h.1, hh⟩, h, hj⟩
 
 theorem callEntryOn_inputReadyStrong
@@ -245,18 +245,18 @@ theorem inputCells_disj_of_runAttemptCells {F : Type}
   · exact hd _ (by simp [runAttemptCells]) o ho
   · exact hd _ (by simp [runAttemptCells]) o ho
 
-def AllBlocksGood {F : Type} (s : PanSemStateFiniteExact 64 F)
+private def AllBlocksGood {F : Type} (s : PanSemStateFiniteExact 64 F)
     (S Nd : List Nat) (bs : List Ivl) : Prop :=
   ∀ b ∈ bs, b.1 % 8 = 0 ∧ b.2 % 8 = 0 ∧
     Inside b sourceBase (globN s "heap_ptr") ∧
     WordsOK s b ∧
     IvlsDisj [b] (worldOwned s S Nd)
 
-theorem allBlocksGood_nil {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) :
+private theorem allBlocksGood_nil {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) :
     AllBlocksGood s S Nd [] :=
   fun _ h => nomatch h
 
-theorem allBlocksGood_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+private theorem allBlocksGood_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
     (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) (S Nd : List Nat) (bs : List Ivl) :
     AllBlocksGood { s with locals := locals, clock := k } S Nd bs ↔ AllBlocksGood s S Nd bs :=
   Iff.rfl
@@ -563,13 +563,13 @@ theorem strongAndBlocks_bufferRegion_conditions {F : Type}
     rw [List.mem_singleton.1 hi]
     exact (hb b hbm).2.2.2.2 b (by simp) _ hm
 
-def boundedCounterRank (counter : MlS) (M : Nat) {F : Type}
+private def boundedCounterRank (counter : MlS) (M : Nat) {F : Type}
     (s : PanSemStateFiniteExact 64 F) : Nat :=
   match s.locals.lookup counter with
   | some (.val (.word w)) => M - w.toNat
   | _ => 0
 
-theorem while_signed_up_bounded_on
+private theorem while_signed_up_bounded_on
     {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
     (c b : MlS) (M : Nat) (hM : M < 2 ^ 63) {body : ProgHOL 64} {B : Nat}
     (hdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → P (decClockHOLFinite s))
@@ -1382,8 +1382,8 @@ theorem runAttemptScan_init_bounded
         (runAttemptScan_hoare hWdec hWi 31104957952 (by decide) runAttemptScanTestExp)
         hcont
 
-theorem callEntryOn_blockReadyExecStrong :
-    CallEntryOn BlockReadyExecStrong BlockReadyExecStrong (ofString "execute_block")
+theorem callEntryOn_blockReadyExecAttemptStrong :
+    CallEntryOn BlockReadyExecAttemptStrong BlockReadyExecAttemptStrong (ofString "execute_block")
       [.var .local (ofString "si"), .var .local (ofString "hdr")] := by
   intro F s values body callee ret hcode hP hargs hl
   cases hsi : s.locals.lookup (ofString "si") with
@@ -1403,7 +1403,7 @@ theorem callEntryOn_blockReadyExecStrong :
         vsi vhdr values body callee ret
         (by simpa [evalAt, evalHOLExact] using hsi)
         (by simpa [evalAt, evalHOLExact] using hhdr) hargs hl
-      exact localsOnly_blockReadyExecStrong s callee (s.clock - 1)
+      exact localsOnly_blockReadyExecAttemptStrong s callee (s.clock - 1)
         (fun n hn => by
           simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
           rcases hn with rfl | rfl
@@ -1419,9 +1419,9 @@ def runAttemptExecuteTail : ProgHOL 64 :=
 private def AnyState {F : Type} (_ : PanSemStateFiniteExact 64 F) : Prop := True
 
 theorem runAttemptExecuteTail_bounded
-    (he : TerminatingFunBoundedOn BlockReadyExecStrong
+    (he : TerminatingFunBoundedOn BlockReadyExecAttemptStrong
       (ofString "execute_block") K.«execute_block») :
-    TerminatingProgBoundedOn BlockReadyExecStrong runAttemptExecuteTail
+    TerminatingProgBoundedOn BlockReadyExecAttemptStrong runAttemptExecuteTail
       (K.«execute_block» + 1) := by
   have hret : TerminatingProgBoundedOn AnyState
       (.seq .skip (.return (.const 0#64))) (0 + 0) :=
@@ -1430,24 +1430,24 @@ theorem runAttemptExecuteTail_bounded
       (Hoare.skip (P := AnyState) (fun _ _ _ => True.intro))
       (TerminatingProgBoundedOn.of_clock (P := AnyState)
         (fun s => clock_return s (.const 0#64)))
-  have hcall : TerminatingProgBoundedOn BlockReadyExecStrong
+  have hcall : TerminatingProgBoundedOn BlockReadyExecAttemptStrong
       (.seq (.call (some (none, none)) (ofString "execute_block")
         [.var .local (ofString "si"), .var .local (ofString "hdr")])
         (.seq .skip (.return (.const 0#64))))
       ((K.«execute_block» + 1) + (0 + 0)) :=
     TerminatingProgBoundedOn.seq_hoare_trans
-      (P := BlockReadyExecStrong) (Q := AnyState)
-      (TerminatingProgBoundedOn.call_on he none _ callEntryOn_blockReadyExecStrong)
+      (P := BlockReadyExecAttemptStrong) (Q := AnyState)
+      (TerminatingProgBoundedOn.call_on he none _ callEntryOn_blockReadyExecAttemptStrong)
       ⟨fun _ _ _ _ _ => True.intro⟩
       hret
   unfold runAttemptExecuteTail
   intro F s hc hp
-  exact TerminatingProgBoundedOn.mono_bound (P := BlockReadyExecStrong)
+  exact TerminatingProgBoundedOn.mono_bound (P := BlockReadyExecAttemptStrong)
     (a := 0 + ((K.«execute_block» + 1) + (0 + 0)))
     (b := K.«execute_block» + 1)
-    (TerminatingProgBoundedOn.seq_hoare (P := BlockReadyExecStrong)
-      (TerminatingProgBoundedOn.of_clock (P := BlockReadyExecStrong) clock_skip)
-      (Hoare.skip (P := BlockReadyExecStrong) (fun _ h _ => h)) hcall)
+    (TerminatingProgBoundedOn.seq_hoare (P := BlockReadyExecAttemptStrong)
+      (TerminatingProgBoundedOn.of_clock (P := BlockReadyExecAttemptStrong) clock_skip)
+      (Hoare.skip (P := BlockReadyExecAttemptStrong) (fun _ h _ => h)) hcall)
     (by omega) s hc hp
 
 def RunAttemptPreBe {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
@@ -1507,7 +1507,7 @@ theorem runAttemptPreBe_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
   inputReadyStrong_worldOK s (runAttemptPreBe_inputReadyStrong h)
 
 theorem runAttemptPreBe_blockReadyExecStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
-    (h : RunAttemptPreBe s) : BlockReadyExecStrong s := by
+    (h : RunAttemptPreBe s) : BlockReadyExecAttemptStrong s := by
   have hIR := runAttemptPreBe_inputReadyStrong h
   obtain ⟨_, w_hdr, _, _, _, _, hHdr, hjc, _, hhdr⟩ := h
   exact blockReadyExecStrong_of s hIR (by simpa [locN, hhdr] using hHdr) hjc
@@ -1518,7 +1518,7 @@ theorem runAttemptHasBe_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F}
   exact hIA.1.1.1
 
 theorem runAttemptHasBe_blockReadyExecStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
-    (h : RunAttemptHasBe s) : BlockReadyExecStrong s := by
+    (h : RunAttemptHasBe s) : BlockReadyExecAttemptStrong s := by
   obtain ⟨w_si, w_hdr, S, Nd, hIA, _, hHdr, hjc, _, hlsi, hlhdr⟩ := h
   have hsi_eq : locN s "si" = w_si.toNat := by simp [locN, hlsi]
   have hhdr_eq : locN s "hdr" = w_hdr.toNat := by simp [locN, hlhdr]
@@ -1859,7 +1859,7 @@ private theorem hoare_store_be_global_word (off : Nat) (gname : String)
 theorem runAttemptPhaseC2_bounded
     (hal : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
     (hmz : TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero»)
-    (hexec : TerminatingFunBoundedOn BlockReadyExecStrong
+    (hexec : TerminatingFunBoundedOn BlockReadyExecAttemptStrong
       (ofString "execute_block") K.«execute_block»)
     (wal : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
       [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
@@ -2652,7 +2652,7 @@ def runAttemptPhaseC1Prog : ProgHOL 64 :=
 
 theorem runAttemptPhaseC1_bounded
     (hal : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
-    (hexec : TerminatingFunBoundedOn BlockReadyExecStrong
+    (hexec : TerminatingFunBoundedOn BlockReadyExecAttemptStrong
       (ofString "execute_block") K.«execute_block»)
     (hhh : TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash»)
     (hvvh : TerminatingFunBoundedOn GuestInv
@@ -3682,7 +3682,7 @@ theorem hoare_state_init
 
 theorem runAttemptScanBlock_bounded
     (hal : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
-    (hexec : TerminatingFunBoundedOn BlockReadyExecStrong
+    (hexec : TerminatingFunBoundedOn BlockReadyExecAttemptStrong
       (ofString "execute_block") K.«execute_block»)
     (hhh : TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash»)
     (hvvh : TerminatingFunBoundedOn GuestInv
@@ -3789,7 +3789,7 @@ theorem runAttemptScanBlock_bounded
 theorem runAttemptFullProg_bounded
     (hal : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
     (hcgl : TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit»)
-    (hexec : TerminatingFunBoundedOn BlockReadyExecStrong
+    (hexec : TerminatingFunBoundedOn BlockReadyExecAttemptStrong
       (ofString "execute_block") K.«execute_block»)
     (hhh : TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash»)
     (hvvh : TerminatingFunBoundedOn GuestInv
@@ -3986,7 +3986,7 @@ theorem runAttemptFullProg_bounded
 def GBody.«run_attempt_strong» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit») →
-  (TerminatingFunBoundedOn BlockReadyExecStrong (ofString "execute_block") K.«execute_block») →
+  (TerminatingFunBoundedOn BlockReadyExecAttemptStrong (ofString "execute_block") K.«execute_block») →
   (TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash») →
   (TerminatingFunBoundedOn GuestInv (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes») →
   (TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq») →
@@ -4044,7 +4044,7 @@ def GBody.«run_attempt_strong» : Prop :=
 theorem gbody_run_attempt_strong_of
     (hal : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
     (hcgl : TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit»)
-    (hexec : TerminatingFunBoundedOn BlockReadyExecStrong
+    (hexec : TerminatingFunBoundedOn BlockReadyExecAttemptStrong
       (ofString "execute_block") K.«execute_block»)
     (hhh : TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash»)
     (hvvh : TerminatingFunBoundedOn GuestInv

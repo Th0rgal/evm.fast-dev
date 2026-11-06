@@ -6752,4 +6752,26 @@ theorem hoare_ws_get_code_dispatch_bounded (gw : List String) (hp : Nat)
   intro F s values body callee ret hc hP hl e v post hne hr
   exact ws_get_code_exception_step gw hp G ch s values body callee ret hc hP hl e v post hne hr
 
+/-- The concrete direct dispatch suffix consumes the bounded lookup result. -/
+theorem hoare_ws_get_code_dispatch_direct (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (hsub : "scratch_ptr" ∈ gw)
+    (args : List (ExpHOL 64))
+    (hentry : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) values body callee ret,
+      s.code = originalRuntimeCode → D0Pre gw hp G ch s →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "ws_get_code") values = some (body, callee, ret) →
+      s.eshapes.lookup (ofString "StateErr") = some .one ∧
+        WsCodeLookupStrong (callEntryStateHOLFinite s callee)) :
+    Hoare (D0Pre gw hp G ch)
+      (.decCall (ofString "rcode") (.comb [.one, .one]) (ofString "ws_get_code") args
+        (.dec (ofString "code") .one (.rfield 0 (.var .local (ofString "rcode")))
+          (.dec (ofString "code_n") .one (.rfield 1 (.var .local (ofString "rcode")))
+            prepareDispatchCommon)))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  apply hoare_ws_get_code_dispatch_bounded gw hp G ch (ofString "rcode") (by decide) args hentry
+  refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+  obtain ⟨hD, code, code_n, hv, hn⟩ := hP
+  exact (hoare_prepare_dispatch_direct gw hp G ch code code_n hn hsub).run
+    s hc ⟨hD, hv⟩ hnt hr
+
 end HeadStore
