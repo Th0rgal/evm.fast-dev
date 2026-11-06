@@ -7103,4 +7103,61 @@ theorem get_code_access_tail_return_strong {F : Type} (s : PanSemStateFiniteExac
     values' body' callee' ret' v' post' ha' hl' hb'
   exact get_code_ws_fallback_return_strong _ hc hs he
 
+/-- The two code caches share their lookup arguments and hit branch. -/
+def getCodeCacheArgs (owner : String) : List (ExpHOL 64) :=
+  [.load .one (.op .add [.var .global (ofString owner), .const 48]),
+    .var .local (ofString "code_hash")]
+
+def getCodeCacheBranch (tail : ProgHOL 64) : ProgHOL 64 :=
+  .seq (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "w"))) (.const 0))
+    (.return (.rstruct [.load .one (.rfield 1 (.var .local (ofString "w"))),
+      .load .one (.op .add [.rfield 1 (.var .local (ofString "w")), .const 8])])) .skip) tail
+
+def getCodeCacheTail : ProgHOL 64 :=
+  .decCall (ofString "w") (.comb [.one, .one]) (ofString "htab_get") (getCodeCacheArgs "ts")
+    (getCodeCacheBranch (.seq
+      (.call (some (some (.local, ofString "w"), none)) (ofString "htab_get") (getCodeCacheArgs "bs"))
+      (getCodeCacheBranch getCodeAccessTail)))
+
+/-- Typed cache arguments and live bounded payloads at a lookup entry. -/
+def CodeCacheLookupStrong {F : Type} (s : PanSemStateFiniteExact 64 F) (owner : String) : Prop :=
+  ArenaReady s ∧ ∃ db hash : BitVec 64,
+    evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) (getCodeCacheArgs owner) =
+      some [.val (.word db), .val (.word hash)] ∧
+    HtabWF s db.toNat ∧ NodeDbEntriesStrong s db.toNat
+
+/-- Compose both concrete caches; only two actual misses reach access recording. -/
+theorem get_code_cache_tail_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (hfirst : CodeCacheLookupStrong s "ts")
+    (hsecond : ∀ values body callee ret post (ptr : BitVec 64),
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) (getCodeCacheArgs "ts") = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "htab_get") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned (.rStruct [.val (.word 0), .val (.word ptr)])), post) →
+      CodeCacheLookupStrong
+        (setVarHOLFinite (ofString "w") (.rStruct [.val (.word 0), .val (.word ptr)])
+          {post with locals := s.locals}) "bs")
+    (hfallback : ∀ (st : PanSemStateFiniteExact 64 F) values body callee ret post (ptr : BitVec 64),
+      evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a)) (getCodeCacheArgs "bs") = some values →
+      lookupCodeHOLFinite st.code.lookup (ofString "htab_get") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite st callee) body =
+        (some (.returned (.rStruct [.val (.word 0), .val (.word ptr)])), post) →
+      Ret (setVarHOLFinite (ofString "w") (.rStruct [.val (.word 0), .val (.word ptr)])
+        {post with locals := st.locals}) getCodeAccessTail
+        (fun v _ => ∃ code code_n : BitVec 64,
+          v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40)) :
+    Ret s getCodeCacheTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  obtain ⟨hA, db, hash, ha, hW, he⟩ := hfirst
+  apply get_code_cache_lookup_return_strong s db hash _ _ hcode hA ha hW he
+  intro values body callee ret post ptr ha hl hb
+  obtain ⟨hA', db', hash', ha', hW', he'⟩ := hsecond values body callee ret post ptr ha hl hb
+  have hc := (InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).1
+  rw [hb] at hc
+  apply get_code_cache_assign_return_strong
+    (setVarHOLFinite (ofString "w") (.rStruct [.val (.word 0), .val (.word ptr)])
+      {post with locals := s.locals}) db' hash' _ _ (hc.trans hcode) hA' ha' hW' he'
+  exact hfallback _
+
 end HeadStore
