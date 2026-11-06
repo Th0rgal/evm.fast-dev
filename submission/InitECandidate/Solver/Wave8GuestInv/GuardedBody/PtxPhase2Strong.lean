@@ -17140,4 +17140,31 @@ theorem phase2_htab_set_aa_message_tables {ι : Type}
       exact hp.1.1.2.2.2.1)
     hmt.symm hbe (hpt.trans ht) hxp
 
+/-- Private-address insertion leaves all twenty-two message words unchanged. -/
+theorem phase2_htabExit_aa_message_fields {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (hm : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hal : locN s "m" % 8 = 0)
+    (hl : locN post "m" = locN s "m") (hbe : post.be = s.be)
+    (ht : locN s "t" = aa) (hx : HtabExit s post)
+    (k : Nat) (hk : k < 22) :
+    memW post (locN post "m" + 8 * k) = memW s (locN s "m" + 8 * k) := by
+  obtain ⟨S, Nd, hw, ha, _, _, _, haf, _, hd⟩ := hm
+  have hf := R16Shards.MptC10C12.worldTypedWith_htab_set_local_csr hs hw
+    (ht.symm ▸ ha) (ht.symm ▸ haf) hx hbe
+  have hu := (hf.2.2.2.2.2.2 (locN s "m", 176) (by intro h; omega) hin
+    (fun j hj => hd _ (by simp) j hj)).2.2
+  rw [hl]
+  apply memW_eq_of_ivlUnhit hu
+  · simpa [Nat.add_mod] using hal
+  · have hg : globN s "heap_ptr" < 2 ^ 64 := by
+      unfold globN
+      split
+      · exact BitVec.isLt _
+      · decide
+    have hi := hin.2
+    omega
+  · constructor <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
