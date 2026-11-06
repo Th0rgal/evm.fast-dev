@@ -9837,4 +9837,67 @@ theorem eval_merge_occupied_inner {F : Type}
     simp only [show (1#64 : BitVec 64) ≠ 0 by decide, ↓reduceIte] at hnt hfr ⊢
     exact eval_merge_get_inner s tw f0 kw vw hc hW ht hk hbs ht0 htbs hnt hfr
 
+/-- Local cursor updates preserve the withdrawal frame on every flowing exit. -/
+theorem progWithdrawalStep_assign_local (x : MlS) (e : ExpHOL 64) :
+    ProgWithdrawalStep (.assign .local x e) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_assign] at hnt hfr ⊢
+  rcases he : evalAt s e with _ | v
+  · unfold evalAt at he
+    simp only [he] at hfr
+    exact absurd hfr not_flowingOrResumes_error
+  · unfold evalAt at he
+    simp only [he] at hnt hfr ⊢
+    by_cases hv : isValidValueHOLFinite s .local x v = true
+    · simp only [hv, ↓reduceIte, setKvarHOLFinite] at hnt hfr ⊢
+      exact (WorldStepSc.refl s none hW.1).with_locals_clock _ s.clock
+    · simp only [hv] at hfr
+      exact absurd hfr not_flowingOrResumes_error
+
+/-- A pointwise prefix effect suffices when the suffix has an unconditional contract. -/
+theorem eval_withdrawal_then {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p q : ProgHOL 64) (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hp : (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState s p).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        s (evaluateHOLFiniteState s p).1 (evaluateHOLFiniteState s p).2)
+    (hq : ProgWithdrawalStep q)
+    (hnt : (evaluateHOLFiniteState s (.seq p q)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq p q)).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s (.seq p q)).1 (evaluateHOLFiniteState s (.seq p q)).2 := by
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s p).1
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases hr : evaluateHOLFiniteState s p with ⟨r, mid⟩
+  simp only [hr] at hmeta hnt hfr ⊢
+  cases r with
+  | none =>
+    have hs := hp (by rw [hr]; simp) (by rw [hr]; exact Or.inl rfl)
+    rw [hr] at hs
+    exact withdrawalStep_trans hs
+      (hq mid (hmeta.trans hc) (hs.worldOK_bufs validBufList_withdrawal hW) hnt hfr)
+  | some r =>
+    have hs := hp (by rw [hr]; exact hnt) (by rw [hr]; exact hfr)
+    simpa only [hr] using hs
+
+def mergeOccupiedThenIncrement : ProgHOL 64 :=
+  .seq mergeOccupiedInner (.assign .local (ofString "i")
+    (.op .add [.var .local (ofString "i"), .const 1#64]))
+
+theorem eval_merge_occupied_then_increment {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hnt : (evaluateHOLFiniteState s mergeOccupiedThenIncrement).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeOccupiedThenIncrement).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeOccupiedThenIncrement).1
+        (evaluateHOLFiniteState s mergeOccupiedThenIncrement).2 := by
+  exact eval_withdrawal_then s _ _ hc hW
+    (eval_merge_occupied_inner s tw f0 kw vw hc hW ht hk hbs ht0 htbs)
+    (progWithdrawalStep_assign_local _ _) hnt hfr
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
