@@ -9766,4 +9766,24 @@ theorem get_account_execution_payload_words {F : Type} (s : PanSemStateFiniteExa
       (worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s ++ [freeGap s]) (heapFree s) := hframe
   exact protected_payload_words_of_worldStep_frame he hA hframe' hsep
 
+/-- Account execution retains payload typing when database values and cells are protected. -/
+theorem get_account_execution_entries_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hWT : WorldTypedWith s S Nd) (he : CodeDbPayloadStrong s S db)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post))
+    (hv : htabValues post db = htabValues s db)
+    (hsep : ∀ p ∈ htabValues s db, ∀ a ∈ [p,p+8],
+      ∀ i ∈ worldOwned s S Nd ++ R16WkAcctWs.bufRegions wsAcctBufs s, ¬ CellHits a i) :
+    NodeDbEntriesStrong post db := by
+  have hW : WorldOK s := ⟨hA,S,(worldTyped_iff_with _ _).2 ⟨Nd,hWT⟩⟩
+  have hs := get_account_execution_world_step s values body callee ret v post hc hW hl hb
+  have hhp : globN s "heap_ptr" ≤ globN post "heap_ptr" := hs.1.2.1
+  exact nodeDbEntriesStrong_of_preserved_payloads he.1 hA hs.1.1 hhp hv
+    (get_account_execution_payload_words s values body callee ret v post S Nd db hc hA hWT he hl hb hsep)
+
 end HeadStore
