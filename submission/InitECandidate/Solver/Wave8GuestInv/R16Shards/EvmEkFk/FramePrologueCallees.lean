@@ -9946,6 +9946,35 @@ theorem precompile_sha256_choice_tail_effect {F : Type}
     (by rw [hgm]; exact hp) htm (by rw [hgm]; exact hs)
     (by rw [hlm (ofString "out") (by decide)]; exact ho) htb hpad hob hntm hrm
 
+open R10Shards.P26_P28 in
+theorem precompile_byteEff_dec_resumes {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (name : MlS) (sh : ShapeHOL)
+    (init : ExpHOL 64) (body : ProgHOL 64) (Rl : List Ivl)
+    (hnt : (evaluateHOLFiniteState s (.dec name sh init body)).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (.dec name sh init body)).1 = none ∨
+      Resumes (evaluateHOLFiniteState s (.dec name sh init body)).1)
+    (hb : ∀ val,
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) init = some val →
+      (evaluateHOLFiniteState (setVarHOLFinite name val s) body).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState (setVarHOLFinite name val s) body).1 = none ∨
+        Resumes (evaluateHOLFiniteState (setVarHOLFinite name val s) body).1) →
+      ByteEff (setVarHOLFinite name val s)
+        (evaluateHOLFiniteState (setVarHOLFinite name val s) body).2 Rl) :
+    ByteEff s (evaluateHOLFiniteState s (.dec name sh init body)).2 Rl := by
+  rw [evaluateHOLFiniteState_dec_total] at hnt hr ⊢
+  dsimp only at hnt hr ⊢
+  split
+  · exact ByteEff.refl s Rl
+  · rename_i val hval
+    rw [hval] at hnt hr
+    dsimp only at hnt hr
+    split
+    · rename_i hshape
+      simp only [hshape, ↓reduceIte] at hnt hr
+      exact ((ByteEff.refl s Rl).locals_clock _ s.clock).trans
+        (hb val hval hnt hr) |>.locals_clock _ _
+    · exact ByteEff.refl s Rl
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
