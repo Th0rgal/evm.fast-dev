@@ -7,6 +7,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.RecoverSe
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group08
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FramePrologueException
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FramePrologueCallees
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodySysTxExecBlock
 
 /-! Closed strengthened contracts for the cutover rehearsal. Callers must establish
 the stated entry guards before these bridges can replace weaker primitive fields. -/
@@ -169,5 +170,10 @@ theorem wk_lst_push_strong :
 
 theorem gbody_run_attempt_strong : R16Shards.TopGbodyWk.GBody.run_attempt_strong :=
   R16Shards.TopGbodyWk.gbody_run_attempt_strong_of
+
+/-- Whole-function termination under the strengthened block entry and slice-preservation
+contracts. These premises must be established before replacing the primitive field. -/
+theorem gbody_execute_block_strong : R16Shards.TopGbodyWk.GBody.execute_block_strong :=
+  R16Shards.TopGbodyWk.gbody_execute_block_strong
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
