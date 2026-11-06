@@ -7188,4 +7188,92 @@ theorem get_code_return_of_cache_tail {F : Type} (s : PanSemStateFiniteExact 64 
   subst eqw
   exact hcache values body callee ret post ha hl hb
 
+/-- Cache-tail obligation at the actual zero-comparison continuation. -/
+def GetCodeCacheContinuationStrong {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∀ values body callee ret post,
+    evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32] = some values →
+    lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+    evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned (.val (.word 0))), post) →
+    Ret (setVarHOLFinite (ofString "eq") (.val (.word 0)) {post with locals := s.locals})
+      getCodeCacheTail (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40)
+
+/-- Lift the full hash/cache proof through the installed `get_code` call. -/
+theorem get_code_call_return_of_cache_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hentry : GetCodeCacheContinuationStrong (callEntryStateHOLFinite s callee))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_code") values = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40 := by
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "get_code")
+    _ _ body _ ret values callee (by rw [hc]; exact R16WkAcctWs.lookup_get_code) hl
+  subst body
+  exact get_code_return_of_cache_tail (callEntryStateHOLFinite s callee) hentry v
+    (congrArg Prod.fst hb)
+
+/-- The concrete external-code suffix forwards the bounded `get_code` result. -/
+theorem ext_code_of_get_code_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hentry : ∀ values body callee ret,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+          .var .local (ofString "addr")] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "get_code") values = some (body, callee, ret) →
+      GetCodeCacheContinuationStrong (callEntryStateHOLFinite s callee)) :
+    Ret s (.decCall (ofString "c") (.comb [.one, .one]) (ofString "get_code")
+      [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+        .var .local (ofString "addr")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  obtain ⟨code, code_n, hv, hn⟩ := get_code_call_return_of_cache_tail s values body callee ret
+    v post hc (hentry values body callee ret ha hl) hl hb
+  subst v
+  have hlocal : (setVarHOLFinite (ofString "c")
+      (.rStruct [.val (.word code), .val (.word code_n)]) {post with locals := s.locals}).locals.lookup
+      (ofString "c") = some (.rStruct [.val (.word code), .val (.word code_n)]) := by
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  intro w hw
+  obtain ⟨hv, hn, _⟩ := ext_code_of_tail_return _ code code_n hlocal hn w hw
+  exact ⟨code, code_n, hv, hn⟩
+
+/-- Lift bounded code retrieval through the concrete account lookup wrapper.
+The entry obligation is checked after the actual account call resumes. -/
+theorem ext_code_of_return_of_cache_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hentry : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "addr")] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      ∀ vals b cl r,
+      let st := setVarHOLFinite (ofString "a") v {post with locals := s.locals}
+      evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+          .var .local (ofString "addr")] = some vals →
+      lookupCodeHOLFinite st.code.lookup (ofString "get_code") vals = some (b, cl, r) →
+      GetCodeCacheContinuationStrong (callEntryStateHOLFinite st cl)) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ext_code_of)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  change Ret s (.decCall (ofString "a") .one (ofString "get_account")
+    [.var .local (ofString "addr")]
+    (.decCall (ofString "c") (.comb [.one, .one]) (ofString "get_code")
+      [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+        .var .local (ofString "addr")] (.return (.var .local (ofString "c"))))) _
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  have hm := (InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).1
+  rw [hb] at hm
+  exact ext_code_of_get_code_return_strong _ (hm.trans hc)
+    (hentry values body callee ret v post ha hl hb)
+
 end HeadStore
