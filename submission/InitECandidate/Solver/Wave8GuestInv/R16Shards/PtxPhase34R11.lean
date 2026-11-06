@@ -15897,4 +15897,51 @@ theorem get_account_optional_body_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup InitECandidate.Solver.PanRunBounded
+
+/-- Installed optional account lookup preserves both transaction backing words. -/
+theorem get_account_optional_call_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account_optional") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have hi : callee.lookup (ofString "index") = none := by
+    have hl' := hl
+    rw [hW.1.1.1.code] at hl'
+    unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hl'
+    split at hl'
+    · cases hl'
+    · rename_i eb el es raw
+      simp only [lookupCodeHOLExact, EvmEkFk.lookup_get_account_optional] at raw
+      split at raw
+      · cases raw
+        cases hl'
+        change List.foldl _ (fun _ => none) ([(ofString "addr")].zip vs) (ofString "index") = none
+        cases vs with
+        | nil => rfl
+        | cons a rest => simp [List.zip, List.foldl, ofString]
+      · cases raw
+  have hbdy := lookupCodeHOLFinite_installed_body GuestCodeLookup.originalRuntimeCode.lookup
+    (ofString "get_account_optional") _ _ body _ ret vs callee
+    EvmEkFk.lookup_get_account_optional (by rwa [← hW.1.1.1.code])
+  subst body
+  have he : TxEnv (callEntryStateHOLFinite s callee) := by
+    refine ⟨hW.2.bo_nz, hW.2.bo24, hW.2.bo32, hW.2.bo40, hW.2.bo72, ?_, hW.2.jcap_nz⟩
+    have hi' : locN (callEntryStateHOLFinite s callee) "index" = 0 := by
+      simp [locN, callEntryStateHOLFinite, hi]
+    rw [hi']
+    exact Nat.lt_of_le_of_lt (Nat.zero_le _) hW.2.idx_lt
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (sourceFnBody Guest.Software.guestFn_get_account_optional) = _ at hr
+  exact get_account_optional_body_header_words (callEntryStateHOLFinite s callee) post S Nd v
+    ⟨(WkBal.worldOK_with_locals s callee (s.clock - 1)).2 hW.1, he⟩
+    ((R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).2 hT) hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
