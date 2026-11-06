@@ -7449,6 +7449,82 @@ private theorem csrW_hcallee_u256_to_be_min {s cur : PanSemStateFiniteExact 64 F
       (fun k hk => (h.gw_kept k hk).trans (hmono.gw_kept k hk)) (by decide)
   exact R16Shards.WorldEff.trans h hmono (fun gs hgs => by simp at hgs) hbuf
 
+/-- Generic callee-side factory for read-only callees (`htab_item`, `htab_has`,
+`u256_is_zero`, …): the run only changes locals and clock, so the caller's
+`WorldEff` transfers directly to the callee's post-state. -/
+private theorem csrW_hcallee_readonly {F : Type} {s cur : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {B : List (String × Nat)} {gw : List String}
+    {fname : MlS} (hf : ReadOnlyFn fname)
+    {params : List (MlS × ShapeHOL)} {fbody : ProgHOL 64} {retSh : ShapeHOL}
+    (hlook : originalRuntimeCode.lookup fname = some (params, fbody, retSh))
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)} {vals : List (ValueHOL 64)}
+    (hlk : PanSemStateFiniteExact.lookupCodeHOLFinite cur.code.lookup fname vals = some (fbody, callee, retSh))
+    (h : R16Shards.WorldEff s cur Rl B gw)
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1) :
+    R16Shards.WorldEff s
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).2 Rl B gw := by
+  obtain ⟨p0, b0, r0, hlook0, hspec⟩ := hf
+  have hsame := lookupCodeHOLFinite_installed_body
+    cur.code.lookup fname p0 b0 fbody r0 retSh vals callee (by rw [h.code]; exact hlook0) hlk
+  cases hsame
+  have hret_eq := lookupCodeHOLFinite_installed_return
+    cur fname p0 fbody fbody r0 retSh vals callee (by rw [h.code]; exact hlook0) hlk
+  cases hret_eq
+  have hex : ∃ vs, PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup fname vs =
+      some (fbody, (callEntryStateHOLFinite cur callee).locals, retSh) :=
+    ⟨vals, by simpa only [h.code, callEntryStateHOLFinite] using hlk⟩
+  have hro := hspec (callEntryStateHOLFinite cur callee) h.code
+    (guestInv_callEntry cur callee h.arena.1) hex hnt hres
+  have hent : R16Shards.WorldEff s (callEntryStateHOLFinite cur callee) Rl B gw :=
+    h.locals_clock callee (cur.clock - 1)
+  rw [hro]
+  exact hent.locals_clock _ _
+
+/-- Callee-side factory for `alloc`: returns a fresh block whose `WorldEff`
+step carries only the `heap_ptr` bump. -/
+private theorem csrW_hcallee_alloc {F : Type} {s cur : PanSemStateFiniteExact 64 F}
+    {params : List (MlS × ShapeHOL)} {fbody : ProgHOL 64} {retSh : ShapeHOL}
+    (hlook : originalRuntimeCode.lookup (ofString "alloc") =
+      some (params, sourceFnBody Guest.Software.guestFn_alloc, retSh))
+    {szExp : ExpHOL 64}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)} {vals : List (ValueHOL 64)}
+    (hargs : evalListHOLFinite cur (h := fun a => Classical.propDecidable (cur.memaddrs a)) [szExp] = some vals)
+    (hlk : PanSemStateFiniteExact.lookupCodeHOLFinite cur.code.lookup (ofString "alloc") vals = some (fbody, callee, retSh))
+    (h : R16Shards.WorldEff s cur [] [] ["heap_ptr", "scratch_ptr"])
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1) :
+    R16Shards.WorldEff s
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).2
+      [] [] ["heap_ptr", "scratch_ptr"] := by
+  have hsame := lookupCodeHOLFinite_installed_body
+    cur.code.lookup (ofString "alloc") params (sourceFnBody Guest.Software.guestFn_alloc) fbody retSh retSh
+    vals callee (by rw [h.code]; exact hlook) hlk
+  cases hsame
+  have hent_code : (callEntryStateHOLFinite cur callee).code = originalRuntimeCode := by
+    cases cur; simp [callEntryStateHOLFinite, h.code]
+  have hA : ArenaReady (callEntryStateHOLFinite cur callee) :=
+    localsFree_arenaReady cur callee (cur.clock - 1) h.arena
+  obtain ⟨p, hrv, hp_eq, hfresh, hpost_m, hpost_be, heff⟩ :=
+    worldEff_alloc_body_csr (callEntryStateHOLFinite cur callee) hent_code hA hres
+  have hmono : R16Shards.WorldEff (callEntryStateHOLFinite cur callee)
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+        (sourceFnBody Guest.Software.guestFn_alloc)).2
+      [] [] ["heap_ptr", "scratch_ptr"] :=
+    heff.mono (fun iv hiv _ => by simp at hiv) (fun gs hgs => by simp at hgs)
+      (fun g hg => by
+        rcases List.mem_cons.1 hg with rfl | h
+        · simp
+        · exact absurd h (by simp))
+  have hent : R16Shards.WorldEff s (callEntryStateHOLFinite cur callee) [] [] ["heap_ptr", "scratch_ptr"] :=
+    h.locals_clock callee (cur.clock - 1)
+  have hbuf : FreshBufsOK s
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+        (sourceFnBody Guest.Software.guestFn_alloc)).2 :=
+    freshBufsOK_of_no_globalBuf_writes
+      (fun k hk => (hent.gw_kept k hk).trans (hmono.gw_kept k hk)) (by decide)
+  exact R16Shards.WorldEff.trans hent hmono (fun gs hgs => by simp at hgs) hbuf
+
 end WkWalk
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
