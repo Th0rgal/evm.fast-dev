@@ -6,6 +6,7 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.Common
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalRemove
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.SetLstNew
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkBalAddChanges
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_has
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_item
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.RlpHelpers
@@ -11111,5 +11112,240 @@ theorem eval_merge_body_zero_ts_kept {F : Type}
     · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
         show ofString "s" ≠ ofString "bouter" by decide] using ht
     · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
+def MergeStorageZeroInv {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  WorldOK s ∧ s.locals.lookup (ofString "bouter") = some (.val (.word 0#64)) ∧
+    ∃ ow : BitVec 64, s.locals.lookup (ofString "outer") = some (.val (.word ow)) ∧
+      globN s "ts" ≠ 0 ∧ ow.toNat = memW s (globN s "ts" + 32)
+
+theorem mergeStorageZeroInv_body_step {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hI : MergeStorageZeroInv s)
+    (hnt : (evaluateHOLFiniteState s mergeStorageBody).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageBody).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeStorageBody).1 (evaluateHOLFiniteState s mergeStorageBody).2 := by
+  obtain ⟨hW, ht, ow, ho, hts, hots⟩ := hI
+  exact eval_merge_storage_body_zero s ow hc hW ht ho hts hots hnt hfr
+
+theorem mergeStorageZeroInv_body_preserved {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hI : MergeStorageZeroInv s)
+    (hnt : (evaluateHOLFiniteState s mergeStorageBody).1 ≠ some .timeOut)
+    (hflow : Flowing (evaluateHOLFiniteState s mergeStorageBody).1) :
+    MergeStorageZeroInv (evaluateHOLFiniteState s mergeStorageBody).2 := by
+  have hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageBody).1 := by
+    rcases hflow with h | h | h
+    · exact Or.inl h
+    · exact Or.inr (Or.inr (Or.inl h))
+    · exact Or.inr (Or.inl h)
+  have hs := mergeStorageZeroInv_body_step s hc hI hnt hfr
+  obtain ⟨hW, ht, ow, ho, hts, hots⟩ := hI
+  have hp := eval_merge_body_zero_ts_kept s ow hc hW ht ho hts hots hnt hfr
+  refine ⟨hs.worldOK_bufs validBufList_withdrawal hW, ?_, ow, ?_, ?_, ?_⟩
+  · exact (merge_storage_body_roots s hflow _ (by simp)).trans ht
+  · exact (merge_storage_body_roots s hflow _ (by simp)).trans ho
+  · rwa [hp.1]
+  · exact hots.trans hp.2.symm
+
+theorem mergeStorageZeroInv_clock {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ck : Nat) (h : MergeStorageZeroInv s) : MergeStorageZeroInv {s with clock := ck} := by
+  obtain ⟨hW, ht, ow, ho, hts, hots⟩ := h
+  exact ⟨localsFree_worldOK s s.locals ck hW, ht, ow, ho, hts, hots⟩
+
+theorem eval_merge_storage_zero_loop {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (cond : ExpHOL 64) (hc0 : s0.code = originalRuntimeCode) (hI0 : MergeStorageZeroInv s0)
+    (hnt0 : (evaluateHOLFiniteState s0 (.while cond mergeStorageBody)).1 ≠ some .timeOut)
+    (hfr0 : FlowingOrResumes (evaluateHOLFiniteState s0 (.while cond mergeStorageBody)).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s0 (evaluateHOLFiniteState s0 (.while cond mergeStorageBody)).1
+        (evaluateHOLFiniteState s0 (.while cond mergeStorageBody)).2 := by
+  suffices ∀ (k : Nat) (s : PanSemStateFiniteExact 64 F), s.clock = k →
+      s.code = originalRuntimeCode → MergeStorageZeroInv s →
+      (evaluateHOLFiniteState s (.while cond mergeStorageBody)).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState s (.while cond mergeStorageBody)).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        s (evaluateHOLFiniteState s (.while cond mergeStorageBody)).1
+          (evaluateHOLFiniteState s (.while cond mergeStorageBody)).2 from
+    this s0.clock s0 rfl hc0 hI0 hnt0 hfr0
+  intro k
+  induction k using Nat.strong_induction_on with
+  | h k ih =>
+    intro s hclk hc hI hnt hfr
+    rw [evaluateHOLFiniteState_while_fixClockRewrite] at hnt hfr ⊢
+    rcases hev : @evalHOLFinite 64 F _ s
+        (fun a => Classical.propDecidable (s.memaddrs a)) cond with _ | cv
+    · simp only [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hev] at hnt hfr ⊢
+      rcases cv with ⟨⟨w⟩⟩ | _ | _
+      · dsimp only at hnt hfr ⊢
+        by_cases hw : w = 0
+        · subst hw; exact WorldStepSc.refl s none hI.1.1
+        · rw [if_pos hw] at hnt hfr ⊢
+          by_cases hk0 : s.clock = 0
+          · simp [hk0] at hnt
+          · rw [if_neg hk0] at hnt hfr ⊢
+            set sd := decClockHOLFinite s
+            have hId : MergeStorageZeroInv sd := mergeStorageZeroInv_clock s (s.clock - 1) hI
+            have hclk_le := evaluateHOLFiniteState_clock_le sd mergeStorageBody
+            have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata sd mergeStorageBody).1
+            rcases hbo : evaluateHOLFiniteState sd mergeStorageBody with ⟨rb, mid⟩
+            have hbo' : evaluateHOLFiniteState (decClockHOLFinite s) mergeStorageBody = (rb, mid) := hbo
+            simp only [sd, hbo'] at hnt hfr hclk_le hmeta ⊢
+            have hmid_lt : mid.clock < k := by
+              change mid.clock ≤ s.clock - 1 at hclk_le; omega
+            have hnt_b : (evaluateHOLFiniteState sd mergeStorageBody).1 ≠ some .timeOut := by
+              rw [hbo]; rintro rfl; exact hnt rfl
+            have hstep := mergeStorageZeroInv_body_step sd hc hId hnt_b
+            have hinv := mergeStorageZeroInv_body_preserved sd hc hId hnt_b
+            rw [hbo] at hstep hinv
+            cases rb with
+            | none =>
+              have hs := hstep (Or.inl rfl)
+              exact withdrawalStep_trans (r1 := none) ((WorldStepSc.of_pre_locals_clock hs).with_locals_clock mid.locals mid.clock)
+                (ih mid.clock hmid_lt mid rfl (hmeta.trans hc) (hinv (Or.inl rfl)) hnt hfr)
+            | some r =>
+              cases r with
+              | «continue» =>
+                have hs := hstep (Or.inr (Or.inl rfl))
+                exact withdrawalStep_trans (r1 := some .continue) ((WorldStepSc.of_pre_locals_clock hs).with_locals_clock mid.locals mid.clock)
+                  (ih mid.clock hmid_lt mid rfl (hmeta.trans hc) (hinv (Or.inr (Or.inr rfl))) hnt hfr)
+              | «break» =>
+                exact (WorldStepSc.of_pre_locals_clock (hstep (Or.inr (Or.inr (Or.inl rfl))))).with_locals_clock mid.locals mid.clock
+              | timeOut => exact absurd rfl hnt
+              | error => exact absurd hfr not_flowingOrResumes_error
+              | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+              | returned v =>
+                exact (WorldStepSc.of_pre_locals_clock (hstep (Or.inr (Or.inr (Or.inr (Or.inl ⟨v, rfl⟩)))))).with_locals_clock mid.locals mid.clock
+              | exception eid ev =>
+                have hres : Resumes (some (.exception eid ev)) := by
+                  rcases hfr with h | h | h | hr <;> try simp at h
+                  exact hr
+                exact (WorldStepSc.of_pre_locals_clock (hstep (Or.inr (Or.inr (Or.inr hres))))).with_locals_clock mid.locals mid.clock
+      · exact absurd hfr not_flowingOrResumes_error
+      · exact absurd hfr not_flowingOrResumes_error
+
+theorem mergeStorageZeroInv_setLocal {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (x : MlS) (v : ValueHOL 64) (hx : x ≠ ofString "bouter")
+    (ho : x ≠ ofString "outer") (hI : MergeStorageZeroInv s) :
+    MergeStorageZeroInv (setVarHOLFinite x v s) := by
+  obtain ⟨hW, ht, ow, hot, hts, hto⟩ := hI
+  refine ⟨localsFree_worldOK s _ s.clock hW, ?_, ow, ?_, hts, hto⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hx] using ht
+  · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, ho] using hot
+
+theorem eval_merge_zero_cursor_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hI : MergeStorageZeroInv s)
+    (hnt : (evaluateHOLFiniteState s mergeCursorInit).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeCursorInit).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeCursorInit).1 (evaluateHOLFiniteState s mergeCursorInit).2 := by
+  unfold mergeCursorInit at hnt hfr ⊢
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  simp only [evalHOLExact, shapeOfHOLExact, shapeEqHOL, ↓reduceIte] at hnt hfr ⊢
+  let mid := setVarHOLFinite (ofString "i") (.val (.word 0#64)) s
+  have hi : MergeStorageZeroInv mid := mergeStorageZeroInv_setLocal s _ _ (by decide) (by decide) hI
+  have hs := eval_withdrawal_then mid _ _ hc hi.1
+    (eval_merge_storage_zero_loop mid _ hc hi) (progWithdrawalStep_return _) hnt hfr
+  exact (WorldStepSc.of_pre_locals_clock hs).with_locals_clock _ _
+
+theorem eval_merge_zero_cap_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hI : MergeStorageZeroInv s)
+    (hnt : (evaluateHOLFiniteState s mergeCapInit).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeCapInit).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeCapInit).1 (evaluateHOLFiniteState s mergeCapInit).2 := by
+  unfold mergeCapInit at hnt hfr ⊢
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  dsimp only at hnt hfr ⊢
+  split at hfr
+  · exact absurd hfr not_flowingOrResumes_error
+  · rename_i v he
+    simp only [he] at hnt ⊢
+    split at hfr
+    · rename_i hshape
+      simp only [if_pos hshape] at hnt ⊢
+      have hs := eval_merge_zero_cursor_init (setVarHOLFinite (ofString "cap") v s) hc
+        (mergeStorageZeroInv_setLocal s _ _ (by decide) (by decide) hI) hnt hfr
+      exact (WorldStepSc.of_pre_locals_clock hs).with_locals_clock _ _
+    · exact absurd hfr not_flowingOrResumes_error
+
+theorem eval_merge_suffix_zero_loaded {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ow : BitVec 64) (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (heo : evalAt s (.load .one (.op .add [.var .global (ofString "ts"), .const 32#64])) = some (.val (.word ow)))
+    (het : evalAt s (.load .one (.op .add [.var .global (ofString "bs"), .const 32#64])) = some (.val (.word 0#64)))
+    (hnt : (evaluateHOLFiniteState s mergeStorageSuffix).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageSuffix).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeStorageSuffix).1 (evaluateHOLFiniteState s mergeStorageSuffix).2 := by
+  obtain ⟨ow', hov, how, hts⟩ := evalAt_loadG_nz s hW.1.1 "ts" 32#64 (by decide) _ heo
+  cases hov
+  have het' : evalAt (setVarHOLFinite (ofString "outer") (.val (.word ow)) s)
+      (.load .one (.op .add [.var .global (ofString "bs"), .const 32#64])) = some (.val (.word 0#64)) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, setVarHOLFinite] at het ⊢
+    split at het <;> try contradiction
+    rename_i he
+    simp only [he]
+    exact het
+  rw [mergeStorageSuffix_eq, evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  unfold evalAt at heo het'
+  simp only [heo, shapeOfHOLExact, shapeEqHOL, ↓reduceIte] at hnt hfr ⊢
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  simp only [het', shapeOfHOLExact, shapeEqHOL, ↓reduceIte] at hnt hfr ⊢
+  let mid := setVarHOLFinite (ofString "bouter") (.val (.word 0#64))
+    (setVarHOLFinite (ofString "outer") (.val (.word ow)) s)
+  have hi : MergeStorageZeroInv mid := by
+    refine ⟨localsFree_worldOK s _ s.clock hW, ?_, ow, ?_, hts, how⟩
+    · simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    · simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "bouter" ≠ ofString "outer" by decide]
+  have hs := eval_merge_zero_cap_init mid hc hi hnt hfr
+  exact (WorldStepSc.of_pre_locals_clock (s := s) hs).with_locals_clock _ _
+
+theorem progWithdrawalStep_mergeStorageSuffix : ProgWithdrawalStep mergeStorageSuffix := by
+  intro F s hc hW hnt hfr
+  have hf := hfr
+  rw [mergeStorageSuffix_eq, evaluateHOLFiniteState_dec_total] at hf
+  dsimp only at hf
+  split at hf
+  · exact absurd hf not_flowingOrResumes_error
+  · rename_i v he
+    have heo : evalAt s (.load .one (.op .add [.var .global (ofString "ts"), .const 32#64])) = some v := he
+    obtain ⟨ow, rfl, how, hts⟩ := evalAt_loadG_nz s hW.1.1 "ts" 32#64 (by decide) _ heo
+    simp only [shapeOfHOLExact, shapeEqHOL, ↓reduceIte] at hf
+    rw [evaluateHOLFiniteState_dec_total] at hf
+    dsimp only at hf
+    split at hf
+    · exact absurd hf not_flowingOrResumes_error
+    · rename_i v he
+      have het : evalAt s (.load .one (.op .add [.var .global (ofString "bs"), .const 32#64])) = some v := by
+        change evalAt (setVarHOLFinite (ofString "outer") (.val (.word ow)) s) _ = some v at he
+        simp [evalAt, evalHOLExact, evalListHOLExact, setVarHOLFinite] at he ⊢
+        split at he <;> try contradiction
+        rename_i heq
+        simp only [heq]
+        exact he
+      obtain ⟨tw, rfl, htw, hbs⟩ := evalAt_loadG_nz s hW.1.1 "bs" 32#64 (by decide) _ het
+      by_cases hz : tw = 0
+      · subst tw
+        exact eval_merge_suffix_zero_loaded s ow hc hW heo het hnt hfr
+      · exact eval_merge_storage_suffix_loaded s tw ow hc hW heo het
+          (by intro h; apply hz; exact BitVec.eq_of_toNat_eq h) hnt hfr
+
+theorem wkSc_merge_tx_into_block :
+    WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "merge_tx_into_block") :=
+  wkSc_merge_tx_into_block_of_storage_suffix progWithdrawalStep_mergeStorageSuffix
+
+theorem wk_bal_init :
+    WorldKeeps WorldOK (fun _ => [])
+      ["bal_accounts", "bal_idx_accts", "bal_idx_stor", "bal_index", "bal_key_buf", "heap_ptr"]
+      stdKeep NoExtra (ofString "bal_init") := WkBal.wk_bal_init
+
+theorem wk_bal_remove_change :
+    WorldKeeps BalChangeArg (fun _ => []) [] stdKeep NoExtra
+      (ofString "bal_remove_change") := WkBal.wk_bal_remove_change
+
+theorem wk_add_balance_change :
+    WorldKeeps WorldOK (fun _ => []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "add_balance_change") := WkBal.wk_add_balance_change
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

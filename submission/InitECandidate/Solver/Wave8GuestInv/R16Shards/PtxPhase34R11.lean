@@ -17111,4 +17111,299 @@ theorem jset_journal_append_backing_resume {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- A table-set call with a local table argument preserves nonempty fixed objects. -/
+theorem htab_set_local_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl)
+    (t : BitVec 64) (key value : ExpHOL 64)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (ht : t.toNat ∈ S)
+    (hlt : s.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.var .local (ofString "t"), key, value]) = (none, post)) : IvlUnhit s post b := by
+  classical
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases ha : evalListHOLFinite s [.var .local (ofString "t"), key, value] with _ | values
+  · rw [ha] at hr; cases hr
+  · simp only [ha] at hr
+    rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set") values with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr
+      split at hr
+      · cases hr
+      · obtain ⟨v1, _, _, he1, _, _, hc_t, _, _⟩ := R16WkAcctWs.callee_param_three s (ofString "htab_set")
+          (ofString "t") (ofString "key") (ofString "value") .one .one .one _ _
+          (by rw [hA.1.code]; exact EvmFrameSpecs.lookup_htab_set)
+          _ _ _ values body callee ret ha hl
+        have hv : v1 = .val (.word t) := by simpa [evalHOLExact, hlt] using he1.symm
+        have hm : locN (callEntryStateHOLFinite s callee) "t" ∈ S := by
+          simpa [locN, callEntryStateHOLFinite, hc_t, hv] using ht
+        rcases hc : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, p⟩
+        rw [hc] at hr
+        cases r with
+        | none => cases hr
+        | some r =>
+          cases r <;> try (simp at hr)
+          rename_i v
+          split at hr
+          · have hu := htab_set_fixed_frame s p values body callee ret v S Nd b hA hT hm hb hbpos hl hc
+            have hp := (Prod.mk.inj hr).2
+            rw [← hp]
+            exact hu
+          · cases hr
+
+end PtxP34
+
+namespace PtxP34
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The table mutation and return tail of jset preserve nonempty fixed objects. -/
+theorem htab_set_local_return_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl)
+    (t : BitVec 64) (key value result : ExpHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (ht : t.toNat ∈ S)
+    (hlt : s.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hr : evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "htab_set")
+      [.var .local (ofString "t"), key, value]) (.return result)) =
+        (some (.returned rv), post)) : IvlUnhit s post b := by
+  obtain ⟨mid, hc, hr⟩ := seq_call0_ret_inv hr
+  have hf := htab_set_local_fixed_frame s mid S Nd b t key value hA hT hb hbpos ht hlt hc
+  rw [evaluateHOLFiniteState_return] at hr
+  split at hr
+  · cases hr
+  split at hr
+  · have he := (Prod.mk.inj hr).2
+    subst post
+    exact hf
+  · cases hr
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Transport entry table membership through the journal step and compose its backing frame. -/
+theorem journal_worldStep_table_tail_frame {F : Type}
+    (s mid post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl)
+    (t : BitVec 64) (key value result : ExpHOL 64) (rv : ValueHOL 64)
+    (hT : WorldTypedWith s S Nd)
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (hb : b ∈ fixedObjects mid) (hbpos : b.2 ≠ 0)
+    (ht : t.toNat ∈ S)
+    (hlt : mid.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hfr : IvlUnhit s mid b)
+    (hr : evaluateHOLFiniteState mid (.seq (.call (some (none, none)) (ofString "htab_set")
+      [.var .local (ofString "t"), key, value]) (.return result)) =
+        (some (.returned rv), post)) : IvlUnhit s post b := by
+  obtain ⟨S', Nd', hsub, hT', _⟩ := hw.1.2.2.2.2 S Nd hT (by
+    intro i hi; simp [bufRegions] at hi)
+  have hf := htab_set_local_return_fixed_frame mid post S' Nd' b t key value result rv
+    hw.1.1 hT' hb hbpos (hsub _ ht) hlt hr
+  intro a ha hit
+  exact (hf a ha hit).trans (hfr a ha hit)
+
+end PtxP34
+
+namespace PtxP34
+open R13Shards InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Journal world steps retain the original backing-header intervals among fixed objects. -/
+theorem journal_worldStep_header_fixed {F : Type}
+    {s mid : PanSemStateFiniteExact 64 F} (hW : TxWorld s)
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (k : Nat) (hk : k ∈ ([40, 72] : List Nat)) :
+    (memW s (globN s "bo" + k), 24) ∈ fixedObjects mid := by
+  have hs : WorldStep (fun _ => []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid := by
+    have he : (fun {F : Type} => @bufRegions [] F) =
+        (fun {F : Type} (_ : PanSemStateFiniteExact 64 F) => []) := by
+      funext F st; simp [bufRegions]
+    rw [← he]; exact hw.1
+  have hr := worldStep_empty_tx_header_roots hs hW (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by decide)
+    (by intro k hk; simp at hk ⊢; omega)
+  have hk' : k = 40 ∨ k = 72 := by simpa using hk
+  unfold fixedObjects
+  apply List.mem_append_left
+  apply List.mem_append_right
+  rcases hk' with rfl | rfl
+  · have hm := hr.2 40 (by simp)
+    simp [blockOutObjects, hr.1, hm, hW.2.bo40, hW.2.bo_nz]
+  · have hm := hr.2 72 (by simp)
+    simp [blockOutObjects, hr.1, hm, hW.2.bo72, hW.2.bo_nz]
+
+end PtxP34
+
+namespace PtxP34
+open R13Shards InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Convert journal backing frames into the header-word contract across the table tail. -/
+theorem journal_table_tail_header_words {F : Type}
+    (s mid post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (t : BitVec 64) (key value result : ExpHOL 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (ht : t.toNat ∈ S)
+    (hlt : mid.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hfr : ∀ k ∈ ([40, 72] : List Nat), IvlUnhit s mid (memW s (globN s "bo" + k), 24))
+    (hr : evaluateHOLFiniteState mid (.seq (.call (some (none, none)) (ofString "htab_set")
+      [.var .local (ofString "t"), key, value]) (.return result)) =
+        (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have hf := journal_worldStep_table_tail_frame s mid post S Nd
+    (memW s (globN s "bo" + k), 24) t key value result rv hT hw
+    (journal_worldStep_header_fixed hW hw k hk) (by simp) ht hlt (hfr k hk) hr
+  have hb := txWorld_header_fixed hW k hk
+  have ha := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  apply memW_eq_of_ivlUnhit hf ha.2.1 (ivl_allocated_bound hW.1.1.2 ha.1).2
+  exact ⟨le_rfl, by dsimp; omega⟩
+
+end PtxP34
+
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Replace a returning declaration body at its concrete entry state. -/
+theorem dec_return_replace_tail {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {nm : MlS} {init : ExpHOL 64}
+    {body : ProgHOL 64} {rv : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.dec nm .one init body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (hbody : ∀ w mid,
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) init = some (.val (.word w)) →
+      evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body = (some (.returned rv), mid) →
+      ∃ mid', evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body' = (some (.returned rv'), mid')) :
+    ∃ post', evaluateHOLFiniteState s (.dec nm .one init body') = (some (.returned rv'), post') := by
+  obtain ⟨w, he, mid, hb, _⟩ := dec_ret_inv h
+  obtain ⟨mid', hb'⟩ := hbody w mid he hb
+  rw [evaluateHOLFiniteState_dec_total]
+  simp only [he]
+  simp [shapeEqHOL, shapeOfHOLExact, hb']
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Replace a continuation after a concrete falling-through prefix. -/
+theorem seq_return_replace_tail {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {pre body : ProgHOL 64}
+    {rv : ValueHOL 64}
+    (hp : evaluateHOLFiniteState s pre = (none, mid))
+    (h : evaluateHOLFiniteState s (.seq pre body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (hbody : evaluateHOLFiniteState mid body = (some (.returned rv), post) →
+      ∃ post', evaluateHOLFiniteState mid body' = (some (.returned rv'), post')) :
+    ∃ post', evaluateHOLFiniteState s (.seq pre body') = (some (.returned rv'), post') := by
+  rw [evaluateHOLFiniteState_seq_line780, hp] at h
+  obtain ⟨post', hb⟩ := hbody h
+  exact ⟨post', by rw [evaluateHOLFiniteState_seq_line780, hp]; exact hb⟩
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Replace a returning declared-call continuation at the same restored caller state. -/
+theorem decCall_return_replace_tail {F : Type}
+    {s out : PanSemStateFiniteExact 64 F} {x fname : MlS} {sh : ShapeHOL}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64} {v : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (some (.returned v), out))
+    (cont' : ProgHOL 64) (v' : ValueHOL 64)
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F), evaluateHOLFiniteState entry cont = (some (.returned v), u) →
+      ∃ u', evaluateHOLFiniteState entry cont' = (some (.returned v'), u')) :
+    ∃ out', evaluateHOLFiniteState s (.decCall x sh fname args cont') = (some (.returned v'), out') := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h ⊢
+  split at h
+  · simp at h
+  · rename_i valuesOpt values ha
+    split at h
+    · simp at h
+    · rename_i bodyOpt body callee ret hl
+      split at h
+      · simp at h
+      · rename_i hclock
+        simp only [hclock, ↓reduceIte]
+        dsimp only at h ⊢
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => simp at h
+        | some r =>
+          cases r <;> try simp at h
+          rename_i rv
+          dsimp only at h ⊢
+          split at h
+          · rename_i hshape
+            simp only [hshape]
+            rcases ht : evaluateHOLFiniteState (setVarHOLFinite x rv {post with locals := s.locals}) cont with ⟨rc, u⟩
+            rw [ht] at h
+            cases rc with
+            | none => simp at h
+            | some r =>
+              cases r <;> try simp at h
+              rename_i w
+              obtain ⟨rfl, _⟩ := h
+              obtain ⟨u', hu⟩ := hc _ _ ht
+              rw [hu]
+              exact ⟨_, rfl⟩
+          · simp at h
+
+end PtxP34
+
+namespace PtxP34
+open private journalAppendTailProg seq_call0_ret_inv seq_store_ret_inv seq_assign_ret_inv
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Replace the trailing continuation through the entire concrete journal-append block. -/
+theorem journal_append_replace_tail {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail tail' : ProgHOL 64) (rv rv' : ValueHOL 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry tail' = (some (.returned rv'), u')) :
+    ∃ out', evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail') = (some (.returned rv'), out') := by
+  unfold journalAppendTailProg at hr ⊢
+  have ⟨hn, hrest⟩ := journal_guard_seq_resume s out jn jc trapCode _ rv hcode hjn hjc hr
+  have hcmp : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  simp only [evalHOLExact, hjn, hjc, hcmp]
+  simp only [evaluateHOLFiniteState_skip]
+  apply dec_return_replace_tail hrest
+  intro w mid he hb
+  apply decCall_return_replace_tail hb
+  intro entry u hu
+  obtain ⟨m, hm, ht⟩ := seq_call0_ret_inv hu
+  apply seq_return_replace_tail hm hu
+  intro _
+  apply dec_return_replace_tail ht
+  intro w mid he hb
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv hb
+  apply seq_return_replace_tail hm hb
+  intro _
+  obtain ⟨m, hm, ht'⟩ := seq_store_ret_inv ht
+  apply seq_return_replace_tail hm ht
+  intro _
+  obtain ⟨m, hm, ht⟩ := seq_store_ret_inv ht'
+  apply seq_return_replace_tail hm ht'
+  intro _
+  obtain ⟨m, hm, ht'⟩ := seq_store_ret_inv ht
+  apply seq_return_replace_tail hm ht
+  intro _
+  obtain ⟨m, hm, ht⟩ := seq_assign_ret_inv ht'
+  apply seq_return_replace_tail hm ht'
+  exact hc m _
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

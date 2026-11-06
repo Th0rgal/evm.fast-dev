@@ -11591,4 +11591,191 @@ theorem words_of_return_bound_g10 {F : Type}
         | _ => simp [shapeOfHOLExact, shapeEqHOL] at hr
       | _ => simp at hr
 
+theorem epsA_refine_return_g10
+    {P P' : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Q Q' : ∀ {F : Type}, PanSemStateFiniteExact 64 F → ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {params : List (MlS × ShapeHOL)} {body : ProgHOL 64} {rs : ShapeHOL}
+    (hl : originalRuntimeCode.lookup fname = some (params, body, rs))
+    (hf : EvmPreservingSpecA P Q fname)
+    (hp : ∀ {F} (s : PanSemStateFiniteExact 64 F), P' s → P s)
+    (hq : ∀ {F} (s : PanSemStateFiniteExact 64 F) v post,
+      s.code = originalRuntimeCode → P' s → Q s v post →
+      (evaluateHOLFiniteState s body).1 = some (.returned v) → Q' s v post) :
+    EvmPreservingSpecA P' Q' fname := by
+  obtain ⟨params', body', rs', hl', hs⟩ := hf
+  rw [hl] at hl'
+  cases hl'
+  refine ⟨params, body, rs, hl, ?_⟩
+  intro F s hc hi hw hpre hlookup hnt
+  have h := hs s hc hi hw (hp s hpre) hlookup hnt
+  exact ⟨fun v hv => ⟨(h.1 v hv).1, (h.1 v hv).2.1,
+    (h.1 v hv).2.2.1, hq s v _ hc hpre (h.1 v hv).2.2.2 hv⟩, h.2⟩
+
+theorem epsA_words_of_bounded_g10 :
+    EvmPreservingSpecA
+      (fun s => ∃ n : BitVec 64, s.locals.lookup (ofString "n") = some (.val (.word n)))
+      (fun s v post => LocFrame s post ∧ ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat < 2 ^ 59)
+      (ofString "words_of") := by
+  apply epsA_refine_return_g10 lookup_words_of epsA_words_of (fun _ _ => trivial)
+  intro F s v post hc hp hq hr
+  obtain ⟨n, hn⟩ := hp
+  exact ⟨hq, words_of_return_bound_g10 s n hc hn v hr⟩
+
+def CreateCostArgs_g10 {F : Type} (isCreate2 : Bool)
+    (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w memoryCost : BitVec 64, w.toNat < 2 ^ 59 ∧
+    s.locals.lookup (ofString "a") = some (.val (.word
+      (if isCreate2 then 12000#64 + 6#64 * w + 2#64 * w else 12000#64 + 2#64 * w))) ∧
+    s.locals.lookup (ofString "b") = some (.val (.word memoryCost))
+
+theorem epsA_create_add_sat_positive_g10 (isCreate2 : Bool) :
+    EvmPreservingSpecA (CreateCostArgs_g10 isCreate2)
+      (fun s v post => LocFrame s post ∧ ∃ cost : BitVec 64, v = .val (.word cost) ∧ 0 < cost.toNat)
+      (ofString "add_sat") := by
+  apply epsA_refine_return_g10 lookup_add_sat epsA_add_sat (fun _ _ => trivial)
+  intro F s v post hc hp hq hr
+  obtain ⟨w, mc, hw, ha, hb⟩ := hp
+  exact ⟨hq, create_add_sat_return_positive_g10 s w mc hw isCreate2 ha hb v hr⟩
+
+theorem create_decCall_charge_then_child_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (P : PanSemStateFiniteExact 64 F → Prop)
+    (isCreate2 charged : Bool) (name : MlS) (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (hentry : ∀ t values body callee rs,
+      t.code = originalRuntimeCode → EvmInv t → Group10.HeadMemChainWF t → P t →
+      evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a)) args = some values →
+      lookupCodeHOLFinite t.code.lookup (ofString "add_sat") values = some (body, callee, rs) →
+      CreateCostArgs_g10 isCreate2 (callEntryStateHOLFinite t callee))
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 name) cont) :
+    HandlerRunA s0 P charged
+      (.decCall name .one (ofString "add_sat") args
+        (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local name]) cont)) := by
+  apply HandlerRunA.decCall (epsA_create_add_sat_positive_g10 isCreate2) hentry
+    (Q := PositiveCostLocal_g10 name)
+  · intro t values body callee rs v post hi hw hp ha hl hpi hpw hch hq
+    obtain ⟨cost, rfl, hpos⟩ := hq.2
+    exact bound_cost_local_positive_g10 _ name cost hpos
+  · exact charge_positive_local_then_child_g10 s0 name cont charged hchild
+
+def CreateBaseExp_g10 (isCreate2 : Bool) : ExpHOL 64 :=
+  if isCreate2 then
+    .op .add [.const 12000, .panop .mul [.const 6, .var .local (ofString "w")],
+      .panop .mul [.const 2, .var .local (ofString "w")]]
+  else .op .add [.const 12000, .panop .mul [.const 2, .var .local (ofString "w")]]
+
+def BoundedWordsLocal_g10 {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w : BitVec 64, s.locals.lookup (ofString "w") = some (.val (.word w)) ∧ w.toNat < 2 ^ 59
+
+theorem create_base_exp_eval_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (isCreate2 : Bool) (w : BitVec 64)
+    (hw : s.locals.lookup (ofString "w") = some (.val (.word w))) :
+    @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (CreateBaseExp_g10 isCreate2) = some (.val (.word
+        (if isCreate2 then 12000#64 + 6#64 * w + 2#64 * w else 12000#64 + 2#64 * w))) := by
+  cases isCreate2 <;>
+    simp [CreateBaseExp_g10, evalHOLExact, evalListHOLExact, hw, panOpHOL,
+      wordOpHOL, wordOp, valueIsWord, valueWord, BitVec.add_assoc]
+
+theorem create_cost_callee_args_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (isCreate2 : Bool) (hp : BoundedWordsLocal_g10 s) (memoryExp : ExpHOL 64)
+    {values : List (ValueHOL 64)} {body : ProgHOL 64}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)} {rs : ShapeHOL}
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [CreateBaseExp_g10 isCreate2, memoryExp] = some values)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "add_sat") values = some (body, callee, rs)) :
+    CreateCostArgs_g10 isCreate2 (callEntryStateHOLFinite s callee) := by
+  rw [hc] at hl
+  obtain ⟨_, _, aw, bw, rfl, hca, hcb⟩ := two_word_arg_lookup (by decide) lookup_add_sat hl
+  obtain ⟨w, hw, hb⟩ := hp
+  rw [evalListHOLFinite_eq_toExact] at ha
+  simp only [evalListHOLExact, create_base_exp_eval_g10 s isCreate2 w hw] at ha
+  cases he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) memoryExp with
+  | none => simp [he] at ha
+  | some mv =>
+    simp only [he] at ha
+    have heq : (if isCreate2 then 12000#64 + 6#64 * w + 2#64 * w else 12000#64 + 2#64 * w) = aw := by
+      simpa using congrArg List.head? (Option.some.inj ha)
+    exact ⟨w, bw, hb, by simpa [heq, callEntryStateHOLFinite] using hca, hcb⟩
+
+theorem create_cost_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (isCreate2 charged : Bool)
+    (memoryExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 (ofString "cost")) cont) :
+    HandlerRunA s0 BoundedWordsLocal_g10 charged
+      (.decCall (ofString "cost") .one (ofString "add_sat")
+        [CreateBaseExp_g10 isCreate2, memoryExp]
+        (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local (ofString "cost")]) cont)) := by
+  apply create_decCall_charge_then_child_g10 s0 BoundedWordsLocal_g10 isCreate2 charged
+    (ofString "cost") _ cont ?_ hchild
+  intro t values body callee rs hc hi hw hp ha hl
+  exact create_cost_callee_args_g10 t hc isCreate2 hp memoryExp ha hl
+
+theorem words_of_create_cost_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (isCreate2 charged : Bool)
+    (sizeExp memoryExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 (ofString "cost")) cont) :
+    HandlerRunA s0 (fun _ => True) charged
+      (.decCall (ofString "w") .one (ofString "words_of") [sizeExp]
+        (.decCall (ofString "cost") .one (ofString "add_sat")
+          [CreateBaseExp_g10 isCreate2, memoryExp]
+          (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local (ofString "cost")]) cont))) := by
+  apply HandlerRunA.decCall epsA_words_of_bounded_g10 (Q := BoundedWordsLocal_g10)
+  · intro t values body callee rs hc hi hw hp ha hl
+    rw [hc] at hl
+    rw [evalListHOLFinite_eq_toExact] at ha
+    simp only [evalListHOLExact] at ha
+    cases he : @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) sizeExp with
+    | none => simp [he] at ha
+    | some v =>
+      simp only [he] at ha
+      have hv : values = [v] := (Option.some.inj ha).symm
+      subst values
+      obtain ⟨_, _, n, _, hn⟩ := one_word_arg_lookup lookup_words_of hl
+      exact ⟨n, hn⟩
+  · intro t values body callee rs v post hi hw hp ha hl hpi hpw hch hq
+    obtain ⟨w, rfl, hb⟩ := hq.2
+    exact ⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE], hb⟩
+  · exact create_cost_sequence_g10 s0 isCreate2 charged memoryExp cont hchild
+
+/-- Strip a fixed, syntactically checked handler prefix to name its continuation. -/
+def handlerSuffix_g10 : Nat → ProgHOL 64 → ProgHOL 64
+  | 0, p => p
+  | n + 1, .seq _ p => handlerSuffix_g10 n p
+  | n + 1, .decCall _ _ _ _ p => handlerSuffix_g10 n p
+  | n + 1, .dec _ _ _ p => handlerSuffix_g10 n p
+  | _, p => p
+
+def createChargedSuffix_g10 : ProgHOL 64 :=
+  handlerSuffix_g10 9 (sourceFnBody Guest.Software.guestFn_op_create)
+
+def create2ChargedSuffix_g10 : ProgHOL 64 :=
+  handlerSuffix_g10 10 (sourceFnBody Guest.Software.guestFn_op_create2)
+
+theorem create_prefix_run_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 (ofString "cost")) createChargedSuffix_g10) :
+    HandlerRunA s0 (fun _ => True) false (sourceFnBody Guest.Software.guestFn_op_create) := by
+  apply HandlerRunA.seq_call_simple epsA_require_not_static
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_sat_word
+  apply HandlerRunA.decCall_simple epsA_extend_memory_cost1
+  exact words_of_create_cost_sequence_g10 s0 false false
+    (.var .local (ofString "n")) (.rfield 0 (.var .local (ofString "x")))
+    createChargedSuffix_g10 hchild
+
+theorem create2_prefix_run_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 (ofString "cost")) create2ChargedSuffix_g10) :
+    HandlerRunA s0 (fun _ => True) false (sourceFnBody Guest.Software.guestFn_op_create2) := by
+  apply HandlerRunA.seq_call_simple epsA_require_not_static
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_sat_word
+  apply HandlerRunA.decCall_simple epsA_extend_memory_cost1
+  exact words_of_create_cost_sequence_g10 s0 true false
+    (.var .local (ofString "n")) (.rfield 0 (.var .local (ofString "x")))
+    create2ChargedSuffix_g10 hchild
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

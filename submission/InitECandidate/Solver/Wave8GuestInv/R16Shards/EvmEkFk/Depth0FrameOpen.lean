@@ -8,6 +8,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.AllocJournalSte
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkKeccak256
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkGetCode
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalBase
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
 
 /-! `fk_frame_open` and `ek_depth0_prepare`: the outermost frame is opened by `frame_open`
 (kind 0) on top of `MsgReady`, and `depth0_prepare` keeps the EVM invariant. -/
@@ -9393,5 +9394,271 @@ theorem codeDbPayloadStrong_of_fresh_frame {F : Type}
   dsimp only at hi
   exact ⟨old_heap_word_of_fresh_world_effect hAs hframe p (by omega),
     old_heap_word_of_fresh_world_effect hAs hframe (p+8) (by omega)⟩
+
+/-- Protected code words survive writes to tables, fixed objects, and fresh regions. -/
+theorem protected_payload_words_of_world_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db) (hA : ArenaReady s)
+    (hframe : ∀ a : BitVec 64, post.memory a ≠ s.memory a →
+      (∃ i, ((∃ t ∈ S, i ∈ htabFootprint s t) ∨ i ∈ fixedObjects s) ∧
+        0 < i.2 ∧ i.1 < a.toNat+8 ∧ a.toNat < i.1+i.2) ∨
+      ((freeGap s).1 < a.toNat+8 ∧ a.toNat < (freeGap s).1+(freeGap s).2) ∨
+      ((heapFree s).1 < a.toNat+8 ∧ a.toNat < (heapFree s).1+(heapFree s).2)) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  intro p hp
+  obtain ⟨hin,hbound,ht,hfix⟩ := he.2 p hp
+  have hw : ∀ a, p ≤ a → a+8 ≤ p+16 → memW post a = memW s a := by
+    intro a hlo hhi
+    have hb : a < 2^64 := by omega
+    unfold memW
+    have hm : post.memory (BitVec.ofNat 64 a) = s.memory (BitVec.ofNat 64 a) := by
+      by_contra hn
+      have hc := hframe (BitVec.ofNat 64 a) hn
+      rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb] at hc
+      rcases hc with ⟨i,hi,hpos,h1,h2⟩ | ⟨h1,h2⟩ | ⟨h1,h2⟩
+      · have hd : Disj (p,16) i := by
+          rcases hi with ⟨t,ht',hi'⟩ | hi'
+          · exact ht t ht' i hi'
+          · exact hfix i hi'
+        unfold Disj at hd
+        dsimp only at hd
+        rcases hd with hd | hd | hd | hd <;> omega
+      · have hh := hA.2.2.1
+        have hfmp := hA.2.2.2.1
+        have hs : heapLimit ≤ scratchStart := by decide
+        have hip := hin.2
+        unfold freeGap at h1
+        dsimp only at h1 hip
+        omega
+      · have hip := hin.2
+        unfold heapFree at h1
+        dsimp only at h1 hip
+        omega
+    rw [hm]
+  exact ⟨hw p (by omega) (by omega),hw (p+8) (by omega) (by omega)⟩
+
+/-- Old protected payloads avoid objects contained in old objects or fresh heap. -/
+theorem protected_payload_disj_of_growth {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db p : Nat} {i : Ivl}
+    (he : CodeDbPayloadStrong s S db) (hp : p ∈ htabValues s db)
+    (hg : i = (0,0) ∨
+      (∃ j, ((∃ t ∈ S, j ∈ htabFootprint s t) ∨ j ∈ fixedObjects s) ∧
+        Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr")) :
+    Disj (p,16) i := by
+  obtain ⟨hi,_,ht,hf⟩ := he.2 p hp
+  rcases hg with rfl | ⟨j,hj,hij⟩ | hnew
+  · simp [Disj]
+  · have hd : Disj (p,16) j := by
+      rcases hj with ⟨t,ht',hj'⟩ | hj'
+      · exact ht t ht' j hj'
+      · exact hf j hj'
+    unfold Inside at hij
+    unfold Disj at hd ⊢
+    dsimp only at hd ⊢
+    rcases hd with hd | hd | hd | hd <;> omega
+  · unfold Inside at hnew hi
+    unfold Disj
+    dsimp only at hi ⊢
+    omega
+
+/-- Preserve protected code records while the typed table set and layout grow. -/
+theorem codeDbPayloadStrong_of_owned_growth {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S S' : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hv : htabValues post db = htabValues s db)
+    (hw : ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hg : ∀ i, ((∃ t ∈ S', i ∈ htabFootprint post t) ∨ i ∈ fixedObjects post) →
+      i = (0,0) ∨
+      (∃ j, ((∃ t ∈ S, j ∈ htabFootprint s t) ∨ j ∈ fixedObjects s) ∧
+        Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr")) :
+    CodeDbPayloadStrong post S' db := by
+  refine ⟨nodeDbEntriesStrong_of_preserved_payloads he.1 hAs hAp hhp hv hw,?_⟩
+  intro p hp
+  rw [hv] at hp
+  obtain ⟨hi,hb,_,_⟩ := he.2 p hp
+  refine ⟨⟨hi.1,le_trans hi.2 hhp⟩,hb,?_,?_⟩
+  · intro t ht i hi'
+    exact protected_payload_disj_of_growth he hp (hg i (Or.inl ⟨t,ht,hi'⟩))
+  · intro i hi'
+    exact protected_payload_disj_of_growth he hp (hg i (Or.inr hi'))
+
+/-- A relational outside-frame yields protected code-word preservation. -/
+theorem protected_payload_words_of_frameOutside {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat} {keep : List Ivl}
+    (he : CodeDbPayloadStrong s S db) (hA : ArenaReady s)
+    (hF : FrameOutside s post (keep ++ [freeGap s]) (heapFree s))
+    (hk : ∀ i ∈ keep, 0 < i.2 ∧
+      ((∃ t ∈ S, i ∈ htabFootprint s t) ∨ i ∈ fixedObjects s)) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  apply protected_payload_words_of_world_frame he hA
+  intro a hn
+  by_contra hc
+  apply hn
+  apply hF a
+  · intro i hi hit
+    rcases List.mem_append.1 hi with hi | hi
+    · obtain ⟨hp,hi'⟩ := hk i hi
+      exact hc (Or.inl ⟨i,hi',hp,hit⟩)
+    · have heq : i = freeGap s := by simpa using hi
+      subst i
+      exact hc (Or.inr (Or.inl hit))
+  · intro hit
+    exact hc (Or.inr (Or.inr hit))
+
+/-- Combine a relational write frame with growth of typed objects. -/
+theorem codeDbPayloadStrong_of_frame_and_growth {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S S' : List Nat} {db : Nat} {keep : List Ivl}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hv : htabValues post db = htabValues s db)
+    (hF : FrameOutside s post (keep ++ [freeGap s]) (heapFree s))
+    (hk : ∀ i ∈ keep, 0 < i.2 ∧
+      ((∃ t ∈ S, i ∈ htabFootprint s t) ∨ i ∈ fixedObjects s))
+    (hg : ∀ i, ((∃ t ∈ S', i ∈ htabFootprint post t) ∨ i ∈ fixedObjects post) →
+      i = (0,0) ∨
+      (∃ j, ((∃ t ∈ S, j ∈ htabFootprint s t) ∨ j ∈ fixedObjects s) ∧
+        Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr")) :
+    CodeDbPayloadStrong post S' db := by
+  exact codeDbPayloadStrong_of_owned_growth he hAs hAp hhp hv
+    (protected_payload_words_of_frameOutside he hAs hF hk) hg
+
+/-- A separated write frame protects code words independently of object categories. -/
+theorem protected_payload_words_of_disjoint_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat} {keep : List Ivl}
+    (he : CodeDbPayloadStrong s S db)
+    (hF : FrameOutside s post keep (heapFree s))
+    (hsep : ∀ p ∈ htabValues s db, ∀ i ∈ keep, 0 < i.2 ∧ Disj (p,16) i) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  intro p hp
+  obtain ⟨hin,hbound,_,_⟩ := he.2 p hp
+  have hw : ∀ a, p ≤ a → a+8 ≤ p+16 → memW post a = memW s a := by
+    intro a hlo hhi
+    have hb : a < 2^64 := by omega
+    have hn : (BitVec.ofNat 64 a).toNat = a := by
+      rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb]
+    unfold memW
+    rw [hF (BitVec.ofNat 64 a) (by
+      intro i hi hit
+      rw [hn] at hit
+      obtain ⟨hpos,hd⟩ := hsep p hp i hi
+      unfold CellHits at hit
+      unfold Disj at hd
+      dsimp only at hd
+      rcases hd with hd | hd | hd | hd <;> omega) (by
+      intro hit
+      rw [hn] at hit
+      have hi := hin.2
+      unfold CellHits heapFree at hit
+      dsimp only at hit hi
+      omega)]
+  exact ⟨hw p (by omega) (by omega),hw (p+8) (by omega) (by omega)⟩
+
+/-- Recover the concrete relational world step from a successful account call. -/
+theorem get_account_execution_world_step {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    R16WkAcctWs.WorldStepSc (R16WkAcctWs.bufRegions wsAcctBufs)
+      ["heap_ptr","scratch_ptr"] stdKeep NoExtra
+      (callEntryStateHOLFinite s callee) (some (.returned v)) post := by
+  have hentry : WorldOK (callEntryStateHOLFinite s callee) := localsFree_worldOK s _ _ hW
+  have hs := FunSpec.at_lookup wkSc_get_account s hc values body callee ret hl hentry
+    (by rw [hb]; simp)
+  rw [hb] at hs
+  exact hs (by simp [Resumes])
+
+/-- The standard record contract preserves all code/access roots away from outputs. -/
+theorem code_roots_kept_of_recordsKept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    (hR : RecordsKept R stdKeep s post)
+    (hG : GlobalsKept ["heap_ptr","scratch_ptr"] s post)
+    (hsep : ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      ∀ i ∈ R s, ¬ CellHits (globN s g+k) i) :
+    ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW post (globN post g+k) = memW s (globN s g+k) := by
+  intro g k hm hn
+  have hg : globN post g = globN s g := by
+    have heq : s.globals.lookup (ofString g) = post.globals.lookup (ofString g) := hG _ (by
+      simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+      rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ <;> decide)
+    unfold globN
+    rw [heq]
+  rw [hg]
+  have hr : ∃ ks, (g,ks) ∈ stdKeep ∧ k ∈ ks := by
+    simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+    rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩
+    · exact ⟨[0,8,16,24,32],by decide,by decide⟩
+    · exact ⟨[0,8,16,24,32,40,48,56,64],by decide,by decide⟩
+    · exact ⟨[0,8,16,24,32,40,48,56,64],by decide,by decide⟩
+    · exact ⟨[0,8,16,24,32,40,48,56,64,72],by decide,by decide⟩
+  obtain ⟨ks,hks,hk⟩ := hr
+  exact hR (g,ks) hks hn k hk (hsep g k hm)
+
+/-- Valid nonempty untyped buffers cannot hit fields of a live typed record. -/
+theorem typed_record_field_avoids_buffers {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) {B : R16WkAcctWs.BufList}
+    (hB : R16WkAcctWs.ValidBufList B)
+    (hpos : ∀ b ∈ B, 0 < b.2)
+    (g : String) (sz k : Nat) (hg : (g,sz) ∈ typedRecords)
+    (hn : globN s g ≠ 0) (hk : k+8 ≤ sz) :
+    ∀ i ∈ R16WkAcctWs.bufRegions B s, ¬ CellHits (globN s g+k) i := by
+  have hi : (globN s g,sz) ∈ worldTypedIvls s S Nd := by
+    unfold worldTypedIvls
+    simp only [List.mem_append]
+    exact Or.inl (Or.inl (Or.inl (Or.inl (Or.inr (List.mem_map.2 ⟨(g,sz),hg,by simp [hn]⟩)))))
+  intro i him hit
+  have hd := R16WkAcctWs.validBufList_disj hB hWT i him _ hi
+  obtain ⟨b,hb,rfl⟩ := List.mem_map.1 him
+  by_cases hz : globN s b.1 = 0
+  · simp [bufferRegion,hz,CellHits] at hit
+  · simp only [bufferRegion,hz,↓reduceIte] at hd hit
+    have hbp := hpos b hb
+    unfold Disj at hd
+    unfold CellHits at hit
+    dsimp only at hd hit
+    rcases hd with hd | hd | hd | hd <;> omega
+
+/-- Account output buffers leave the live code and access roots unchanged. -/
+theorem account_records_preserve_code_roots {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd)
+    (hR : RecordsKept (R16WkAcctWs.bufRegions wsAcctBufs) stdKeep s post)
+    (hG : GlobalsKept ["heap_ptr","scratch_ptr"] s post) :
+    ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW post (globN post g+k) = memW s (globN s g+k) := by
+  intro g k hm hn
+  have hg : globN post g = globN s g := by
+    have heq : s.globals.lookup (ofString g) = post.globals.lookup (ofString g) := hG _ (by
+      simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+      rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ <;> decide)
+    unfold globN
+    rw [heq]
+  rw [hg]
+  have hp : ∀ b ∈ wsAcctBufs, 0 < b.2 := by decide
+  simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+  rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩
+  · exact hR ("ws",[0,8,16,24,32]) (by decide) hn 16 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "ws" 40 16 (by decide) hn (by decide))
+  · exact hR ("ts",[0,8,16,24,32,40,48,56,64]) (by decide) hn 40 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "ts" 72 40 (by decide) hn (by decide))
+  · exact hR ("ts",[0,8,16,24,32,40,48,56,64]) (by decide) hn 48 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "ts" 72 48 (by decide) hn (by decide))
+  · exact hR ("bs",[0,8,16,24,32,40,48,56,64,72]) (by decide) hn 48 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "bs" 80 48 (by decide) hn (by decide))
 
 end HeadStore

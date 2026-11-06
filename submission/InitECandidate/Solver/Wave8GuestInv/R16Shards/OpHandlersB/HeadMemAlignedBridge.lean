@@ -9604,16 +9604,14 @@ theorem chain_cells_ne_head_pc {F : Type} (s : PanSemStateFiniteExact 64 F)
       hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
 
 /-- Error incorporation's three head writes avoid every chain alignment cell. -/
-theorem chain_cells_ne_head_error {F : Type} (s : PanSemStateFiniteExact 64 F)
-    (hi : EvmInv s) (k : Nat) (hk : k ∈ [64, 72, 184]) :
+theorem chain_cells_ne_head_offset {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : EvmInv s) (k : Nat) (hkbound : k < 280)
+    (hkne : k ≠ 24 ∧ k ≠ 32 ∧ k ≠ 40) :
     ∀ ec ∈ evmChain s,
       BitVec.ofNat 64 (ec.1 + 24) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
       BitVec.ofNat 64 (ec.1 + 32) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
       BitVec.ofNat 64 (ec.1 + 40) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
       BitVec.ofNat 64 (ec.2 + 56) ≠ BitVec.ofNat 64 (globN s "ev" + k) := by
-  have hkbound : k < 280 := by simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
-  have hkne : k ≠ 24 ∧ k ≠ 32 ∧ k ≠ 40 := by
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
   obtain ⟨_, S, _, hrest⟩ := hi
   dsimp only at hrest
   obtain ⟨_, _, _, hFW, _, _, hPair, _⟩ := hrest
@@ -9659,6 +9657,45 @@ theorem chain_cells_ne_head_error {F : Type} (s : PanSemStateFiniteExact 64 F)
       hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
 
 /-- The error incorporation callee preserves the chain's memory contract. -/
+theorem chain_cells_ne_head_error {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : EvmInv s) (k : Nat) (hk : k ∈ [64, 72, 184]) :
+    ∀ ec ∈ evmChain s,
+      BitVec.ofNat 64 (ec.1 + 24) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.1 + 32) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.1 + 40) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.2 + 56) ≠ BitVec.ofNat 64 (globN s "ev" + k) := by
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+  exact chain_cells_ne_head_offset s hi k (by omega) (by omega)
+
+theorem credit_state_gas_refund_cells {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (e : BitVec 64)
+    (hi : EvmInv s) (hcode : s.code = originalRuntimeCode)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_credit_state_gas_refund) = (some (.returned v), post)) :
+    EvmEkFk.ChainCellsAgree s post := by
+  obtain ⟨_, ⟨w1, w2, w3, hm⟩, _, _⟩ :=
+    Ret.apply (credit_state_gas_refund_run s e hcode he) hr
+  have heq : BitVec.ofNat 64 (globN s "ev") = e := by simp [globN, he]
+  have h64 := chain_cells_ne_head_offset s hi 64 (by omega) (by omega)
+  have h72 := chain_cells_ne_head_offset s hi 72 (by omega) (by omega)
+  have h192 := chain_cells_ne_head_offset s hi 192 (by omega) (by omega)
+  rw [BitVec.ofNat_add (globN s "ev") 64, heq] at h64
+  rw [BitVec.ofNat_add (globN s "ev") 72, heq] at h72
+  rw [BitVec.ofNat_add (globN s "ev") 192, heq] at h192
+  intro ec hec
+  obtain ⟨h1, h2, h3, h4⟩ := h64 ec hec
+  obtain ⟨h5, h6, h7, h8⟩ := h72 ec hec
+  obtain ⟨h9, h10, h11, h12⟩ := h192 ec hec
+  have hkeep (a : Nat) (ha : BitVec.ofNat 64 a ≠ e + 64)
+      (hb : BitVec.ofNat 64 a ≠ e + 72) (hc : BitVec.ofNat 64 a ≠ e + 192) :
+      memW post a = memW s a := by
+    unfold memW
+    rw [hm, updW_ne _ _ _ _ hb, updW_ne _ _ _ _ hc, updW_ne _ _ _ _ ha]
+  exact ⟨hkeep _ h1 h5 h9, hkeep _ h2 h6 h10,
+    hkeep _ h3 h7 h11, hkeep _ h4 h8 h12⟩
+
 theorem incorporate_child_on_error_cells {F : Type}
     (s post : PanSemStateFiniteExact 64 F) (e : BitVec 64)
     (hi : EvmInv s)
@@ -12103,5 +12140,1965 @@ theorem laInv_headMemAligned_group04 {F : Type} {s u : PanSemStateFiniteExact 64
       R16Shards.IvlUnhit s u (ec.1, 280) ∧ R16Shards.IvlUnhit s u (ec.2, 104)) :
     R16Shards.OpHandlers.HeadMemAligned u :=
   headMemChainWF_headMemAligned_group04 (laInv_headMemChainWF h hE hA hchain hun)
+
+section CheckpointR16
+open InitECandidate.Solver.UniformSourceClock
+open InitECandidate.Solver.PanTerminatingBounded
+open InitECandidate.Solver.PanRunBounded
+
+theorem Ret.seq_while_inv_exit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cond : ExpHOL 64} {body cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (I : PanSemStateFiniteExact 64 F → Prop) (hinit : I s) (hNR : NoRet body)
+    (hnb : ∀ t : PanSemStateFiniteExact 64 F,
+      (evaluateHOLFiniteState t body).1 ≠ some .break)
+    (hstep : ∀ t, I t → InitECandidate.Solver.Wave8M19.LoopActive cond t → t.clock ≠ 0 →
+      Flw (decClockHOLFinite t) body (fun _ post => I post))
+    (hk : ∀ t, I t → ev t cond = some (.val (.word 0)) → Ret t cont Φ) :
+    Ret s (.seq (.while cond body) cont) Φ := by
+  refine Ret.seq (fun v hv => absurd hv
+    (while_noRet cond body (fun t v => hNR t v) s.clock s le_rfl v)) ?_
+  intro t ht
+  have hi := while_inv_act I cond body (fun u hu ha hc hf => hstep u hu ha hc hf)
+    s.clock s le_rfl hinit (by rw [ht])
+  rw [ht] at hi
+  exact hk t hi (while_normal_exit cond body hnb s t ht)
+
+theorem la_loop_contents_exit {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (L arr0 cap0 n0 nc p : BitVec 64) (child : Nat → Nat) (a2 : ExpHOL 64)
+    (cont : ProgHOL 64) (Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop)
+    (hsum : n0.toNat + nc.toNat < 2 ^ 58)
+    (hinit : LAInvContents s L arr0 cap0 n0 nc child u)
+    (hp : u.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hstep : ∀ t, LAInvContents s L arr0 cap0 n0 nc child t →
+      t.locals.lookup (ofString "p") = some (.val (.word p)) →
+      InitECandidate.Solver.Wave8M19.LoopActive
+        (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n"))) t →
+      t.clock ≠ 0 →
+      Flw (decClockHOLFinite t)
+        (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+        (fun _ post => LAInvContents s L arr0 cap0 n0 nc child post))
+    (hk : ∀ t, LAInvContents s L arr0 cap0 n0 nc child t →
+      t.locals.lookup (ofString "p") = some (.val (.word p)) →
+      LAContents s L arr0 n0 child nc.toNat t → Ret t cont Φ) :
+    Ret u
+      (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n")))
+        (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))) cont) Φ := by
+  apply Ret.seq_while_inv_exit (cond := .cmp .less (.var .local (ofString "i"))
+    (.var .local (ofString "n"))) (cont := cont) (Φ := Φ)
+    (fun t => LAInvContents s L arr0 cap0 n0 nc child t ∧
+      t.locals.lookup (ofString "p") = some (.val (.word p))) ⟨hinit, hp⟩
+    (NoRet.seq NoRet.call0 NoRet.assign) (fun t => la_body_no_break t a2)
+  · intro t ht hact hc
+    apply Flw.and (hstep t ht.1 ht.2 hact hc)
+    intro hf
+    have hkeep := R16Shards.OpHandlers.evaluate_notAssignedLocal
+      (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (show R16Shards.OpHandlers.notAssignedLocal (ofString "p") _ = true from by
+        simp [R16Shards.OpHandlers.notAssignedLocal]
+        decide)
+      (decClockHOLFinite t) (by rcases hf with h | h | h <;> rw [h] <;> rfl)
+    exact hkeep.trans ht.2
+  · intro t ht hexit
+    exact hk t ht.1 ht.2 (laInvContents_exit ht.1 (by omega) hexit)
+
+/-- Unaligned `pc_add` body step preserving `EvmInv`, `evmChain`, `evmR`, `ChainCellsAgree`, and `globals`. -/
+theorem pc_add_body_unaligned {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (hi : EvmInv s) (hc : s.code = originalRuntimeCode)
+    (e pc n : BitVec 64) (v : ValueHOL 64)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hp : s.memory e = .word pc) (hd : s.memaddrs e)
+    (hex : ∃ values, lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "pc_add") values =
+      some (sourceFnBody Guest.Software.guestFn_pc_add, s.locals, .one))
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_pc_add) =
+      (some (.returned v), post)) :
+    EvmInv post ∧ evmChain post = evmChain s ∧
+    R11Shards.OpDispatchSpec.evmR post ≤ R11Shards.OpDispatchSpec.evmR s ∧
+    EvmEkFk.ChainCellsAgree s post ∧ post.globals = s.globals := by
+  obtain ⟨ps, body, rt, hl, hs⟩ := R14Shards.OpHandlersA.eps_pc_add
+  obtain ⟨rfl, rfl, rfl⟩ := funSpec_same_body lookup_pc_add hl
+  have hspec := (hs s hc hi trivial hex (by rw [hr]; simp)).1 v (by rw [hr])
+  rw [hr] at hspec
+  dsimp only at hspec
+  obtain ⟨hI, hch, hR, hg⟩ := hspec
+  obtain ⟨_, hm, _, _⟩ := Ret.apply (pc_add_run s e pc n hn he hp hd) hr
+  have heAddr : BitVec.ofNat 64 (globN s "ev") = e := by simp [globN, he]
+  have hsafe := chain_cells_ne_head_pc s hi
+  rw [heAddr] at hsafe
+  have hcells : EvmEkFk.ChainCellsAgree s post := by
+    intro ec hec
+    obtain ⟨h24, h32, h40, h56⟩ := hsafe ec hec
+    have hkeep (a : Nat) (ha : BitVec.ofNat 64 a ≠ e) : memW post a = memW s a := by
+      unfold memW; rw [hm, updW_ne _ _ _ _ ha]
+    exact ⟨hkeep _ h24, hkeep _ h32, hkeep _ h40, hkeep _ h56⟩
+  exact ⟨hI, hch, hR, hcells, hg⟩
+
+theorem pc_add_return_unaligned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : EvmInv s) (hc : s.code = originalRuntimeCode)
+    (e pc : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hp : s.memory e = .word pc) (hd : s.memaddrs e) :
+    Ret s (.seq (.call (some (none, none)) (ofString "pc_add") [.const 1#64])
+      (.return (.const 0#64))) (fun _ post =>
+      EvmInv post ∧ evmChain post = evmChain s ∧
+      R11Shards.OpDispatchSpec.evmR post ≤ R11Shards.OpDispatchSpec.evmR s ∧
+      EvmEkFk.ChainCellsAgree s post ∧ post.globals = s.globals) := by
+  refine Ret.seq_call00 fun values body callee ret v post hargs hl hr => ?_
+  have hv : values = [.val (.word (1#64))] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact] using hargs.symm
+  subst values
+  have hl0 := pan_one_word_lookup s.code.lookup (ofString "pc_add") (ofString "n")
+    _ (1#64) (by rw [hc]; exact lookup_pc_add)
+  rw [hl0] at hl
+  obtain ⟨rfl, rfl, rfl⟩ := Option.some.inj hl
+  let ce := callEntryStateHOLFinite s
+    (HolFiniteMapExact.empty.update (ofString "n", .val (.word (1#64))))
+  obtain ⟨hI, hch, hR, hcells, hg⟩ := pc_add_body_unaligned ce post
+    (R11Shards.OpDispatchSpec.localsFree_evmInv s _ _ hi) hc e pc 1 v
+    (by simp [ce, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+    he hp hd
+    ⟨[.val (.word (1#64))], pan_one_word_lookup originalRuntimeCode.lookup
+      (ofString "pc_add") (ofString "n") _ 1 lookup_pc_add⟩ hr
+  have hch0 : evmChain ce = evmChain s :=
+    R11Shards.OpDispatchSpec.evmChain_congr (s := s) (t := ce) rfl rfl
+  have hR0 : R11Shards.OpDispatchSpec.evmR ce = R11Shards.OpDispatchSpec.evmR s :=
+    (R11Shards.OpDispatchSpec.evm_congr (s := s) (t := ce) rfl rfl).2.1
+  have hchRest : evmChain (emptyLocalsHOLFinite { post with locals := s.locals }) = evmChain post :=
+    R11Shards.OpDispatchSpec.evmChain_congr (s := post)
+      (t := emptyLocalsHOLFinite { post with locals := s.locals }) rfl rfl
+  have hRRest : R11Shards.OpDispatchSpec.evmR (emptyLocalsHOLFinite { post with locals := s.locals }) =
+      R11Shards.OpDispatchSpec.evmR post :=
+    (R11Shards.OpDispatchSpec.evm_congr (s := post)
+      (t := emptyLocalsHOLFinite { post with locals := s.locals }) rfl rfl).2.1
+  refine Ret.ret fun _ _ => ?_
+  refine ⟨R11Shards.OpDispatchSpec.localsFree_evmInv post _ _ hI, ?_, ?_, ?_, hg⟩
+  · exact hchRest.trans (hch.trans hch0)
+  · exact hRRest.le.trans (hR.trans_eq hR0)
+  · intro ec hec
+    exact hcells ec (hch0.symm ▸ hec)
+
+theorem finish_child_cleanup_finishPost_unaligned {F : Type}
+    (s0 st post : PanSemStateFiniteExact 64 F) (cmw cmmw : BitVec 64) {S : List Nat}
+    (hAs : ArenaReady st)
+    (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt st S)
+    (hRel : EvmEkFk.ReleaseReadyAt st S cmw.toNat cmmw.toNat)
+    (hcm : st.locals.lookup (ofString "child_mark") = some (.val (.word cmw)))
+    (hcmm : st.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmmw)))
+    (hchain : evmChain st = (evmChain s0).tail)
+    (hlen : (evmChain st).length + 1 = (evmChain s0).length)
+    (hcells : ∀ ec ∈ evmChain st,
+      memW st (ec.1 + 24) = memW s0 (ec.1 + 24) ∧
+      memW st (ec.1 + 32) = memW s0 (ec.1 + 32) ∧
+      memW st (ec.1 + 40) = memW s0 (ec.1 + 40) ∧
+      memW st (ec.2 + 56) = memW s0 (ec.2 + 56))
+    (hev : globN st "ev" = memW s0 (globN s0 "cur_cont"))
+    (hmark : cmmw.toNat = memW s0 (globN s0 "cur_cont" + 56))
+    (hgas : R11Shards.OpDispatchSpec.evmR st ≤ R11Shards.OpDispatchSpec.evmR s0)
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState st EvmEkFk.fcCleanup = (some (.returned v), post)) :
+    EvmEkFk.FinishPost s0 (some (.returned v)) post := by
+  have hFW := hInv.2.2.2.2.1 _ (head_mem_evmChain st)
+  have hw := hFW.1 (globN st "ev", 280) (by simp)
+  obtain ⟨pc, hd, hm⟩ := hw.2.2.2 0 (by norm_num)
+  obtain ⟨e, he⟩ := hAs.2.2.2.2.2.2.2.2.2 "ev" (by decide)
+  have heq : BitVec.ofNat 64 (globN st "ev") = e := by
+    simp [globN, GlobalWord] at he ⊢
+    rw [he]; simp
+  have hnt : (evaluateHOLFiniteState st EvmEkFk.fcCleanup).1 ≠ some .timeOut := by rw [hr]; simp
+  obtain ⟨mid, heval, _, hm_mid, hd_mid, _, _, hfmp, hg, hAmid, hImid, hch_mid, hR_mid, _⟩ :=
+    EvmEkFk.release_pair_step st (.var .local (ofString "child_mark"))
+      (.var .local (ofString "child_mem_mark")) cmw cmmw hAs hInv hRel
+      (by simp [evalHOLExact, hcm]) (by intro g ck; simp [evalHOLExact, hcmm]) hnt
+  have hev_mid : globN mid "ev" = globN st "ev" := by
+    unfold globN; rw [hg _ (by decide) (by decide)]
+  have hmw_mid : memW mid = memW st := by funext a; unfold memW; rw [hm_mid]
+  have hret := pc_add_return_unaligned mid ⟨hAmid, S, hImid⟩ hAmid.1.code e pc
+    (by rw [hg _ (by decide) (by decide)]; exact he)
+    (by rw [hm_mid, ← heq]; simpa using hm)
+    (by rw [hd_mid, ← heq]; simpa using hd)
+  have hrmid : evaluateHOLFiniteState mid
+      (.seq (.call (some (none, none)) (ofString "pc_add") [.const 1#64])
+        (.return (.const 0#64))) = (some (.returned v), post) := heval.symm.trans hr
+  obtain ⟨hIp, hchp, hRp, hcp, hgp⟩ := Ret.apply hret hrmid
+  have hch_tot : evmChain post = evmChain st := hchp.trans hch_mid
+  refine fun _ => ⟨hIp, ?_, (hRp.trans_eq hR_mid).trans hgas, hch_tot.trans hchain, ?_, ?_, ?_⟩
+  · rw [hch_tot]; exact hlen
+  · intro ec hec
+    have hh := hcp ec (hchp ▸ hec)
+    have hh' : memW post (ec.1 + 24) = memW st (ec.1 + 24) ∧
+        memW post (ec.1 + 32) = memW st (ec.1 + 32) ∧
+        memW post (ec.1 + 40) = memW st (ec.1 + 40) ∧
+        memW post (ec.2 + 56) = memW st (ec.2 + 56) := by
+      simpa only [hmw_mid] using hh
+    have hmem0 := hcells ec (hch_tot ▸ hec)
+    exact ⟨hh'.1.trans hmem0.1, hh'.2.1.trans hmem0.2.1,
+      hh'.2.2.1.trans hmem0.2.2.1, hh'.2.2.2.trans hmem0.2.2.2⟩
+  · exact (show globN post "ev" = globN mid "ev" by simp [globN, hgp]).trans (hev_mid.trans hev)
+  · exact (show globN post "frame_mem_ptr" = globN mid "frame_mem_ptr" by simp [globN, hgp]).trans
+      (hfmp.trans hmark)
+
+section MemcpyLenBound
+
+open Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.Asm
+
+private theorem ordinaryDomain_interval' (a : BitVec 64) (h : ordinaryDomain a) :
+    sourceBase ≤ a.toNat ∧ a.toNat + 8 ≤ heapEnd := by
+  unfold ordinaryDomain at h
+  rw [StackRemove.mem_addresses] at h
+  obtain ⟨i, hi, rfl⟩ := h
+  simp only [StackRemove.bytesInWord, BitVec.toNat_add, BitVec.toNat_mul, BitVec.toNat_ofNat]
+  norm_num [sourceBase, heapEnd, stackStart, ramEnd, ramStart, ramSize, stackSize, globalsWords] at hi ⊢
+  omega
+
+private theorem byteAlign_toNat' (a : BitVec 64) :
+    (panByteAlignHOL a).toNat = a.toNat / 8 * 8 := by
+  have ha := a.isLt
+  change (a.toNat / 8 * 8) % 2 ^ 64 = a.toNat / 8 * 8
+  omega
+
+private theorem ordinaryDomain_byte_interval' (a : BitVec 64) (h : ordinaryDomain (panByteAlignHOL a)) :
+    sourceBase ≤ a.toNat ∧ a.toNat < heapEnd := by
+  have hi := ordinaryDomain_interval' _ h
+  rw [byteAlign_toNat'] at hi
+  norm_num [sourceBase] at hi ⊢
+  omega
+
+private def WordExp' (e : ExpHOL 64) : Prop :=
+  ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+    @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e = some v →
+    ∃ w : BitVec 64, v = .val (.word w)
+
+private theorem WordExp'.load (a : ExpHOL 64) : WordExp' (.load .one a) := by
+  classical
+  intro F s v h
+  simp only [evalHOLExact, isWfShapeExactHOL, ↓reduceIte] at h
+  split at h
+  · rename_i address _
+    simp only [memLoadHOLExact] at h
+    split at h
+    · cases hm : s.memory address with
+      | word w => exact ⟨w, by simpa [hm] using h.symm⟩
+    · cases h
+  · cases h
+
+private def DomTouch' (address : ExpHOL 64) (body : ProgHOL 64) : Prop :=
+  ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), GuestInv s →
+    (evaluateHOLFiniteState s body).1 = none →
+    ∃ a : BitVec 64,
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) address = some (.val (.word a)) ∧
+      sourceBase ≤ a.toNat ∧ a.toNat < heapEnd
+
+private theorem DomTouch'.storeByte (address value : ExpHOL 64) :
+    DomTouch' address (.storeByte address value) := by
+  intro F s hguest hflow
+  rw [evaluateHOLFiniteState_storeByte] at hflow
+  split at hflow
+  · rename_i addr haddr
+    split at hflow
+    · split at hflow
+      · rename_i memory hmem
+        refine ⟨addr, haddr, ordinaryDomain_byte_interval' addr ?_⟩
+        unfold panMemStoreByteWord8HOL at hmem
+        cases hm : s.memory (panByteAlignHOL addr) with
+        | word _ =>
+          simp only [hm] at hmem
+          split at hmem
+          · rename_i hd
+            rw [hguest.memaddrs] at hd
+            exact hd
+          · cases hmem
+      · simp at hflow
+    · simp at hflow
+  · simp at hflow
+
+private theorem DomTouch'.store (address value : ExpHOL 64) (hw : WordExp' value) :
+    DomTouch' address (.store address value) := by
+  intro F s hguest hflow
+  rw [evaluateHOLFiniteState_store] at hflow
+  split at hflow
+  · rename_i addr haddr
+    split at hflow
+    · rename_i v hv
+      obtain ⟨_, rfl⟩ := hw s v hv
+      simp only [flattenHOL, panMemStoresHOL, panMemStoreHOL] at hflow
+      by_cases hd : s.memaddrs addr
+      · rw [hguest.memaddrs] at hd
+        have hi := ordinaryDomain_interval' addr hd
+        exact ⟨addr, haddr, hi.1, by omega⟩
+      · simp [hd] at hflow
+    · simp at hflow
+  · simp at hflow
+
+private theorem DomTouch'.seq (address : ExpHOL 64) (first rest : ProgHOL 64)
+    (ht : DomTouch' address first) : DomTouch' address (.seq first rest) := by
+  intro F s hguest hflow
+  apply ht s hguest
+  rw [evaluateHOLFiniteState_seq_line780] at hflow
+  cases hfirst : evaluateHOLFiniteState s first with
+  | mk result _ =>
+    rw [hfirst] at hflow
+    cases result with
+    | none => rfl
+    | some _ => simp at hflow
+
+private def CntStep' (counter : MlS) (step : BitVec 64) (body : ProgHOL 64) : Prop :=
+  ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (w : BitVec 64),
+    s.locals.lookup counter = some (.val (.word w)) →
+    (evaluateHOLFiniteState s body).1 = none →
+    (evaluateHOLFiniteState s body).2.locals.lookup counter = some (.val (.word (w + step)))
+
+private theorem CntStep'.assign (counter : MlS) (step : BitVec 64) :
+    CntStep' counter step (.assign .local counter (.op .add [.var .local counter, .const step])) := by
+  intro F s w hlocal _
+  have run : evaluateHOLFiniteState s
+      (.assign .local counter (.op .add [.var .local counter, .const step])) =
+      (none, setVarHOLFinite counter (.val (.word (w + step))) s) := by
+    simp [evaluateHOLFiniteState_assign, evalHOLExact, evalListHOLExact,
+      hlocal, wordOpHOL, wordOp, valueIsWord, valueWord,
+      lookupKvarHOLExact, isValidValueHOLExact, setKvarHOLFinite,
+      shapeOfHOLExact, shapeEqHOL]
+  rw [run]
+  simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
+private theorem CntStep'.seq (counter : MlS) (step : BitVec 64) (first : ProgHOL 64)
+    {rest : ProgHOL 64} (havoid : avoidsLocal counter first = true)
+    (hrest : CntStep' counter step rest) :
+    CntStep' counter step (.seq first rest) := by
+  intro F s w hlocal hflow
+  rw [evaluateHOLFiniteState_seq_line780] at hflow ⊢
+  cases hrun : evaluateHOLFiniteState s first with
+  | mk r mid =>
+    have hkeep := evaluate_avoidsLocal_flowing counter first havoid s
+    rw [hrun] at hkeep hflow
+    cases r with
+    | none =>
+      exact hrest mid w ((hkeep (Or.inl rfl)).trans hlocal) hflow
+    | some _ => simp at hflow
+
+private def mcfNoBreak' : ProgHOL 64 → Bool
+  | .seq a b => mcfNoBreak' a && mcfNoBreak' b
+  | .assign .local _ _ | .store _ _ | .storeByte _ _ | .skip => true
+  | _ => false
+
+private theorem mcf_eval_noBreak' {F : Type} (p : ProgHOL 64) (hp : mcfNoBreak' p = true)
+    (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s p).1 ≠ some .break := by
+  cases shape : p with
+  | skip => simp [evaluateHOLFiniteState_skip]
+  | assign k _ _ =>
+    cases k with
+    | global => simp [shape, mcfNoBreak'] at hp
+    | «local» => rw [evaluateHOLFiniteState_assign]; split <;> [simp; (split <;> simp)]
+  | store _ _ =>
+    rw [evaluateHOLFiniteState_store]; split <;> [(split <;> [(split <;> simp); simp]); simp]
+  | storeByte _ _ =>
+    rw [evaluateHOLFiniteState_storeByte]; split <;> [(split <;> [(split <;> simp); simp]); simp]
+  | seq a b =>
+    have hab : mcfNoBreak' a = true ∧ mcfNoBreak' b = true := by
+      simpa [shape, mcfNoBreak', Bool.and_eq_true] using hp
+    rw [evaluateHOLFiniteState_seq_line780]
+    have ha := mcf_eval_noBreak' a hab.1 s
+    rcases hr : evaluateHOLFiniteState s a with ⟨r, m⟩
+    rw [hr] at ha
+    cases r with
+    | none => exact mcf_eval_noBreak' b hab.2 m
+    | some _ => exact ha
+  | _ => simp [shape, mcfNoBreak'] at hp
+
+private def McpLocInv {F : Type} (dst n : BitVec 64) (st : PanSemStateFiniteExact 64 F) : Prop :=
+  GuestInv st ∧
+  st.locals.lookup (ofString "dst") = some (.val (.word dst)) ∧
+  st.locals.lookup (ofString "n") = some (.val (.word n)) ∧
+  ∃ wi : BitVec 64,
+    st.locals.lookup (ofString "i") = some (.val (.word wi)) ∧
+    dst.toNat + wi.toNat ≤ heapEnd + 32
+
+private theorem mcp_while_bound {F : Type} (dst n step : BitVec 64)
+    (hstep : step.toNat ≤ 32)
+    (cond : ExpHOL 64) (body : ProgHOL 64)
+    (hnc : noTopContinue body = true)
+    (hnb : mcfNoBreak' body = true)
+    (htouch : DomTouch'
+      (.op .add [.var .local (ofString "dst"), .var .local (ofString "i")]) body)
+    (hinc : CntStep' (ofString "i") step body)
+    (hd_keep : avoidsLocal (ofString "dst") body = true)
+    (hn_keep : avoidsLocal (ofString "n") body = true)
+    (clk : Nat) (s u : PanSemStateFiniteExact 64 F)
+    (hclk : s.clock ≤ clk)
+    (hinv : McpLocInv dst n s)
+    (hrun : evaluateHOLFiniteState s (.while cond body) = (none, u)) :
+    McpLocInv dst n u ∧ ev u cond = some (.val (.word 0)) := by
+  induction clk generalizing s with
+  | zero =>
+    rw [evaluateHOLFiniteState_while_total] at hrun
+    split at hrun
+    · rename_i cw hcond_ev
+      split at hrun
+      · split at hrun
+        · simp at hrun
+        · omega
+      · rename_i hcw_z
+        injection hrun with _ hu; subst hu
+        rw [evalHOLFinite_eq_toExact] at hcond_ev
+        have hcw0 : cw = 0 := Classical.not_not.mp hcw_z
+        subst hcw0
+        exact ⟨hinv, hcond_ev⟩
+    · simp at hrun
+  | succ clk ih =>
+    rw [evaluateHOLFiniteState_while_total] at hrun
+    split at hrun
+    · rename_i cw hcond_ev
+      split at hrun
+      · split at hrun
+        · simp at hrun
+        · dsimp only at hrun
+          rw [fixClockHOLFinite_evaluateState] at hrun
+          let sd := decClockHOLFinite s
+          obtain ⟨hG, hd_loc, hn_loc, wi, hi_loc, hdw_le⟩ := hinv
+          have hG_sd : GuestInv sd := guestInv_with_locals_clock s s.locals _ hG
+          have hnc' := evaluate_noTopContinue body hnc sd
+          have hnb' := mcf_eval_noBreak' body hnb sd
+          have hrem := evaluateHOLFiniteState_clock_le sd body
+          rcases hbr : evaluateHOLFiniteState sd body with ⟨rb, mid⟩
+          rw [hbr] at hrun hnc' hnb' hrem
+          cases rb with
+          | none =>
+            have hnone_sd : (evaluateHOLFiniteState sd body).1 = none := by rw [hbr]
+            obtain ⟨addr, haddr, _, hhigh⟩ := htouch sd hG_sd hnone_sd
+            have hev_di : evalAt sd (.op .add [.var .local (ofString "dst"), .var .local (ofString "i")]) =
+                some (.val (.word (dst + wi))) := by
+              simp [evalAt, PanSemStateFiniteExact.toExact, evalHOLExact, evalListHOLExact,
+                sd, decClockHOLFinite, hd_loc, hi_loc, valueIsWord, valueWord, wordOpHOL, wordOp]
+            unfold evalAt at hev_di
+            rw [hev_di] at haddr
+            injection haddr with haddr'; injection haddr' with haddr''; injection haddr'' with haddr'''
+            subst haddr'''
+            have hhe : heapEnd = 33806089704 := by decide
+            have hwi_lt : dst.toNat + wi.toNat < heapEnd := by
+              have hadd_eq : (dst + wi).toNat = dst.toNat + wi.toNat := by
+                rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by omega)]
+              omega
+            have hi_mid := hinc sd wi hi_loc hnone_sd
+            rw [hbr] at hi_mid
+            have hd_mid := evaluate_avoidsLocal_flowing (ofString "dst") body hd_keep sd (Or.inl hnone_sd)
+            rw [hbr] at hd_mid
+            have hn_mid := evaluate_avoidsLocal_flowing (ofString "n") body hn_keep sd (Or.inl hnone_sd)
+            rw [hbr] at hn_mid
+            have hG_mid : GuestInv mid := by
+              have := guestInv_evaluate sd body hG_sd
+              rwa [hbr] at this
+            have hw_add : (wi + step).toNat = wi.toNat + step.toNat := by
+              rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by omega)]
+            exact ih mid (by change mid.clock ≤ s.clock - 1 at hrem; omega)
+              ⟨hG_mid, hd_mid.trans hd_loc, hn_mid.trans hn_loc, wi + step, hi_mid, by omega⟩ hrun
+          | some r =>
+            cases r with
+            | «continue» => exact absurd rfl hnc'
+            | «break» => exact absurd rfl hnb'
+            | _ => simp at hrun
+      · rename_i hcw_z
+        injection hrun with _ hu; subst hu
+        rw [evalHOLFinite_eq_toExact] at hcond_ev
+        have hcw0 : cw = 0 := Classical.not_not.mp hcw_z
+        subst hcw0
+        exact ⟨hinv, hcond_ev⟩
+    · simp at hrun
+
+private def mcfNoRet' : ProgHOL 64 → Bool
+  | .seq a b => mcfNoRet' a && mcfNoRet' b
+  | .ite _ a b => mcfNoRet' a && mcfNoRet' b
+  | .while _ a => mcfNoRet' a
+  | .assign .local _ _ | .store _ _ | .storeByte _ _ | .skip => true
+  | _ => false
+
+private theorem mcf_eval_noRet' {F : Type} (p : ProgHOL 64) (hp : mcfNoRet' p = true)
+    (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s p).1 ≠ some (.returned v) := by
+  cases shape : p with
+  | skip => rw [evaluateHOLFiniteState_skip]; simp
+  | assign k _ _ =>
+    cases k with
+    | global => simp [shape, mcfNoRet'] at hp
+    | «local» => rw [evaluateHOLFiniteState_assign]; split <;> [simp; (split <;> simp)]
+  | store _ _ =>
+    rw [evaluateHOLFiniteState_store]; split <;> [(split <;> [(split <;> simp); simp]); simp]
+  | storeByte _ _ =>
+    rw [evaluateHOLFiniteState_storeByte]; split <;> [(split <;> [(split <;> simp); simp]); simp]
+  | seq a b =>
+    have hab : mcfNoRet' a = true ∧ mcfNoRet' b = true := by
+      simpa [shape, mcfNoRet', Bool.and_eq_true] using hp
+    have rem := evaluateHOLFiniteState_clock_le s a
+    rw [evaluateHOLFiniteState_seq_line780]
+    have ha := mcf_eval_noRet' a hab.1 s v
+    rcases hr : evaluateHOLFiniteState s a with ⟨r, m⟩
+    rw [hr] at ha rem
+    have mclk : m.clock ≤ s.clock := rem
+    cases r with
+    | none => exact mcf_eval_noRet' b hab.2 m v
+    | some _ => exact ha
+  | ite _ a b =>
+    have hab : mcfNoRet' a = true ∧ mcfNoRet' b = true := by
+      simpa [shape, mcfNoRet', Bool.and_eq_true] using hp
+    rw [evaluateHOLFiniteState_ite]
+    split
+    · split
+      · exact mcf_eval_noRet' b hab.2 s v
+      · exact mcf_eval_noRet' a hab.1 s v
+    · simp
+  | «while» cond body =>
+    have hb : mcfNoRet' body = true := by simpa [shape, mcfNoRet'] using hp
+    rw [evaluateHOLFiniteState_while_total]
+    split
+    · split
+      · split
+        · simp
+        · have dec_lt : (decClockHOLFinite s).clock < s.clock := by
+            simp only [decClockHOLFinite]; omega
+          dsimp only
+          rw [fixClockHOLFinite_evaluateState]
+          have ih1 := mcf_eval_noRet' body hb (decClockHOLFinite s) v
+          have rem := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+          rcases hbr : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r1, mid⟩
+          rw [hbr] at ih1 rem
+          have smaller : mid.clock < s.clock := by
+            change mid.clock ≤ s.clock - 1 at rem; omega
+          cases r1 with
+          | none => exact mcf_eval_noRet' (.while cond body) (by simpa [mcfNoRet'] using hb) mid v
+          | some r1 =>
+            cases r1 with
+            | «continue» => exact mcf_eval_noRet' (.while cond body) (by simpa [mcfNoRet'] using hb) mid v
+            | returned _ => exact ih1
+            | _ => simp
+      · simp
+    · simp
+  | _ => simp [shape, mcfNoRet'] at hp
+termination_by (s.clock, sizeOf p)
+decreasing_by
+  all_goals
+    subst shape
+    simp_wf
+    first
+      | exact Prod.Lex.left _ _ dec_lt
+      | exact Prod.Lex.left _ _ smaller
+      | exact Prod.Lex.right _ (by omega)
+      | (rcases Nat.lt_or_eq_of_le mclk with h | h
+         · exact Prod.Lex.left _ _ h
+         · rw [h]; exact Prod.Lex.right _ (by omega))
+
+theorem memcpy_ret_len_bound {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (dst n : BitVec 64)
+    (hG0 : GuestInv s0)
+    (hd_le : dst.toNat ≤ heapEnd)
+    (hd_loc : s0.locals.lookup (ofString "dst") = some (.val (.word dst)))
+    (hn_loc : s0.locals.lookup (ofString "n") = some (.val (.word n)))
+    (v : ValueHOL 64)
+    (hret : (evaluateHOLFiniteState s0 (sourceFnBody Guest.Software.guestFn_memcpy)).1 =
+      some (.returned v)) :
+    dst.toNat + n.toNat ≤ heapEnd + 32 := by
+  have seq_ret_or_none : ∀ (s : PanSemStateFiniteExact 64 F) (p1 p2 : ProgHOL 64) (rv : ValueHOL 64),
+      (evaluateHOLFiniteState s (.seq p1 p2)).1 = some (.returned rv) →
+      (evaluateHOLFiniteState s p1).1 = some (.returned rv) ∨
+        ∃ m, evaluateHOLFiniteState s p1 = (none, m) ∧
+          (evaluateHOLFiniteState m p2).1 = some (.returned rv) := by
+    intro s p1 p2 rv h
+    rw [evaluateHOLFiniteState_seq_line780] at h
+    rcases hr : evaluateHOLFiniteState s p1 with ⟨r1, m⟩
+    rw [hr] at h
+    cases r1 with
+    | none => exact Or.inr ⟨m, rfl, h⟩
+    | some _ => exact Or.inl h
+  dsimp only [sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_memcpy,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, List.map, Option.map] at hret
+  rw [evaluateHOLFiniteState_dec_total] at hret
+  dsimp only at hret
+  have hev0 : @evalHOLExact 64 F _ s0.toExact (fun x => Classical.propDecidable (s0.memaddrs x)) (.const 0#64) =
+      some (.val (.word 0#64)) := rfl
+  rw [hev0] at hret; dsimp only at hret
+  have hsh0 : shapeEqHOL .one (shapeOfHOLExact (.val (.word 0#64))) = true := by
+    simp [shapeEqHOL, shapeOfHOLExact]
+  rw [if_pos hsh0] at hret; dsimp only at hret
+  set s1 := setVarHOLFinite (ofString "i") (.val (.word 0#64)) s0
+  have hs1_inv : McpLocInv dst n s1 := by
+    refine ⟨guestInv_setVar _ _ s0 hG0, ?_, ?_, 0#64, ?_, by simp [BitVec.toNat_ofNat]; omega⟩
+    · simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hd_loc, show ofString "i" ≠ ofString "dst" by decide]
+    · simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hn_loc, show ofString "i" ≠ ofString "n" by decide]
+    · simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  rcases seq_ret_or_none s1 _ _ _ hret with h_ite_ret | ⟨s2, hs2, hret2⟩
+  · exact False.elim (mcf_eval_noRet' _ rfl s1 v h_ite_ret)
+  have hs2_inv : McpLocInv dst n s2 := by
+    rw [evaluateHOLFiniteState_ite] at hs2
+    split at hs2
+    · split at hs2
+      · rw [evaluateHOLFiniteState_skip] at hs2; injection hs2 with _ e; rw [← e]; exact hs1_inv
+      · rw [evaluateHOLFiniteState_seq_line780] at hs2
+        rcases hm32 : evaluateHOLFiniteState s1 _ with ⟨r32, m32⟩
+        rw [hm32] at hs2
+        cases r32 with
+        | some _ => simp at hs2
+        | none =>
+          have hl32 := (mcp_while_bound dst n 32#64 (by decide) _ _ rfl rfl
+            (DomTouch'.seq _ _ _ (DomTouch'.store _ _ (WordExp'.load _)))
+            (CntStep'.seq _ _ _ rfl (CntStep'.seq _ _ _ rfl
+              (CntStep'.seq _ _ _ rfl (CntStep'.seq _ _ _ rfl
+                (CntStep'.assign _ _)))))
+            rfl rfl s1.clock s1 m32 le_rfl hs1_inv hm32).1
+          exact (mcp_while_bound dst n 8#64 (by decide) _ _ rfl rfl
+            (DomTouch'.seq _ _ _ (DomTouch'.store _ _ (WordExp'.load _)))
+            (CntStep'.seq _ _ _ rfl (CntStep'.assign _ _))
+            rfl rfl m32.clock m32 s2 le_rfl hl32 hs2).1
+    · simp at hs2
+  rcases seq_ret_or_none s2 _ _ _ hret2 with h_l8b_ret | ⟨s3, hs3, hret3⟩
+  · exact False.elim (mcf_eval_noRet' _ rfl s2 v h_l8b_ret)
+  have hs3_inv : McpLocInv dst n s3 :=
+    (mcp_while_bound dst n 8#64 (by decide) _ _ rfl rfl
+      (DomTouch'.seq _ _ _ (DomTouch'.storeByte _ _))
+      (CntStep'.seq _ _ _ rfl (CntStep'.seq _ _ _ rfl
+        (CntStep'.seq _ _ _ rfl (CntStep'.seq _ _ _ rfl
+          (CntStep'.seq _ _ _ rfl (CntStep'.seq _ _ _ rfl
+            (CntStep'.seq _ _ _ rfl (CntStep'.seq _ _ _ rfl
+              (CntStep'.assign _ _)))))))))
+      rfl rfl s2.clock s2 s3 le_rfl hs2_inv hs3).1
+  rcases seq_ret_or_none s3 _ _ _ hret3 with h_l1b_ret | ⟨s4, hs4, _⟩
+  · exact False.elim (mcf_eval_noRet' _ rfl s3 v h_l1b_ret)
+  obtain ⟨hs4_inv, hexit⟩ := mcp_while_bound dst n 1#64 (by decide) _ _ rfl rfl
+    (DomTouch'.seq _ _ _ (DomTouch'.storeByte _ _))
+    (CntStep'.seq _ _ _ rfl (CntStep'.assign _ _))
+    rfl rfl s3.clock s3 s4 le_rfl hs3_inv hs4
+  obtain ⟨_, _, hn4, wi4, hi4, hdw4⟩ := hs4_inv
+  obtain ⟨va, vb, hva, hvb, hcw⟩ := evalAt_cmp s4 .lower _ _ 0 hexit
+  simp [evalAt, PanSemStateFiniteExact.toExact, evalHOLExact, hn4, hi4] at hva hvb
+  subst hva hvb
+  have hn_le : n.toNat ≤ wi4.toNat := by
+    by_contra hlt
+    have hwlt : wi4 < n := by rw [BitVec.lt_def]; omega
+    simp [Flapjack.Compiler.Encoders.Asm.wordCmpHOL, hwlt] at hcw
+  omega
+
+end MemcpyLenBound
+
+section HeadRetdataStep
+
+open InitECandidate.Solver.Wave8GuestInv.R11Shards
+open InitECandidate.Solver.Wave8GuestInv.R11Shards.OpDispatchSpec
+open InitECandidate.Solver.Wave8GuestInv.R14Shards.OpHandlersA
+open InitECandidate.Solver.Wave8Contracts.M23
+
+private theorem m23_bre_of_m11 {F : Type} {s post : PanSemStateFiniteExact 64 F} {Rl : List Ivl}
+    (h : M11.ByteRegionEffect s post Rl) : Wave8Contracts.M23.ByteRegionEffect s post Rl :=
+  ⟨h.code, h.memaddrs, h.shMemaddrs, h.baseAddr, h.be, h.globals,
+   h.out_dom, h.cell_frame, h.byte_frame⟩
+
+private theorem m23_bre_updW {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a w : BitVec 64) (Rl : List Ivl)
+    (hdom : s.memaddrs a)
+    (ha_hi : a.toNat + 8 ≤ 2 ^ 64)
+    (ha_al : a.toNat % 8 = 0)
+    (hin : ∃ i ∈ Rl, i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2) :
+    Wave8Contracts.M23.ByteRegionEffect s { s with memory := Wave8M19.Htab.updW s.memory a w } Rl := by
+  obtain ⟨i, hi, hi1, hi2⟩ := hin
+  refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, ?_, ?_, ?_⟩
+  · intro x hnx
+    dsimp only
+    rw [Wave8M19.Htab.updW_ne s.memory a w x (by rintro rfl; exact hnx hdom)]
+  · intro x hx
+    dsimp only
+    rw [Wave8M19.Htab.updW_ne s.memory a w x (by rintro rfl; exact hx i hi ⟨by omega, by omega⟩)]
+  · intro b hb hno
+    unfold memB; dsimp only
+    have hal_b : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat = b / 8 * 8 := by
+      rw [panByteAlign_toNat64, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+    rw [Wave8M19.Htab.updW_ne s.memory a w (panByteAlignHOL (BitVec.ofNat 64 b))]
+    intro heq
+    have := congrArg BitVec.toNat heq
+    rw [hal_b] at this
+    exact hno i hi ⟨by omega, by omega⟩
+
+theorem head_frameObject_disj_all {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {o : Ivl}
+    (hInv : EvmInvAt s S)
+    (hAT_Nd : ∀ x ∈ ((evmChain s).map (frameObjects s)).flatten, ∀ j ∈ nodeExtents s Nd, Disj x j)
+    (ho : o ∈ frameObjects s (globN s "ev", globN s "cur_cont")) :
+    ∀ i ∈ Wave8Contracts.M23.worldTypedIvls s S Nd, i.2 = 0 ∨ Disj o i := by
+  obtain ⟨_, _, _, _, _, _, _, _, hFO_disj, _⟩ := hInv
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := head_mem_evmChain s
+  intro i hi
+  unfold Wave8Contracts.M23.worldTypedIvls at hi
+  simp only [List.mem_append] at hi
+  rcases hi with ((((h1 | h2) | h3) | h4) | h5) | h6
+  · obtain ⟨t, ht, hfp⟩ := List.mem_flatMap.1 h1
+    exact Or.inr ((hFO_disj _ hhead o ho).1 t ht i hfp)
+  · obtain ⟨r, hr, rfl⟩ := List.mem_map.1 h2
+    exact Or.inr ((hFO_disj _ hhead o ho).2 _ (typedRec_in_fixedObjects s hr))
+  · simp only [List.mem_singleton] at h3; subst h3
+    have hfix_j : (if globN s "journal_cap" = 0 then 0 else globN s "journal", 32 * globN s "journal_cap") ∈ fixedObjects s := by
+      unfold fixedObjects
+      apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_right; simp
+    exact Or.inr ((hFO_disj _ hhead o ho).2 _ hfix_j)
+  · exact Or.inr ((hFO_disj _ hhead o ho).2 _ (blockOut_in_fixedObjects h4))
+  · exact Or.inr ((hFO_disj _ hhead o ho).2 _ (bal_in_fixedObjects h5))
+  · have hfl : o ∈ ((evmChain s).map (frameObjects s)).flatten :=
+      List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨_, hhead, rfl⟩, ho⟩
+    exact Or.inr (hAT_Nd o hfl i h6)
+
+private theorem memW_eq_of_bre_disj {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hma_s : s.memaddrs = ordinaryDomain)
+    {Rl : List Ivl} (heff : Wave8Contracts.M23.ByteRegionEffect s post Rl)
+    {base sz k : Nat} (hbnd : base + sz ≤ 2 ^ 64) (_hb8 : base % 8 = 0) (_hk8 : k % 8 = 0)
+    (hk : k + 8 ≤ sz)
+    (hdj : ∀ x ∈ Rl, Disj x (base, sz)) :
+    memW post (base + k) = memW s (base + k) := by
+  have ha : base + k < 2 ^ 64 := by omega
+  have hbit : (BitVec.ofNat 64 (base + k)).toNat = base + k := Nat.mod_eq_of_lt ha
+  unfold memW
+  by_cases hdom : ordinaryDomain (BitVec.ofNat 64 (base + k))
+  · rcases hp_m : post.memory (BitVec.ofNat 64 (base + k)) with ⟨wp⟩
+    rcases hs_m : s.memory (BitVec.ofNat 64 (base + k)) with ⟨ws⟩
+    dsimp only
+    have hb_eq : ∀ idx < 8, memB post (base + k + idx) = memB s (base + k + idx) := by
+      intro idx hidx
+      apply heff.byte_frame (base + k + idx) (by omega)
+      intro x hx hbx
+      obtain ⟨_, _⟩ := hbx
+      rcases hdj x hx with h0 | h0 | h | h
+      · omega
+      · dsimp only at h0; omega
+      · dsimp only at h; omega
+      · dsimp only at h; omega
+    have hbyte_val : ∀ idx < 8,
+        (panGetByteHOL (BitVec.ofNat 64 (base + k + idx)) wp s.be).toNat =
+        (panGetByteHOL (BitVec.ofNat 64 (base + k + idx)) ws s.be).toNat := by
+      intro idx hidx
+      have hal_eq : panByteAlignHOL (BitVec.ofNat 64 (base + k + idx)) = BitVec.ofNat 64 (base + k) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [panByteAlign_toNat64, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
+            Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt ha]
+        omega
+      have hbk := hb_eq idx hidx
+      unfold memB at hbk
+      rw [hal_eq, hp_m, hs_m, heff.be] at hbk
+      exact hbk
+    have hshift : ∀ (w : BitVec 64) (idx : Nat), idx < 8 →
+        w.toNat / 256 ^ idx % 256 =
+        (panGetByteHOL (BitVec.ofNat 64 (base + k + (if s.be then 7 - idx else idx))) w s.be).toNat := by
+      intro w idx hidx
+      unfold panGetByteHOL
+      change w.toNat / 256 ^ idx % 256 =
+        (UInt8.ofNat (w.toNat / 256 ^ (if s.be then 8 - 1 - (BitVec.ofNat 64 (base + k + (if s.be then 7 - idx else idx))).toNat % 8
+          else (BitVec.ofNat 64 (base + k + (if s.be then 7 - idx else idx))).toNat % 8) % 256)).toNat
+      have hexp : (if s.be then 8 - 1 - (BitVec.ofNat 64 (base + k + (if s.be then 7 - idx else idx))).toNat % 8
+          else (BitVec.ofNat 64 (base + k + (if s.be then 7 - idx else idx))).toNat % 8) = idx := by
+        have hmod_lt : (BitVec.ofNat 64 (base + k + (if s.be then 7 - idx else idx))).toNat =
+            base + k + (if s.be then 7 - idx else idx) :=
+          Nat.mod_eq_of_lt (by cases s.be <;> simp <;> omega)
+        rw [hmod_lt]; cases s.be <;> simp <;> omega
+      rw [hexp, UInt8.toNat_ofNat']
+      have h256 : (2 ^ 8 : Nat) = 256 := by decide
+      rw [h256, Nat.mod_mod]
+    have hpow_eq : ∀ idx : Nat, idx < 8 → wp.toNat / 256 ^ idx % 256 = ws.toNat / 256 ^ idx % 256 := by
+      intro idx hidx
+      rw [hshift wp idx hidx, hshift ws idx hidx]
+      exact hbyte_val (if s.be then 7 - idx else idx) (by cases s.be <;> simp <;> omega)
+    have hdecomp : ∀ n : Nat, n < 2 ^ 64 →
+        n = (n / 256 ^ 0 % 256) +
+            (n / 256 ^ 1 % 256) * 256 ^ 1 +
+            (n / 256 ^ 2 % 256) * 256 ^ 2 +
+            (n / 256 ^ 3 % 256) * 256 ^ 3 +
+            (n / 256 ^ 4 % 256) * 256 ^ 4 +
+            (n / 256 ^ 5 % 256) * 256 ^ 5 +
+            (n / 256 ^ 6 % 256) * 256 ^ 6 +
+            (n / 256 ^ 7 % 256) * 256 ^ 7 := by intro n _; omega
+    rw [hdecomp wp.toNat wp.isLt, hdecomp ws.toNat ws.isLt]
+    rw [hpow_eq 0 (by omega), hpow_eq 1 (by omega), hpow_eq 2 (by omega), hpow_eq 3 (by omega),
+        hpow_eq 4 (by omega), hpow_eq 5 (by omega), hpow_eq 6 (by omega), hpow_eq 7 (by omega)]
+  · rw [heff.out_dom _ (by rwa [hma_s])]
+
+private theorem wordAt_congr_of_dom_r15 {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hma : post.memaddrs = s.memaddrs) {a : Nat} :
+    WordAt post a ↔ WordAt s a := by
+  unfold WordAt; rw [hma]
+  constructor
+  · rintro ⟨_, hdom, _⟩
+    cases s.memory (BitVec.ofNat 64 a) with | word w => exact ⟨w, hdom, rfl⟩
+  · rintro ⟨_, hdom, _⟩
+    cases post.memory (BitVec.ofNat 64 a) with | word w => exact ⟨w, hdom, rfl⟩
+
+private theorem wordsOK_congr_of_dom_r15 {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hma : post.memaddrs = s.memaddrs) {i : Ivl} :
+    WordsOK post i ↔ WordsOK s i := by
+  unfold WordsOK
+  exact and_congr Iff.rfl (and_congr Iff.rfl (forall_congr' fun _ => imp_congr_right fun _ =>
+    wordAt_congr_of_dom_r15 hma))
+
+private theorem worldTableRefs_eq_of_cell_r15 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaOK s) (hWT : WorldTypedWith s S Nd)
+    (hcell : Wave8Contracts.M23.SameTypedCells s post S Nd)
+    (hglob_eq : ∀ nm, ofString nm ≠ ofString "heap_ptr" → globN post nm = globN s nm) :
+    worldTableRefs post S = worldTableRefs s S := by
+  have hws : globN post "ws" = globN s "ws" := hglob_eq "ws" (by decide)
+  have hbs : globN post "bs" = globN s "bs" := hglob_eq "bs" (by decide)
+  have hts : globN post "ts" = globN s "ts" := hglob_eq "ts" (by decide)
+  have hba : globN post "bal_accounts" = globN s "bal_accounts" := hglob_eq "bal_accounts" (by decide)
+  have hjn : globN post "journal_n" = globN s "journal_n" := hglob_eq "journal_n" (by decide)
+  have hjr : globN post "journal" = globN s "journal" := hglob_eq "journal" (by decide)
+  have hgtr : globalTableRoots.map (globN post) = globalTableRoots.map (globN s) := by
+    apply List.map_congr_left
+    intro nm hnm
+    exact hglob_eq nm (by revert nm hnm; decide)
+  have hws_sl : (if globN s "ws" = 0 then [] else wsTableSlots.map fun k => memW post (globN s "ws" + k)) =
+      (if globN s "ws" = 0 then [] else wsTableSlots.map fun k => memW s (globN s "ws" + k)) := by
+    split
+    · rfl
+    · rename_i hnz; apply List.map_congr_left; intro k hk
+      have hk_le : k + 8 ≤ 40 := by
+        simp only [wsTableSlots, List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl | rfl | rfl <;> omega
+      exact Wave8Contracts.M23.memW_typedRec_eq hAs hWT.2.2.1 hcell (sz := 40) (by decide) hnz hk_le
+  have hbs_sl : (if globN s "bs" = 0 then [] else bsTableSlots.map fun k => memW post (globN s "bs" + k)) =
+      (if globN s "bs" = 0 then [] else bsTableSlots.map fun k => memW s (globN s "bs" + k)) := by
+    split
+    · rfl
+    · rename_i hnz; apply List.map_congr_left; intro k hk
+      have hk_le : k + 8 ≤ 80 := by
+        simp only [bsTableSlots, List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega
+      exact Wave8Contracts.M23.memW_typedRec_eq hAs hWT.2.2.1 hcell (sz := 80) (by decide) hnz hk_le
+  have hts_sl : (if globN s "ts" = 0 then [] else tsTableSlots.map fun k => memW post (globN s "ts" + k)) =
+      (if globN s "ts" = 0 then [] else tsTableSlots.map fun k => memW s (globN s "ts" + k)) := by
+    split
+    · rfl
+    · rename_i hnz; apply List.map_congr_left; intro k hk
+      have hk_le : k + 8 ≤ 72 := by
+        simp only [tsTableSlots, List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega
+      exact Wave8Contracts.M23.memW_typedRec_eq hAs hWT.2.2.1 hcell (sz := 72) (by decide) hnz hk_le
+  have hnest_bs : (if globN post "bs" ≠ 0 ∧ memW post (globN post "bs" + 32) ∈ S then htabValues post (memW post (globN post "bs" + 32)) else []) =
+      (if globN s "bs" ≠ 0 ∧ memW s (globN s "bs" + 32) ∈ S then htabValues s (memW s (globN s "bs" + 32)) else []) := by
+    rw [hbs]
+    by_cases hnz : globN s "bs" = 0
+    · simp [hnz]
+    · rw [Wave8Contracts.M23.memW_typedRec_eq hAs hWT.2.2.1 hcell (sz := 80) (by decide) hnz (by omega)]
+      by_cases hmS : memW s (globN s "bs" + 32) ∈ S
+      · simp [hnz, hmS, Wave8Contracts.M23.htabValues_eq hcell hmS (hWT.1.2.1 _ hmS).1]
+      · simp [hnz, hmS]
+  have hnest_ts : (if globN post "ts" ≠ 0 ∧ memW post (globN post "ts" + 32) ∈ S then htabValues post (memW post (globN post "ts" + 32)) else []) =
+      (if globN s "ts" ≠ 0 ∧ memW s (globN s "ts" + 32) ∈ S then htabValues s (memW s (globN s "ts" + 32)) else []) := by
+    rw [hts]
+    by_cases hnz : globN s "ts" = 0
+    · simp [hnz]
+    · rw [Wave8Contracts.M23.memW_typedRec_eq hAs hWT.2.2.1 hcell (sz := 72) (by decide) hnz (by omega)]
+      by_cases hmS : memW s (globN s "ts" + 32) ∈ S
+      · simp [hnz, hmS, Wave8Contracts.M23.htabValues_eq hcell hmS (hWT.1.2.1 _ hmS).1]
+      · simp [hnz, hmS]
+  have hbal_fl : (balRecords post).flatMap (fun ad => [memW post ad, memW post (ad + 8)]) =
+      (balRecords s).flatMap (fun ad => [memW s ad, memW s (ad + 8)]) := by
+    rw [Wave8Contracts.M23.balRecords_eq hWT.1 hcell hba]
+    apply List.flatMap_congr; intro ad had
+    have had_mem := balRecord_ivl_mem had
+    rcases fixedObject_le_2pow64 hAs hWT.2.2.1 (bal_in_fixedObjects had_mem) with h0 | had_bnd
+    · dsimp only at h0; omega
+    · dsimp only at had_bnd
+      have hwti_ad := Wave8Contracts.M23.mem_worldTypedIvls_bal (S := S) (Nd := Nd) had_mem
+      rw [Wave8Contracts.M23.memW_eq_of_cellHits hcell (by omega) hwti_ad ⟨by dsimp only; omega, by dsimp only; omega⟩,
+          Wave8Contracts.M23.memW_eq_of_cellHits hcell (by omega) hwti_ad ⟨by dsimp only; omega, by dsimp only; omega⟩]
+  have hjrn_mp : (List.range (globN post "journal_n")).map (fun k => memW post (globN post "journal" + 32 * k)) =
+      (List.range (globN s "journal_n")).map (fun k => memW s (globN s "journal" + 32 * k)) := by
+    rw [hjn, hjr]
+    apply List.map_congr_left; intro k hk
+    rw [List.mem_range] at hk
+    have hjc_ne : globN s "journal_cap" ≠ 0 := by have := hWT.2.1.1; omega
+    rcases hWT.2.1.2.2.1 with h0 | ⟨hal, _⟩
+    · exact absurd h0 hjc_ne
+    · have hbnd : globN s "journal" + 32 * globN s "journal_cap" ≤ 2 ^ 64 := by
+        rcases hal with ⟨_, hhi⟩ | ⟨_, hhi⟩
+        · have hlim := hAs.2.1
+          have hhl : heapLimit ≤ 2 ^ 64 := by rw [R11Shards.heapLimit_val]; decide
+          dsimp only at hhi; omega
+        · have hse : scratchEnd ≤ 2 ^ 64 := by rw [R11Shards.scratchEnd_val]; decide
+          dsimp only at hhi; omega
+      have hlt : 32 * k + 8 ≤ 32 * globN s "journal_cap" := by have := hWT.2.1.1; omega
+      exact Wave8Contracts.M23.memW_eq_of_cellHits hcell (by omega)
+        (Wave8Contracts.M23.mem_worldTypedIvls_journal (S := S) (Nd := Nd) hjc_ne)
+        ⟨by dsimp only; omega, by dsimp only; omega⟩
+  unfold worldTableRefs recordSlots
+  dsimp only
+  rw [hnest_bs, hnest_ts, hws, hbs, hts, hws_sl, hbs_sl, hts_sl, hgtr, hbal_fl, hjrn_mp]
+
+theorem evmInvAt_of_head_step {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hInv : EvmInvAt s S)
+    (hApost : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg_kept : ∀ k : MlS, k ≠ ofString "heap_ptr" → post.globals.lookup k = s.globals.lookup k)
+    (heff : Wave8Contracts.M23.ByteRegionEffect s { post with globals := s.globals }
+      [(globN s "ev", 280),
+       (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232)),
+       (memW s (globN s "ev" + 24), memW s (globN s "ev" + 40)),
+       frameRet s (globN s "ev", globN s "cur_cont"),
+       (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")])
+    (he_other : ∀ off, off + 8 ≤ 280 → off % 8 = 0 →
+      off ∉ ([16, 64, 72, 96, 144, 152, 184, 192, 216] : List Nat) →
+      memW post (globN s "ev" + off) = memW s (globN s "ev" + off))
+    (hsp_le : memW post (globN s "ev" + 16) ≤ memW s (globN s "ev" + 232))
+    (hret_post :
+      (memW post (globN s "ev" + 216) = 0 ∧ memW post (globN s "ev" + 144) = globN post "evm_empty") ∨
+      ((frameRet post (globN s "ev", globN s "cur_cont") =
+          frameRet s (globN s "ev", globN s "cur_cont") ∨
+        Inside (frameRet post (globN s "ev", globN s "cur_cont"))
+          (globN s "heap_ptr") (globN post "heap_ptr")) ∧
+       Inside (frameRet post (globN s "ev", globN s "cur_cont")) sourceBase (globN post "heap_ptr") ∧
+       WordsOK post (frameRet post (globN s "ev", globN s "cur_cont"))))
+    (hgas_post :
+      ((evmChain s).map fun ec => memW post (ec.1 + 64) + memW post (ec.1 + 192)).sum + 1 < 2 ^ 64) :
+    EvmInvAt post S ∧
+    evmChain post = evmChain s ∧
+    (∀ ec ∈ (evmChain s).tail,
+      memW post (ec.1 + 64) = memW s (ec.1 + 64) ∧
+      memW post (ec.1 + 192) = memW s (ec.1 + 192)) ∧
+    (∀ cm cmm, EvmEkFk.ReleaseReadyAt s S cm cmm → EvmEkFk.ReleaseReadyAt post S cm cmm) := by
+  have hInv0 := hInv
+  obtain ⟨hW, hch_ne, hch_len, hch_last, hFW_all, hFR_all, hRW, hFO_pw, hFO_disj, hAT, hMarks, hRoles, _⟩ := hInv
+  obtain ⟨Nd_at, hTr_at, hAT_at⟩ := hAT
+  have hWT : WorldTypedWith s S Nd_at := ⟨hW.1, hW.2.1, hW.2.2.1, hTr_at⟩
+  set e0 := globN s "ev"
+  set c0 := globN s "cur_cont"
+  set stkIvl : Ivl := (memW s (e0 + 8), 32 * memW s (e0 + 232))
+  set memIvl : Ivl := (memW s (e0 + 24), memW s (e0 + 40))
+  set retIvl : Ivl := frameRet s (e0, c0)
+  set freshIvl : Ivl := (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
+  set Rl : List Ivl := [(e0, 280), stkIvl, memIvl, retIvl, freshIvl]
+  have hch_cons_ex : ∃ tail, evmChain s = (e0, c0) :: tail := ⟨_, rfl⟩
+  obtain ⟨chTail, hch_eq⟩ := hch_cons_ex
+  have hhead_mem : (e0, c0) ∈ evmChain s := by rw [hch_eq]; exact List.mem_cons_self
+  have hhead_FW := hFW_all _ hhead_mem
+  have hdom_eq : post.memaddrs = s.memaddrs := hApost.1.memaddrs.trans hAs.1.memaddrs.symm
+  have hglob_nh : ∀ nm : String, ofString nm ≠ ofString "heap_ptr" → globN post nm = globN s nm := by
+    intro nm hne
+    unfold globN
+    rw [hg_kept (ofString nm) hne]
+  have hsc : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by
+    rw [hglob_nh "scratch_ptr" (by decide)]
+  have hcg : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
+    intro g hg
+    exact hglob_nh g (by revert g hg; decide)
+  have hfresh_disj_wti : ∀ i ∈ Wave8Contracts.M23.worldTypedIvls s S Nd_at, i.2 = 0 ∨ Disj freshIvl i := by
+    intro i hi
+    rcases Wave8Contracts.M23.worldTypedIvls_allocated hWT hi with hi0 | hal_i
+    · exact Or.inl hi0
+    · rcases hal_i with ⟨_, hhi⟩ | ⟨hlo, _⟩
+      · exact Or.inr (Or.inr (Or.inr (Or.inr (by dsimp only [freshIvl]; omega))))
+      · have hp_lim := hApost.2.2.1
+        have hs_fr := hAs.2.2.2.1
+        have hs_gap := hAs.2.2.2.2.1
+        rw [R11Shards.heapLimit_val] at hp_lim
+        rw [R11Shards.scratchStart_val] at hs_fr
+        have hlo' : globN s "scratch_ptr" ≤ i.1 := hlo
+        exact Or.inr (Or.inr (Or.inr (Or.inl (by dsimp only [freshIvl]; omega))))
+  have hwrite_disj_wti : ∀ x ∈ Rl, ∀ i ∈ Wave8Contracts.M23.worldTypedIvls s S Nd_at, i.2 = 0 ∨ Disj x i := by
+    intro x hx
+    simp only [Rl, List.mem_cons, List.not_mem_nil, or_false] at hx
+    rcases hx with rfl | rfl | rfl | rfl | rfl
+    · exact head_frameObject_disj_all hInv0 hAT_at (by unfold frameObjects; simp [e0, c0])
+    · exact head_frameObject_disj_all hInv0 hAT_at (by unfold frameObjects; simp [e0, c0, stkIvl])
+    · exact head_frameObject_disj_all hInv0 hAT_at (by unfold frameObjects; simp [e0, c0, memIvl])
+    · exact head_frameObject_disj_all hInv0 hAT_at (by unfold frameObjects; simp [e0, c0, retIvl])
+    · exact hfresh_disj_wti
+  have hcellG : Wave8Contracts.M23.SameTypedCells s { post with globals := s.globals } S Nd_at :=
+    Wave8Contracts.M23.ByteRegionEffect.sameTypedCells (Rl := []) (extra := Rl)
+      hAs.1.memaddrs hWT (fun _ h => by simp at h) hwrite_disj_wti (by simpa using heff)
+  have hcell : Wave8Contracts.M23.SameTypedCells s post S Nd_at := hcellG
+  have hfeq : fixedObjects post = fixedObjects s := by
+    unfold fixedObjects
+    rw [Wave8Contracts.M23.blockOutObjects_eq hAs.2 hWT.2.2.1 hcell (hglob_nh "bo" (by decide)),
+        Wave8Contracts.M23.balObjects_eq hAs.2 hWT.1 hWT.2.2.1 hcell (hglob_nh "bal_accounts" (by decide)),
+        hglob_nh "journal" (by decide),
+        hglob_nh "journal_cap" (by decide)]
+    congr 3
+    apply List.map_congr_left
+    intro gn hgn
+    have hgn_eq := hglob_nh gn.1 (by revert gn hgn; decide)
+    rw [hgn_eq]
+  have hFT_post := Wave8Contracts.M23.fixedTyped_of_eq hApost hWT.2.2.1 hhp hsc hfeq
+  obtain ⟨hWT_post, _⟩ := Wave8Contracts.M23.worldTypedWith_congr_w1 hAs hApost hhp hsc hcg hcell hWT
+    ⟨hFT_post, fun o ho => Or.inl (by rw [← hfeq]; exact ho)⟩
+  have hW_post : WorldTyped post S :=
+    ⟨hWT_post.1, hWT_post.2.1, hWT_post.2.2.1, Nd_at, hWT_post.2.2.2⟩
+  have hfresh_disj_fo : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj freshIvl o := by
+    intro ec hec o ho
+    by_cases h0 : freshIvl.2 = 0
+    · exact Or.inl h0
+    · have hFW := hFW_all ec hec
+      have hhl_ss : heapLimit ≤ scratchStart := by
+        rw [R11Shards.heapLimit_val, R11Shards.scratchStart_val]
+      have hfm_ge : scratchStart ≤ globN s "frame_mem_ptr" := hAs.2.2.2.1
+      have hsp_ge : scratchStart ≤ globN s "scratch_ptr" := le_trans hfm_ge hAs.2.2.2.2.1
+      have hhp_lim : globN post "heap_ptr" ≤ heapLimit := hApost.2.2.1
+      have hfr_end : freshIvl.1 + freshIvl.2 = globN post "heap_ptr" := by
+        change globN s "heap_ptr" + (globN post "heap_ptr" - globN s "heap_ptr") = globN post "heap_ptr"
+        omega
+      obtain ⟨hscr, hmem_in, _, _, _, _, _, _, _, _, _, _, hlogs_in, _, hret_in, hll_ok, _⟩ := hFW
+      unfold frameObjects at ho
+      rcases List.mem_append.1 ho with ho7 | holog
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at ho7
+        rcases ho7 with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+        · have h : globN s "scratch_ptr" ≤ ec.1 := (hscr (ec.1, 280) (by simp)).1.1
+          exact Or.inr (Or.inr (Or.inl (by change freshIvl.1 + freshIvl.2 ≤ ec.1; omega)))
+        · have h : globN s "scratch_ptr" ≤ ec.2 := (hscr (ec.2, 104) (by simp)).1.1
+          exact Or.inr (Or.inr (Or.inl (by change freshIvl.1 + freshIvl.2 ≤ ec.2; omega)))
+        · have h : globN s "scratch_ptr" ≤ memW s (ec.1 + 8) :=
+            (hscr (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)) (by simp)).1.1
+          exact Or.inr (Or.inr (Or.inl (by change freshIvl.1 + freshIvl.2 ≤ memW s (ec.1 + 8); omega)))
+        · have h : scratchStart ≤ memW s (ec.1 + 24) := hmem_in.1
+          exact Or.inr (Or.inr (Or.inl (by change freshIvl.1 + freshIvl.2 ≤ memW s (ec.1 + 24); omega)))
+        · have h : globN s "scratch_ptr" ≤ memW s (ec.1 + 88) := (hscr (memW s (ec.1 + 88), 24) (by simp)).1.1
+          exact Or.inr (Or.inr (Or.inl (by change freshIvl.1 + freshIvl.2 ≤ memW s (ec.1 + 88); omega)))
+        · rcases hlogs_in with h | h
+          · exact Or.inr (Or.inr (Or.inr (by have := h.2; change (frameLogs s ec).1 + (frameLogs s ec).2 ≤ globN s "heap_ptr"; omega)))
+          · exact Or.inr (Or.inr (Or.inl (by have h' : globN s "scratch_ptr" ≤ (frameLogs s ec).1 := h.1; change freshIvl.1 + freshIvl.2 ≤ (frameLogs s ec).1; omega)))
+        · rcases hret_in with ⟨hz, _⟩ | ⟨h, _⟩
+          · unfold frameRet; simp [hz]; exact Or.inr (Or.inl rfl)
+          · exact Or.inr (Or.inr (Or.inr (by have := h.2; change (frameRet s ec).1 + (frameRet s ec).2 ≤ globN s "heap_ptr"; omega)))
+      · unfold frameLogObjects at holog; dsimp only at holog
+        obtain ⟨idx, hidx_mem, ho_own⟩ := List.mem_flatMap.1 holog
+        rw [List.mem_range] at hidx_mem
+        rcases hll_ok with hz | ⟨_, _, _, _, hent⟩
+        · exfalso
+          have hlo : globN s "scratch_ptr" ≤ memW s (ec.1 + 88) := (hscr (memW s (ec.1 + 88), 24) (by simp)).1.1
+          have hss : 0 < scratchStart := by rw [R11Shards.scratchStart_val]; decide
+          omega
+        · have hle := (hent idx hidx_mem).2
+          have ho_rec := (List.mem_filter.1 ho_own).1
+          simp only [logRecordIvls, List.mem_cons, List.not_mem_nil, or_false] at ho_rec
+          rcases ho_rec with rfl | rfl | rfl | rfl
+          · exact Or.inr (Or.inr (Or.inr (by have := hle.2.1.2; dsimp only [freshIvl]; omega)))
+          · exact Or.inr (Or.inr (Or.inr (by have := hle.2.2.2.2.1.2; dsimp only [freshIvl]; omega)))
+          · exact Or.inr (Or.inr (Or.inr (by have := hle.2.2.2.2.2.1.2; dsimp only [freshIvl]; omega)))
+          · exact Or.inr (Or.inr (Or.inr (by have := hle.2.2.2.2.2.2.2; dsimp only [freshIvl]; omega)))
+  have hpw_head_tail :
+      (frameObjects s (e0, c0)).Pairwise Disj ∧
+      (∀ o1 ∈ frameObjects s (e0, c0),
+        ∀ ec ∈ chTail, ∀ o2 ∈ frameObjects s ec, Disj o1 o2) := by
+    have hpw := hFO_pw
+    rw [hch_eq, List.map_cons, List.flatten_cons, List.pairwise_append] at hpw
+    refine ⟨hpw.1, fun o1 ho1 ec hec o2 ho2 => hpw.2.2 o1 ho1 o2 ?_⟩
+    exact List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨ec, hec, rfl⟩, ho2⟩
+  have hhead_pw := hpw_head_tail.1
+  unfold frameObjects at hhead_pw
+  have hp0 := List.pairwise_cons.1 hhead_pw
+  have hp1 := List.pairwise_cons.1 hp0.2
+  have hp2 := List.pairwise_cons.1 hp1.2
+  have hp3 := List.pairwise_cons.1 hp2.2
+  have hp4 := List.pairwise_cons.1 hp3.2
+  have hp5 := List.pairwise_cons.1 hp4.2
+  have hp6 := List.pairwise_cons.1 hp5.2
+  have hRl_disj_head_nonwrite : ∀ o ∈ [(c0, 104), (memW s (e0 + 88), 24), frameLogs s (e0, c0)] ++
+      frameLogObjects s (e0, c0), ∀ x ∈ Rl, Disj x o := by
+    intro o ho x hx
+    simp only [Rl, List.mem_cons, List.not_mem_nil, or_false] at hx
+    have ho_fo : o ∈ frameObjects s (e0, c0) := by
+      rcases List.mem_append.1 ho with h3 | hl
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at h3
+        rcases h3 with rfl | rfl | rfl <;> simp [frameObjects]
+      · unfold frameObjects; exact List.mem_append_right _ hl
+    rcases hx with rfl | rfl | rfl | rfl | rfl
+    · rcases List.mem_append.1 ho with h3 | hl
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at h3
+        rcases h3 with rfl | rfl | rfl <;> exact hp0.1 _ (by simp)
+      · exact hp0.1 _ (by simp [hl])
+    · rcases List.mem_append.1 ho with h3 | hl
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at h3
+        rcases h3 with rfl | rfl | rfl
+        · exact Wave8Contracts.M23.Disj.symm (hp1.1 _ (by simp [stkIvl]))
+        · exact hp2.1 _ (by simp)
+        · exact hp2.1 _ (by simp)
+      · exact hp2.1 _ (by simp [hl])
+    · rcases List.mem_append.1 ho with h3 | hl
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at h3
+        rcases h3 with rfl | rfl | rfl
+        · exact Wave8Contracts.M23.Disj.symm (hp1.1 _ (by simp [memIvl]))
+        · exact hp3.1 _ (by simp)
+        · exact hp3.1 _ (by simp)
+      · exact hp3.1 _ (by simp [hl])
+    · rcases List.mem_append.1 ho with h3 | hl
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at h3
+        rcases h3 with rfl | rfl | rfl
+        · exact Wave8Contracts.M23.Disj.symm (hp1.1 _ (by simp [retIvl]))
+        · exact Wave8Contracts.M23.Disj.symm (hp4.1 _ (by simp [retIvl]))
+        · exact Wave8Contracts.M23.Disj.symm (hp5.1 _ (by simp [retIvl]))
+      · exact hp6.1 _ hl
+    · exact hfresh_disj_fo _ hhead_mem o ho_fo
+  have hRl_disj_tail : ∀ ec ∈ chTail, ∀ o ∈ frameObjects s ec, ∀ x ∈ Rl, Disj x o := by
+    intro ec htail o ho x hx
+    have hec : ec ∈ evmChain s := by rw [hch_eq]; exact List.mem_cons_of_mem _ htail
+    simp only [Rl, List.mem_cons, List.not_mem_nil, or_false] at hx
+    rcases hx with rfl | rfl | rfl | rfl | rfl
+    · exact hpw_head_tail.2 _ (by simp [frameObjects]) ec htail o ho
+    · exact hpw_head_tail.2 _ (by simp [frameObjects, stkIvl]) ec htail o ho
+    · exact hpw_head_tail.2 _ (by simp [frameObjects, memIvl]) ec htail o ho
+    · exact hpw_head_tail.2 _ (by simp [frameObjects, retIvl]) ec htail o ho
+    · exact hfresh_disj_fo ec hec o ho
+  have hmemW_pg : ∀ a, memW { post with globals := s.globals } a = memW post a := fun _ => rfl
+  have htail_all_eq : ∀ ec ∈ chTail, ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW post (ec.1 + k) = memW s (ec.1 + k) := by
+    intro ec htail k hk hk8
+    have hec : ec ∈ evmChain s := by rw [hch_eq]; exact List.mem_cons_of_mem _ htail
+    have hFW := hFW_all ec hec
+    obtain ⟨hb_e, _, _, _⟩ := frameWF_bounds hAs.2 hFW
+    have he8 : ec.1 % 8 = 0 := (hFW.1 (ec.1, 280) (by simp)).2.1
+    exact memW_eq_of_bre_disj hAs.1.memaddrs heff hb_e he8 hk8 hk
+      (hRl_disj_tail ec htail (ec.1, 280) (by simp [frameObjects]))
+  have hrec_eq : ∀ ec ∈ evmChain s,
+      (∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+        k ∉ ([16, 64, 72, 96, 144, 152, 184, 192, 216] : List Nat) →
+        memW post (ec.1 + k) = memW s (ec.1 + k)) ∧
+      (∀ k, k + 8 ≤ 104 → k % 8 = 0 → memW post (ec.2 + k) = memW s (ec.2 + k)) ∧
+      (∀ k, k + 8 ≤ 24 → k % 8 = 0 → memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k)) := by
+    intro ec hec
+    have hFW := hFW_all ec hec
+    obtain ⟨_, hb_c, hb_88, _⟩ := frameWF_bounds hAs.2 hFW
+    have hc8 : ec.2 % 8 = 0 := (hFW.1 (ec.2, 104) (by simp)).2.1
+    have h88_8 : (memW s (ec.1 + 88)) % 8 = 0 := (hFW.1 (memW s (ec.1 + 88), 24) (by simp)).2.1
+    rw [hch_eq, List.mem_cons] at hec
+    rcases hec with rfl | htail
+    · refine ⟨he_other,
+        fun k hk hk8 => memW_eq_of_bre_disj hAs.1.memaddrs heff hb_c hc8 hk8 hk
+          (hRl_disj_head_nonwrite (c0, 104) (by simp)),
+        fun k hk hk8 => memW_eq_of_bre_disj hAs.1.memaddrs heff hb_88 h88_8 hk8 hk
+          (hRl_disj_head_nonwrite (memW s (e0 + 88), 24) (by simp))⟩
+    · refine ⟨fun k hk hk8 _ => htail_all_eq ec htail k hk hk8,
+        fun k hk hk8 => memW_eq_of_bre_disj hAs.1.memaddrs heff hb_c hc8 hk8 hk
+          (hRl_disj_tail ec htail (ec.2, 104) (by simp [frameObjects])),
+        fun k hk hk8 => memW_eq_of_bre_disj hAs.1.memaddrs heff hb_88 h88_8 hk8 hk
+          (hRl_disj_tail ec htail (memW s (ec.1 + 88), 24) (by simp [frameObjects]))⟩
+  have hchain_aux : ∀ (fuel e c : Nat),
+      (∀ ec ∈ evmChainFrom s fuel e c, ec ∈ evmChain s) →
+      evmChainFrom post fuel e c = evmChainFrom s fuel e c := by
+    intro fuel; induction fuel with
+    | zero => intros; rfl
+    | succ fuel ih =>
+      intro e c hsub
+      have hec : (e, c) ∈ evmChain s := hsub (e, c) (by simp [evmChainFrom])
+      obtain ⟨_, hc_eq, _⟩ := hrec_eq (e, c) hec
+      have hc16 := hc_eq 16 (by omega) (by omega)
+      have hc0 : memW post c = memW s c := by simpa using hc_eq 0 (by omega) (by omega)
+      have hc8 := hc_eq 8 (by omega) (by omega)
+      simp only [evmChainFrom, hc16, hc0, hc8]
+      split
+      · rfl
+      · rename_i hne16
+        rw [ih]; intro ec' hec'; exact hsub ec' (by simp [evmChainFrom, hne16, hec'])
+  have hchain_eq : evmChain post = evmChain s := by
+    unfold evmChain
+    rw [hglob_nh "ev" (by decide), hglob_nh "cur_cont" (by decide)]
+    exact hchain_aux _ _ _ (fun _ h => h)
+  have hframeLogs_eq : ∀ ec ∈ evmChain s, frameLogs post ec = frameLogs s ec := by
+    intro ec hec
+    obtain ⟨he_eq, _, h88_eq⟩ := hrec_eq ec hec
+    unfold frameLogs
+    rw [he_eq 88 (by omega) (by decide) (by decide),
+        show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by simpa using h88_eq 0 (by omega) (by omega),
+        h88_eq 16 (by omega) (by omega)]
+  have htail_frameRet_eq : ∀ ec ∈ chTail, frameRet post ec = frameRet s ec := by
+    intro ec htail
+    unfold frameRet
+    rw [htail_all_eq ec htail 216 (by omega) (by decide),
+        htail_all_eq ec htail 144 (by omega) (by decide)]
+  have hlogs_congr : ∀ ec ∈ evmChain s,
+      frameLogObjects post ec = frameLogObjects s ec ∧ LogsListOK post (memW post (ec.1 + 88)) := by
+    intro ec hec
+    have hFW := hFW_all ec hec
+    obtain ⟨_, _, _, hfob⟩ := frameWF_bounds hAs.2 hFW
+    obtain ⟨he_eq, _, h88_eq⟩ := hrec_eq ec hec
+    have hl0 : memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) := by
+      simpa using h88_eq 0 (by omega) (by omega)
+    have hl8 : memW post (memW s (ec.1 + 88) + 8) = memW s (memW s (ec.1 + 88) + 8) :=
+      h88_eq 8 (by omega) (by omega)
+    have hl16 : memW post (memW s (ec.1 + 88) + 16) = memW s (memW s (ec.1 + 88) + 16) :=
+      h88_eq 16 (by omega) (by omega)
+    have hd_fl : ∀ x ∈ Rl, Disj x (frameLogs s ec) := by
+      rcases List.mem_cons.1 (hch_eq ▸ hec) with rfl | htail
+      · exact hRl_disj_head_nonwrite (frameLogs s (e0, c0)) (by simp)
+      · exact hRl_disj_tail ec htail (frameLogs s ec) (by simp [frameObjects])
+    have harr_eq : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+        memW post (memW s (memW s (ec.1 + 88)) + 8 * i) = memW s (memW s (memW s (ec.1 + 88)) + 8 * i) := by
+      intro i hi
+      have hfl_in : frameLogs s ec ∈ frameObjects s ec := by simp [frameObjects]
+      have hlen_le : memW s (memW s (ec.1 + 88) + 8) ≤ memW s (memW s (ec.1 + 88) + 16) :=
+        hFW.2.2.2.2.2.2.2.2.2.2.2.1
+      have hfl_b : (frameLogs s ec).1 + (frameLogs s ec).2 ≤ 2 ^ 64 := by
+        rcases hfob _ hfl_in with h0 | hb
+        · unfold frameLogs at h0; dsimp only at h0; omega
+        · exact hb
+      have hfl_8 : (memW s (memW s (ec.1 + 88))) % 8 = 0 := hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.1.1
+      exact memW_eq_of_bre_disj hAs.1.memaddrs heff hfl_b hfl_8 (by omega)
+        (by unfold frameLogs; dsimp only; omega) hd_fl
+    have hlr_eq : ∀ i (hi : i < memW s (memW s (ec.1 + 88) + 8)) off, off + 8 ≤ 40 → off % 8 = 0 →
+        memW post (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + off) =
+          memW s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + off) := by
+      intro i hi off hoff hoff8
+      have hlr_lo : (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40) ∈ frameLogObjects s ec := by
+        unfold frameLogObjects; dsimp only
+        exact List.mem_flatMap.2 ⟨i, List.mem_range.2 hi, by unfold logOwnedIvls logRecordIvls; exact List.mem_filter.2 ⟨by simp, by simp⟩⟩
+      have hlr_in : (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40) ∈ frameObjects s ec := by
+        unfold frameObjects; exact List.mem_append_right _ hlr_lo
+      have hlr_b : memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + 40 ≤ 2 ^ 64 := by
+        rcases hfob _ hlr_in with h0 | hb
+        · dsimp only at h0; omega
+        · exact hb
+      have hlr_8 : memW s (memW s (memW s (ec.1 + 88)) + 8 * i) % 8 = 0 := by
+        rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1 with hz | ⟨_, _, _, _, hent⟩
+        · have he88_in : globN s "scratch_ptr" ≤ memW s (ec.1 + 88) :=
+            (hFW.1 (memW s (ec.1 + 88), 24) (by simp)).1.1
+          have h1 := hAs.2.2.2.1; have h2 := hAs.2.2.2.2.1
+          rw [R11Shards.scratchStart_val] at h1; omega
+        · exact (hent i hi).2.1.1
+      have hd_lr : ∀ x ∈ Rl, Disj x (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40) := by
+        rcases List.mem_cons.1 (hch_eq ▸ hec) with rfl | htail
+        · exact hRl_disj_head_nonwrite _ (List.mem_append_right _ hlr_lo)
+        · exact hRl_disj_tail ec htail _ hlr_in
+      exact memW_eq_of_bre_disj hAs.1.memaddrs heff hlr_b hlr_8 hoff8 hoff hd_lr
+    refine ⟨?_, ?_⟩
+    · unfold frameLogObjects; dsimp only
+      rw [he_eq 88 (by omega) (by decide) (by decide), hl8]
+      apply List.flatMap_congr; intro i hi; rw [List.mem_range] at hi
+      rw [hl0, harr_eq i hi]
+      have r0 := hlr_eq i hi 0 (by omega) (by omega)
+      have r8 := hlr_eq i hi 8 (by omega) (by omega)
+      have r16 := hlr_eq i hi 16 (by omega) (by omega)
+      have r24 := hlr_eq i hi 24 (by omega) (by omega)
+      have r32 := hlr_eq i hi 32 (by omega) (by omega)
+      simp only [Nat.add_zero] at r0
+      unfold logOwnedIvls logRecordIvls
+      rw [r0, r8, r16, r24, r32, hglob_nh "vm_system_address" (by decide)]
+    · rw [he_eq 88 (by omega) (by decide) (by decide)]
+      rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1 with hz | ⟨hw_l, hal_l, hlt28, hle_cap, hent⟩
+      · exact Or.inl hz
+      · right
+        refine ⟨(wordsOK_congr_of_dom_r15 hdom_eq).2 hw_l,
+          allocated_mono hhp hsc hal_l,
+          by rw [hl8]; exact hlt28, by rw [hl8, hl16]; exact hle_cap, fun i hi => ?_⟩
+        rw [hl8] at hi; rw [hl0]
+        obtain ⟨hwa, hle⟩ := hent i hi
+        refine ⟨(wordAt_congr_of_dom_r15 hdom_eq).2 hwa, ?_⟩
+        rw [harr_eq i hi]
+        have r0 := hlr_eq i hi 0 (by omega) (by omega)
+        have r8 := hlr_eq i hi 8 (by omega) (by omega)
+        have r16 := hlr_eq i hi 16 (by omega) (by omega)
+        have r24 := hlr_eq i hi 24 (by omega) (by omega)
+        have r32 := hlr_eq i hi 32 (by omega) (by omega)
+        simp only [Nat.add_zero] at r0
+        unfold LogEntryOK at hle ⊢
+        obtain ⟨hle_w, hle1, hle2, hle3, hle4, hle5, hle6⟩ := hle
+        rw [r0, r8, r16, r24, r32]
+        exact ⟨(wordsOK_congr_of_dom_r15 hdom_eq).2 hle_w,
+          ⟨hle1.1, le_trans hle1.2 hhp⟩, hle2, hle3,
+          ⟨hle4.1, le_trans hle4.2 hhp⟩,
+          ⟨hle5.1, le_trans hle5.2 hhp⟩,
+          ⟨hle6.1, le_trans hle6.2 hhp⟩⟩
+  have htail_fo_eq : ∀ ec ∈ chTail, frameObjects post ec = frameObjects s ec := by
+    intro ec htail
+    have hec : ec ∈ evmChain s := by rw [hch_eq]; exact List.mem_cons_of_mem _ htail
+    obtain ⟨he_eq, _, _⟩ := hrec_eq ec hec
+    unfold frameObjects
+    rw [he_eq 8 (by omega) (by decide) (by decide),
+        he_eq 232 (by omega) (by decide) (by decide),
+        he_eq 24 (by omega) (by decide) (by decide),
+        he_eq 40 (by omega) (by decide) (by decide),
+        he_eq 88 (by omega) (by decide) (by decide),
+        hframeLogs_eq ec hec, htail_frameRet_eq ec htail, (hlogs_congr ec hec).1]
+  have hhead_ret_cases :
+      frameRet post (e0, c0) = (0, 0) ∨
+      frameRet post (e0, c0) = frameRet s (e0, c0) ∨
+      Inside (frameRet post (e0, c0)) (globN s "heap_ptr") (globN post "heap_ptr") := by
+    rcases hret_post with ⟨h216, _⟩ | ⟨hcases, _, _⟩
+    · left; unfold frameRet; simp [h216]
+    · exact Or.inr hcases
+  have hfo_post_cases : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects post ec,
+      o ∈ frameObjects s ec ∨ o = (0, 0) ∨
+      Inside o (globN s "heap_ptr") (globN post "heap_ptr") := by
+    intro ec hec o ho
+    rw [hch_eq, List.mem_cons] at hec
+    rcases hec with rfl | htail
+    · obtain ⟨he_eq, _, _⟩ := hrec_eq (e0, c0) hhead_mem
+      unfold frameObjects at ho
+      rw [he_eq 8 (by omega) (by decide) (by decide),
+          he_eq 232 (by omega) (by decide) (by decide),
+          he_eq 24 (by omega) (by decide) (by decide),
+          he_eq 40 (by omega) (by decide) (by decide),
+          he_eq 88 (by omega) (by decide) (by decide),
+          hframeLogs_eq _ hhead_mem, (hlogs_congr _ hhead_mem).1] at ho
+      rcases List.mem_append.1 ho with ho7 | holog
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at ho7
+        rcases ho7 with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+        · exact Or.inl (by simp [frameObjects])
+        · exact Or.inl (by simp [frameObjects])
+        · exact Or.inl (by simp [frameObjects])
+        · exact Or.inl (by simp [frameObjects])
+        · exact Or.inl (by simp [frameObjects])
+        · exact Or.inl (by simp [frameObjects])
+        · rcases hhead_ret_cases with hz | heq_r | hin_r
+          · exact Or.inr (Or.inl hz)
+          · exact Or.inl (by rw [heq_r]; simp [frameObjects])
+          · exact Or.inr (Or.inr hin_r)
+      · exact Or.inl (by unfold frameObjects; exact List.mem_append_right _ holog)
+    · exact Or.inl (by rwa [htail_fo_eq ec htail] at ho)
+  have hfresh_in_disj_fo : ∀ {o : Ivl}, Inside o (globN s "heap_ptr") (globN post "heap_ptr") →
+      ∀ ec ∈ evmChain s, ∀ o2 ∈ frameObjects s ec, Disj o o2 := by
+    intro o hin ec hec o2 ho2
+    rcases hfresh_disj_fo ec hec o2 ho2 with h0 | h0 | h1 | h2
+    · dsimp only [freshIvl] at h0
+      exact Or.inl (by have := hin.1; have := hin.2; omega)
+    · exact Or.inr (Or.inl h0)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only [freshIvl] at h1; have := hin.1; have := hin.2; omega)))
+    · exact Or.inr (Or.inr (Or.inr (by dsimp only [freshIvl] at h2; have := hin.1; omega)))
+  have hfresh_in_disj_wti : ∀ {o : Ivl}, Inside o (globN s "heap_ptr") (globN post "heap_ptr") →
+      ∀ i ∈ Wave8Contracts.M23.worldTypedIvls s S Nd_at, i.2 = 0 ∨ Disj o i := by
+    intro o hin i hi
+    rcases hfresh_disj_wti i hi with h0 | hd
+    · exact Or.inl h0
+    · right
+      rcases hd with h0 | h0 | h1 | h2
+      · dsimp only [freshIvl] at h0; exact Or.inl (by have := hin.1; have := hin.2; omega)
+      · exact Or.inr (Or.inl h0)
+      · exact Or.inr (Or.inr (Or.inl (by dsimp only [freshIvl] at h1; have := hin.1; have := hin.2; omega)))
+      · exact Or.inr (Or.inr (Or.inr (by dsimp only [freshIvl] at h2; have := hin.1; omega)))
+  have hframeScratch_eq : ∀ ec ∈ evmChain s, frameScratch post ec = frameScratch s ec := by
+    intro ec hec
+    obtain ⟨he_eq, _, _⟩ := hrec_eq ec hec
+    unfold frameScratch
+    rw [he_eq 8 (by omega) (by decide) (by decide),
+        he_eq 232 (by omega) (by decide) (by decide),
+        he_eq 88 (by omega) (by decide) (by decide)]
+  have hfo_idx3_eq : ∀ ec ∈ evmChain s, (frameObjects post ec)[3]! = (frameObjects s ec)[3]! := by
+    intro ec hec
+    obtain ⟨he_eq, _, _⟩ := hrec_eq ec hec
+    unfold frameObjects
+    simp [he_eq 24 (by omega) (by decide) (by decide),
+          he_eq 40 (by omega) (by decide) (by decide)]
+  have hframeRoleSlots_eq : frameRoleSlots post (evmChain s) = frameRoleSlots s (evmChain s) := by
+    unfold frameRoleSlots; apply List.flatMap_congr; intro ec hec
+    obtain ⟨he_eq, _, _⟩ := hrec_eq ec hec
+    rw [he_eq 136 (by omega) (by decide) (by decide),
+        he_eq 168 (by omega) (by decide) (by decide),
+        he_eq 176 (by omega) (by decide) (by decide)]
+  have hfp_eq_all : ∀ t ∈ S, htabFootprint post t = htabFootprint s t :=
+    fun t ht => Wave8Contracts.M23.htabFootprint_eq hcell ht (hWT.1.2.1 t ht).1
+  have htail_gas_eq : ∀ ec ∈ (evmChain s).tail,
+      memW post (ec.1 + 64) = memW s (ec.1 + 64) ∧
+      memW post (ec.1 + 192) = memW s (ec.1 + 192) := by
+    intro ec hec
+    rw [hch_eq, List.tail_cons] at hec
+    exact ⟨htail_all_eq ec hec 64 (by omega) (by decide),
+           htail_all_eq ec hec 192 (by omega) (by decide)⟩
+  have hRel_tr : ∀ cm cmm, EvmEkFk.ReleaseReadyAt s S cm cmm → EvmEkFk.ReleaseReadyAt post S cm cmm := by
+    intro cm cmm hRel
+    exact EvmEkFk.releaseReadyAt_transport hRel hhp hchain_eq hframeScratch_eq
+      (fun ec hec => ⟨(hrec_eq ec hec).1 24 (by omega) (by decide) (by decide),
+                      (hrec_eq ec hec).1 40 (by omega) (by decide) (by decide)⟩)
+      (fun ec hec => Or.inl (hframeLogs_eq ec hec))
+      (fun ec hec => (hrec_eq ec hec).1 112 (by omega) (by decide) (by decide))
+      (fun t ht => Or.inl (hfp_eq_all t ht))
+      hfeq
+  refine ⟨?_, hchain_eq, htail_gas_eq, hRel_tr⟩
+  dsimp only [EvmInvAt]
+  rw [hchain_eq]
+  refine ⟨hW_post, hch_ne, hch_len, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, hgas_post⟩
+  · obtain ⟨ec, hec, hk0⟩ := hch_last
+    have hec_mem := List.mem_of_mem_getLast? hec
+    exact ⟨ec, hec, by rw [(hrec_eq ec hec_mem).2.1 16 (by omega) (by omega)]; exact hk0⟩
+  · intro ec hec
+    obtain ⟨he_eq, _, h88_eq⟩ := hrec_eq ec hec
+    obtain ⟨c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, _, c17⟩ := hFW_all ec hec
+    have hlo_ok := (hlogs_congr ec hec).2
+    have hmsg_ok : MsgOwned post S (memW post (ec.1 + 112)) := by
+      rw [he_eq 112 (by omega) (by decide) (by decide)]
+      obtain ⟨hal_m, hw_m, hdt, hdf, hdfo, Nd_m, hTr_m, hdj_m⟩ := c17
+      obtain ⟨hTr_int, hsub_int⟩ := Wave8Contracts.M23.triesTypedWith_inter hTr_at hTr_m
+      set Ndi := Nd_at.filter (fun n => decide (n ∈ Nd_m))
+      have hcell_i : Wave8Contracts.M23.SameTypedCells s post S Ndi := by
+        have hwti_sub : ∀ i ∈ Wave8Contracts.M23.worldTypedIvls s S Ndi, i ∈ Wave8Contracts.M23.worldTypedIvls s S Nd_at := by
+          intro i hi; unfold Wave8Contracts.M23.worldTypedIvls at hi ⊢
+          rcases List.mem_append.1 hi with hpre | hne
+          · exact List.mem_append_left _ hpre
+          · apply List.mem_append_right; unfold nodeExtents at hne ⊢
+            obtain ⟨n, hn, hnx⟩ := List.mem_flatMap.1 hne
+            exact List.mem_flatMap.2 ⟨n, (List.mem_filter.1 hn).1, hnx⟩
+        refine ⟨hcell.1, hcell.2.1, hcell.2.2.1, hcell.2.2.2.1,
+          fun a ha ha8 ⟨i, hi, h1, h2⟩ => hcell.2.2.2.2.1 a ha ha8 ⟨i, hwti_sub i hi, h1, h2⟩,
+          fun b hb ⟨i, hi, h1, h2⟩ => hcell.2.2.2.2.2 b hb ⟨i, hwti_sub i hi, h1, h2⟩⟩
+      obtain ⟨hWT_i_post, _⟩ := Wave8Contracts.M23.worldTypedWith_congr_w1 hAs hApost hhp hsc hcg hcell_i
+        ⟨hWT.1, hWT.2.1, hWT.2.2.1, hTr_int⟩
+        ⟨hFT_post, fun o ho => Or.inl (by rw [← hfeq]; exact ho)⟩
+      refine ⟨allocated_mono hhp hsc hal_m, (wordsOK_congr_of_dom_r15 hdom_eq).2 hw_m,
+        fun t ht i hi => by rw [hfp_eq_all t ht] at hi; exact hdt t ht i hi,
+        by rw [hfeq]; exact hdf,
+        ?_, Ndi, hWT_i_post.2.2.2, fun o ho j hj => ?_⟩
+      · rw [hchain_eq]; intro ec' hec' o ho
+        rcases hfo_post_cases ec' hec' o ho with ho_old | rfl | hin_o
+        · exact hdfo ec' hec' o ho_old
+        · exact Or.inr (Or.inl rfl)
+        · rcases hal_m with ⟨_, hhi⟩ | ⟨hlo, _⟩
+          · exact Or.inr (Or.inr (Or.inl (by dsimp only at hhi; have := hin_o.1; omega)))
+          · have h1 := hApost.2.2.1; have h2 := hAs.2.2.2.1; have h3 := hAs.2.2.2.2.1
+            rw [R11Shards.heapLimit_val] at h1; rw [R11Shards.scratchStart_val] at h2
+            exact Or.inr (Or.inr (Or.inr (by dsimp only at hlo; have := hin_o.2; omega)))
+      · rw [Wave8Contracts.M23.nodeExtents_eq hTr_int.1 hcell_i] at hj
+        exact hdj_m o ho j (hsub_int j hj).2
+    unfold FrameWF; dsimp only
+    rw [he_eq 8 (by omega) (by decide) (by decide),
+        he_eq 232 (by omega) (by decide) (by decide),
+        he_eq 88 (by omega) (by decide) (by decide),
+        he_eq 24 (by omega) (by decide) (by decide),
+        he_eq 40 (by omega) (by decide) (by decide),
+        he_eq 32 (by omega) (by decide) (by decide),
+        he_eq 136 (by omega) (by decide) (by decide),
+        he_eq 168 (by omega) (by decide) (by decide),
+        he_eq 176 (by omega) (by decide) (by decide),
+        h88_eq 16 (by omega) (by omega), h88_eq 8 (by omega) (by omega),
+        hframeLogs_eq ec hec,
+        hglob_nh "scratch_ptr" (by decide),
+        hglob_nh "frame_mem_ptr" (by decide),
+        hglob_nh "evm_empty" (by decide)]
+    rw [he_eq 88 (by omega) (by decide) (by decide)] at hlo_ok
+    have hc13' : Inside (frameLogs s ec) sourceBase (globN post "heap_ptr") ∨
+        Inside (frameLogs s ec) (globN s "scratch_ptr") scratchEnd := by
+      rcases c13 with ⟨h1, h2⟩ | hscr
+      · exact Or.inl ⟨h1, le_trans h2 hhp⟩
+      · exact Or.inr hscr
+    rw [hch_eq, List.mem_cons] at hec
+    rcases hec with rfl | htail
+    · refine ⟨fun i hi => ⟨(c1 i hi).1, (wordsOK_congr_of_dom_r15 hdom_eq).2 (c1 i hi).2⟩,
+        c2, (wordsOK_congr_of_dom_r15 hdom_eq).2 c3, c4, hsp_le, c6, c7, c8, c9, c10, c11, c12,
+        hc13', (wordsOK_congr_of_dom_r15 hdom_eq).2 c14, ?_, hlo_ok, hmsg_ok⟩
+      rcases hret_post with ⟨h216, h144⟩ | ⟨_, hin_r, hw_r⟩
+      · rw [← hglob_nh "evm_empty" (by decide)]
+        exact Or.inl ⟨h216, h144⟩
+      · exact Or.inr ⟨hin_r, hw_r⟩
+    · rw [htail_all_eq ec htail 16 (by omega) (by decide),
+          htail_all_eq ec htail 216 (by omega) (by decide),
+          htail_all_eq ec htail 144 (by omega) (by decide),
+          htail_frameRet_eq ec htail]
+      refine ⟨fun i hi => ⟨(c1 i hi).1, (wordsOK_congr_of_dom_r15 hdom_eq).2 (c1 i hi).2⟩,
+        c2, (wordsOK_congr_of_dom_r15 hdom_eq).2 c3, c4, c5, c6, c7, c8, c9, c10, c11, c12,
+        hc13', (wordsOK_congr_of_dom_r15 hdom_eq).2 c14, ?_, hlo_ok, hmsg_ok⟩
+      rcases c15 with h0 | ⟨hin, hw⟩
+      · exact Or.inl h0
+      · exact Or.inr ⟨⟨hin.1, le_trans hin.2 hhp⟩, (wordsOK_congr_of_dom_r15 hdom_eq).2 hw⟩
+  · intro ec hec
+    rw [hch_eq, List.tail_cons] at hec
+    unfold FrameRoom
+    rw [htail_all_eq ec hec 16 (by omega) (by decide),
+        htail_all_eq ec hec 232 (by omega) (by decide)]
+    exact hFR_all ec (by rw [hch_eq, List.tail_cons]; exact hec)
+  · intro i hi
+    have hi0 : (evmChain s)[i]'(by omega) ∈ evmChain s := List.getElem_mem _
+    have hi1 : (evmChain s)[i + 1] ∈ evmChain s := List.getElem_mem _
+    rw [(hrec_eq _ hi0).2.1 80 (by omega) (by omega),
+        (hrec_eq _ hi0).2.1 72 (by omega) (by omega),
+        (hrec_eq _ hi1).1 40 (by omega) (by decide) (by decide)]
+    exact hRW i hi
+  · have htail_map_eq : chTail.map (frameObjects post) = chTail.map (frameObjects s) :=
+      List.map_congr_left htail_fo_eq
+    rw [hch_eq, List.map_cons, List.flatten_cons, htail_map_eq, List.pairwise_append]
+    have hFO_pw' := hFO_pw
+    rw [hch_eq, List.map_cons, List.flatten_cons, List.pairwise_append] at hFO_pw'
+    refine ⟨?_, hFO_pw'.2.1, ?_⟩
+    · obtain ⟨he_eq, _, _⟩ := hrec_eq (e0, c0) hhead_mem
+      unfold frameObjects
+      rw [he_eq 8 (by omega) (by decide) (by decide),
+          he_eq 232 (by omega) (by decide) (by decide),
+          he_eq 24 (by omega) (by decide) (by decide),
+          he_eq 40 (by omega) (by decide) (by decide),
+          he_eq 88 (by omega) (by decide) (by decide),
+          hframeLogs_eq _ hhead_mem, (hlogs_congr _ hhead_mem).1]
+      have hd_r : ∀ o ∈ [(e0, 280), (c0, 104), (memW s (e0 + 8), 32 * memW s (e0 + 232)),
+          (memW s (e0 + 24), memW s (e0 + 40)), (memW s (e0 + 88), 24),
+          frameLogs s (e0, c0)], Disj o (frameRet post (e0, c0)) := by
+        intro o ho
+        have ho_fo : o ∈ frameObjects s (e0, c0) := by
+          simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+          rcases ho with rfl | rfl | rfl | rfl | rfl | rfl <;> simp [frameObjects]
+        rcases hhead_ret_cases with hz | heq_r | hin_r
+        · rw [hz]; exact Or.inr (Or.inl rfl)
+        · rw [heq_r]
+          simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+          rcases ho with rfl | rfl | rfl | rfl | rfl | rfl
+          · exact hp0.1 _ (by simp)
+          · exact hp1.1 _ (by simp)
+          · exact hp2.1 _ (by simp)
+          · exact hp3.1 _ (by simp)
+          · exact hp4.1 _ (by simp)
+          · exact hp5.1 _ (by simp)
+        · exact Wave8Contracts.M23.Disj.symm (hfresh_in_disj_fo hin_r _ hhead_mem o ho_fo)
+      have hr_l : ∀ o ∈ frameLogObjects s (e0, c0), Disj (frameRet post (e0, c0)) o := by
+        intro o ho
+        rcases hhead_ret_cases with hz | heq_r | hin_r
+        · rw [hz]; exact Or.inl rfl
+        · rw [heq_r]; exact hp6.1 o ho
+        · exact hfresh_in_disj_fo hin_r _ hhead_mem o (by unfold frameObjects; exact List.mem_append_right _ ho)
+      change ((e0, 280) :: (c0, 104) :: (memW s (e0 + 8), 32 * memW s (e0 + 232)) ::
+        (memW s (e0 + 24), memW s (e0 + 40)) :: (memW s (e0 + 88), 24) ::
+        frameLogs s (e0, c0) :: frameRet post (e0, c0) :: frameLogObjects s (e0, c0)).Pairwise Disj
+      refine List.pairwise_cons.2 ⟨?_, List.pairwise_cons.2 ⟨?_, List.pairwise_cons.2 ⟨?_,
+        List.pairwise_cons.2 ⟨?_, List.pairwise_cons.2 ⟨?_, List.pairwise_cons.2 ⟨?_,
+          List.pairwise_cons.2 ⟨hr_l, hp6.2⟩⟩⟩⟩⟩⟩⟩
+      · intro o ho; simp only [List.mem_cons] at ho
+        rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | ho_l
+        · exact hp0.1 _ (by simp)
+        · exact hp0.1 _ (by simp)
+        · exact hp0.1 _ (by simp)
+        · exact hp0.1 _ (by simp)
+        · exact hp0.1 _ (by simp)
+        · exact hd_r _ (by simp)
+        · exact hp0.1 _ (by simp [ho_l])
+      · intro o ho; simp only [List.mem_cons] at ho
+        rcases ho with rfl | rfl | rfl | rfl | rfl | ho_l
+        · exact hp1.1 _ (by simp)
+        · exact hp1.1 _ (by simp)
+        · exact hp1.1 _ (by simp)
+        · exact hp1.1 _ (by simp)
+        · exact hd_r _ (by simp)
+        · exact hp1.1 _ (by simp [ho_l])
+      · intro o ho; simp only [List.mem_cons] at ho
+        rcases ho with rfl | rfl | rfl | rfl | ho_l
+        · exact hp2.1 _ (by simp)
+        · exact hp2.1 _ (by simp)
+        · exact hp2.1 _ (by simp)
+        · exact hd_r _ (by simp)
+        · exact hp2.1 _ (by simp [ho_l])
+      · intro o ho; simp only [List.mem_cons] at ho
+        rcases ho with rfl | rfl | rfl | ho_l
+        · exact hp3.1 _ (by simp)
+        · exact hp3.1 _ (by simp)
+        · exact hd_r _ (by simp)
+        · exact hp3.1 _ (by simp [ho_l])
+      · intro o ho; simp only [List.mem_cons] at ho
+        rcases ho with rfl | rfl | ho_l
+        · exact hp4.1 _ (by simp)
+        · exact hd_r _ (by simp)
+        · exact hp4.1 _ (by simp [ho_l])
+      · intro o ho; simp only [List.mem_cons] at ho
+        rcases ho with rfl | ho_l
+        · exact hd_r _ (by simp)
+        · exact hp5.1 _ (by simp [ho_l])
+    · intro o1 ho1 o2 ho2
+      rcases hfo_post_cases _ hhead_mem o1 ho1 with ho1_old | rfl | hin_o1
+      · exact hFO_pw'.2.2 o1 ho1_old o2 ho2
+      · exact Or.inl rfl
+      · obtain ⟨fo, hfo_map, ho2_in⟩ := List.mem_flatten.1 ho2
+        obtain ⟨ec, htail, rfl⟩ := List.mem_map.1 hfo_map
+        exact hfresh_in_disj_fo hin_o1 ec (by rw [hch_eq]; exact List.mem_cons_of_mem _ htail) o2 ho2_in
+  · intro ec hec o ho
+    rw [hfeq]
+    rcases hfo_post_cases ec hec o ho with ho_old | rfl | hin_o
+    · exact ⟨fun t ht i hi => by rw [hfp_eq_all t ht] at hi; exact (hFO_disj ec hec o ho_old).1 t ht i hi,
+        (hFO_disj ec hec o ho_old).2⟩
+    · exact ⟨fun _ _ _ _ => Or.inl rfl, fun _ _ => Or.inl rfl⟩
+    · refine ⟨fun t ht i hi => ?_, fun fx hfx => ?_⟩
+      · rw [hfp_eq_all t ht] at hi
+        have hwti : i ∈ Wave8Contracts.M23.worldTypedIvls s S Nd_at := by
+          unfold Wave8Contracts.M23.worldTypedIvls
+          apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+          apply List.mem_append_left; apply List.mem_append_left
+          exact List.mem_flatMap.2 ⟨t, ht, hi⟩
+        rcases hfresh_in_disj_wti hin_o i hwti with h0 | hd
+        · exact Or.inr (Or.inl h0)
+        · exact hd
+      · rcases hWT.2.2.1.1 fx hfx with h0 | ⟨hal_fx, _⟩
+        · exact Or.inr (Or.inl h0)
+        · rcases hal_fx with ⟨_, hhi⟩ | ⟨hlo, _⟩
+          · exact Or.inr (Or.inr (Or.inr (by have := hin_o.1; omega)))
+          · have h1 := hApost.2.2.1; have h2 := hAs.2.2.2.1; have h3 := hAs.2.2.2.2.1
+            rw [R11Shards.heapLimit_val] at h1; rw [R11Shards.scratchStart_val] at h2
+            exact Or.inr (Or.inr (Or.inl (by have hlo' : globN s "scratch_ptr" ≤ fx.1 := hlo; have := hin_o.2; omega)))
+  · refine ⟨Nd_at, hWT_post.2.2.2, fun o ho j hj => ?_⟩
+    rw [Wave8Contracts.M23.nodeExtents_eq hTr_at.1 hcell] at hj
+    obtain ⟨fo, hfo_map, ho_in⟩ := List.mem_flatten.1 ho
+    obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hfo_map
+    rcases hfo_post_cases ec hec o ho_in with ho_old | rfl | hin_o
+    · exact hAT_at o (List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨ec, hec, rfl⟩, ho_old⟩) j hj
+    · exact Or.inl rfl
+    · have hwti_j : j ∈ Wave8Contracts.M23.worldTypedIvls s S Nd_at := by
+        unfold Wave8Contracts.M23.worldTypedIvls; exact List.mem_append_right _ hj
+      rcases hfresh_in_disj_wti hin_o j hwti_j with h0 | hd
+      · exact Or.inr (Or.inl h0)
+      · exact hd
+  · have hworldRefs_eq := worldTableRefs_eq_of_cell_r15 hAs.2 hWT hcell hglob_nh
+    have hdelEx_iff : ∀ i t, DelExclusive post S (evmChain s) i t ↔ DelExclusive s S (evmChain s) i t := by
+      intro i t
+      unfold DelExclusive
+      rw [hworldRefs_eq]
+      refine and_congr Iff.rfl (forall_congr' fun j => forall_congr' fun hj =>
+        forall_congr' fun k => imp_congr_right fun hk => ?_)
+      have hj_mem : (evmChain s)[j] ∈ evmChain s := List.getElem_mem _
+      have hk_ok : k + 8 ≤ 280 ∧ k % 8 = 0 ∧
+          k ∉ ([16, 64, 72, 96, 144, 152, 184, 192, 216] : List Nat) := by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl | rfl <;> exact ⟨by omega, by decide, by decide⟩
+      rw [(hrec_eq _ hj_mem).1 k hk_ok.1 hk_ok.2.1 hk_ok.2.2]
+    intro i hi
+    have hi_mem : (evmChain s)[i]'(by omega) ∈ evmChain s := List.getElem_mem _
+    have hm_eq := (hrec_eq _ hi_mem).2.1 48 (by omega) (by omega)
+    have hmm_eq := (hrec_eq _ hi_mem).2.1 56 (by omega) (by omega)
+    have he24_eq := (hrec_eq _ hi_mem).1 24 (by omega) (by decide) (by decide)
+    have htake_eq : ((evmChain s).take (i + 1)).map (fun ec => memW post (ec.1 + 136)) =
+        ((evmChain s).take (i + 1)).map (fun ec => memW s (ec.1 + 136)) := by
+      apply List.map_congr_left; intro ec hec
+      exact (hrec_eq ec (List.mem_of_mem_take hec)).1 136 (by omega) (by decide) (by decide)
+    have hM := hMarks i hi
+    dsimp only at hM ⊢
+    rw [hm_eq, hmm_eq, he24_eq, hframeScratch_eq _ hi_mem, hfeq, htake_eq]
+    obtain ⟨m1, m2, m3, m4, m5, m6, m7, m8, m9⟩ := hM
+    refine ⟨m1, m2, m3, m4, ?_, m6, m7, ?_, m9⟩
+    · intro j hj hij
+      have hj_mem : (evmChain s)[j] ∈ evmChain s := List.getElem_mem _
+      rw [hframeScratch_eq _ hj_mem, hfo_idx3_eq _ hj_mem, hframeLogs_eq _ hj_mem,
+          (hrec_eq _ hj_mem).1 112 (by omega) (by decide) (by decide)]
+      exact m5 j hj hij
+    · intro t ht
+      rw [hfp_eq_all t ht, hdelEx_iff i t]
+      exact m8 t ht
+  · rw [Wave8Contracts.M23.worldRoleSlots_eq hAs.2 hWT.1 hWT.2.2.1 hcell hcg,
+        hframeRoleSlots_eq,
+        Wave8Contracts.M23.journalRoleSlots_eq hAs.2 hWT.2.1 hWT.2.2.1 hcell hcg]
+    unfold RolesOK at hRoles ⊢
+    refine ⟨fun a ha => ?_, hRoles.2⟩
+    obtain ⟨haS, hkl⟩ := hRoles.1 a ha
+    have htb := ((hWT.1.2.1 a.1 haS).1.1 (a.1, 88) (by simp [htabFootprint])).1
+    rw [Wave8Contracts.M23.htab_hdr_eq hcell haS htb 0 (by omega)]
+    exact ⟨haS, hkl⟩
+
+end HeadRetdataStep
+
+section FcNoEvmErr
+
+open InitECandidate.Solver.GuestGlobalKeep
+open InitECandidate.Solver.Wave8GuestInv.R11Shards
+open InitECandidate.Solver.Wave8GuestInv.R11Shards.OpDispatchSpec
+open InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue
+
+def ncrFn (f : MlS) : Bool :=
+  f == ofString "trap_with" || f == ofString "alloc" || f == ofString "frame_mem_release" ||
+  f == ofString "scratch_release" || f == ofString "memcpy" || f == ofString "memeq" ||
+  f == ofString "bswap64" || f == ofString "min" || f == ofString "u256_from_be" ||
+  f == ofString "htab_first_diff" || f == ofString "htab_find_leaf" ||
+  f == ofString "htab_new_node" || f == ofString "htab_new_leaf" ||
+  f == ofString "htab_new_internal" || f == ofString "htab_grow" ||
+  f == ofString "htab_set" || f == ofString "htab_del" || f == ofString "htab_truncate" ||
+  f == ofString "htab_item" || f == ofString "htab_union_into" || f == ofString "lst_push" ||
+  f == ofString "address_to_u256" || f == ofString "credit_state_gas_refund" ||
+  f == ofString "pc_add" || f == ofString "log_append" ||
+  f == ofString "incorporate_child_on_error" || f == ofString "incorporate_child_on_success" ||
+  f == ofString "rollback_child_access" || f == ofString "set_retdata"
+
+theorem ncrOk :
+    ∀ f, ncrFn f = true → ∀ values body callee rs,
+      PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup f values =
+        some (body, callee, rs) →
+      noCatchableRaise ncrFn body = true := by
+  intro f hf values body callee rs hfound
+  obtain ⟨params, rs', hinst⟩ := lookupCode_installed hfound
+  simp only [ncrFn, Bool.or_eq_true, beq_iff_eq] at hf
+  rcases hf with (((((((((((((((((((((((((((rfl | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) |
+    rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) |
+    rfl) | rfl) | rfl) | rfl) | rfl) | rfl
+  · have hl := lookup_of_guestAst_getElem 3 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_trap_with) rfl
+    change originalRuntimeCode.lookup (ofString "trap_with") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 7 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_alloc) rfl
+    change originalRuntimeCode.lookup (ofString "alloc") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 12 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_frame_mem_release) rfl
+    change originalRuntimeCode.lookup (ofString "frame_mem_release") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 15 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_scratch_release) rfl
+    change originalRuntimeCode.lookup (ofString "scratch_release") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 16 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_memcpy) rfl
+    change originalRuntimeCode.lookup (ofString "memcpy") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 18 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_memeq) rfl
+    change originalRuntimeCode.lookup (ofString "memeq") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 23 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_bswap64) rfl
+    change originalRuntimeCode.lookup (ofString "bswap64") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 31 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_min) rfl
+    change originalRuntimeCode.lookup (ofString "min") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 86 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_u256_from_be) rfl
+    change originalRuntimeCode.lookup (ofString "u256_from_be") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 130 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_first_diff) rfl
+    change originalRuntimeCode.lookup (ofString "htab_first_diff") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 131 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_find_leaf) rfl
+    change originalRuntimeCode.lookup (ofString "htab_find_leaf") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 134 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_new_node) rfl
+    change originalRuntimeCode.lookup (ofString "htab_new_node") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 135 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_new_leaf) rfl
+    change originalRuntimeCode.lookup (ofString "htab_new_leaf") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 136 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_new_internal) rfl
+    change originalRuntimeCode.lookup (ofString "htab_new_internal") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 137 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_grow) rfl
+    change originalRuntimeCode.lookup (ofString "htab_grow") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 138 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_set) rfl
+    change originalRuntimeCode.lookup (ofString "htab_set") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 139 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_del) rfl
+    change originalRuntimeCode.lookup (ofString "htab_del") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 140 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_truncate) rfl
+    change originalRuntimeCode.lookup (ofString "htab_truncate") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 143 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_item) rfl
+    change originalRuntimeCode.lookup (ofString "htab_item") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 400 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_union_into) rfl
+    change originalRuntimeCode.lookup (ofString "htab_union_into") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 410 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_lst_push) rfl
+    change originalRuntimeCode.lookup (ofString "lst_push") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 445 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_address_to_u256) rfl
+    change originalRuntimeCode.lookup (ofString "address_to_u256") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 450 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_credit_state_gas_refund) rfl
+    change originalRuntimeCode.lookup (ofString "credit_state_gas_refund") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 468 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_pc_add) rfl
+    change originalRuntimeCode.lookup (ofString "pc_add") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 523 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_log_append) rfl
+    change originalRuntimeCode.lookup (ofString "log_append") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 591 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_incorporate_child_on_error) rfl
+    change originalRuntimeCode.lookup (ofString "incorporate_child_on_error") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 592 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_incorporate_child_on_success) rfl
+    change originalRuntimeCode.lookup (ofString "incorporate_child_on_success") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 593 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_rollback_child_access) rfl
+    change originalRuntimeCode.lookup (ofString "rollback_child_access") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 595 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_set_retdata) rfl
+    change originalRuntimeCode.lookup (ofString "set_retdata") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+
+theorem ncrNoErr {F : Type} {p : ProgHOL 64}
+    (hp : noCatchableRaise ncrFn p = true)
+    (s : PanSemStateFiniteExact 64 F) (hcode : s.code = originalRuntimeCode) :
+    ¬ IsEvmErr (evaluateHOLFiniteState s p).1 := by
+  rintro ⟨v, hv⟩
+  exact evaluate_noCatchableRaise ncrFn ncrOk p hp s hcode
+    (ofString "EvmErr") v (by decide) hv
+
+theorem evLoadLocOff {F : Type} (s : PanSemStateFiniteExact 64 F)
+    {lname : String} {base sz off : Nat}
+    (hlk : s.locals.lookup (ofString lname) = some (.val (.word (BitVec.ofNat 64 base))))
+    (hwok : WordsOK s (base, sz))
+    (hbnd : base + sz ≤ 2 ^ 64)
+    (hoff : off + 8 ≤ sz) (hoff8 : off % 8 = 0) :
+    @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .local (ofString lname), .const (BitVec.ofNat 64 off)])) =
+      some (.val (.word (BitVec.ofNat 64 (memW s (base + off))))) := by
+  have hadd_eq : BitVec.ofNat 64 base + BitVec.ofNat 64 off = BitVec.ofNat 64 (base + off) := by
+    apply BitVec.eq_of_toNat_eq
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat,
+      Nat.mod_eq_of_lt (show base < 2 ^ 64 by omega),
+      Nat.mod_eq_of_lt (show off < 2 ^ 64 by omega),
+      Nat.mod_eq_of_lt (show base + off < 2 ^ 64 by omega)]
+  have hwa : WordAt s (base + off) := hwok.2.2 (off / 8) (by omega)
+    |> fun h => by rwa [show base + 8 * (off / 8) = base + off by omega] at h
+  obtain ⟨w, hmem_dom, hmem_eq⟩ := hwa
+  have hadd0 : BitVec.ofNat 64 base + (BitVec.ofNat 64 off + (0 : BitVec 64)) =
+      BitVec.ofNat 64 (base + off) := by
+    change BitVec.ofNat 64 base + (BitVec.ofNat 64 off + 0#64) = _
+    rw [BitVec.add_zero, hadd_eq]
+  simp only [evalHOLExact, evalListHOLExact, hlk, isWfShapeExactHOL, memLoadHOLExact, ↓reduceIte,
+    valueIsWord, valueWord, wordOpHOL, wordOp, List.all, List.map, Option.map, List.foldr,
+    Bool.and_self]
+  rw [hadd0]
+  simp only [hmem_dom, ↓reduceIte, hmem_eq, Option.some.injEq, ValueHOL.val.injEq, HolWordLab.word.injEq]
+  unfold memW
+  rw [hmem_eq]; simp
+
+theorem fcPreDecNoErr {F : Type} {t : PanSemStateFiniteExact 64 F}
+    {nm : MlS} {e : ExpHOL 64} {w : BitVec 64} {p : ProgHOL 64}
+    (hev : @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) e =
+      some (.val (.word w)))
+    (hnt : (evaluateHOLFiniteState t (.dec nm .one e p)).1 ≠ some .timeOut)
+    (hb : (evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) t) p).1 ≠ some .timeOut →
+      ¬ IsEvmErr (evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) t) p).1) :
+    ¬ IsEvmErr (evaluateHOLFiniteState t (.dec nm .one e p)).1 := by
+  rw [evaluateHOLFiniteState_dec_total] at hnt ⊢
+  dsimp only at hnt ⊢
+  rw [hev] at hnt ⊢
+  dsimp only at hnt ⊢
+  have hsh : shapeEqHOL .one (shapeOfHOLExact (.val (.word w) : ValueHOL 64)) = true := by
+    simp [shapeOfHOLExact, shapeEqHOL]
+  rw [if_pos hsh] at hnt ⊢
+  dsimp only at hnt ⊢
+  exact hb hnt
+
+theorem fcPreNoErr (hCF : EvmEkFk.CreateFinishSpecs) {F : Type}
+    {s0 s1 : PanSemStateFiniteExact 64 F}
+    (hRel0 : EvmEkFk.PreludeRel s0 s1)
+    (hnt : (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).1 ≠ some .timeOut) :
+    ¬ IsEvmErr (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).1 := by
+  have hInv1 := hRel0.inv
+  have hch1 := hRel0.chain_eq
+  have hlocs1 := hRel0.locals_ok
+  have hcc1 : globN s1 "cur_cont" = globN s0 "cur_cont" ∧ globN s1 "ev" = globN s0 "ev" := by
+    have hhead : (evmChain s1).head? = (evmChain s0).head? := congrArg List.head? hch1
+    rw [evmChain_cons, evmChain_cons] at hhead
+    simp only [List.head?_cons, Option.some.injEq, Prod.mk.injEq] at hhead
+    exact ⟨hhead.2, hhead.1⟩
+  have hhead1 : (globN s1 "ev", globN s1 "cur_cont") ∈ evmChain s1 := by
+    rw [evmChain_cons]; exact List.mem_cons_self
+  have hFW1 := hInv1.2.choose_spec.2.2.2.2.1 _ hhead1
+  obtain ⟨he1_lt, hc1_lt, _, _⟩ := Wave8Contracts.M23.frameWF_bounds hInv1.1.2 hFW1
+  have hc1_wok : WordsOK s1 (globN s1 "cur_cont", 104) :=
+    (hFW1.1 (globN s1 "cur_cont", 104) (by simp)).2
+  have he1_wok : WordsOK s1 (globN s1 "ev", 280) :=
+    (hFW1.1 (globN s1 "ev", 280) (by simp)).2
+  rw [EvmEkFk.fcPrelude_eq, evaluateHOLFiniteState_ite] at hnt ⊢
+  have hcmp_kind : @evalHOLExact 64 F _ s1.toExact (fun a => Classical.propDecidable (s1.memaddrs a))
+      (.cmp .equal (.var .local (ofString "kind")) (.const 2#64)) =
+      some (.val (.word (if BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64
+        then 1 else 0))) := by
+    simp [evalHOLExact, hlocs1.kind_lk, Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+  rw [hcmp_kind] at hnt ⊢
+  dsimp only at hnt ⊢
+  by_cases hkind2 : BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64
+  · have h1_ne0 : (if BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64
+        then (1 : BitVec 64) else 0) ≠ 0 := by simp [hkind2]
+    rw [if_neg h1_ne0] at hnt ⊢
+    have hrec1 : s1.locals.lookup (ofString "rec") =
+        some (.val (.word (BitVec.ofNat 64 (globN s1 "cur_cont")))) := by
+      rw [hcc1.1]; exact hlocs1.rec_lk
+    have he_csnap := evLoadLocOff s1 hrec1 hc1_wok (by omega)
+      (off := 96) (by omega) (by omega)
+    refine fcPreDecNoErr he_csnap hnt (fun hnt_cs => ?_)
+    let s_cs := setVarHOLFinite (ofString "csnap")
+      (.val (.word (BitVec.ofNat 64 (memW s1 (globN s1 "cur_cont" + 96))))) s1
+    change ¬ IsEvmErr (evaluateHOLFiniteState s_cs _).1
+    have hInv_cs : EvmInv s_cs := OpDispatchSpec.localsFree_evmInv s1 s_cs.locals s1.clock hInv1
+    have hlocs_cs : EvmEkFk.FcEntryLocals s0 s_cs :=
+      EvmEkFk.fcEntryLocals_setVar (by decide) (by decide) (by decide) (by decide) (by decide)
+        (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) hlocs1
+    have hchild_cs : s_cs.locals.lookup (ofString "child") =
+        some (.val (.word (BitVec.ofNat 64 (globN s1 "ev")))) := by
+      rw [hcc1.2]; exact hlocs_cs.child_lk
+    have he1_cs_wok : WordsOK s_cs (globN s1 "ev", 280) := by
+      refine ⟨he1_wok.1, he1_wok.2.1, fun k hk => ?_⟩
+      obtain ⟨w, hd, hm⟩ := he1_wok.2.2 k hk
+      exact ⟨w, hd, hm⟩
+    have hld160 := evLoadLocOff s_cs hchild_cs he1_cs_wok he1_lt
+      (off := 160) (by omega) (by omega)
+    have hcmp160 : @evalHOLExact 64 F _ s_cs.toExact (fun a => Classical.propDecidable (s_cs.memaddrs a))
+        (.cmp .equal (.load .one (.op .add [.var .local (ofString "child"), .const 160#64])) (.const 0#64)) =
+        some (.val (.word (if BitVec.ofNat 64 (memW s_cs (globN s1 "ev" + 160)) = 0#64
+          then 1#64 else 0#64))) := by
+      rw [evalHOLExact, hld160, evalHOLExact]
+      simp only [Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+      by_cases h : BitVec.ofNat 64 (memW s_cs (globN s1 "ev" + 160)) = 0#64 <;> simp [h]
+    rw [evaluateHOLFiniteState_ite, hcmp160] at hnt_cs ⊢
+    dsimp only at hnt_cs ⊢
+    by_cases hst0 : BitVec.ofNat 64 (memW s_cs (globN s1 "ev" + 160)) = 0#64
+    · have hc1_ne0 : (if BitVec.ofNat 64 (memW s_cs (globN s1 "ev" + 160)) = 0#64
+          then (1#64 : BitVec 64) else 0#64) ≠ 0 := by simp [hst0]
+      rw [if_neg hc1_ne0] at hnt_cs ⊢
+      have he_err0 : @evalHOLExact 64 F _ s_cs.toExact (fun a => Classical.propDecidable (s_cs.memaddrs a))
+          (.const 0#64) = some (.val (.word 0#64)) := rfl
+      refine fcPreDecNoErr he_err0 hnt_cs (fun hnt_er => ?_)
+      let s_er := setVarHOLFinite (ofString "err") (.val (.word 0#64)) s_cs
+      change ¬ IsEvmErr (evaluateHOLFiniteState s_er _).1
+      change (evaluateHOLFiniteState s_er _).1 ≠ some .timeOut at hnt_er
+      have hInv_er : EvmInv s_er := OpDispatchSpec.localsFree_evmInv s_cs s_er.locals s_cs.clock hInv_cs
+      have herr_lk : s_er.locals.lookup (ofString "err") = some (.val (.word 0#64)) := by
+        simp [s_er, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+      intro herr
+      obtain ⟨_, hout_err⟩ := EvmEkFk.callHandle0_outcome_fc hnt_er
+      rcases hout_err herr with ⟨hne, _⟩ |
+        ⟨values, body, callee, ret, ev, cpost, _, hl, hrun, hv2, hnt_h, he_h, _⟩
+      · exact absurd rfl hne
+      · have hw_ev : ∃ w_ev : BitVec 64, ev = .val (.word w_ev) := by
+          simp only [isValidValueHOLExact, lookupKvarHOLExact, herr_lk, shapeOfHOLExact] at hv2
+          cases ev with
+          | val v0 => cases v0 with | word w => exact ⟨w, rfl⟩
+          | rStruct _ => simp [shapeOfHOLExact, shapeEqHOL] at hv2
+          | nStruct _ _ => simp [shapeOfHOLExact, shapeEqHOL] at hv2
+        obtain ⟨w_ev, rfl⟩ := hw_ev
+        obtain ⟨cf_params, cf_body, cf_ret, hcf_lk, hcf_spec⟩ := EvmEkFk.create_finish_specs_of hCF
+        have hcode_er : s_er.code = originalRuntimeCode := hInv_er.1.1.code
+        have hcf_lk' : s_er.code.lookup (ofString "create_finish") =
+            some (cf_params, cf_body, cf_ret) := by rw [hcode_er]; exact hcf_lk
+        have hbody_eq : body = cf_body :=
+          lookupCodeHOLFinite_installed_body s_er.code.lookup _ _ _ _ _ _ _ _ hcf_lk' hl
+        have hret_eq : ret = cf_ret := by
+          have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
+            s_er.code.lookup (ofString "create_finish") values body callee ret hl
+          simp only [Flapjack.lookupCodeHOLExact, hcf_lk'] at hx
+          split at hx
+          · exact (congrArg (fun x => x.2.2) (Option.some.inj hx)).symm
+          · cases hx
+        have hInv_ce : EvmInv (callEntryStateHOLFinite s_er callee) :=
+          OpDispatchSpec.localsFree_evmInv s_er callee (s_er.clock - 1) hInv_er
+        have hAv_ce : Wave8Contracts.M23.EvmAvoids EvmEkFk.createBuffers (callEntryStateHOLFinite s_er callee) :=
+          EvmEkFk.evmAvoids_createBuffers_of_evmInv _ hInv_ce
+        have hex_ce : ∃ vals, lookupCodeHOLFinite originalRuntimeCode.lookup
+            (ofString "create_finish") vals =
+              some (cf_body, (callEntryStateHOLFinite s_er callee).locals, cf_ret) :=
+          ⟨values, by rw [← hcode_er, ← hbody_eq, ← hret_eq]; exact hl⟩
+        have hrun_cf : evaluateHOLFiniteState (callEntryStateHOLFinite s_er callee) cf_body =
+            (some (.exception (ofString "EvmErr") (.val (.word w_ev))), cpost) := by
+          rw [← hbody_eq]; exact hrun
+        have hsp := hcf_spec (callEntryStateHOLFinite s_er callee) hcode_er hAv_ce hex_ce
+          (by rw [hrun_cf]; simp)
+          (by rw [hrun_cf]; exact Or.inr ⟨ofString "EvmErr", .val (.word w_ev), rfl, by decide⟩)
+        rw [hrun_cf] at hsp
+        obtain ⟨⟨hIp, _, _, _⟩, _, _, _⟩ := hsp
+        set hst := setVarHOLFinite (ofString "err") (.val (.word w_ev))
+          { cpost with locals := s_er.locals }
+        have hInv_hst : EvmInv hst :=
+          OpDispatchSpec.localsFree_evmInv cpost hst.locals cpost.clock hIp
+        have hw_err_hst : hst.locals.lookup (ofString "err") = some (.val (.word w_ev)) := by
+          simp [hst, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+        exact (EvmEkFk.fcCreateErrHandler_step (s := hst) (w_err := w_ev) hInv_hst hw_err_hst hnt_h).2 he_h
+    · have hc0 : (if BitVec.ofNat 64 (memW s_cs (globN s1 "ev" + 160)) = 0#64
+          then (1#64 : BitVec 64) else 0#64) = 0 := by simp [hst0]
+      rw [if_pos hc0] at hnt_cs ⊢
+      exact (EvmEkFk.call_state_restore_step (s := s_cs)
+        (args := [.var .local (ofString "csnap")]) hInv_cs hnt_cs).2
+  · have h0 : (if BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64
+        then (1 : BitVec 64) else 0) = 0 := by simp [hkind2]
+    rw [if_pos h0, evaluateHOLFiniteState_skip]
+    simp [IsEvmErr]
+
+theorem ncrFn_sp :
+    ncrFn (ofString "stack_push") = false := by decide
+
+def fcB1 : ProgHOL 64 := EvmEkFk.fcLeftSeq EvmEkFk.fcBranches
+def fcB2 : ProgHOL 64 := EvmEkFk.fcRightSeq EvmEkFk.fcBranches
+
+end FcNoEvmErr
+
+
+end CheckpointR16
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
