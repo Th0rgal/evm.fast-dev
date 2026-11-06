@@ -15851,4 +15851,50 @@ theorem get_pre_state_account_optional_call_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- The complete optional account lookup preserves both transaction backing words. -/
+theorem get_account_optional_body_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_get_account_optional) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]),
+     .var .local (ofString "addr"), .const 1]) _) = _ at hr
+  obtain ⟨mid, hc, _, _, ht⟩ := ignored_call_seq_returned hr
+  obtain ⟨hW', S', Nd', hT'⟩ := account_touch_txWorld s mid S Nd hW hT hc
+  have hs := account_touch_worldStep s mid hW.1 hc
+  have hroots := worldStep_empty_tx_header_roots hs hW (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by simp [R10Shards.P26_P28.stdKeep])
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl <;> simp)
+  apply tx_header_words_trans hroots.1 hroots.2
+  · apply tx_header_words_of_fixed_frame hW hT
+    intro b hb hn
+    exact htab_set_recSlot_fixed_frame s mid S Nd b "ts" 8 _ _ hW.1.1 hT hb hn
+      (by decide) (fun hts hz => (hT.1.2.2.2.2.2.1 8 (by simp [tsTableSlots]) hts).resolve_left hz) hc
+  · obtain ⟨vs, body, callee, ret, rv, cp, u, _, hl, hb, ht, hm⟩ := dec_call_return_inv_args ht
+    have he := htab_get_restored_state mid cp vs body callee ret rv hW'.1.1.1 hl hb
+    rw [he] at ht
+    have hwc : TxWorld ({mid with clock := cp.clock}) :=
+      localsOnly_txWorld mid mid.locals cp.clock (by intros; rfl) hW'
+    have hwr := LocalsOnly.setVar localsOnly_txWorld (name := ofString "w") (by decide) rv _ hwc
+    have htr : WorldTypedWith (setVarHOLFinite (ofString "w") rv {mid with clock := cp.clock}) S' Nd' :=
+      (R13Shards.worldTypedWith_with_locals mid (mid.locals.update (ofString "w", rv)) cp.clock S' Nd').2 hT'
+    rcases early_return_or_tail_memory ht with hu | ht
+    · intro k hk
+      simp only [memW, hm, hu, setVarHOLFinite]
+    · obtain ⟨vs2, body2, callee2, ret2, rv2, cp2, u2, _, hl2, hb2, ht2, hm2⟩ := dec_call_return_inv_args ht
+      have hf := get_pre_state_account_optional_call_header_words _ cp2 vs2 body2 callee2 ret2 rv2 S' Nd' hwr htr hl2 hb2
+      have hu := return_memory_eq ht2
+      intro k hk
+      simpa only [memW, hm, hm2, hu, setVarHOLFinite, globN] using hf k hk
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
