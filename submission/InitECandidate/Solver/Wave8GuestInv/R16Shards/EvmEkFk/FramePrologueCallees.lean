@@ -10249,6 +10249,43 @@ theorem precompile_sha256_padding_path_effect {F : Type}
     (by rw [hgn, hgm]; exact hp) (by rw [hln, hlm]; exact hr)
     (by rw [hgn, hgm]; exact hs) (by rw [hln, hlm]; exact ho) hb hpad hob hntn hrn
 
+open R10Shards.P26_P28 in
+theorem precompile_sha256_remainder_then {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len i : BitVec 64)
+    (body : ProgHOL 64) (Rl : List Ivl)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hle : i.toNat ≤ len.toNat) (hb : len.toNat - i.toNat < 64)
+    (hbody : ∀ (m : PanSemStateFiniteExact 64 F), m.code = originalRuntimeCode → GuestInv m →
+      m.globals = s.globals →
+      (∀ name, name ≠ ofString "rem" → m.locals.lookup name = s.locals.lookup name) →
+      m.locals.lookup (ofString "rem") = some (.val (.word (len-i))) →
+      (len-i).toNat < 64 →
+      (evaluateHOLFiniteState m body).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState m body).1 = none ∨ Resumes (evaluateHOLFiniteState m body).1) →
+      ByteEff m (evaluateHOLFiniteState m body).2 Rl) :
+    let p := ProgHOL.dec (ofString "rem") .one
+      (.op .sub [.var .local (ofString "len"), .var .local (ofString "i")]) body
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    ((evaluateHOLFiniteState s p).1 = none ∨ Resumes (evaluateHOLFiniteState s p).1) →
+    ByteEff s (evaluateHOLFiniteState s p).2 Rl := by
+  dsimp only
+  intro hnt hr
+  refine precompile_byteEff_dec_resumes s _ _ _ _ _ hnt hr ?_
+  intro val hval hntb hrb
+  simp [evalHOLExact, evalListHOLExact, hl, hx, valueIsWord, valueWord, wordOpHOL, wordOp] at hval
+  subst val
+  apply hbody (setVarHOLFinite (ofString "rem") (.val (.word (len-i))) s) hc
+    (guestInv_setVar _ _ s hi) rfl
+  · intro name hne
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · rw [BitVec.toNat_sub_of_le (show i ≤ len from hle)]
+    exact hb
+  · exact hntb
+  · exact hrb
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
