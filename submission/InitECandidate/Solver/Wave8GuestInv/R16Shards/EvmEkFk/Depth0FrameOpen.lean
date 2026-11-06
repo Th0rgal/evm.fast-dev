@@ -9277,4 +9277,29 @@ theorem worldTypedCodeStrong_of_preserved_layout {F : Type}
   exact codeDbPayloadStrong_of_preserved_layout (he.2 g k hmem (by rwa [hg g] at hn))
     hAs hAp hhp (hv _) (hw _) hf hfixed
 
+/-- Typed-cell preservation fixes every in-bounds field of a live world record. -/
+theorem typed_record_root_preserved {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (hC : EvmBase.SameTypedCells s post S Nd)
+    (g : String) (sz k : Nat) (hg : (g,sz) ∈ typedRecords)
+    (hn : globN s g ≠ 0) (hk : k + 8 ≤ sz) :
+    memW post (globN s g+k) = memW s (globN s g+k) := by
+  have hi : (globN s g,sz) ∈ worldTypedIvls s S Nd := by
+    unfold worldTypedIvls
+    simp only [List.mem_append]
+    exact Or.inl (Or.inl (Or.inl (Or.inl (Or.inr (List.mem_map.2 ⟨(g,sz),hg,by simp [hn]⟩)))))
+  have hf : (globN s g,sz) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.2
+    exact ⟨(g,sz),(show ∀ r ∈ typedRecords, r ∈ globalBuffers by decide) _ hg,by simp [hn]⟩
+  have hb : globN s g+sz ≤ 2^64 := by
+    rcases hW.2.2.1.1 _ hf with hz | ⟨ha,_⟩
+    · dsimp at hz; omega
+    · exact allocated_le_2pow64 hA.2 ha
+  exact EvmBase.memW_eq_of_cellHits hC (by omega) hi (by dsimp; omega)
+
 end HeadStore
