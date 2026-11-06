@@ -11126,6 +11126,32 @@ theorem precompile_sha256_buffers_avoid {F : Type}
   · rw [←hp']; simp
   · rw [←hs']; simp
 
+theorem precompile_fresh_output_avoid {F : Type}
+    {s allocated : PanSemStateFiniteExact 64 F} (out : BitVec 64)
+    (hi : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s allocated)
+    (hm : allocated.memory = s.memory) (hb : allocated.be = s.be)
+    (hfresh : Inside (out.toNat,32) (globN s "heap_ptr") (globN allocated "heap_ptr")) :
+    Wave8Contracts.M23.EvmAvoids (fun {_} _ => [(out.toNat,32)]) allocated := by
+  obtain ⟨ha,S,hat⟩ := (evmInv_iff_at s).1 hi
+  obtain ⟨Nd,htr,hatn⟩ := hat.2.2.2.2.2.2.2.2.2.1
+  have hout : ∀ a : BitVec 64, ¬ s.memaddrs a → allocated.memory a = s.memory a := by
+    intro a _; rw [hm]
+  have hbyte : ∀ b : Nat, b < 2^64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN allocated "heap_ptr") → memB allocated b = memB s b := by
+    intro b _ _; unfold memB; rw [hm,hb]
+  obtain ⟨hat',htr',hatn'⟩ := transfer_fixed_witness_of_accumulated_frame hi hat htr hatn hstep hb hout hbyte
+  have hwt : WorldTypedWith s S Nd := ⟨hat.1.1,hat.1.2.1,hat.1.2.2.1,htr⟩
+  obtain ⟨hw,hf,_⟩ := transfer_fresh_disjoint_of_accumulated_frame hi hstep hwt hb hout hbyte (Or.inr hfresh)
+  refine ⟨hstep.1.1.1,S,hat',Nd,htr',?_⟩
+  intro i him j hjm
+  simp only [List.mem_singleton] at him
+  subst i
+  rcases List.mem_append.mp hjm with hj|hj
+  · exact hw j (worldTypedIvls_sub_worldOwned allocated S Nd j hj)
+  · obtain ⟨l,hl,hjl⟩ := List.mem_flatten.mp hj
+    obtain ⟨ec,hec,rfl⟩ := List.mem_map.mp hl
+    exact hf ec hec j hjl
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
