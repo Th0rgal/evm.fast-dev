@@ -157,4 +157,14 @@ theorem backendBound_of_table (w : LeanBridge.ConcreteOracleCompilationWitness)
   subst hp
   exact budget
 
+/-- The backend budget depends only on the oracle table, not on the other
+fields of a concrete compilation witness. -/
+theorem backendBound_of_oracles_eq
+    (w v : LeanBridge.ConcreteOracleCompilationWitness)
+    (same : w.oracles = v.oracles)
+    (bounded : ConcreteStageTransferBridge.BackendBound v) :
+    ConcreteStageTransferBridge.BackendBound w := by
+  unfold ConcreteStageTransferBridge.BackendBound at bounded ⊢
+  simpa only [same] using bounded
+
 end InitECandidate.Solver.Wave8Stage.ConcreteM7313.BackendDecomposition

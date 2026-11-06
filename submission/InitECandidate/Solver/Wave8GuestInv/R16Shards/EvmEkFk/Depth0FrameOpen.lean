@@ -8278,8 +8278,7 @@ theorem witness_return_after_access_execution {F : Type}
       some (sourceFnBody Guest.Software.guestFn_htab_set, callee, .one))
     (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
       (sourceFnBody Guest.Software.guestFn_htab_set) = (some (.returned v), post))
-    (hcode : post.code = originalRuntimeCode)
-    (hshape : post.eshapes.lookup (ofString "StateErr") = some .one)
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
     (hload : evalHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
       (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
     (hhash : s.locals.lookup (ofString "code_hash") = some (.val (.word hash))) :
@@ -8290,9 +8289,55 @@ theorem witness_return_after_access_execution {F : Type}
         v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
   obtain ⟨hAp, hw, he⟩ := protected_db_after_access_execution db.toNat t callee
     hAs hW h hdb ht hne hloc hc values v hl hb
+  have hm := PanRunBounded.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) (sourceFnBody Guest.Software.guestFn_htab_set)
+  rw [hb] at hm
+  have hcode : post.code = originalRuntimeCode := hm.1.trans hc
+  have hshape' : post.eshapes.lookup (ofString "StateErr") = some .one := by
+    rw [hm.2.2.2.2]; exact hshape
   apply get_code_ws_fallback_return_entry_strong {post with locals := s.locals} db hash
-    hcode hshape hAp ?_ hhash hw he
+    hcode hshape' hAp ?_ hhash hw he
   rw [evalHOLFinite_eq_toExact] at hload ⊢
   exact hload
+
+/-- An allocated aligned word outside the mutated table survives its exit. -/
+theorem protected_word_after_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (a : Nat)
+    (hAs : ArenaReady s) (ht : HtabWF s (locN s "t"))
+    (ha : Allocated s (a, 8)) (hal : a % 8 = 0)
+    (hd : ∀ j ∈ htabFootprint s (locN s "t"), Disj (a, 8) j)
+    (hx : HtabExit s post) : memW post a = memW s a := by
+  have hu : InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.IvlUnhit s post (a, 8) := by
+    right
+    apply ivlUnhit_of_frameOutside ⟨hal, by norm_num⟩ hx.2.2.2.2.2.2.1
+    · intro j hj
+      exact ⟨(ht.1 j hj).2.1, (ht.1 j hj).2.2.1⟩
+    · have hs := hAs.2.2.2.2.2.2.1
+      have hp := hx.1.2.2.2.2.2.2.1
+      exact ⟨hs, by omega⟩
+    · exact hd
+    · exact disj_fresh_of_allocated hAs.2 hx.1.2 hx.2.2.2.2.1 ha
+  apply InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.memW_eq_of_ivlUnhit hu hal
+  · exact allocated_le_2pow64 hAs.2 ha
+  · exact ⟨Nat.le_refl _, Nat.le_refl _⟩
+
+/-- Fixed-object typing supplies allocation and separation for root words. -/
+theorem fixed_word_after_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (a : Nat) (i : Ivl)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hi : i ∈ fixedObjects s)
+    (hin : Inside (a, 8) i.1 (i.1 + i.2)) (hal : a % 8 = 0)
+    (hx : HtabExit s post) : memW post a = memW s a := by
+  have hiPos : i.2 ≠ 0 := by unfold Inside at hin; omega
+  have hai := ((hW.2.2.1.1 i hi).resolve_left hiPos).1
+  have ha : Allocated s (a, 8) := by
+    rcases hai with hai | hai
+    · left; unfold Inside at hai hin ⊢; omega
+    · right; unfold Inside at hai hin ⊢; omega
+  apply protected_word_after_htab_exit a hAs (hW.1.2.1 _ ht).1 ha hal
+  · intro j hj
+    have hd := Disj.flip (((hW.1.2.1 _ ht).2 j hj).2 i hi)
+    apply InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.disj_of_inside_left hin hd
+  · exact hx
 
 end HeadStore
