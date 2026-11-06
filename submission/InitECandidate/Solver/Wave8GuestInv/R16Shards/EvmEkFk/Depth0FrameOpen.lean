@@ -8934,4 +8934,32 @@ theorem fallback_payload_of_world_strong {F : Type} (s : PanSemStateFiniteExact 
   rw [hdb]
   exact hW.2 "ws" 16 (by simp) hws
 
+/-- Nonzero cache roots are members of the world's typed table set. -/
+theorem code_cache_root_mem {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (owner : String) (hW : WorldTyped s S)
+    (ho : owner = "ts" ∨ owner = "bs") (hn : globN s owner ≠ 0)
+    (hd : memW s (globN s owner + 48) ≠ 0) :
+    memW s (globN s owner + 48) ∈ S := by
+  rcases ho with rfl | rfl
+  · have hr := hW.1.2.2.2.2.2.1 48 (by decide) hn
+    rcases hr with hz | hm
+    · exact (hd hz).elim
+    · exact hm
+  · have hr := hW.1.2.2.2.2.1 48 (by decide) hn
+    rcases hr with hz | hm
+    · exact (hd hz).elim
+    · exact hm
+
+theorem code_cache_entry_of_world_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (owner : String) (db hash : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S)
+    (ho : owner = "ts" ∨ owner = "bs") (hn : globN s owner ≠ 0)
+    (hdb : db.toNat = memW s (globN s owner + 48)) (hd : db.toNat ≠ 0)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (getCodeCacheArgs owner) = some [.val (.word db), .val (.word hash)]) :
+    CodeCacheLookupStrong s owner := by
+  apply code_cache_entry_of_world_strong s S owner db hash hA hW ho hn hdb _ ha
+  rw [hdb]
+  exact code_cache_root_mem s S owner hW.1 ho hn (by rwa [← hdb])
+
 end HeadStore
