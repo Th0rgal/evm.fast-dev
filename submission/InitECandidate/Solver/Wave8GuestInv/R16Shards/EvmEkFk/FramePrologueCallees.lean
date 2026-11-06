@@ -11663,6 +11663,66 @@ theorem precompile_sha256_words_gas_tail_step {F : Type}
             precompile_seq_store_flows_resumes t _ _ _ (fun t ht =>
               precompile_return_flows_resumes t _ ht) ht) ht) ht) ht) hfr
 
+theorem precompile_step_dec_at {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : MlS) (shape : ShapeHOL) (init : ExpHOL 64) (body : ProgHOL 64)
+    (hb : ∀ v, @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) init = some v →
+      shapeEqHOL shape (shapeOfHOLExact v) = true →
+      (evaluateHOLFiniteState (setVarHOLFinite name v s) body).1 ≠ some .timeOut →
+      R13.FlowsOrResumes (evaluateHOLFiniteState (setVarHOLFinite name v s) body).1 →
+      EvmStepCC frameStartGw (setVarHOLFinite name v s)
+        (evaluateHOLFiniteState (setVarHOLFinite name v s) body).2)
+    (hnt : (evaluateHOLFiniteState s (.dec name shape init body)).1 ≠ some .timeOut)
+    (hfr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.dec name shape init body)).1) :
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s (.dec name shape init body)).2 := by
+  have bad : ¬ R13.FlowsOrResumes (some (.error : PanSemResultExact 64)) := by
+    rintro (h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩) <;> cases h
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  dsimp only at hnt hfr ⊢
+  revert hnt hfr
+  split <;> intro hnt hfr
+  · exact absurd hfr bad
+  · rename_i v hv
+    by_cases hsh : shapeEqHOL shape (shapeOfHOLExact v) = true
+    · simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+      have hh := hb v hv hsh hnt hfr
+      have hset : setVarHOLFinite name v s =
+          {s with locals := (setVarHOLFinite name v s).locals, clock := s.clock} := by cases s; rfl
+      rw [hset] at hh
+      exact precompile_step_locals_right _ _ (precompile_step_locals_left _ _ hh)
+    · simp only [hsh, Bool.false_eq_true, ↓reduceIte] at hfr
+      exact absurd hfr bad
+
+theorem pre_sha256_body_step_of_input_bound {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
+    (hpad : globN s "sha_pad" ≠ 0) (hst : globN s "sha_st" ≠ 0)
+    (hbound : ∀ msg : ValueHOL 64, @evalHOLExact 64 F _ s.toExact
+        (fun a => Classical.propDecidable (s.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString "ev"),.const 112])) = some msg →
+      let t := setVarHOLFinite (ofString "msg") msg s
+      ∀ v : ValueHOL 64, @evalHOLExact 64 F _ t.toExact
+        (fun a => Classical.propDecidable (t.memaddrs a))
+        (.load .one (.op .add [.var .local (ofString "msg"),.const 96])) = some v →
+        ∃ n : BitVec 64, v = .val (.word n) ∧ n.toNat+64 < 2^64)
+    (hnt : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_pre_sha256)).1 ≠ some .timeOut)
+    (hfr : R13.FlowsOrResumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_pre_sha256)).1) :
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_pre_sha256)).2 := by
+  dsimp only [sourceFnBody,sourceFunctionEntry,Guest.Software.guestFn_pre_sha256,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural] at hnt hfr ⊢
+  apply precompile_step_dec_at s _ _ _ _ ?_ hnt hfr
+  intro msg hmsg hshape hnt hfr
+  let t := setVarHOLFinite (ofString "msg") msg s
+  have hit : EvmInv t := by
+    exact localsFree_evmInv s t.locals s.clock hi
+  apply precompile_step_dec_at t _ _ _ _ ?_ hnt hfr
+  intro v hv hshape hnt hfr
+  obtain ⟨n,rfl,hnb⟩ := hbound msg hmsg v hv
+  let u := setVarHOLFinite (ofString "n") (.val (.word n)) t
+  have hiu : EvmInv u := by
+    exact localsFree_evmInv t u.locals t.clock hit
+  apply precompile_sha256_words_gas_tail_step u n _ hiu hpad hst ?_ hnb hnt hfr
+  simp [u,setVarHOLFinite,HolFiniteMapExact.lookup_update,FUPDATE]
+
 theorem precompile_identity_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (args : List (ExpHOL 64)) (n : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
@@ -11730,36 +11790,6 @@ private theorem dispatch_step_ite (cond : ExpHOL 64) {a b : ProgHOL 64}
       simp only [hz, ↓reduceIte] at hfr ⊢
       exact ha s hcode hInv hnt hfr
   · rcases hfr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> cases h
-
-theorem precompile_step_dec_at {F : Type} (s : PanSemStateFiniteExact 64 F)
-    (name : MlS) (shape : ShapeHOL) (init : ExpHOL 64) (body : ProgHOL 64)
-    (hb : ∀ v, @evalHOLExact 64 F _ s.toExact
-      (fun a => Classical.propDecidable (s.memaddrs a)) init = some v →
-      shapeEqHOL shape (shapeOfHOLExact v) = true →
-      (evaluateHOLFiniteState (setVarHOLFinite name v s) body).1 ≠ some .timeOut →
-      R13.FlowsOrResumes (evaluateHOLFiniteState (setVarHOLFinite name v s) body).1 →
-      EvmStepCC frameStartGw (setVarHOLFinite name v s)
-        (evaluateHOLFiniteState (setVarHOLFinite name v s) body).2)
-    (hnt : (evaluateHOLFiniteState s (.dec name shape init body)).1 ≠ some .timeOut)
-    (hfr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.dec name shape init body)).1) :
-    EvmStepCC frameStartGw s (evaluateHOLFiniteState s (.dec name shape init body)).2 := by
-  have bad : ¬ R13.FlowsOrResumes (some (.error : PanSemResultExact 64)) := by
-    rintro (h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩) <;> cases h
-  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
-  dsimp only at hnt hfr ⊢
-  revert hnt hfr
-  split <;> intro hnt hfr
-  · exact absurd hfr bad
-  · rename_i v hv
-    by_cases hsh : shapeEqHOL shape (shapeOfHOLExact v) = true
-    · simp only [hsh, ↓reduceIte] at hnt hfr ⊢
-      have hh := hb v hv hsh hnt hfr
-      have hset : setVarHOLFinite name v s =
-          {s with locals := (setVarHOLFinite name v s).locals, clock := s.clock} := by cases s; rfl
-      rw [hset] at hh
-      exact precompile_step_locals_right _ _ (precompile_step_locals_left _ _ hh)
-    · simp only [hsh, Bool.false_eq_true, ↓reduceIte] at hfr
-      exact absurd hfr bad
 
 theorem pre_identity_body_step :
     EvmProgStep frameStartGw (sourceFnBody Guest.Software.guestFn_pre_identity) := by
