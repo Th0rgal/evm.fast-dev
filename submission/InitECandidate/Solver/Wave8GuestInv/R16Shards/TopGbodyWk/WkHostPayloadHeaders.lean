@@ -13818,6 +13818,48 @@ private theorem eval_decCall_alloc_cr {F : Type}
 
 
 
+/-- Threads a prior `HeapByteEff` through an `alloc` call: consumes the effect from `s0` to
+the call entry `ent` and yields the effect to the freshly bumped heap state `mid`, together
+with all the allocation arithmetic needed by later body steps. -/
+private theorem heapByteEff_decCall_alloc {F : Type}
+    {s0 ent : PanSemStateFiniteExact 64 F}
+    (lname : String) (cont : ProgHOL 64) (nExp : ExpHOL 64)
+    (Rl : List Ivl) (gw : List String)
+    (heff : WkBlockTxEnc.HeapByteEff s0 ent Rl gw)
+    (hcode : ent.code = originalRuntimeCode) (hAR : ArenaReady ent)
+    (hgw : "heap_ptr" ∈ gw)
+    (hnt : (evaluateHOLFiniteState ent
+      (.decCall (ofString lname) .one (ofString "alloc") [nExp] cont)).1 ≠ some .timeOut)
+    (hres : ContOrRes (evaluateHOLFiniteState ent
+      (.decCall (ofString lname) .one (ofString "alloc") [nExp] cont)).1) :
+    ∃ (hp n q : BitVec 64) (mid : PanSemStateFiniteExact 64 F),
+      @evalHOLExact 64 F _ ent.toExact (fun a => Classical.propDecidable (ent.memaddrs a)) nExp =
+        some (.val (.word n)) ∧
+      hp.toNat = globN ent "heap_ptr" ∧
+      hp.toNat % 8 = 0 ∧
+      q.toNat = (hp.toNat + n.toNat + 7) / 8 * 8 ∧
+      hp.toNat + n.toNat ≤ q.toNat ∧
+      q.toNat ≤ heapLimit ∧
+      q.toNat % 8 = 0 ∧
+      globN mid "heap_ptr" = q.toNat ∧
+      mid.globals = ent.globals.update (ofString "heap_ptr", .val (.word q)) ∧
+      mid.memory = ent.memory ∧
+      mid.locals = ent.locals.update (ofString lname, .val (.word hp)) ∧
+      WkBlockTxEnc.HeapByteEff s0 mid Rl gw ∧
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut ∧
+      ContOrRes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState ent
+        (.decCall (ofString lname) .one (ofString "alloc") [nExp] cont)) =
+        ((evaluateHOLFiniteState mid cont).1,
+         { (evaluateHOLFiniteState mid cont).2 with
+           locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+             (ofString lname, ent.locals.lookup (ofString lname)) }) := by
+  obtain ⟨hp, n, q, mid, hev, hhp, hhp8, hq, hpq, hqhi, hq8, hmid, hg, hm, hl,
+    heff_mid, hnt, hres, heq⟩ :=
+    eval_decCall_alloc_cr ent lname nExp cont Rl gw hcode hAR hgw hnt hres
+  exact ⟨hp, n, q, mid, hev, hhp, hhp8, hq, hpq, hqhi, hq8, hmid, hg, hm, hl,
+    heff.trans heff_mid, hnt, hres, heq⟩
+
 private theorem cr_seq_left {F : Type} (s : PanSemStateFiniteExact 64 F)
     (a b : ProgHOL 64)
     (h : ContOrRes (evaluateHOLFiniteState s (.seq a b)).1) :
@@ -15120,6 +15162,43 @@ private theorem retHeader_of_header_cell {F : Type}
   rw [hr] at hv
   cases hv
   exact ⟨w, rfl, hH, hin, hdisj⟩
+
+/-- Sound replacement for the `hQ` premise of `«wk_payload_header_of_heapByteEff»`: the
+returned header-cell facts must be threaded explicitly, since `RetHeader` is false for an
+arbitrary return value. -/
+theorem «wk_payload_header_of_bodyEffect»
+    (hbody : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), InputReady s →
+      WkBlockTxEnc.HeapByteEff s
+        (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).2
+        (phR s) ["heap_ptr", "scratch_ptr", "wd_rlp_slices"])
+    (hret : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), InputReady s →
+      ∃ w : BitVec 64,
+        (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).1 =
+          some (.returned (.val (.word w))) ∧
+        HeaderAt
+          (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).2
+          w.toNat ∧
+        Inside (w.toNat, 248) sourceBase
+          (globN
+            (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).2
+            "heap_ptr") ∧
+        ∀ S Nd : List Nat,
+          IvlsDisj [(w.toNat, 248)]
+            (worldOwned
+              (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_payload_header)).2
+              S Nd)) :
+    WorldKeeps InputReady phR ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
+      stdKeep RetHeader (ofString "payload_header") := by
+  refine ⟨[(ofString "si", .one)], sourceFnBody Guest.Software.guestFn_payload_header, .one,
+    lookup_payload_header, ?_⟩
+  intro F s hc hIR ⟨vals, hl⟩ hnt hres
+  obtain ⟨w, hrv, hH, hin, hdisj⟩ := hret (F := F) s hIR
+  exact PayloadWorldStepScratch.heapByteEff_to_worldStep_payload (R := phR)
+    (gw := ["heap_ptr", "scratch_ptr", "wd_rlp_slices"])
+    (B := []) (by intro gs hgs; cases hgs) (by intro g hg; simp only [List.mem_cons, List.not_mem_nil, or_false] at hg; rcases hg with rfl | rfl | rfl <;> simp)
+    (inputReady_worldOK s hIR) (hbody (F := F) s hIR)
+    (fun S Nd hWT hWTp hown =>
+      retHeader_of_header_cell (w := w) hrv hH hin (hdisj S Nd))
 
 /-- Reduces `«wk_payload_header»` to a single `HeapByteEff` for the compiled body plus the
 return-typing fact.  Once the body effect is proved this is a one-line application. -/
