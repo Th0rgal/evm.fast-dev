@@ -11737,4 +11737,45 @@ theorem words_of_create_cost_sequence_g10 {F : Type}
     exact ⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE], hb⟩
   · exact create_cost_sequence_g10 s0 isCreate2 charged memoryExp cont hchild
 
+/-- Strip a fixed, syntactically checked handler prefix to name its continuation. -/
+def handlerSuffix_g10 : Nat → ProgHOL 64 → ProgHOL 64
+  | 0, p => p
+  | n + 1, .seq _ p => handlerSuffix_g10 n p
+  | n + 1, .decCall _ _ _ _ p => handlerSuffix_g10 n p
+  | n + 1, .dec _ _ _ p => handlerSuffix_g10 n p
+  | _, p => p
+
+def createChargedSuffix_g10 : ProgHOL 64 :=
+  handlerSuffix_g10 9 (sourceFnBody Guest.Software.guestFn_op_create)
+
+def create2ChargedSuffix_g10 : ProgHOL 64 :=
+  handlerSuffix_g10 10 (sourceFnBody Guest.Software.guestFn_op_create2)
+
+theorem create_prefix_run_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 (ofString "cost")) createChargedSuffix_g10) :
+    HandlerRunA s0 (fun _ => True) false (sourceFnBody Guest.Software.guestFn_op_create) := by
+  apply HandlerRunA.seq_call_simple epsA_require_not_static
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_sat_word
+  apply HandlerRunA.decCall_simple epsA_extend_memory_cost1
+  exact words_of_create_cost_sequence_g10 s0 false false
+    (.var .local (ofString "n")) (.rfield 0 (.var .local (ofString "x")))
+    createChargedSuffix_g10 hchild
+
+theorem create2_prefix_run_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 (ofString "cost")) create2ChargedSuffix_g10) :
+    HandlerRunA s0 (fun _ => True) false (sourceFnBody Guest.Software.guestFn_op_create2) := by
+  apply HandlerRunA.seq_call_simple epsA_require_not_static
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_stack_pop
+  apply HandlerRunA.decCall_simple epsA_sat_word
+  apply HandlerRunA.decCall_simple epsA_extend_memory_cost1
+  exact words_of_create_cost_sequence_g10 s0 true false
+    (.var .local (ofString "n")) (.rfield 0 (.var .local (ofString "x")))
+    create2ChargedSuffix_g10 hchild
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
