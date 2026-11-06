@@ -12720,6 +12720,31 @@ theorem precompile_sha256_call_input_bound {F : Type}
           | some r => cases r <;> simp_all [R13.FlowsOrResumes,Resumes]
         exact precompile_sha256_body_input_bound (callEntryStateHOLFinite s callee) len hc hnl hbody
 
+theorem precompile_sha256_allocated_tail_unconditional {F : Type}
+    {s next : PanSemStateFiniteExact 64 F} (pad stp out len : BitVec 64) (ptr : ExpHOL 64)
+    (hi : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s next)
+    (hm : next.memory = s.memory) (hb : next.be = s.be)
+    (hfresh : Inside (out.toNat,32) (globN s "heap_ptr") (globN next "heap_ptr"))
+    (hc : next.code = originalRuntimeCode)
+    (hp : next.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : next.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hn : next.locals.lookup (ofString "n") = some (.val (.word len)))
+    (ho : next.locals.lookup (ofString "out") = some (.val (.word out))) :
+    let p : ProgHOL 64 := .seq
+      (.call (some (none,none)) (ofString "sha256") [ptr,.var .local (ofString "n"),.var .local (ofString "out")])
+      (.seq (.store (.op .add [.var .global (ofString "ev"),.const 120]) (.var .local (ofString "out")))
+        (.seq (.store (.op .add [.var .global (ofString "ev"),.const 128]) (.const 32)) (.return (.const 0))))
+    (evaluateHOLFiniteState next p).1 ≠ some .timeOut →
+    R13.FlowsOrResumes (evaluateHOLFiniteState next p).1 →
+    EvmStepCC frameStartGw next (evaluateHOLFiniteState next p).2 := by
+  intro p hnt hflow
+  have hbound := precompile_sha256_call_input_bound next len ptr
+    (.var .local (ofString "n")) (.var .local (ofString "out")) hc
+    (by simp [evalHOLFinite,evalHOLExact,hn])
+    (precompile_seq_flows_left next _ _ hflow)
+  exact precompile_sha256_allocated_tail pad stp out len ptr hi hstep hm hb hfresh hc
+    hp hs hn ho hbound hnt hflow
+
 theorem pre_sha256_body_step_of_input_bound {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
     (hbound : ∀ msg : ValueHOL 64, @evalHOLExact 64 F _ s.toExact
