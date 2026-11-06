@@ -15136,4 +15136,66 @@ theorem acct_empty_allocated_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- A concrete table-slot update preserves every nonempty fixed object. -/
+theorem htab_set_recSlot_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl)
+    (recName : String) (off : BitVec 64) (key value : ExpHOL 64)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hoff : off.toNat < sourceBase)
+    (ht : globN s recName ≠ 0 → memW s (globN s recName + off.toNat) ≠ 0 →
+      memW s (globN s recName + off.toNat) ∈ S)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString recName), .const off]), key, value]) =
+      (none, post)) : IvlUnhit s post b := by
+  classical
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases ha : evalListHOLFinite s
+      [.load .one (.op .add [.var .global (ofString recName), .const off]), key, value]
+      with _ | values
+  · rw [ha] at hr
+    cases hr
+  · simp only [ha] at hr
+    rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set") values with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr
+      split at hr
+      · cases hr
+      · obtain ⟨v1, _, _, he1, _, _, hc_t, _, _⟩ := R16WkAcctWs.callee_param_three s (ofString "htab_set")
+          (ofString "t") (ofString "key") (ofString "value") .one .one .one _ _
+          (by rw [hA.1.code]; exact EvmFrameSpecs.lookup_htab_set)
+          _ _ _ values body callee ret ha hl
+        obtain ⟨tw, rfl, htw, hnz⟩ := evalAt_loadG_nz s hA.1 recName off hoff v1 he1
+        have hloc : locN (callEntryStateHOLFinite s callee) "t" =
+            memW s (globN s recName + off.toNat) := by
+          simp [locN, callEntryStateHOLFinite, hc_t, htw]
+        rcases hc : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, p⟩
+        rw [hc] at hr
+        cases r with
+        | none => cases hr
+        | some r =>
+          cases r <;> try (simp at hr)
+          rename_i v
+          split at hr
+          · have hzn := PtxP1.funSpec_at_lookup EvmFrameSpecs.nz_htab_set
+              s hA.1.code values body callee ret hl
+              (guestInv_callEntry s callee hA.1) (by rw [hc]; simp)
+            rw [hc] at hzn
+            have hm : locN (callEntryStateHOLFinite s callee) "t" ∈ S := by
+              rw [hloc]
+              apply ht hnz
+              rw [← hloc]
+              exact hzn (Or.inl ⟨v, rfl⟩)
+            have hu := htab_set_fixed_frame s p values body callee ret v S Nd b hA hT hm hb hbpos hl hc
+            have hp := (Prod.mk.inj hr).2
+            rw [← hp]
+            exact hu
+          · cases hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
