@@ -9678,4 +9678,27 @@ theorem get_account_execution_code_roots {F : Type} (s : PanSemStateFiniteExact 
   have hr := account_records_preserve_code_roots hWT hs.1.2.2.2.1 hs.1.2.2.1
   simpa [globN,memW,callEntryStateHOLFinite] using hr
 
+/-- Account execution preserves world validity, protected globals, and live roots. -/
+theorem get_account_execution_world_live_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    WorldOK post ∧ GlobalsKept ["heap_ptr","scratch_ptr"] s post ∧
+    (∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW s (globN s g+k) ≠ 0 → memW post (globN post g+k) ≠ 0) := by
+  have hs := get_account_execution_world_step s values body callee ret v post hc hW hl hb
+  have hentry : WorldOK (callEntryStateHOLFinite s callee) := localsFree_worldOK s _ _ hW
+  obtain ⟨_,S,hS⟩ := hentry
+  obtain ⟨Nd,hWT⟩ := (worldTyped_iff_with _ _).1 hS
+  obtain ⟨S',Nd',_,hWT',_⟩ := hs.1.2.2.2.2 S Nd hWT
+    (R16WkAcctWs.validBufList_disj validBufList_wsAcctBufs hWT)
+  refine ⟨⟨hs.1.1,S',(worldTyped_iff_with _ _).2 ⟨Nd',hWT'⟩⟩,?_,?_⟩
+  · exact hs.1.2.2.1
+  · intro g k hm hn hv
+    rw [get_account_execution_code_roots s values body callee ret v post hc hW hl hb g k hm hn]
+    exact hv
+
 end HeadStore
