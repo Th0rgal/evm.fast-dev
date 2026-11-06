@@ -10947,6 +10947,43 @@ theorem precompile_output_tail_byteEff {F : Type} (s : PanSemStateFiniteExact 64
     · simp [evalHOLExact, evalListHOLExact, hev', valueIsWord, valueWord, wordOpHOL, wordOp]
   exact byteEff_seq he2 (fun n _ => byteEff_return n _ _)
 
+open R10Shards.P26_P28 in
+theorem precompile_sha256_output_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad stp out len ev : BitVec 64) (ptr : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hev : s.globals.lookup (ofString "ev") = some (.val (.word ev)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word len)))
+    (ho : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hbound : len.toNat+64 < 2^64) (hpad : pad.toNat+128 ≤ heapEnd)
+    (hob : out.toNat+32 < 2^64) (hevbound : ev.toNat+136 ≤ heapEnd) :
+    let p := ProgHOL.seq
+      (.call (some (none,none)) (ofString "sha256")
+        [ptr,.var .local (ofString "n"),.var .local (ofString "out")])
+      (.seq (.store (.op .add [.var .global (ofString "ev"),.const 120]) (.var .local (ofString "out")))
+        (.seq (.store (.op .add [.var .global (ofString "ev"),.const 128]) (.const 32))
+          (.return (.const 0))))
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    ((evaluateHOLFiniteState s p).1 = none ∨ Resumes (evaluateHOLFiniteState s p).1) →
+    ByteEff s (evaluateHOLFiniteState s p).2
+      [(pad.toNat,128),(stp.toNat,64),(out.toNat,32),(ev.toNat,136)] := by
+  dsimp only
+  intro hnt hr
+  refine precompile_sha256_call_then s pad stp out len ptr _ _ _ _ hc hi hp hs
+    (by simp [evalHOLFinite,evalHOLExact,hn]) (by simp [evalHOLFinite,evalHOLExact,ho])
+    hbound hpad hob ?_ ?_ hnt hr
+  · intro i hi hpos
+    simp only [List.mem_cons,List.not_mem_nil,or_false] at hi
+    rcases hi with rfl|rfl|rfl <;> exact ⟨_,by simp,le_rfl,le_rfl⟩
+  · intro m hcm him hgm hlm he hntm hrm
+    exact (precompile_output_tail_byteEff m ev out 32 (ofString "out") him
+      (by rw [hgm]; exact hev) (by rw [hlm]; exact ho) hevbound).mono (by
+        intro i hi hpos
+        simp only [List.mem_singleton] at hi
+        subst i
+        exact ⟨(ev.toNat,136),by simp,le_rfl,le_rfl⟩)
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
