@@ -15585,4 +15585,48 @@ theorem record_pre_state_read_call_worldStep {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+theorem record_pre_state_read_call_txWorld {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "record_pre_state_read") [.var .local (ofString "addr")]) = (none, mid)) :
+    TxWorld mid ∧ ∃ S' Nd', WorldTypedWith mid S' Nd' := by
+  have hs := record_pre_state_read_call_worldStep s mid hW.1 hc
+  obtain ⟨S', Nd', _, hT', _⟩ := hs.2.2.2.2 S Nd hT (by intro i hi; cases hi)
+  have hl := (ignored_call_fall_locals s mid _ _ hc).1
+  have he := txEnv_preserved_by_worldStep hs (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp [R10Shards.P26_P28.stdKeep])
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+    (by intro i hi; cases hi) (bo_words hT.2.2.1 hW.2.bo_nz).2.1
+    (by intro i hi; cases hi) hW.2 (locals := mid.locals) (by rw [hl])
+  exact ⟨⟨PtxP1.worldOK_of_parts hs.1 hT', he⟩, S', Nd', hT'⟩
+
+/-- The full recorded trie fallback preserves both transaction backing words. -/
+theorem recorded_trie_lookup_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "record_pre_state_read") [.var .local (ofString "addr")])
+        (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+          [.var .local (ofString "addr")] (.return (.var .local (ofString "a"))))) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨mid, hc, _, _, ht⟩ := ignored_call_seq_returned hr
+  obtain ⟨hW', S', Nd', hT'⟩ := record_pre_state_read_call_txWorld s mid S Nd hW hT hc
+  have hs := record_pre_state_read_call_worldStep s mid hW.1 hc
+  have hroots := worldStep_empty_tx_header_roots hs hW (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by simp [R10Shards.P26_P28.stdKeep])
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl <;> simp)
+  exact tx_header_words_trans hroots.1 hroots.2
+    (record_pre_state_read_call_header_words s mid S Nd hW hT hc)
+    (ws_get_account_optional_return_header_words mid post S' Nd' v hW' hT' ht)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
