@@ -10073,4 +10073,18 @@ theorem ws_get_account_execution_payload_strong {F : Type} (s : PanSemStateFinit
   exact codeDbPayloadStrong_of_witness_effect he hWT hA
     (ws_get_account_execution_effect s values body callee ret v post hc hA hl hb) hm
 
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+/-- Witness lookup keeps live code/access roots at their post-state record addresses. -/
+theorem code_roots_kept_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW post (globN post g+k) = memW s (globN s g+k) := by
+  have hw : WorldStep (fun {_} _ => []) wsGw stdKeep NoExtra s none post :=
+    heff.to_worldStep_Q ⟨hA,S,(worldTyped_iff_with _ _).2 ⟨Nd,hWT⟩⟩
+      (by decide) (by decide) (fun _ _ _ _ _ _ _ _ => True.intro)
+  exact code_roots_kept_of_recordsKept hw.2.2.2.1 hw.2.2.1
+    (by intro g k hm i hi; cases hi)
+
 end HeadStore
