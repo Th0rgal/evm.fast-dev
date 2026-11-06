@@ -8554,4 +8554,35 @@ theorem access_set_then_witness_return {F : Type}
   exact witness_return_after_access_lookup db hash tw key (.val (.word 1)) body callee ret
     hAs hW h hdb ht hne hc v hl hb hs hws hload hh
 
+/-- Compose key construction, access update, and witness retrieval, deriving
+the intermediate arena/world/payload facts from the original state. -/
+theorem get_code_access_tail_of_key_facts {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (db hash tw : BitVec 64)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hdb : db.toNat ∈ S) (ht : tw.toNat ∈ S) (hne : db.toNat ≠ tw.toNat)
+    (h : CodeDbPayloadStrong s S db.toNat) (hc : s.code = originalRuntimeCode)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hfacts : ∀ values body callee ret v post,
+      lookupCodeHOLFinite s.code.lookup (ofString "sk_make") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      let st := setVarHOLFinite (ofString "k") v {post with locals := s.locals}
+      st.code = originalRuntimeCode ∧ st.eshapes.lookup (ofString "StateErr") = some .one ∧
+      globN st "ws" ≠ 0 ∧
+      evalHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)) ∧
+      st.locals.lookup (ofString "code_hash") = some (.val (.word hash)) ∧
+      evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 40]),
+          .var .local (ofString "k"), .const 1] = some [.val (.word tw), v, .val (.word 1)]) :
+    Ret s getCodeAccessTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  unfold getCodeAccessTail
+  apply Ret.decCall_gen
+  intro values body callee ret v post _ hl hb
+  obtain ⟨hA, hW, hp⟩ := world_and_payload_after_sk_call db.toNat hAs hWT hdb h hc
+    hAs.1.memaddrs hfit values body callee ret v hl hb
+  obtain ⟨hcode, hshape, hws, hload, hhash, hargs⟩ := hfacts values body callee ret v post hl hb
+  exact access_set_then_witness_return _ S db hash tw v hA hW hp hdb ht hne
+    hcode hshape hws hload hhash hargs
+
 end HeadStore
