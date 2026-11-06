@@ -8983,6 +8983,14 @@ theorem precompile_sha256_state_init_effect {F : Type} (s : PanSemStateFiniteExa
   exact (R10Shards.P26_P28.checkWordStoresLocal_sound (ofString "stp") 64 (by decide) []
     (sourceFnBody Guest.Software.guestFn_sha256_state_init) rfl s p hc hi hp (by simp)).1
 
+theorem precompile_sha256_block_no_catchable_exception {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (eid : MlS) (v : ValueHOL 64) (hne : eid ≠ ofString "TrapErr") :
+    (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_block)).1 ≠
+      some (.exception eid v) := by
+  exact R16WkAcctWs.evaluate_noCatchableRaise (fun _ => false)
+    (by intro f hf; cases hf) _ (by decide) s hc eid v hne
+
 theorem precompile_sha256_block_effect {F : Type} (s : PanSemStateFiniteExact 64 F)
     (p : BitVec 64) (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
     (hp : s.locals.lookup (ofString "stp") = some (.val (.word p))) :
@@ -9262,6 +9270,39 @@ theorem precompile_call0_byteEff_total {F : Type} (fname : MlS)
           all_goals first
             | exact eff.locals_clock _ _
             | (split <;> exact eff.locals_clock _ _)
+
+theorem precompile_sha256_block_call_not_resumes {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64))
+    (hc : s.code = originalRuntimeCode) :
+    ¬ Resumes (evaluateHOLFiniteState s
+      (.call (some (none,none)) (ofString "sha256_block") args)).1 := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256_block") =
+      some ([(ofString "stp",.one),(ofString "blk",.one)],
+        sourceFnBody Guest.Software.guestFn_sha256_block,.one) :=
+    lookup_of_guestAst_getElem 93 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256_block) rfl
+  have hn := R16WkAcctWs.evaluate_noCatchableRaise
+    (fun f => f == ofString "sha256_block") ?_
+    (.call (some (none,none)) (ofString "sha256_block") args) rfl s hc
+  · intro hr
+    rcases hr with ⟨v,hr⟩ | ⟨e,v,hr,hne⟩
+    · rw [evaluateHOLFiniteState_call] at hr
+      split at hr
+      · simp at hr
+      · dsimp only at hr
+        split at hr
+        · simp at hr
+        · split at hr
+          · simp at hr
+          · split at hr <;> try simp_all
+            split at hr <;> simp_all
+    · exact hn e v hne hr
+  · intro f hf vals body callee ret hlook
+    have he : f = ofString "sha256_block" := by simpa using hf
+    subst f
+    have he := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup _ _ _ body _ ret _ callee hl hlook
+    subst he
+    decide
 
 theorem precompile_sha256_block_call_effect {F : Type}
     (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (ptr block : ExpHOL 64)
