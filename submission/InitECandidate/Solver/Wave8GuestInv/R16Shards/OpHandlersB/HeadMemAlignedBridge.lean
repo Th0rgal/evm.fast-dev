@@ -15136,4 +15136,37 @@ theorem fcPopPoppedChild_concrete {F : Type}
       (BitVec.ofNat 64 (memW s2 (globN s2 "cur_cont" + 8))) name he hc
   exact preludeRel_pop_MlS hRel2 hk hAp rfl rfl rfl hev hcc hg rfl hp
 
+
+/-- The complete `_of_createFinish` export for the pop: under
+`CreateFinishSpecs` and a nonzero child mark, the finish-child core run
+factors through the prelude and equals the branch-and-cleanup sequence
+run from the popped state, which carries the full popped-child bundle
+(`FcBranchState` + `FcPoppedChild` + the evmR budget bounds) with no
+abstract-post hypothesis. -/
+theorem fcCore_pop_poppedChild_of_createFinish (hCF : EvmEkFk.CreateFinishSpecs) {F : Type}
+    {s0 s1 : PanSemStateFiniteExact 64 F}
+    (hRel0 : EvmEkFk.PreludeRel s0 s1)
+    (hk0 : memW s0 (globN s0 "cur_cont" + 16) ≠ 0)
+    (hRes : (∃ v : ValueHOL 64, (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1 =
+        some (.returned v)) ∨
+      IsEvmErr (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1)
+    (hnt : (evaluateHOLFiniteState s1 EvmEkFk.fcCore).1 ≠ some .timeOut) :
+    ∃ (s2 : PanSemStateFiniteExact 64 F) (S : List Nat),
+      evaluateHOLFiniteState s1 EvmEkFk.fcPrelude = (none, s2) ∧
+      evaluateHOLFiniteState s1 EvmEkFk.fcCore =
+        evaluateHOLFiniteState (fcPopState s0 s2)
+          (ProgHOL.seq EvmEkFk.fcBranches EvmEkFk.fcCleanup) ∧
+      EvmEkFk.FcBranchState s0 (fcPopState s0 s2) S ∧
+      EvmEkFk.FcPoppedChild s0 (fcPopState s0 s2) S ∧
+      OpDispatchSpec.evmR (fcPopState s0 s2) +
+        (memW (fcPopState s0 s2) (globN s0 "ev" + 64) +
+          memW (fcPopState s0 s2) (globN s0 "ev" + 192)) ≤
+        OpDispatchSpec.evmR s0 ∧
+      OpDispatchSpec.evmR (fcPopState s0 s2) +
+        (memW (fcPopState s0 s2) (globN s0 "ev" + 64) +
+          memW (fcPopState s0 s2) (globN s0 "ev" + 192)) + 1 < 2 ^ 64 := by
+  obtain ⟨s2, hpre, hRel2, hrun⟩ := fcCore_afterPrelude_of_createFinish hCF hRel0 hRes hnt
+  obtain ⟨S, hBS, hPC, hR1, hR2⟩ := fcPopPoppedChild_concrete hRel2 hk0
+  exact ⟨s2, S, hpre, hrun.trans (finish_child_pop_step hRel2), hBS, hPC, hR1, hR2⟩
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
+
