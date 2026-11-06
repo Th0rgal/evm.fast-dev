@@ -12655,4 +12655,33 @@ theorem heap_step_evm_avoids_g10 {F : Type}
     exact heap_step_frame_objects_g10 hm hg ec
   simpa only [heap_step_world_ivls_g10 ha hap hw hm hbe hg, hch, hfo] using hd
 
+theorem alloc_return_avoids_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p n : BitVec 64)
+    (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (hc : s.code = originalRuntimeCode)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    EvmAvoids (fun _ => [(p.toNat, n.toNat)]) post := by
+  have hav := alloc_return_prestate_avoids_g10 s p n hi hc hp hn v post hr
+  have ha := (alloc_return_aligned_g10 s p n hi hw hc hp hn v post hr).1.1
+  have hpn : globN s "heap_ptr" = p.toNat := by unfold globN; rw [hp]
+  have hple : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat := by
+    rw [← hpn]; exact hi.1.2.2.1
+  have h := M13.evaluate_alloc_body_general s p n hc hple hp hn v
+  rw [hr] at h
+  obtain ⟨_, hg, hm, hlo, _, _⟩ := h rfl
+  have hbe := R16Shards.evaluate_be_eq s (sourceFnBody Guest.Software.guestFn_alloc)
+  rw [hr] at hbe
+  apply heap_step_evm_avoids_g10 _ hav ha ?_ hm hbe ?_
+  · unfold globN
+    rw [hg, hp]
+    simp only [HolFiniteMapExact.lookup_update, FUPDATE, beq_self_eq_true, ite_true]
+    omega
+  · intro k hk
+    have hne : ofString "heap_ptr" ≠ k := by intro he; subst k; exact hk (by simp)
+    rw [hg]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, hne]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
