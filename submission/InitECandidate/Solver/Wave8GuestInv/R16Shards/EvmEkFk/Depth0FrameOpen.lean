@@ -9981,4 +9981,68 @@ theorem blockOutObjects_eq_of_witness_effect {F : Type}
       exact List.mem_append_right _ hi
     · omega
 
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+theorem balObjects_eq_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    balObjects post = balObjects s := by
+  have hbal : globN post "bal_accounts" = globN s "bal_accounts" := by
+    have he := heff.gw_kept (ofString "bal_accounts") (by decide)
+    unfold globN
+    rw [he]
+  apply (Fast_C08WkShard03.balObjects_eq_of_unhit hA.2 hWT.1 hWT.2.2.1 hbal ?_ ?_ ?_).1
+  · intro t ht i hi
+    apply allocated_typed_ivl_unhit_of_witness_effect hWT hA heff
+    · unfold worldTypedIvls
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_left
+      apply List.mem_append_left
+      exact List.mem_flatMap.2 ⟨t,ht,hi⟩
+    · exact ((hWT.1.2.1 t ht).2 i hi).1
+    · exact ((hWT.1.2.1 t ht).1.1 i hi).2.1
+    · exact ((hWT.1.2.1 t ht).1.1 i hi).2.2.1
+  · intro i hi hn
+    apply fixed_typed_ivl_unhit_of_witness_effect hWT hA heff
+    · unfold worldTypedIvls
+      apply List.mem_append_left
+      exact List.mem_append_right _ hi
+    · unfold fixedObjects
+      exact List.mem_append_right _ hi
+    · exact hn
+  · constructor
+    · exact Fast_C08WkShard03.mem_low_eq_of_domain_writes heff.out_dom hA.1 (by rw [sourceBase_val]; omega)
+    · exact Fast_C08WkShard03.mem_low_eq_of_domain_writes heff.out_dom hA.1 (by rw [sourceBase_val]; omega)
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+theorem fixedObjects_eq_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    fixedObjects post = fixedObjects s := by
+  have hg : ∀ g, g ∈ globalBuffers.map Prod.fst ∨ g = "journal" ∨ g = "journal_cap" →
+      globN post g = globN s g := by
+    intro g hm
+    have hn : ofString g ∉ wsGw.map ofString := by
+      rcases hm with hm | rfl | rfl
+      · obtain ⟨b,hb,rfl⟩ := List.mem_map.1 hm
+        have h : ∀ b ∈ globalBuffers, ofString b.1 ∉ wsGw.map ofString := by decide
+        exact h b hb
+      · decide
+      · decide
+    have he := heff.gw_kept _ hn
+    unfold globN
+    rw [he]
+  have hb : globalBuffers.map (bufferRegion post) = globalBuffers.map (bufferRegion s) := by
+    apply List.map_congr_left
+    intro b hm
+    simp only [bufferRegion,hg b.1 (Or.inl (List.mem_map.2 ⟨b,hm,rfl⟩))]
+  unfold fixedObjects
+  change globalBuffers.map (bufferRegion post) ++ _ = globalBuffers.map (bufferRegion s) ++ _
+  rw [hb,blockOutObjects_eq_of_witness_effect hWT hA heff,
+    balObjects_eq_of_witness_effect hWT hA heff,
+    hg "journal" (by simp),hg "journal_cap" (by simp)]
+
 end HeadStore
