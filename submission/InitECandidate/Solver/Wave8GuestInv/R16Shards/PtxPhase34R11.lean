@@ -16230,4 +16230,25 @@ theorem get_account_call_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Retain the concrete commit call's world contract after caller-local restoration. -/
+theorem modify_state_commit_call_worldStep {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64)) (hW : WorldOK s)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "modify_state_commit") args) = (none, mid)) :
+    WorldStepSc (bufRegions [("sk_buf", 52)]) ["heap_ptr", "journal_n"]
+      R10Shards.P26_P28.stdKeep NoExtra s none mid := by
+  obtain ⟨vs, body, callee, ret, v, cp, _, hl, hr, hm⟩ := ignored_call_fall_inv_args hc
+  have hwc := (WkBal.worldOK_with_locals s callee (s.clock - 1)).2 hW
+  have hs := PtxP1.funSpec_at_lookup EvmEkFk.wkSc_modify_state_commit s hW.1.1.code
+    vs body callee ret hl hwc (by rw [hr]; simp)
+  rw [hr] at hs
+  have hs' := (hs (Or.inl ⟨v, rfl⟩)).of_pre_locals_clock
+  subst mid
+  exact hs'.with_locals_clock s.locals cp.clock
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
