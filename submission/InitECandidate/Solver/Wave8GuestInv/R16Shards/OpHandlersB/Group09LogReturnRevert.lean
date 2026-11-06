@@ -15194,4 +15194,68 @@ theorem op_log_topics_alloc_loop_g09 {F : Type}
     · exact hnL
   · exact hncont
 
+/-- Compose the record and address allocations, retaining their separated
+ownership and the caller locals needed by record construction. -/
+theorem op_log_record_allocations_g09 {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {cont : ProgHOL 64}
+    (hcode : s.code = originalRuntimeCode) (hInvW : EvmInvWith s S Nd)
+    (hlen : (evmChain s).length = (evmChain s0).length) (hR : evmR s < evmR s0)
+    (hHM : HeadMemAligned s)
+    (hcont : ∀ (log address finish : BitVec 64) (last : PanSemStateFiniteExact 64 F),
+      last.code = originalRuntimeCode → EvmInvWith last S Nd →
+      (evmChain last).length = (evmChain s0).length → evmR last < evmR s0 →
+      HeadMemAligned last →
+      worldTypedIvls last S Nd = worldTypedIvls s S Nd →
+      (evmChain last).map (frameObjects last) = (evmChain s).map (frameObjects s) →
+      last.memory = s.memory → last.memaddrs = s.memaddrs →
+      globN s "heap_ptr" = log.toNat → globN last "heap_ptr" = finish.toNat →
+      log.toNat + 40 ≤ address.toNat → address.toNat + 24 ≤ finish.toNat →
+      finish.toNat ≤ heapLimit → log.toNat % 8 = 0 → address.toNat % 8 = 0 →
+      sourceBase ≤ log.toNat → sourceBase ≤ address.toNat →
+      IvlsDisj [(log.toNat, address.toNat - log.toNat),
+        (address.toNat, finish.toNat - address.toNat)]
+        (worldTypedIvls last S Nd ++ ((evmChain last).map (frameObjects last)).flatten) →
+      last.locals.lookup (ofString "log") = some (.val (.word log)) →
+      last.locals.lookup (ofString "log_address") = some (.val (.word address)) →
+      (∀ nm : MlS, nm ≠ ofString "log" → nm ≠ ofString "log_address" →
+        last.locals.lookup nm = s.locals.lookup nm) →
+      (evaluateHOLFiniteState last cont).1 ≠ some .timeOut →
+      OpDispatchPost s0 (evaluateHOLFiniteState last cont).1 (evaluateHOLFiniteState last cont).2)
+    (hnt : (evaluateHOLFiniteState s (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+      (.decCall (ofString "log_address") .one (ofString "alloc") [.const 24] cont))).1 ≠ some .timeOut) :
+    OpDispatchPost s0
+      (evaluateHOLFiniteState s (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+        (.decCall (ofString "log_address") .one (ofString "alloc") [.const 24] cont))).1
+      (evaluateHOLFiniteState s (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+        (.decCall (ofString "log_address") .one (ofString "alloc") [.const 24] cont))).2 := by
+  apply decCall_alloc_step_g09 (s0 := s0) (s := s) (charged := true) (nw := 40#64) hcode hInvW hlen hR rfl hnt
+  intro log next first hc1 hw1 hwt1 hfo1 hch1 hr1 hhm1 hg1 hm1 hd1 hl1 hp1 hq1 hfit1 hlim1 ha1 hqa1 hlo1 hwords1 hdj1 hn1
+  apply decCall_alloc_step_g09 (s0 := s0) (s := first) (charged := true) (nw := 24#64) hc1 hw1
+    (by rw [hch1]; exact hlen) (by rw [hr1]; exact hR) rfl hn1
+  intro address finish last hc2 hw2 hwt2 hfo2 hch2 hr2 hhm2 hg2 hm2 hd2 hl2 hp2 hq2 hfit2 hlim2 ha2 hqa2 hlo2 hwords2 hdj2 hn2
+  have haddr : next.toNat = address.toNat := hq1.symm.trans hp2
+  have hdjFirst : IvlsDisj [(log.toNat, address.toNat - log.toNat)]
+      (worldTypedIvls last S Nd ++ ((evmChain last).map (frameObjects last)).flatten) := by
+    rw [hwt2, hfo2, ← haddr]
+    exact hdj1
+  apply hcont log address finish last hc2 hw2
+    (by rw [hch2,hch1]; exact hlen) (by rw [hr2,hr1]; exact hR)
+    (hhm2 (hhm1 hHM)) (hwt2.trans hwt1) (hfo2.trans hfo1)
+    (hm2.trans hm1) (hd2.trans hd1) hp1 hq2
+    (by simpa only [show (40#64).toNat = 40 from rfl, haddr] using hfit1)
+    hfit2 hlim2 ha1 ha2 hlo1 hlo2
+  · intro a ha b hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
+    rcases ha with rfl | rfl
+    · exact hdjFirst _ (by simp) b hb
+    · exact hdj2 _ (by simp) b hb
+  · rw [hl2, hl1]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE,
+      (by decide : ofString "log_address" ≠ ofString "log")]
+  · rw [hl2]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  · intro nm hnlog hnaddr
+    rw [hl2,hl1]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hnlog, Ne.symm hnaddr]
+  · exact hn2
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
