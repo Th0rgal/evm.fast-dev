@@ -7957,4 +7957,25 @@ theorem typed_tables_preserved_of_sk_make {F : Type}
   exact ⟨htabValues_eq_of_sk_make db hc hma hfit v hb hw hd,
     htabFootprint_eq_of_sk_make db hc hma hfit v hb hw (hd _ (by simp [htabFootprint]))⟩
 
+/-- Compose both mutating fallback steps for a protected database. Table
+values and footprints at the intermediate state are derived from execution. -/
+theorem code_entries_after_key_and_access {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (h : CodeDbPayloadStrong s S db) (hW : WorldTyped s S)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), mid))
+    (hAs : ArenaReady s) (hAm : ArenaReady mid)
+    (hfixed : fixedObjects mid = fixedObjects s)
+    (hWm : WorldTyped mid S) (hdb : db ∈ S)
+    (ht : locN mid "t" ∈ S) (hne : db ≠ locN mid "t")
+    (hx : HtabExit mid post) : NodeDbEntriesStrong post db := by
+  have hp := typed_tables_preserved_of_sk_make hW hc hma hfit v hb
+  have hm : CodeDbPayloadStrong mid S db :=
+    codeDbPayloadStrong_of_sk_make db h hc hma hfit v hb hAs hAm
+      (hp db hdb).1 (fun t ht => (hp t ht).2) hfixed
+  exact codeDbPayloadStrong_entries_of_separated_htab_exit db hm hAm hWm hdb ht hne hx
+
 end HeadStore
