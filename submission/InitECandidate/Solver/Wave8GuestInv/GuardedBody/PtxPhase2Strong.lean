@@ -18215,4 +18215,41 @@ theorem phase2_compute_contract_address_tables (h : PtxCallees) {F : Type}
     ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (hd S Nd hw)
   exact ⟨S', Nd', hsub, (worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hw', hg⟩
 
+/-- Keccak scratch separation follows from world typing; only output separation
+remains to establish for the contract-address world step. -/
+theorem phase2_contract_writes_disjoint_typed {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (out : Nat)
+    (hw : WorldTypedWith s S Nd)
+    (hout : IvlsDisj [(out, 20)] (worldTypedIvls s S Nd)) :
+    IvlsDisj [(out, 20),
+      (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+      (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)]
+      (worldTypedIvls s S Nd) := by
+  intro region hr i hi
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hr
+  rcases hr with rfl | rfl | rfl
+  · exact hout _ (by simp) i hi
+  · exact R10Shards.P26_P28.untypedBuf_disj_worldTypedIvls hw
+      ("keccak_pad", 136) (by decide) (by decide) i hi
+  · exact R10Shards.P26_P28.untypedBuf_disj_worldTypedIvls hw
+      ("keccak_st", 200) (by decide) (by decide) i hi
+
+/-- The fresh address output is separated from every previously allocated
+interval, including intervals allocated in the scratch arena. -/
+theorem phase2_ct_fresh_disjoint_allocated {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (p : Nat)
+    (ha : ArenaOK s) (hap : ArenaOK post)
+    (hf : FreshBlock s post p 24) (i : Ivl) (hi : i = (0, 0) ∨ Allocated s i) :
+    Disj (p, 20) i := by
+  have h := hf.2.1
+  change globN s "heap_ptr" ≤ p ∧ p + 24 ≤ globN post "heap_ptr" at h
+  rcases hi with rfl | hh | hs
+  · simp [Disj]
+  · exact Or.inr (Or.inr (Or.inr (hh.2.trans h.1)))
+  · have hlim := hap.2.1
+    have hsc := ha.2.2.1
+    have hfm := ha.2.2.2.1
+    have hsep : heapLimit ≤ InitE.scratchStart := by decide
+    exact Or.inr (Or.inr (Or.inl (by have := hs.1; dsimp at *; omega)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

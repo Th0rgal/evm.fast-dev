@@ -16635,4 +16635,129 @@ theorem op_log_growth_all_frames_g09 {F : Type}
     exact op_log_growth_tail_frame_g09 (hFW ec hec) hdom hgrows hscratch hframe hempty hsys
       (hfields ec hec) (hheader ec heTail) (hslots ec heTail) (hrecords ec heTail) hmsg
 
+/-- Assemble the growing chain invariant with all suspended ownership derived internally. -/
+theorem op_log_growth_invariant_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {head : Ivl} {log : Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hcell : SameTypedCells s post S Nd) (hdom : post.memaddrs = s.memaddrs)
+    (hgrows : AllocatorGrows s post)
+    (hglobals : ∀ g, ofString g ≠ ofString "heap_ptr" →
+      ofString g ≠ ofString "scratch_ptr" → ofString g ≠ ofString "frame_mem_ptr" →
+      globN post g = globN s g)
+    (hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g)
+    (hfixed : fixedObjects post = fixedObjects s)
+    (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hchain : evmChain post = evmChain s)
+    (hhead : ∀ ec ∈ evmChain s, ec = head ∨ ec ∈ (evmChain s).tail)
+    (hscratch : globN post "scratch_ptr" = globN s "scratch_ptr")
+    (hframe : globN post "frame_mem_ptr" = globN s "frame_mem_ptr")
+    (hempty : globN post "evm_empty" = globN s "evm_empty")
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hheader : ∀ ec ∈ (evmChain s).tail, ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hslots : ∀ ec ∈ (evmChain s).tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8*i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8*i))
+    (hrecords : ∀ ec ∈ (evmChain s).tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (memW s (memW s (memW s (ec.1 + 88)) + 8*i) + k) =
+        memW s (memW s (memW s (memW s (ec.1 + 88)) + 8*i) + k))
+    (hheadMem : head ∈ evmChain s)
+    (hlogs : frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log)
+    (hmsgBuffer : ∀ ec ∈ evmChain s, Disj (memW s (ec.1 + 112), 176) (frameLogs post head))
+    (hmsgNew : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls post log,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hFW : ∀ ec ∈ evmChain s, FrameWF s S ec) (hheadWF : FrameWF post S head)
+    (hpairwise : ((evmChain post).map (frameObjects post)).flatten.Pairwise Disj)
+    (hold : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd))
+    (hbuffer : ∀ i ∈ worldOwned s S Nd, Disj (frameLogs post head) i)
+    (hnew : IvlsDisj (logOwnedIvls post log) (worldOwned s S Nd)) : EvmInvAt post S := by
+  have ht : ∀ ec ∈ (evmChain s).tail,
+      frameObjects post ec = frameObjects s ec ∧ frameLogs post ec = frameLogs s ec := by
+    intro ec hec
+    exact log_no_growth_tail_objects_congr_g09 hsys
+      (hfields ec (List.mem_of_mem_tail hec)) (hheader ec hec) (hslots ec hec) (hrecords ec hec)
+  have hframes := op_log_growth_all_frames_g09 hAs hAp hWT hcell hcore hdom hgrows
+    hfixed hfoot hchain hhead (fun ec hec => (ht ec hec).1) hscratch hframe hempty hsys
+    hfields hheader hslots hrecords hheadMem hlogs hmsgBuffer hmsgNew hFW hheadWF
+  exact evmInvAt_of_log_growth_new_objects_g09 hAs hAp hinv hWT hgrows.1
+    (by rw [hscratch]) hglobals hcell hchain hheadMem hhead
+    (fun ec hec k hk _ => hfields ec hec k hk)
+    (fun ec hec k hk _ => hcont ec hec k hk) hframes hpairwise hold hbuffer hnew hlogs
+    (fun ec hec => (ht ec hec).1) (fun ec hec => (ht ec hec).2)
+
+/-- Derive whole-chain growth disjointness from old ownership and fresh-region separation. -/
+theorem op_log_growth_pairwise_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {head : Ivl} {tail : List Ivl} {log : Nat}
+    (hcons : evmChain s = head :: tail) (hchain : evmChain post = evmChain s)
+    (hfields : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (head.1 + k) = memW s (head.1 + k))
+    (hret : frameRet post head = frameRet s head)
+    (hlogs : frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log)
+    (htail : ∀ ec ∈ tail, frameObjects post ec = frameObjects s ec)
+    (hold : ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj)
+    (hbuffer : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (frameLogs post head) o)
+    (hnew : (logOwnedIvls post log).Pairwise Disj)
+    (hnewOld : ∀ x ∈ logOwnedIvls post log, ∀ ec ∈ evmChain s,
+      ∀ o ∈ frameObjects s ec, Disj x o)
+    (hnewBuffer : ∀ x ∈ logOwnedIvls post log, Disj x (frameLogs post head)) :
+    ((evmChain post).map (frameObjects post)).flatten.Pairwise Disj := by
+  have hhead : head ∈ evmChain s := by rw [hcons]; exact List.mem_cons_self
+  have hpw : (frameObjects s head).Pairwise Disj := by
+    rw [hcons, List.map_cons, List.flatten_cons, List.pairwise_append] at hold
+    exact hold.1
+  have hp := log_growth_frame_objects_pairwise_g09 hfields hret hlogs hpw
+    (hbuffer head hhead) hnew (fun x hx => hnewOld x hx head hhead) hnewBuffer
+  apply log_growth_chain_objects_pairwise_g09 hcons hchain hold hp htail
+  intro o ho
+  rcases log_growth_frame_object_cases_g09 hfields hret hlogs o ho with ho | rfl | ho
+  · exact Or.inl ho
+  · exact Or.inr (fun ec hec => hbuffer ec (by rw [hcons]; exact List.mem_cons_of_mem _ hec))
+  · exact Or.inr (fun ec hec => hnewOld o ho ec (by rw [hcons]; exact List.mem_cons_of_mem _ hec))
+
+/-- Concrete allocated growth stores discharge all head-buffer validity obligations. -/
+theorem op_log_growth_buffer_post_g09 {F : Type}
+    (copy : PanSemStateFiniteExact 64 F) (ec : Ivl)
+    (l p n cap q log : BitVec 64) (objects : List Ivl)
+    (hheader : (l.toNat, 24) ∈ objects)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] objects)
+    (hl : l.toNat + 24 ≤ 2^64)
+    (hcap : 1 ≤ cap.toNat) (hbound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hwords : WordsOK copy (p.toNat, q.toNat - p.toNat))
+    (hlo : sourceBase ≤ p.toNat) (hq : q.toNat ≤ globN copy "heap_ptr") :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then HolWordLab.word p else copy.memory a}
+    memW post (ec.1 + 88) = l.toNat →
+    1 ≤ memW post (l.toNat + 16) ∧
+    memW post (l.toNat + 8) ≤ memW post (l.toNat + 16) ∧
+    Inside (frameLogs post ec) sourceBase (globN post "heap_ptr") ∧
+    WordsOK post (frameLogs post ec) ∧
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8*i)) := by
+  dsimp only
+  intro hframe
+  obtain ⟨_, h8, h16, hcapNat, hnNat, _⟩ :=
+    log_growth_readback_of_fresh_g09 copy l p n cap q log objects
+      hheader hfresh hl hcap hbound hlen hgrow hfit
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  rw [hl8] at h8
+  rw [hl16] at h16
+  obtain ⟨hi, hw, hs⟩ := log_growth_buffer_of_allocated_g09 copy ec l p n cap q log objects
+    hheader hfresh hl hcap hbound hlen hgrow hfit hwords hlo hq hframe
+  exact ⟨by rw [h16]; omega, by rw [h8, h16]; omega, hi, hw, hs⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

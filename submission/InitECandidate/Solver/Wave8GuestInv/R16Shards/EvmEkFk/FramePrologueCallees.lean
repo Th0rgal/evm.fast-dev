@@ -9247,6 +9247,57 @@ theorem precompile_sha256_init_nonzero_of_sequence {F : Type}
   precompile_sha256_init_nonzero_of_flow s ptr stp hi hp
     (precompile_seq_flows_left s _ cont hflow)
 
+theorem precompile_sha256_body_state_nonzero {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (hi : GuestInv s)
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hflow : R13.FlowsOrResumes
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256)).1) :
+    stp.toNat ≠ 0 := by
+  change R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq
+    (.call (some (none,none)) (ofString "sha256_state_init")
+      [.var .global (ofString "sha_st")]) _)).1 at hflow
+  exact precompile_sha256_init_nonzero_of_sequence s _ stp _ hi
+    (by simp [evalHOLFinite,evalHOLExact,hs]) hflow
+
+theorem precompile_sha256_call_state_nonzero {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (args : List (ExpHOL 64))
+    (hi : GuestInv s)
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s
+      (.call (some (none,none)) (ofString "sha256") args)).1) :
+    stp.toNat ≠ 0 := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256") =
+      some ([(ofString "p",.one),(ofString "len",.one),(ofString "out",.one)],
+        sourceFnBody Guest.Software.guestFn_sha256,.one) :=
+    lookup_of_guestAst_getElem 95 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256) rfl
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · rw [ha] at hr
+    simp [R13.FlowsOrResumes,Resumes] at hr
+  · rw [ha] at hr
+    dsimp only at hr
+    rcases hlook : lookupCodeHOLFinite s.code.lookup (ofString "sha256") vals with _ | ⟨body,callee,ret⟩
+    · simp [hlook,R13.FlowsOrResumes,Resumes] at hr
+    · rw [hlook] at hr
+      dsimp only at hr
+      have heq := lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ body _ ret _ callee
+        (by rw [hi.code]; exact hl) hlook
+      subst heq
+      by_cases hz : s.clock = 0
+      · simp [hz,R13.FlowsOrResumes,Resumes] at hr
+      · rw [if_neg hz] at hr
+        have hbody : R13.FlowsOrResumes (evaluateHOLFiniteState
+            (callEntryStateHOLFinite s callee) (sourceFnBody Guest.Software.guestFn_sha256)).1 := by
+          rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+              (sourceFnBody Guest.Software.guestFn_sha256) with ⟨r,post⟩
+          cases r with
+          | none => exact Or.inl rfl
+          | some r =>
+            cases r <;> simp_all [R13.FlowsOrResumes,Resumes]
+        exact precompile_sha256_body_state_nonzero _ stp
+          (guestInv_callEntry s callee hi) hs hbody
+
 theorem precompile_sha256_init_call_effect {F : Type}
     (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (ptr : ExpHOL 64)
     (hc : s.code = originalRuntimeCode) (hi : GuestInv s)

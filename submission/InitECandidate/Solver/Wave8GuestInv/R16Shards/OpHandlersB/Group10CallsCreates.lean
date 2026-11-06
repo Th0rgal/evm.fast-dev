@@ -12315,4 +12315,74 @@ theorem alloc_return_buffer_bounds_g10 {F : Type}
   rw [← hpn]
   exact hi.1.2.2.2.2.2.2.1
 
+theorem epsA_alloc_buffer_g10 :
+    EvmPreservingSpecA (fun _ => True)
+      (fun s v post => post.memory = s.memory ∧
+        ∃ p : BitVec 64, v = .val (.word p) ∧ p.toNat = globN s "heap_ptr" ∧
+          p.toNat % 8 = 0 ∧ p.toNat + locN s "n" ≤ globN post "heap_ptr")
+      (ofString "alloc") := by
+  obtain ⟨params, body, rs, hl, hs⟩ := epsA_alloc_g10
+  rw [GuestTrapAndLookup.lookup_alloc] at hl
+  cases hl
+  refine ⟨_, _, _, GuestTrapAndLookup.lookup_alloc, ?_⟩
+  intro F s hc hi hw hp hlookup hnt
+  have h := hs s hc hi hw hp hlookup hnt
+  refine ⟨fun v hv => ?_, h.2⟩
+  obtain ⟨hiw, hch, hR, hm, p, hvp, hpn⟩ := h.1 v hv
+  obtain ⟨vals, hl⟩ := hlookup
+  have hlen : ∃ v0, vals = [v0] := by
+    have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
+      originalRuntimeCode.lookup (ofString "alloc") vals _ _ _ hl
+    simp only [Flapjack.lookupCodeHOLExact, GuestTrapAndLookup.lookup_alloc] at hx
+    rcases vals with _ | ⟨v0, _ | _⟩ <;> simp at hx
+    exact ⟨v0, rfl⟩
+  obtain ⟨v0, rfl⟩ := hlen
+  obtain ⟨_, _, n, rfl, hn⟩ := one_word_arg_lookup GuestTrapAndLookup.lookup_alloc hl
+  obtain ⟨p0, hp0⟩ := hi.1.2.2.2.2.2.2.2.2.2 "heap_ptr" (by decide)
+  change s.globals.lookup (ofString "heap_ptr") = some (.val (.word p0)) at hp0
+  have hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) =
+      (some (.returned v), (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).2) := by
+    exact Prod.ext hv rfl
+  obtain ⟨hv0, hp0n, hal, hb, _, _⟩ := alloc_return_buffer_bounds_g10 s p0 n hi hc hp0 hn v _ hr
+  refine ⟨hiw, hch, hR, hm, p0, hv0, hp0n, hal, ?_⟩
+  simpa only [locN, hn] using hb
+
+def SaltBufferLocal_g10 {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ p : BitVec 64, s.locals.lookup (ofString "salt") = some (.val (.word p)) ∧
+    p.toNat % 8 = 0 ∧ p.toNat + 32 ≤ globN s "heap_ptr"
+
+theorem alloc_salt_buffer_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (charged : Bool) (cont : ProgHOL 64)
+    (hcont : HandlerRunA s0 (fun s => MemoryExpansionLocal_g10 s ∧ SaltBufferLocal_g10 s) charged cont) :
+    HandlerRunA s0 MemoryExpansionLocal_g10 charged
+      (.decCall (ofString "salt") .one (ofString "alloc") [.const 32] cont) := by
+  apply HandlerRunA.decCall epsA_alloc_buffer_g10
+    (Q := fun s => MemoryExpansionLocal_g10 s ∧ SaltBufferLocal_g10 s)
+  · intros; trivial
+  · intro t values body callee rs v post hi hw hp ha hl hpi hpw hch hq
+    have hvals : values = [.val (.word (32 : BitVec 64))] := by
+      simpa [evalListHOLExact, evalHOLExact] using ha.symm
+    subst values
+    obtain ⟨_, _, n, hvn, hn⟩ := one_word_arg_lookup GuestTrapAndLookup.lookup_alloc hl
+    have hn32 : n = (32 : BitVec 64) := by simpa using hvn.symm
+    subst n
+    obtain ⟨hm, p, rfl, hpn, hal, hb⟩ := hq
+    have hev : globN post "ev" = globN t "ev" := by
+      have he := congrArg (fun l => l.head?.map Prod.fst) hch
+      simpa [evmChain, evmChainFrom, callEntryStateHOLFinite, globN] using he
+    constructor
+    · apply memoryExpansionLocal_transport_g10 hp
+      · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+          show ofString "salt" ≠ ofString "x" by decide]
+      · exact hev
+      · change memW post _ = memW t _
+        unfold memW
+        rw [hm]
+        rfl
+    · refine ⟨p, ?_, hal, ?_⟩
+      · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+      · change p.toNat + 32 ≤ globN post "heap_ptr"
+        simpa [locN, callEntryStateHOLFinite, hn] using hb
+  · exact hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
