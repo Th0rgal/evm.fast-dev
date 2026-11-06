@@ -14231,6 +14231,73 @@ theorem fcCore_pop_branchState_of_createFinish (hCF : EvmEkFk.CreateFinishSpecs)
   · simp only [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE]
     exact Nat.mod_eq_of_lt (memW_lt s0 _)
 
+theorem fcBranches_eq :
+    EvmEkFk.fcBranches =
+      .ite (.cmp .equal (.var .local (ofString "kind")) (.const 2#64))
+        (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+          (.ite (.cmp .notEqual
+              (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+              (.const 0#64))
+            (.seq (.call (some (none, none)) (ofString "rollback_child_access")
+                [.var .local (ofString "child")])
+              (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                  [.var .local (ofString "child")])
+                (.seq (.ite (.cmp .notEqual
+                        (.var .local (ofString "new_account_charged")) (.const 0#64))
+                      (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                        [.const 183600#64])
+                      .skip)
+                  (.seq (.call (some (none, none)) (ofString "set_retdata")
+                      [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                       .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                    (.call (some (none, none)) (ofString "stack_push")
+                      [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))))
+            (.seq (.call (some (none, none)) (ofString "incorporate_child_on_success")
+                [.var .local (ofString "child")])
+              (.seq (.call (some (none, none)) (ofString "set_retdata")
+                  [.var .local (ofString "empty"), .const 0#64])
+                (.decCall (ofString "av") (.comb [.one, .one, .one, .one])
+                    (ofString "address_to_u256")
+                    [.var .local (ofString "contract_address")]
+                  (.call (some (none, none)) (ofString "stack_push")
+                    [.var .local (ofString "av")]))))))
+        (.seq
+          (.ite (.cmp .notEqual
+              (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+              (.const 0#64))
+            (.seq (.call (some (none, none)) (ofString "rollback_child_access")
+                [.var .local (ofString "child")])
+              (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                  [.var .local (ofString "child")])
+                (.seq (.ite (.cmp .notEqual
+                        (.var .local (ofString "new_account_charged")) (.const 0#64))
+                      (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                        [.const 183600#64])
+                      .skip)
+                  (.seq (.call (some (none, none)) (ofString "set_retdata")
+                      [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                       .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                    (.call (some (none, none)) (ofString "stack_push")
+                      [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))))
+            (.seq (.call (some (none, none)) (ofString "incorporate_child_on_success")
+                [.var .local (ofString "child")])
+              (.seq (.call (some (none, none)) (ofString "set_retdata")
+                  [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                   .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                (.call (some (none, none)) (ofString "stack_push")
+                  [.rstruct [.const 1#64, .const 0#64, .const 0#64, .const 0#64]]))))
+          (.decCall (ofString "actual") .one (ofString "min")
+              [.var .local (ofString "out_size"),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])]
+            (.ite (.cmp .notEqual (.var .local (ofString "actual")) (.const 0#64))
+              (.call (some (none, none)) (ofString "memcpy")
+                [.op .add
+                   [.load .one (.op .add [.var .global (ofString "ev"), .const 24#64]),
+                    .var .local (ofString "out_start")],
+                 .load .one (.op .add [.var .global (ofString "ev"), .const 144#64]),
+                 .var .local (ofString "actual")])
+              .skip))) := rfl
+
 end FcNoEvmErr
 
 
