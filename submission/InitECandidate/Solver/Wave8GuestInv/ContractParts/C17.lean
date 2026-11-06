@@ -125,7 +125,7 @@ def SysTxReadyStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 theorem sysTxReadyStrong_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : SysTxReadyStrong s) : WorldOK s := h.1
 
-private theorem shapeEqHOL_one_iff_word {v : ValueHOL 64} :
+theorem shapeEqHOL_one_iff_word {v : ValueHOL 64} :
     shapeEqHOL .one (shapeOfHOLExact v) = true ↔ ∃ w : BitVec 64, v = .val (.word w) := by
   rcases v with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩
   · simp [shapeOfHOLExact, shapeEqHOL]
