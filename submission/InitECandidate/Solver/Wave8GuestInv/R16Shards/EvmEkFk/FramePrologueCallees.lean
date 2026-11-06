@@ -9084,6 +9084,65 @@ theorem precompile_call0_byteEff_total {F : Type} (fname : MlS)
             | exact eff.locals_clock _ _
             | (split <;> exact eff.locals_clock _ _)
 
+theorem precompile_sha256_block_call_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (ptr block : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) ptr =
+      some (.val (.word stp))) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "sha256_block") [ptr, block])).2 [(stp.toNat,64)] := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256_block") =
+      some ([(ofString "stp", .one), (ofString "blk", .one)],
+        sourceFnBody Guest.Software.guestFn_sha256_block, .one) :=
+    lookup_of_guestAst_getElem 93 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256_block) rfl
+  refine precompile_call0_byteEff_total _ _ _ _
+    (fun vals => [(R10Shards.P26_P28.valWordNat (vals[0]?.getD (.rStruct [])),64)]) hl ?_ s _ _ hc hi ?_
+  · intro entry vals hce hge hle
+    obtain ⟨p, b, rfl, hpe, hbe⟩ := R10Shards.P26_P28.lookupCode_two_words (by decide) hl hle
+    exact precompile_sha256_block_effect entry p hce hge hpe
+  · intro vals hv r hr hpos
+    change @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) ptr = some (.val (.word stp)) at hp
+    simp [evalListHOLFinite, evalListHOLExact, hp] at hv
+    split at hv
+    · rename_i v vs hv1 hv2
+      injection hv1 with hv1
+      subst v
+      injection hv with hv
+      subst vals
+      simp only [List.getElem?_cons_zero, Option.getD_some, R10Shards.P26_P28.valWordNat,
+        List.mem_singleton] at hr
+      subst r
+      exact ⟨(stp.toNat,64), List.mem_singleton.mpr rfl, le_rfl, le_rfl⟩
+    · simp at hv
+
+theorem precompile_sha256_init_call_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (ptr : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) ptr =
+      some (.val (.word stp))) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "sha256_state_init") [ptr])).2 [(stp.toNat,64)] := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256_state_init") =
+      some ([(ofString "stp", .one)], sourceFnBody Guest.Software.guestFn_sha256_state_init, .one) :=
+    lookup_of_guestAst_getElem 92 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256_state_init) rfl
+  refine precompile_call0_byteEff_total _ _ _ _
+    (fun vals => [(R10Shards.P26_P28.valWordNat (vals[0]?.getD (.rStruct [])),64)]) hl ?_ s _ _ hc hi ?_
+  · intro entry vals hce hge hle
+    obtain ⟨p, rfl, hpe⟩ := R10Shards.P26_P28.lookupCode_one_word hl hle
+    exact precompile_sha256_state_init_effect entry p hce hge hpe
+  · intro vals hv r hr hpos
+    change @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) ptr = some (.val (.word stp)) at hp
+    simp [evalListHOLFinite, evalListHOLExact, hp] at hv
+    subst vals
+    simp only [List.getElem?_cons_zero, Option.getD_some, R10Shards.P26_P28.valWordNat,
+      List.mem_singleton] at hr
+    subst r
+    exact ⟨(stp.toNat,64), List.mem_singleton.mpr rfl, le_rfl, le_rfl⟩
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
