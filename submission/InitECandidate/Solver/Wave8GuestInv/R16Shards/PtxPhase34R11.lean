@@ -15544,4 +15544,22 @@ theorem ignored_call_fall_inv_args {F : Type} {s t : PanSemStateFiniteExact 64 F
 
 end PtxP34
 
+namespace PtxP34
+
+/-- The actual ignored read-recording call preserves transaction backing words. -/
+theorem record_pre_state_read_call_header_words {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "record_pre_state_read") [.var .local (ofString "addr")]) = (none, mid)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨vs, body, callee, ret, v, cp, _, hl, hr, hm⟩ := ignored_call_fall_inv_args hc
+  subst mid
+  apply tx_header_words_of_fixed_frame hW hT
+  intro b hb hn
+  exact record_pre_state_read_fixed_frame s cp vs body callee ret v S Nd b hW.1.1 hT hb hn hl hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
