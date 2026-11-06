@@ -16515,4 +16515,71 @@ theorem op_log_growth_head_frame_g09 {F : Type}
   exact frameWF_of_log_growth_g09 hFW hdom hscratch hframe hgrows.1 hempty
     hfields hcapacity hlist hlen hbuffer hwords hmsg
 
+/-- Suspended frames retain structural validity even when log allocation advances the heap. -/
+theorem op_log_growth_tail_frame_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl}
+    (hFW : FrameWF s S ec) (hdom : post.memaddrs = s.memaddrs)
+    (hgrows : AllocatorGrows s post)
+    (hscratch : globN post "scratch_ptr" = globN s "scratch_ptr")
+    (hframe : globN post "frame_mem_ptr" = globN s "frame_mem_ptr")
+    (hempty : globN post "evm_empty" = globN s "evm_empty")
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hfields : ∀ k, k + 8 ≤ 280 → memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hheader : ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hslots : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8*i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8*i))
+    (hrecords : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (memW s (memW s (memW s (ec.1 + 88)) + 8*i) + k) =
+        memW s (memW s (memW s (memW s (ec.1 + 88)) + 8*i) + k))
+    (hmsg : MsgOwned post S (memW s (ec.1 + 112))) : FrameWF post S ec := by
+  have hwAt : ∀ a, WordAt post a ↔ WordAt s a := by
+    intro a
+    unfold WordAt
+    rw [hdom]
+    constructor
+    · rintro ⟨_, hd, _⟩
+      cases hm : s.memory (BitVec.ofNat 64 a) with
+      | word w => exact ⟨w, hd, rfl⟩
+    · rintro ⟨_, hd, _⟩
+      cases hm : post.memory (BitVec.ofNat 64 a) with
+      | word w => exact ⟨w, hd, rfl⟩
+  have hw : ∀ o, WordsOK post o ↔ WordsOK s o := by
+    intro o; unfold WordsOK; simp only [hwAt]
+  have h0 : memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) := by
+    simpa only [Nat.add_zero] using hheader 0 (by omega)
+  obtain ⟨_, hb⟩ := log_no_growth_tail_objects_congr_g09 hsys hfields hheader hslots hrecords
+  have hlist : LogsListOK post (memW s (ec.1 + 88)) := by
+    have hs := hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+    rcases hs with hn | ⟨hwords, halloc, hn, hcap, hentries⟩
+    · exact Or.inl hn
+    · right
+      refine ⟨(hw _).2 hwords, hgrows.allocated halloc, ?_, ?_, ?_⟩
+      · rw [hheader 8 (by omega)]; exact hn
+      · rw [hheader 8 (by omega), hheader 16 (by omega)]; exact hcap
+      · intro i hi
+        rw [hheader 8 (by omega)] at hi
+        obtain ⟨hword, hentry⟩ := hentries i hi
+        rw [h0]
+        refine ⟨(hwAt _).2 hword, ?_⟩
+        rw [hslots i hi]
+        exact logEntryOK_of_record_agree_g09 hdom hgrows.1 (hrecords i hi) hentry
+  apply frameWF_of_log_growth_g09 hFW hdom hscratch hframe hgrows.1 hempty
+    _ _ hlist _ _ _ hmsg
+  · intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+      exact hfields _ (by omega)
+  · rw [hheader 16 (by omega)]
+    exact hFW.2.2.2.2.2.2.2.2.2.2.1
+  · rw [hheader 8 (by omega), hheader 16 (by omega)]
+    exact hFW.2.2.2.2.2.2.2.2.2.2.2.1
+  · rw [hb, hscratch]
+    rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.1 with hh | hs
+    · exact Or.inl ⟨hh.1, le_trans hh.2 hgrows.1⟩
+    · exact Or.inr hs
+  · rw [hb]; exact (hw _).2 hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
