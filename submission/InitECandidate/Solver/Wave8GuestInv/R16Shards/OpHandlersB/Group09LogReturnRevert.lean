@@ -16245,4 +16245,62 @@ theorem op_log_no_growth_execution_of_invariant_g09 {F : Type}
   exact log_append_no_growth_execution_post_g09 s e log l n cap p hcode hclock
     he hlg hde hme hd0 hd8 hd16 hm0 hm8 hm16 hlt hne hdslot hp
 
+/-- Concrete in-place log_append closes entirely from pre-state validity and separation. -/
+theorem op_log_no_growth_execution_of_separation_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (head : Ivl) (tail : List Ivl) (S Nd : List Nat)
+    (e l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hFW : ∀ ec ∈ evmChain s, FrameWF s S ec)
+    (hpw : (frameObjects s head).Pairwise Disj)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hl_bound : l.toNat + 24 ≤ 2^64)
+    (hp_bound : p.toNat + 8 * cap.toNat ≤ 2^64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8))
+    (hnewMsg : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls s log.toNat,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hold : ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj)
+    (hnew : (logOwnedIvls s log.toNat).Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls s log.toNat))
+    (holdWorld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd))
+    (hnewWorld : IvlsDisj (logOwnedIvls s log.toNat) (worldOwned s S Nd))
+    (hheaderWorld : ∀ i ∈ worldTypedIvls s S Nd, Disj (l.toNat, 24) i)
+    (hbufferWorld : ∀ i ∈ worldTypedIvls s S Nd, Disj (p.toNat, 8 * cap.toNat) i)
+    (hprotected : ∀ ec ∈ evmChain s, ∀ o ∈ ([(ec.1, 280), (ec.2, 104)] : List Ivl),
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8))
+    (htail : ∀ ec ∈ tail, ∀ o ∈ ([(memW s (ec.1 + 88), 24),
+        (memW s (memW s (ec.1 + 88)), 8 * memW s (memW s (ec.1 + 88) + 8))] : List Ivl),
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8))
+    (hrecords : ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let o := (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40)
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8))
+    (hclock : s.clock ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hd0 : s.memaddrs l) (hd16 : s.memaddrs (l + 16#64))
+    (hm0w : s.memory l = .word p) (hm8w : s.memory (l + 8#64) = .word n)
+    (hm16w : s.memory (l + 16#64) = .word cap)
+    (hne : l ≠ l + 8#64) (hHM : HeadMemAligned s) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append)
+    out.1 = some (.returned (.val (.word 0))) ∧
+      EvmInv out.2 ∧ evmR out.2 = evmR s ∧ HeadMemAligned out.2 := by
+  have hi := op_log_no_growth_invariant_of_separation_g09 s head tail S Nd l p n cap log
+    hA hinv hWT hFW hpw hcons hl hn hm0 hm16 hnonnull hlt hl_bound hp_bound
+    hdisj hd8 hdslot hlog hdheader hdbuffer hnewMsg hold hnew hnewOld holdWorld hnewWorld
+    hheaderWorld hbufferWorld hprotected htail hrecords
+  obtain ⟨hf, hc, _⟩ := op_log_no_growth_readback_g09 s tail l p n log hl_bound
+    (by omega) hprotected htail hrecords
+  exact op_log_no_growth_execution_of_invariant_g09 s e log l n cap p S
+    hA hA.1.code hclock he hlg hde hme hd0 hd8 hd16 hm0w hm8w hm16w hlt hne hdslot hHM
+    hi hf hc
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
