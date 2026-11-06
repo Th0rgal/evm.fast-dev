@@ -19102,4 +19102,29 @@ theorem set_account_call_worldStep {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+
+/-- Account installation preserves the transaction environment and world typing. -/
+theorem set_account_call_txWorld {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (args : List (ExpHOL 64))
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "set_account") args) =
+      (none, post)) : TxWorld post ∧ ∃ S' Nd', WorldTypedWith post S' Nd' := by
+  have hs := (set_account_call_worldStep s post args hW.1 hr).1
+  have hB : ValidBufList [] := by intro p hp; cases hp
+  have hd := validBufList_disj hB hT
+  obtain ⟨S', Nd', _, hT', _⟩ := hs.2.2.2.2 S Nd hT hd
+  have hl := (ignored_call_fall_locals s post _ _ hr).1
+  have he := txEnv_preserved_by_worldStep hs (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp [R10Shards.P26_P28.stdKeep])
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+    (by simp [bufRegions])
+    (bo_words hT.2.2.1 hW.2.bo_nz).2.1 (by simp [bufRegions]) hW.2
+    (locals := post.locals) (by rw [hl])
+  exact ⟨⟨PtxP1.worldOK_of_parts hs.1 hT', he⟩, S', Nd', hT'⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
