@@ -9202,4 +9202,79 @@ theorem ext_code_tail_of_world_nonzero {F : Type} (s : PanSemStateFiniteExact 64
     hsk hws hts hbs hdn htn hcn hl
   exact ⟨S,Nd,db,hash,tw,h⟩
 
+/-- Full external-code retrieval reduces to strong entry facts after account lookup. -/
+theorem ext_code_of_return_of_world_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hentry : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "addr")] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post) →
+      ∀ vals b cl r,
+      let st := setVarHOLFinite (ofString "a") v {post with locals := s.locals}
+      evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+          .var .local (ofString "addr")] = some vals →
+      lookupCodeHOLFinite st.code.lookup (ofString "get_code") vals = some (b,cl,r) →
+      ∃ S Nd db hash tw, GetCodeEntryStrong (callEntryStateHOLFinite st cl) S Nd db hash tw) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ext_code_of)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  change Ret s (.decCall (ofString "a") .one (ofString "get_account")
+    [.var .local (ofString "addr")]
+    (.decCall (ofString "c") (.comb [.one,.one]) (ofString "get_code")
+      [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+        .var .local (ofString "addr")] (.return (.var .local (ofString "c"))))) _
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  have hm := (InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).1
+  rw [hb] at hm
+  exact ext_code_tail_of_world_entry _ (hm.trans hc) (hentry values body callee ret v post ha hl hb)
+
+/-- Transport protected code records through an unchanged table/fixed layout. -/
+theorem codeDbPayloadStrong_of_preserved_layout {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hv : htabValues post db = htabValues s db)
+    (hw : ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hf : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hfixed : fixedObjects post = fixedObjects s) :
+    CodeDbPayloadStrong post S db := by
+  refine ⟨nodeDbEntriesStrong_of_preserved_payloads he.1 hAs hAp hhp hv hw, ?_⟩
+  intro p hp
+  rw [hv] at hp
+  obtain ⟨hi,hb,ht,hfix⟩ := he.2 p hp
+  refine ⟨⟨hi.1,le_trans hi.2 hhp⟩,hb,?_,?_⟩
+  · intro t ht' i hi'
+    rw [hf t ht'] at hi'
+    exact ht t ht' i hi'
+  · intro i hi'
+    rw [hfixed] at hi'
+    exact hfix i hi'
+
+/-- Structural preservation of the strengthened world's code-root payloads. -/
+theorem worldTypedCodeStrong_of_preserved_layout {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (he : WorldTypedCodeStrong s S) (hW : WorldTyped post S)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg : ∀ g, globN post g = globN s g)
+    (hr : ∀ g k, (g,k) ∈ ([("ws",16),("bs",48),("ts",48)] : List (String × Nat)) →
+      memW post (globN s g+k) = memW s (globN s g+k))
+    (hv : ∀ db, htabValues post db = htabValues s db)
+    (hw : ∀ db, ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hf : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hfixed : fixedObjects post = fixedObjects s) :
+    WorldTypedCodeStrong post S := by
+  refine ⟨hW,?_⟩
+  intro g k hmem hn
+  rw [hg g,hr g k hmem]
+  exact codeDbPayloadStrong_of_preserved_layout (he.2 g k hmem (by rwa [hg g] at hn))
+    hAs hAp hhp (hv _) (hw _) hf hfixed
+
 end HeadStore

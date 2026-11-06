@@ -17007,4 +17007,47 @@ theorem phase2_htabExit_aa_headers {F : Type}
         rw [he] at hkl
         omega) 0 (by decide)).trans hkl
 
+/-- A private table cannot be a world value-table slot. -/
+theorem phase2_private_table_nonValue {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (t : Nat)
+    (hw : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (hf : ∀ slot ∈ worldRoleSlots s ++ journalRoleSlots s, slot.1 ≠ t) :
+    t ∈ S ∧
+    (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ t) ∧
+    (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ t) ∧
+    globN s "bal_accounts" ≠ t ∧
+    (∀ ad ∈ balRecords s, memW s ad ≠ t) ∧
+    (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ t) := by
+  have hn : t ≠ 0 := by
+    have hh := (hw.1.2.1 t ht).1.1 (t, 88) (by simp [htabFootprint])
+    have hb := hh.1.1
+    simp only [InitE.sourceBase] at hb
+    omega
+  have hr : ∀ slot ∈ worldRoleSlots s, slot.1 ≠ t :=
+    fun slot hm => hf slot (List.mem_append_left _ hm)
+  have recne : ∀ (g : String), (g = "bs" ∨ g = "ts" ∨ g = "ws") →
+      globN s g ≠ 0 → memW s (globN s g + 32) ≠ t := by
+    intro g hg hgn he
+    have hnz : memW s (globN s g + 32) ≠ 0 := by rw [he]; exact hn
+    have hm := R16WkAcctWs.mem_worldRoleSlots_recRole s g 32 (g ++ "+32") hgn hnz
+      (by rcases hg with rfl | rfl | rfl <;> simp [recRoles, hgn])
+    exact hr _ hm he
+  refine ⟨ht, recne "bs" (Or.inl rfl),
+    recne "ts" (Or.inr (Or.inl rfl)), ?_, ?_,
+    recne "ws" (Or.inr (Or.inr rfl))⟩
+  · intro he
+    have hnz : globN s "bal_accounts" ≠ 0 := by rw [he]; exact hn
+    apply hr (_, "bal_accounts") ?_ he
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simpa [globN] using hnz⟩
+    apply List.mem_append.2; left; apply List.mem_append.2; left
+    apply List.mem_append.2; left; apply List.mem_append.2; right; simp [globN]
+  · intro ad had he
+    have hnz : memW s ad ≠ 0 := by rw [he]; exact hn
+    apply hr (_, "bal.stor") ?_ he
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simpa [memW] using hnz⟩
+    apply List.mem_append.2; right
+    exact List.mem_flatMap.2 ⟨ad, had, by simp [memW]⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

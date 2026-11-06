@@ -10390,6 +10390,59 @@ theorem precompile_sha256_blocks_body_index {F : Type}
       (by rw [hloc]; exact hx) hb
   | some r => simp [run] at hr
 
+theorem precompile_while_normal_exit {F : Type}
+    (P : PanSemStateFiniteExact 64 F → Prop) (cond : ExpHOL 64) (body : ProgHOL 64)
+    (hdec : ∀ s, P s → P (decClockHOLFinite s))
+    (hb : ∀ s, P s → LoopActive cond s →
+      (evaluateHOLFiniteState s body).1 ≠ some .break ∧
+      ((evaluateHOLFiniteState s body).1 = none ∨
+        (evaluateHOLFiniteState s body).1 = some .continue → P (evaluateHOLFiniteState s body).2))
+    (s : PanSemStateFiniteExact 64 F) (hp : P s)
+    (hr : (evaluateHOLFiniteState s (.while cond body)).1 = none) :
+    let post := (evaluateHOLFiniteState s (.while cond body)).2
+    P post ∧ @evalHOLFinite 64 F _ post
+      (fun a => Classical.propDecidable (post.memaddrs a)) cond = some (.val (.word 0)) := by
+  rw [evaluateHOLFiniteState_while_total] at hr ⊢
+  split
+  · rename_i v hv
+    rw [hv] at hr
+    dsimp only at hr
+    split
+    · rename_i hn
+      change v ≠ 0#64 at hn
+      have hn' : v ≠ (0 : BitVec 64) := hn
+      rw [if_pos hn'] at hr
+      split
+      · rename_i hz
+        simp [hz] at hr
+      · dsimp only at hr ⊢
+        rename_i hz
+        rw [if_neg hz] at hr
+        rw [fixClockHOLFinite_evaluateState] at hr ⊢
+        have ha : LoopActive cond (decClockHOLFinite s) :=
+          loopActive_decClock ⟨_, hv, hn⟩
+        obtain ⟨hnb, hpres⟩ := hb (decClockHOLFinite s) (hdec s hp) ha
+        have rem := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+        rcases run : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r,mid⟩
+        rw [run] at hnb hpres rem
+        have hlt : mid.clock < s.clock := by change mid.clock ≤ s.clock-1 at rem; omega
+        cases r with
+        | none =>
+          simp only [run] at hr ⊢
+          exact precompile_while_normal_exit P cond body hdec hb mid (hpres (Or.inl rfl)) hr
+        | some r =>
+          cases r <;> simp only [run] at hr ⊢
+          all_goals first
+            | exact precompile_while_normal_exit P cond body hdec hb mid (hpres (Or.inr rfl)) hr
+            | exact False.elim (hnb rfl)
+            | cases hr
+    · rename_i hn
+      have hz : v = 0 := by simpa only [not_not] using hn
+      exact ⟨hp, hz ▸ hv⟩
+  · rename_i hn
+    split at hr <;> simp_all
+termination_by s.clock
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
