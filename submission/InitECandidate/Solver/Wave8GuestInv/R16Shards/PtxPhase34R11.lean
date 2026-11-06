@@ -16512,4 +16512,30 @@ theorem journal_key_copy_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Each word store contained in the journal record retains its narrow effect. -/
+theorem journal_record_store_effect {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} {jrec : Ivl}
+    (dst value : ExpHOL 64) (address word : BitVec 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hd : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) dst =
+      some (.val (.word address)))
+    (hv : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) value =
+      some (.val (.word word)))
+    (hlo : jrec.1 ≤ address.toNat) (hhi : address.toNat + 8 ≤ jrec.1 + jrec.2)
+    (hr : evaluateHOLFiniteState cur (.store dst value) = (none, post)) :
+    WorldEff s post [jrec] [] ["heap_ptr"] := by
+  have hm := worldEff_store_word heff dst value
+    (fun v h => by rw [hv] at h; exact ⟨word, (Option.some.inj h).symm⟩)
+    (fun x h _ => by
+      rw [hd] at h
+      have hx : address = x := by injection h with h; injection h with h; injection h
+      subst x
+      exact Or.inl ⟨jrec, by simp, hlo, hhi⟩)
+  rw [hr] at hm
+  exact hm
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
