@@ -8119,6 +8119,23 @@ def PrecompileDispatchSpecs : Prop :=
     "pre_bls_map_fp_to_g1", "pre_bls_map_fp2_to_g2", "pre_p256verify"] : List String),
     EvmProgStep frameStartGw (.call (some (none, none)) (ofString f) [])
 
+theorem precompile_head_update_step {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) (hGuest : GuestInv post)
+    (hglobals : post.globals = s.globals) (hbe : post.be = s.be)
+    (hmemory : ∀ x : BitVec 64,
+      (∀ addr ∈ R11Shards.headAllowedOffsets (globN s "ev") (globN s "cur_cont"),
+        x ≠ BitVec.ofNat 64 addr) → post.memory x = s.memory x)
+    (hgas : memW post (globN s "ev" + 64) + memW post (globN s "ev" + 192) ≤
+      memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192))
+    (hcells : ChainCellsAgree s post) : EvmStepCC frameStartGw s post := by
+  obtain ⟨inv, chain, _⟩ := R11Shards.evmInv_of_head_status_gas_update
+    hInv hGuest hglobals hbe hmemory hgas
+  refine ⟨⟨inv, ?_, ?_, chain⟩, hcells⟩
+  · simp [globN, hglobals]
+  · intro k _
+    rw [hglobals]
+
 private theorem dispatch_step_trans {F : Type} {s mid post : PanSemStateFiniteExact 64 F}
     (h1 : EvmStepCC frameStartGw s mid) (h2 : EvmStepCC frameStartGw mid post) :
     EvmStepCC frameStartGw s post := by
