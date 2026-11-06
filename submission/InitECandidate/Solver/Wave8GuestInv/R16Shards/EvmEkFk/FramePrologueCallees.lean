@@ -9727,6 +9727,65 @@ theorem precompile_byteEff_seq_resumes {F : Type}
     have he := ha (by simpa [run] using hnt) (by simpa [run] using hr)
     simpa only [run] using he
 
+open R10Shards.P26_P28 in
+theorem precompile_sha256_padding_prepare_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad rem : BitVec 64) (src : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hrm : s.locals.lookup (ofString "rem") = some (.val (.word rem)))
+    (hb : rem.toNat < 64) (hpad : pad.toNat + 128 ≤ heapEnd)
+    (hnt : (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "memzero")
+        [.var .global (ofString "sha_pad"), .const 128])
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")])
+          (.storeByte (.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "rem")])
+            (.const 128))))).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "memzero")
+        [.var .global (ofString "sha_pad"), .const 128])
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")])
+          (.storeByte (.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "rem")])
+            (.const 128))))).1 = none ∨ Resumes (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "memzero")
+        [.var .global (ofString "sha_pad"), .const 128])
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")])
+          (.storeByte (.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "rem")])
+            (.const 128))))).1) :
+    ByteEff s (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "memzero")
+        [.var .global (ofString "sha_pad"), .const 128])
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")])
+          (.storeByte (.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "rem")])
+            (.const 128))))).2 [(pad.toNat,128)] := by
+  refine precompile_byteEff_seq_resumes s _ _ _ hnt hr
+    (precompile_sha256_padding_zero_effect s pad hc hi hp) ?_
+  intro m hm hntm hrm'
+  have he := precompile_sha256_padding_zero_effect s pad hc hi hp (by rw [hm]; simp)
+    (Or.inl (by rw [hm]))
+  have hl := precompile_call0_locals_on_flow s (ofString "memzero")
+    [.var .global (ofString "sha_pad"), .const 128] (by rw [hm])
+  rw [hm] at he hl
+  have him : GuestInv m := guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi
+  have hpm : m.globals.lookup (ofString "sha_pad") = some (.val (.word pad)) := by
+    rw [he.globals]; exact hp
+  have hrmm : m.locals.lookup (ofString "rem") = some (.val (.word rem)) := by
+    rw [hl]; exact hrm
+  refine precompile_byteEff_seq_resumes m _ _ _ hntm hrm'
+    (precompile_sha256_padding_copy_effect m pad rem src (he.code.trans hc) him hpm hrmm hb) ?_
+  intro n hn hntn hrn
+  have he2 := precompile_sha256_padding_copy_effect m pad rem src (he.code.trans hc) him hpm hrmm hb
+    (by rw [hn]; simp) (Or.inl (by rw [hn]))
+  have hl2 := precompile_call0_locals_on_flow m (ofString "memcpy")
+    [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")] (by rw [hn])
+  rw [hn] at he2 hl2
+  apply precompile_sha256_padding_byte_effect n pad rem
+    (guestInv_congr he2.code he2.memaddrs he2.shMemaddrs he2.baseAddr him)
+    (by rw [he2.globals]; exact hpm) (by rw [hl2]; exact hrmm) hb hpad
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
