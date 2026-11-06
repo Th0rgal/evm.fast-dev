@@ -12418,6 +12418,46 @@ theorem pre_sha256_body_flows_resumes {F : Type} (s : PanSemStateFiniteExact 64 
                 precompile_seq_store_flows_resumes t _ _ _ (fun t ht =>
                   precompile_return_flows_resumes t _ ht) ht) ht) ht) ht) ht) ht) ht) hr
 
+theorem precompile_while_invariant_no_normal_exit {F : Type}
+    (cond : ExpHOL 64) (body : ProgHOL 64)
+    (P : PanSemStateFiniteExact 64 F → Prop)
+    (hguard : ∀ t, P t → @evalHOLFinite 64 F _ t
+      (fun a => Classical.propDecidable (t.memaddrs a)) cond = some (.val (.word 1)))
+    (hdec : ∀ t, P t → P (decClockHOLFinite t))
+    (hbody : ∀ t, P t →
+      (evaluateHOLFiniteState t body).1 ≠ some .break ∧
+      ((evaluateHOLFiniteState t body).1 = none ∨
+        (evaluateHOLFiniteState t body).1 = some .continue →
+        P (evaluateHOLFiniteState t body).2))
+    (s : PanSemStateFiniteExact 64 F) (hs : P s) :
+    (evaluateHOLFiniteState s (.while cond body)).1 ≠ none := by
+  rw [evaluateHOLFiniteState_while_total]
+  rw [hguard s hs]
+  dsimp only
+  split <;> try (rename_i h; exact False.elim (h (by decide)))
+  split
+  · simp
+  · rw [fixClockHOLFinite_evaluateState]
+    have hb := hbody (decClockHOLFinite s) (hdec s hs)
+    have hle := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+    rcases run : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r,m⟩
+    rw [run] at hb hle
+    have hlt : m.clock < s.clock := by
+      change m.clock ≤ s.clock - 1 at hle
+      omega
+    cases r with
+    | none =>
+      exact precompile_while_invariant_no_normal_exit cond body P hguard hdec hbody m
+        (hb.2 (Or.inl rfl))
+    | some r =>
+      cases r with
+      | «continue» =>
+        exact precompile_while_invariant_no_normal_exit cond body P hguard hdec hbody m
+          (hb.2 (Or.inr rfl))
+      | «break» => exact False.elim (hb.1 rfl)
+      | _ => simp
+termination_by s.clock
+
 theorem precompile_sha256_block_index_add_bound (i : BitVec 64)
     (halign : i.toNat % 64 = 0) :
     (i + 64).toNat % 64 = 0 ∧ (i + 64).toNat ≤ 2^64 - 64 := by
