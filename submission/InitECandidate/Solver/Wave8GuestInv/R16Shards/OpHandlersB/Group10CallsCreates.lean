@@ -11591,4 +11591,69 @@ theorem words_of_return_bound_g10 {F : Type}
         | _ => simp [shapeOfHOLExact, shapeEqHOL] at hr
       | _ => simp at hr
 
+theorem epsA_refine_return_g10
+    {P P' : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Q Q' : ∀ {F : Type}, PanSemStateFiniteExact 64 F → ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {params : List (MlS × ShapeHOL)} {body : ProgHOL 64} {rs : ShapeHOL}
+    (hl : originalRuntimeCode.lookup fname = some (params, body, rs))
+    (hf : EvmPreservingSpecA P Q fname)
+    (hp : ∀ {F} (s : PanSemStateFiniteExact 64 F), P' s → P s)
+    (hq : ∀ {F} (s : PanSemStateFiniteExact 64 F) v post,
+      s.code = originalRuntimeCode → P' s → Q s v post →
+      (evaluateHOLFiniteState s body).1 = some (.returned v) → Q' s v post) :
+    EvmPreservingSpecA P' Q' fname := by
+  obtain ⟨params', body', rs', hl', hs⟩ := hf
+  rw [hl] at hl'
+  cases hl'
+  refine ⟨params, body, rs, hl, ?_⟩
+  intro F s hc hi hw hpre hlookup hnt
+  have h := hs s hc hi hw (hp s hpre) hlookup hnt
+  exact ⟨fun v hv => ⟨(h.1 v hv).1, (h.1 v hv).2.1,
+    (h.1 v hv).2.2.1, hq s v _ hc hpre (h.1 v hv).2.2.2 hv⟩, h.2⟩
+
+theorem epsA_words_of_bounded_g10 :
+    EvmPreservingSpecA
+      (fun s => ∃ n : BitVec 64, s.locals.lookup (ofString "n") = some (.val (.word n)))
+      (fun s v post => LocFrame s post ∧ ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat < 2 ^ 59)
+      (ofString "words_of") := by
+  apply epsA_refine_return_g10 lookup_words_of epsA_words_of (fun _ _ => trivial)
+  intro F s v post hc hp hq hr
+  obtain ⟨n, hn⟩ := hp
+  exact ⟨hq, words_of_return_bound_g10 s n hc hn v hr⟩
+
+def CreateCostArgs_g10 {F : Type} (isCreate2 : Bool)
+    (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w memoryCost : BitVec 64, w.toNat < 2 ^ 59 ∧
+    s.locals.lookup (ofString "a") = some (.val (.word
+      (if isCreate2 then 12000#64 + 6#64 * w + 2#64 * w else 12000#64 + 2#64 * w))) ∧
+    s.locals.lookup (ofString "b") = some (.val (.word memoryCost))
+
+theorem epsA_create_add_sat_positive_g10 (isCreate2 : Bool) :
+    EvmPreservingSpecA (CreateCostArgs_g10 isCreate2)
+      (fun s v post => LocFrame s post ∧ ∃ cost : BitVec 64, v = .val (.word cost) ∧ 0 < cost.toNat)
+      (ofString "add_sat") := by
+  apply epsA_refine_return_g10 lookup_add_sat epsA_add_sat (fun _ _ => trivial)
+  intro F s v post hc hp hq hr
+  obtain ⟨w, mc, hw, ha, hb⟩ := hp
+  exact ⟨hq, create_add_sat_return_positive_g10 s w mc hw isCreate2 ha hb v hr⟩
+
+theorem create_decCall_charge_then_child_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (P : PanSemStateFiniteExact 64 F → Prop)
+    (isCreate2 charged : Bool) (name : MlS) (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (hentry : ∀ t values body callee rs,
+      t.code = originalRuntimeCode → EvmInv t → Group10.HeadMemChainWF t → P t →
+      evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a)) args = some values →
+      lookupCodeHOLFinite t.code.lookup (ofString "add_sat") values = some (body, callee, rs) →
+      CreateCostArgs_g10 isCreate2 (callEntryStateHOLFinite t callee))
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 name) cont) :
+    HandlerRunA s0 P charged
+      (.decCall name .one (ofString "add_sat") args
+        (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local name]) cont)) := by
+  apply HandlerRunA.decCall (epsA_create_add_sat_positive_g10 isCreate2) hentry
+    (Q := PositiveCostLocal_g10 name)
+  · intro t values body callee rs v post hi hw hp ha hl hpi hpw hch hq
+    obtain ⟨cost, rfl, hpos⟩ := hq.2
+    exact bound_cost_local_positive_g10 _ name cost hpos
+  · exact charge_positive_local_then_child_g10 s0 name cont charged hchild
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
