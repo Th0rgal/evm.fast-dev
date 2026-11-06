@@ -11334,4 +11334,13 @@ theorem wkSc_merge_tx_into_block :
       withdrawalKeep NoExtra (ofString "merge_tx_into_block") :=
   wkSc_merge_tx_into_block_of_storage_suffix progWithdrawalStep_mergeStorageSuffix
 
+theorem wk_bal_init :
+    WorldKeeps WorldOK (fun _ => [])
+      ["bal_accounts", "bal_idx_accts", "bal_idx_stor", "bal_index", "bal_key_buf", "heap_ptr"]
+      stdKeep NoExtra (ofString "bal_init") := WkBal.wk_bal_init
+
+theorem wk_bal_remove_change :
+    WorldKeeps BalChangeArg (fun _ => []) [] stdKeep NoExtra
+      (ofString "bal_remove_change") := WkBal.wk_bal_remove_change
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
