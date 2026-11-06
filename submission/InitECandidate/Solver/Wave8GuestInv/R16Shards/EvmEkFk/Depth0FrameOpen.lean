@@ -8300,4 +8300,25 @@ theorem witness_return_after_access_execution {F : Type}
   rw [evalHOLFinite_eq_toExact] at hload ⊢
   exact hload
 
+/-- An allocated aligned word outside the mutated table survives its exit. -/
+theorem protected_word_after_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (a : Nat)
+    (hAs : ArenaReady s) (ht : HtabWF s (locN s "t"))
+    (ha : Allocated s (a, 8)) (hal : a % 8 = 0)
+    (hd : ∀ j ∈ htabFootprint s (locN s "t"), Disj (a, 8) j)
+    (hx : HtabExit s post) : memW post a = memW s a := by
+  have hu : InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.IvlUnhit s post (a, 8) := by
+    right
+    apply ivlUnhit_of_frameOutside ⟨hal, by norm_num⟩ hx.2.2.2.2.2.2.1
+    · intro j hj
+      exact ⟨(ht.1 j hj).2.1, (ht.1 j hj).2.2.1⟩
+    · have hs := hAs.2.2.2.2.2.2.1
+      have hp := hx.1.2.2.2.2.2.2.1
+      exact ⟨hs, by omega⟩
+    · exact hd
+    · exact disj_fresh_of_allocated hAs.2 hx.1.2 hx.2.2.2.2.1 ha
+  apply InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.memW_eq_of_ivlUnhit hu hal
+  · exact allocated_le_2pow64 hAs.2 ha
+  · exact ⟨Nat.le_refl _, Nat.le_refl _⟩
+
 end HeadStore
