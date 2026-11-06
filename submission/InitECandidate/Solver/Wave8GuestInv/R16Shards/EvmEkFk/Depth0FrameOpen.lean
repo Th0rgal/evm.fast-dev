@@ -9437,4 +9437,54 @@ theorem protected_payload_words_of_world_frame {F : Type}
     rw [hm]
   exact ⟨hw p (by omega) (by omega),hw (p+8) (by omega) (by omega)⟩
 
+/-- Old protected payloads avoid objects contained in old objects or fresh heap. -/
+theorem protected_payload_disj_of_growth {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db p : Nat} {i : Ivl}
+    (he : CodeDbPayloadStrong s S db) (hp : p ∈ htabValues s db)
+    (hg : i = (0,0) ∨
+      (∃ j, ((∃ t ∈ S, j ∈ htabFootprint s t) ∨ j ∈ fixedObjects s) ∧
+        Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr")) :
+    Disj (p,16) i := by
+  obtain ⟨hi,_,ht,hf⟩ := he.2 p hp
+  rcases hg with rfl | ⟨j,hj,hij⟩ | hnew
+  · simp [Disj]
+  · have hd : Disj (p,16) j := by
+      rcases hj with ⟨t,ht',hj'⟩ | hj'
+      · exact ht t ht' j hj'
+      · exact hf j hj'
+    unfold Inside at hij
+    unfold Disj at hd ⊢
+    dsimp only at hd ⊢
+    rcases hd with hd | hd | hd | hd <;> omega
+  · unfold Inside at hnew hi
+    unfold Disj
+    dsimp only at hi ⊢
+    omega
+
+/-- Preserve protected code records while the typed table set and layout grow. -/
+theorem codeDbPayloadStrong_of_owned_growth {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S S' : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hv : htabValues post db = htabValues s db)
+    (hw : ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hg : ∀ i, ((∃ t ∈ S', i ∈ htabFootprint post t) ∨ i ∈ fixedObjects post) →
+      i = (0,0) ∨
+      (∃ j, ((∃ t ∈ S, j ∈ htabFootprint s t) ∨ j ∈ fixedObjects s) ∧
+        Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr")) :
+    CodeDbPayloadStrong post S' db := by
+  refine ⟨nodeDbEntriesStrong_of_preserved_payloads he.1 hAs hAp hhp hv hw,?_⟩
+  intro p hp
+  rw [hv] at hp
+  obtain ⟨hi,hb,_,_⟩ := he.2 p hp
+  refine ⟨⟨hi.1,le_trans hi.2 hhp⟩,hb,?_,?_⟩
+  · intro t ht i hi'
+    exact protected_payload_disj_of_growth he hp (hg i (Or.inl ⟨t,ht,hi'⟩))
+  · intro i hi'
+    exact protected_payload_disj_of_growth he hp (hg i (Or.inr hi'))
+
 end HeadStore
