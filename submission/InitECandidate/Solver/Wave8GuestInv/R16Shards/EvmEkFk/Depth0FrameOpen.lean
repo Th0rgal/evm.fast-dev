@@ -7511,4 +7511,35 @@ theorem sk_make_preserves_code_record {F : Type} (s : PanSemStateFiniteExact 64 
       rcases hoff with rfl | rfl <;> omega
   exact ⟨by simpa using hword 0 (Or.inl rfl), hword 8 (Or.inr rfl)⟩
 
+/-- A table mutation's concrete write frame preserves an old code record
+separated from the table footprint. Its two cells precede the fresh heap. -/
+theorem htab_frame_preserves_code_record {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (t p : Nat)
+    (hp : p + 16 ≤ globN s "heap_ptr") (hp64 : p + 16 ≤ 2 ^ 64)
+    (hpos : ∀ i ∈ htabFootprint s t, 0 < i.2)
+    (hd : ∀ i ∈ htabFootprint s t, Disj (p, 16) i)
+    (hfr : FrameOutside s post (htabFootprint s t)
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    memW post p = memW s p ∧ memW post (p + 8) = memW s (p + 8) := by
+  have hword : ∀ off, off = 0 ∨ off = 8 →
+      memW post (p + off) = memW s (p + off) := by
+    intro off hoff
+    have hnat : (BitVec.ofNat 64 (p + off)).toNat = p + off :=
+      Nat.mod_eq_of_lt (by rcases hoff with rfl | rfl <;> omega)
+    unfold memW
+    rw [hfr _ ?_ ?_]
+    · intro i hi hhit
+      rw [hnat] at hhit
+      have hdisj := hd i hi
+      have hipos := hpos i hi
+      rcases hdisj with h | h | h | h <;> try dsimp only at h
+      all_goals
+        unfold CellHits at hhit
+        rcases hoff with rfl | rfl <;> omega
+    · rw [hnat]
+      unfold CellHits
+      dsimp only
+      rcases hoff with rfl | rfl <;> omega
+  exact ⟨by simpa using hword 0 (Or.inl rfl), hword 8 (Or.inr rfl)⟩
+
 end HeadStore
