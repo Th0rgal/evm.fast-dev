@@ -4,6 +4,7 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.TeNewSupport
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase34R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.ComputeStateRoot
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.Common
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -18462,5 +18463,29 @@ theorem phase2_compute_contract_address_selected_store_ready (h : PtxCallees)
       ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hd
     exact ⟨S, Nd, S', Nd', hw, hb, hm,
       (worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hw', hg, hframe⟩
+
+/-- The concrete byte-write effect frames aligned intervals outside its
+outputs and the two free allocation regions. -/
+theorem phase2_heapByteEff_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String} {i : Ivl}
+    (h : R16Shards.WkBlockTxEnc.HeapByteEff s post R gw)
+    (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0)
+    (hR : ∀ j ∈ R, Disj i j)
+    (hgap : Disj i (freeGap s)) (hheap : Disj i (heapFree s)) :
+    IvlUnhit s post i := by
+  intro a ha hh
+  by_contra he
+  have hh' : i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2 := by
+    unfold CellHits at hh
+    omega
+  have exclude : ∀ j, Disj i j → ¬ Keccak256.CellHitsPos a.toNat j := by
+    intro j hd hc
+    unfold Disj at hd
+    simp only [Keccak256.CellHitsPos, CellHits] at hc
+    rcases hd with hz | hz | hl | hr <;> omega
+  rcases h.cell_frame a he with ⟨j, hj, hc⟩ | hc | hc
+  · exact exclude j (hR j hj) hc
+  · exact exclude _ hgap hc
+  · exact exclude _ hheap hc
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
