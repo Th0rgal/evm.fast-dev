@@ -6809,4 +6809,54 @@ theorem get_code_cache_record_return {F : Type} (s : PanSemStateFiniteExact 64 F
   cases hv
   exact ⟨code, code_n, rfl, hb, rfl⟩
 
+/-- A cache hit returns its bounded code pair; a miss reaches the next cache
+or world-state fallback without changing the current state. -/
+theorem get_code_cache_branch_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (found ptr : BitVec 64) (tail : ProgHOL 64)
+    (hwlocal : s.locals.lookup (ofString "w") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]))
+    (hrecord : found ≠ 0 → WordsOK s (ptr.toNat, 16) ∧
+      Inside (memW s ptr.toNat, memW s (ptr.toNat + 8)) sourceBase (globN s "heap_ptr"))
+    (hmiss : found = 0 → Ret s tail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40)) :
+    Ret s (.seq (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "w"))) (.const 0))
+      (.return (.rstruct [
+        .load .one (.rfield 1 (.var .local (ofString "w"))),
+        .load .one (.op .add [.rfield 1 (.var .local (ofString "w")), .const 8])])) .skip) tail)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  by_cases hz : found = 0
+  · have he : ev s (.cmp .notEqual (.rfield 0 (.var .local (ofString "w"))) (.const 0)) =
+        some (.val (.word 0)) := by
+      simp [ev, evalHOLExact, hwlocal, hz, Compiler.Encoders.Asm.wordCmpHOL]
+    have hi : evaluateHOLFiniteState s
+        (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "w"))) (.const 0))
+          (.return (.rstruct [
+            .load .one (.rfield 1 (.var .local (ofString "w"))),
+            .load .one (.op .add [.rfield 1 (.var .local (ofString "w")), .const 8])])) .skip) = (none, s) := by
+      rw [evaluateHOLFiniteState_ite]
+      unfold ev at he
+      rw [he]
+      exact evaluateHOLFiniteState_skip s
+    intro v hv
+    rw [evaluateHOLFiniteState_seq_line780, hi] at hv
+    exact hmiss hz v hv
+  · have he : ev s (.cmp .notEqual (.rfield 0 (.var .local (ofString "w"))) (.const 0)) =
+        some (.val (.word 1)) := by
+      simp [ev, evalHOLExact, hwlocal, Compiler.Encoders.Asm.wordCmpHOL]
+      exact hz
+    intro v hv
+    rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hv
+    unfold ev at he
+    rw [he] at hv
+    simp only [show (1 : BitVec 64) ≠ 0 by decide, ↓reduceIte] at hv
+    split at hv
+    · rename_i hn
+      rw [evaluateHOLFiniteState_return] at hn
+      split at hn <;> simp_all
+      split at hn <;> simp_all
+    · obtain ⟨hw, hin⟩ := hrecord hz
+      obtain ⟨code, code_n, hv', hn, _⟩ := get_code_cache_record_return s hA found ptr hwlocal hw hin v hv
+      exact ⟨code, code_n, hv', hn⟩
+
 end HeadStore
