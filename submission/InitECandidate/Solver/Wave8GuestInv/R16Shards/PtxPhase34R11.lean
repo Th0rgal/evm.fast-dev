@@ -16974,4 +16974,49 @@ theorem journal_address_stores_backing_resume {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Compose allocation, key copying, address calculation and journal writes into a backing frame. -/
+theorem journal_alloc_to_writes_backing_resume {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {b : Ivl}
+    (j n p len t f0 f1 : BitVec 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hncap : n.toNat < globN s "journal_cap") (hjbase : j.toNat = globN s "journal")
+    (heff : WorldEff s cur [(j.toNat + 32 * n.toNat, 32)] [] ["heap_ptr"])
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hlen : cur.locals.lookup (ofString "klen") = some (.val (.word len)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hbound : j.toNat + 32 * n.toNat + 32 < 2 ^ 64)
+    (hr : evaluateHOLFiniteState cur
+      (.decCall (ofString "kc") .one (ofString "alloc") [.var .local (ofString "klen")]
+      (.seq (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "kc"), .var .local (ofString "key"), .var .local (ofString "klen")])
+      (.dec (ofString "r") .one (.op .add [.var .global (ofString "journal"),
+        .panop .mul [.var .global (ofString "journal_n"), .const 32#64]])
+      (.seq (.store (.var .local (ofString "r")) (.var .local (ofString "t")))
+        (.seq (.store (.op .add [.var .local (ofString "r"), .const 8#64]) (.var .local (ofString "kc")))
+          (.seq (.store (.op .add [.var .local (ofString "r"), .const 16#64]) (.rfield 0 (.var .local (ofString "old"))))
+            (.seq (.store (.op .add [.var .local (ofString "r"), .const 24#64]) (.rfield 1 (.var .local (ofString "old"))))
+              (.seq (.assign .global (ofString "journal_n") (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail)))))))) =
+      (some (.returned rv), out)) :
+    ∃ mid u, IvlUnhit s mid b ∧ evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨copied, u, he, hl, hrun, hm⟩ := journal_alloc_copy_prefix_effect p len _ rv heff hp hlen hr
+  have hj' : copied.globals.lookup (ofString "journal") = some (.val (.word j)) := by
+    rw [← he.gw_kept _ (by decide)]; exact hj
+  have hn' : copied.globals.lookup (ofString "journal_n") = some (.val (.word n)) := by
+    rw [← he.gw_kept _ (by decide)]; exact hn
+  obtain ⟨mid, v, hf, htail, hm'⟩ := journal_address_stores_backing_resume j n t p f0 f1 tail rv
+    hA hfix hb hal hb1 hb2 hncap hjbase he hj' hn'
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, ht, show ofString "kc" ≠ ofString "t" by decide])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, hold, show ofString "kc" ≠ ofString "old" by decide])
+    hbound hrun
+  exact ⟨mid, v, hf, htail, hm.trans hm'⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
