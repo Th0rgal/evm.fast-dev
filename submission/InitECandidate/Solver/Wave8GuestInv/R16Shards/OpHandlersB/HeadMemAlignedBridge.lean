@@ -11798,4 +11798,43 @@ theorem la_step_child_contents {F : Type} (s u : PanSemStateFiniteExact 64 F)
   exact laInv_append_callee_contents s u e L arr0 cap0 n0 nc i lg _ h hi hvalue
     hd88 hparent hd0 hd8 hd16 hLw hLd hLh hold hsum
 
+/-- Exact contents survive a continuation which preserves the header pointer
+and all occupied slots; unused capacity need not be preserved. -/
+theorem laContents_frame {F : Type} {s u post : PanSemStateFiniteExact 64 F}
+    {L arr0 n0 : BitVec 64} {child : Nat → Nat} {i : Nat}
+    (h : LAContents s L arr0 n0 child i u)
+    (hL : post.memory L = u.memory L)
+    (hslots : ∀ arr : BitVec 64, u.memory L = .word arr →
+      ∀ k, k < n0.toNat + i →
+        post.memory (BitVec.ofNat 64 (arr.toNat + 8 * k)) =
+          u.memory (BitVec.ofNat 64 (arr.toNat + 8 * k))) :
+    LAContents s L arr0 n0 child i post := by
+  obtain ⟨arr, hm, ha, hprefix, hsuffix⟩ := h
+  refine ⟨arr, hL.trans hm, ha, ?_, ?_⟩
+  · intro k hk
+    rw [memW, hslots arr hm k (by omega)]
+    exact hprefix k hk
+  · intro k hk
+    rw [memW, hslots arr hm (n0.toNat + k) (by omega)]
+    exact hsuffix k hk
+
+/-- The table-union tail preserves exact log contents whenever its write
+footprint avoids the list header and occupied destination slots. -/
+theorem icsTail_laContents {F : Type} {s u post : PanSemStateFiniteExact 64 F}
+    {e L arr0 n0 : BitVec 64} {tw i : Nat} {child : Nat → Nat}
+    (h : LAContents s L arr0 n0 child i u) (ht : ICSTail u e tw post)
+    (hL : L ≠ e + 96 ∧
+      (∀ v ∈ htabFootprint u tw, ¬ CellHits L.toNat v) ∧
+      ¬ CellHits L.toNat (globN u "heap_ptr", globN post "heap_ptr" - globN u "heap_ptr"))
+    (hslots : ∀ arr : BitVec 64, u.memory L = .word arr →
+      ∀ k, k < n0.toNat + i →
+      let a := BitVec.ofNat 64 (arr.toNat + 8 * k)
+      a ≠ e + 96 ∧ (∀ v ∈ htabFootprint u tw, ¬ CellHits a.toNat v) ∧
+        ¬ CellHits a.toNat (globN u "heap_ptr", globN post "heap_ptr" - globN u "heap_ptr")) :
+    LAContents s L arr0 n0 child i post := by
+  apply laContents_frame h (ht.2.2.2.2.2 L hL.1 hL.2.1 hL.2.2)
+  intro arr hm k hk
+  obtain ⟨h96, htab, hfresh⟩ := hslots arr hm k hk
+  exact ht.2.2.2.2.2 _ h96 htab hfresh
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
