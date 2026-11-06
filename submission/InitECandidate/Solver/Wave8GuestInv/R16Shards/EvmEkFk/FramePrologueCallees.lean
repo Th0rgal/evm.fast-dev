@@ -8260,14 +8260,16 @@ theorem precompile_output_fields_gas_eq {F : Type}
     hmemory _ (hne 192 120 (by decide) (by decide) (by decide))
     (hne 192 128 (by decide) (by decide) (by decide))]
 
-theorem precompile_store_output_step (off : Nat) (hoff : off = 120 ∨ off = 128)
-    (val : ExpHOL 64)
-    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+theorem precompile_store_output_at {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (off : Nat) (hoff : off = 120 ∨ off = 128) (val : ExpHOL 64)
+    (hInv : EvmInv s)
+    (hword : ∀ v : ValueHOL 64,
       @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) val = some v →
-        ∃ w : BitVec 64, v = .val (.word w)) :
-    EvmProgStep frameStartGw
-      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) val) := by
-  intro F s _ hInv _ hfr
+        ∃ w : BitVec 64, v = .val (.word w))
+    (hfr : R13.FlowsOrResumes (evaluateHOLFiniteState s
+      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) val)).1) :
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s
+      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) val)).2 := by
   rcases hrun : evaluateHOLFiniteState s
       (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) val) with ⟨r, post⟩
   simp only [hrun] at hfr ⊢
@@ -8283,7 +8285,7 @@ theorem precompile_store_output_step (off : Nat) (hoff : off = 120 ∨ off = 128
     obtain ⟨he_lt, _, ⟨evw, hevw, hevn⟩, _, _⟩ := R11Shards.evm_head_globals hInv
     obtain ⟨w, _, hp⟩ := R11Shards.store_global_off_word (t := s) (post := post)
       (gname := "ev") (gbase := globN s "ev") (off := off) hevw hevn
-      (by rcases hoff with rfl | rfl <;> omega) (hword s) hrun
+      (by rcases hoff with rfl | rfl <;> omega) hword hrun
     have hmem : ∀ x : BitVec 64,
         x ≠ BitVec.ofNat 64 (globN s "ev" + 120) →
         x ≠ BitVec.ofNat 64 (globN s "ev" + 128) → post.memory x = s.memory x := by
@@ -8294,6 +8296,30 @@ theorem precompile_store_output_step (off : Nat) (hoff : off = 120 ∨ off = 128
       (by rw [hp]; exact guestInv_congr (s := s) rfl rfl rfl rfl hInv.1.1)
       (by rw [hp]) (by rw [hp]) hmem
     exact le_of_eq (precompile_output_fields_gas_eq hInv hmem)
+
+theorem precompile_store_output_step (off : Nat) (hoff : off = 120 ∨ off = 128)
+    (val : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) val = some v →
+        ∃ w : BitVec 64, v = .val (.word w)) :
+    EvmProgStep frameStartGw
+      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) val) := by
+  intro F s _ hInv _ hfr
+  exact precompile_store_output_at s off hoff val hInv (hword s) hfr
+
+theorem precompile_store_output_local_at {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (off : Nat) (hoff : off = 120 ∨ off = 128) (name : MlS) (w : BitVec 64)
+    (hInv : EvmInv s) (hl : s.locals.lookup name = some (.val (.word w)))
+    (hfr : R13.FlowsOrResumes (evaluateHOLFiniteState s
+      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)])
+        (.var .local name))).1) :
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s
+      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)])
+        (.var .local name))).2 := by
+  apply precompile_store_output_at s off hoff _ hInv _ hfr
+  intro v hv
+  simp only [evalHOLExact, hl, Option.some.injEq] at hv
+  exact ⟨w, hv.symm⟩
 
 /-- Gas charging preserves all cells outside its two gas counters, including on errors. -/
 theorem precompile_charge_gas_memory {F : Type} (s : PanSemStateFiniteExact 64 F)
