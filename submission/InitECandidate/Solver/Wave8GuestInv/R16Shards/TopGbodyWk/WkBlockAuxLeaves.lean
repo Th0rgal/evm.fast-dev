@@ -10909,4 +10909,31 @@ theorem eval_merge_get_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
   · intro v ck hv
     exact hv.elim
 
+theorem eval_merge_occupied_zero {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word 0#64)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hnt : (evaluateHOLFiniteState s mergeOccupiedInner).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeOccupiedInner).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeOccupiedInner).1 (evaluateHOLFiniteState s mergeOccupiedInner).2 := by
+  unfold mergeOccupiedInner at hnt hfr ⊢
+  rw [evaluateHOLFiniteState_ite] at hnt hfr ⊢
+  by_cases hz : f0 = 0
+  · subst f0
+    simp only [evalHOLExact, hk, List.getElem?_cons_zero,
+      Flapjack.Compiler.Encoders.Asm.wordCmpHOL] at hnt hfr ⊢
+    simp at hnt hfr ⊢
+    exact WorldStepSc.refl s _ hW.1
+  · have he : evalAt s (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0#64)) =
+        some (.val (.word 1#64)) := by
+      simpa [evalAt, evalHOLExact, hk, Flapjack.Compiler.Encoders.Asm.wordCmpHOL] using hz
+    unfold evalAt at he
+    rw [he] at hnt hfr ⊢
+    simp only [show (1#64 : BitVec 64) ≠ 0 by decide, ↓reduceIte] at hnt hfr ⊢
+    apply eval_merge_get_zero s _ _ _ _ hc hW ?_ hnt hfr
+    intro tw hw
+    simpa [evalAt, evalHOLExact, ht] using hw.symm
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
