@@ -19238,4 +19238,29 @@ theorem conditional_destroy_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Table deletion preserves every nonempty fixed object. -/
+theorem htab_del_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat) (b : Ivl)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (ht : locN (callEntryStateHOLFinite s callee) "t" ∈ S)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_del") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : IvlUnhit s post b := by
+  have ha : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).2 hA, ?_, ?_⟩
+    · exact (htabWF_with_locals s callee (s.clock - 1) _).2 (hT.1.2.1 _ ht).1
+    · exact fun i hi => ((hT.1.2.1 _ ht).2 i hi).1
+  have hx := PtxP1.funSpec_at_lookup htab_del_spec s hA.1.code vs body callee ret hl ha
+    (by rw [hr]; simp)
+  rw [hr] at hx
+  obtain ⟨hAp, _, _, _, hhp, _, hframe, _⟩ := hx v rfl
+  exact htab_mutation_fixed_frame hA.2 hAp.2 hT ht hb hbpos hhp hframe
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
