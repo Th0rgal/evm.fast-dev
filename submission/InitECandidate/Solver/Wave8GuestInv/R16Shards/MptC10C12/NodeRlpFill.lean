@@ -5919,6 +5919,14 @@ private theorem eval_call_local_alloc_none {F : Type}
           hq_nat, hpq, hqc, hq8, hmid_hp, hg_sa, hm_sa, rfl, heff_mid⟩
       | _ => simp at hnone
 
+private def leafPayloadExact {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fr node : Nat) : Prop :=
+  memW s (fr + 40) =
+    rlpBytesLenPure (memB s (memW s (fr + 24))) (memW s (fr + 32)) +
+      rlpBytesLenPure
+        (if 0 < memW s (node + 56) then memB s (memW s (node + 48)) else 0)
+        (memW s (node + 56))
+
 private def ValidRlpFrame {F : Type} (s : PanSemStateFiniteExact 64 F)
     (Nd : List Nat) (fr : Nat) : Prop :=
   fr % 8 = 0 ∧
@@ -8121,6 +8129,54 @@ private theorem finishPayloadLen_pos {F : Type} (s : PanSemStateFiniteExact 64 F
       have hb1 := (rlpBytesLenPure_bounds (memB s (memW s (fr + 24))) (memW s (fr + 32))).1
       have hb2 := (rlpBytesLenPure_bounds 128 (memW s (memW s (fr + 8) + 56))).1
       omega
+
+private def finishWriteLen {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fr node : Nat) : Nat :=
+  if memW s node = 3 then
+    branchRefsLenSum s node 16 +
+      rlpBytesLenPure
+        (if 0 < memW s (node + 168) then memB s (memW s (node + 160)) else 0)
+        (memW s (node + 168))
+  else
+    rlpBytesLenPure (memB s (memW s (fr + 24))) (memW s (fr + 32)) +
+      if memW s node = 1 then
+        rlpBytesLenPure
+          (if 0 < memW s (node + 56) then memB s (memW s (node + 48)) else 0)
+          (memW s (node + 56))
+      else nodeRefBytes s (memW s (node + 48))
+
+private theorem finishWriteLen_eq_payload {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (fr : Nat)
+    (hfr : ValidRlpFrame s Nd fr)
+    (hleaf : memW s (memW s (fr + 8)) = 1 →
+      leafPayloadExact s fr (memW s (fr + 8))) :
+    finishWriteLen s fr (memW s (fr + 8)) =
+      finishPayloadLen s fr (memW s (fr + 8)) := by
+  obtain ⟨_, _, _, _, hk1, hk3, _, _, hbranch, _, hext⟩ := hfr
+  by_cases h3 : memW s (memW s (fr + 8)) = 3
+  · have h2 : memW s (memW s (fr + 8)) ≠ 2 := by omega
+    simp [finishWriteLen, finishPayloadLen, h3, h2, hbranch h3]
+  · by_cases h2 : memW s (memW s (fr + 8)) = 2
+    · obtain ⟨_, _, _, _, _, hpay⟩ := hext h2
+      have h1 : memW s (memW s (fr + 8)) ≠ 1 := by omega
+      simp [finishWriteLen, finishPayloadLen, h3, h2, h1, hpay]
+    · have h1 : memW s (memW s (fr + 8)) = 1 := by omega
+      have hpay := hleaf h1
+      unfold leafPayloadExact at hpay
+      simp [finishWriteLen, finishPayloadLen, h3, h2, h1, hpay]
+
+private theorem finishWriteLen_fits_alloc {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (fr buf q : Nat)
+    (hfr : ValidRlpFrame s Nd fr)
+    (hleaf : memW s (memW s (fr + 8)) = 1 →
+      leafPayloadExact s fr (memW s (fr + 8)))
+    (halloc : buf + rlpHeaderLenPure (finishPayloadLen s fr (memW s (fr + 8))) +
+      finishPayloadLen s fr (memW s (fr + 8)) ≤ q)
+    (hq : q ≤ heapLimit) :
+    buf + rlpHeaderLenPure (finishPayloadLen s fr (memW s (fr + 8))) +
+      finishWriteLen s fr (memW s (fr + 8)) ≤ heapLimit := by
+  rw [finishWriteLen_eq_payload s Nd fr hfr hleaf]
+  exact halloc.trans hq
 
 end NodeRlpFillProof
 
