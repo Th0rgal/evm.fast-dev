@@ -14916,4 +14916,65 @@ theorem phase2_get_account_message_scalar_backing (h : PtxCallees)
     phase2_get_account_resume_backing name args s vs body callee ret v post hc
       ⟨hp.1.1.1, hp.1.1.2.1, hp.2⟩ ha hl hr⟩
 
+/-- The backing-aware account lookup feeds the next Phase-2 assembly cut. -/
+theorem phase2_get_account_message_scalar_backing_bound (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+      (.decCall name .one (ofString "get_account") args tail) (K.get_account + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+    h.fb_get_account
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · exact phase2_get_account_message_scalar_backing h buffers contents names name args hm hi hn
+  · exact ht
+
+/-- Warming an account in the transaction table retains the message assembly guard. -/
+theorem phase2_htab_set_ts8_message_scalar_backing
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (key value : ExpHOL 64) :
+    Hoare (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none →
+        PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hb := (phase2_htab_set_ts8_world_backing key value).run s hc
+    ⟨hp.1.1.1, hp.1.1.2.1, hp.2⟩ hnt hr
+  have hs := R16WkAcctWs.progWStep_call0_htab_set_recSlot (B := []) (gw := ["heap_ptr"])
+    "ts" "ts+8" 8 key value (by simp) (by decide)
+    (fun s S hT hts ht0 => R16WkAcctWs.nonValueSlot_ts8 s S hT hts ht0)
+    s hc hp.1.1.1 hnt (Or.inl hr)
+  have hl := phase2_call0_locals s (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value] hr
+  refine ⟨⟨phase2_message_store_ready_world_step buffers contents s _ hp.1.1
+    hb.1.1 hb.2.1 (by rw [hl]) hs.1.2.1 ?_, ?_⟩, hb.2.2⟩
+  · intro S Nd hw
+    obtain ⟨S', Nd', _, hw', hg, hf, _⟩ := hs.1.2.2.2.2 S Nd hw
+      (by simp [R16WkAcctWs.bufRegions, IvlsDisj])
+    exact ⟨S', Nd', hw', hg, hf⟩
+  · intro n hn
+    obtain ⟨w, hw⟩ := hp.1.2 n hn
+    exact ⟨w, by rw [hl]; exact hw⟩
+
+/-- The message-aware warming call also exposes the original world/backing cut. -/
+theorem phase2_htab_set_ts8_message_world_backing
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (key value : ExpHOL 64) :
+    Hoare (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none → WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have h := (phase2_htab_set_ts8_message_scalar_backing buffers contents names key value).run
+    s hc hp hnt hr
+  exact ⟨h.1.1.1, h.1.1.2.1, h.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
