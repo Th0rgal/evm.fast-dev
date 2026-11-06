@@ -17202,4 +17202,53 @@ theorem op_log_no_growth_store_world_of_capacity_g09 {F : Type}
   exact op_log_no_growth_store_world_g09 s S head l p n log hA hinv hm hl
     hbuffer hroom hd8 hdslot hlb hpb
 
+/-- Concrete store-world preservation feeds the complete in-place invariant reconstruction. -/
+theorem op_log_no_growth_invariant_from_store_world_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (head : Ivl) (tail : List Ivl) (S : List Nat)
+    (l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hpw : (frameObjects s head).Pairwise Disj)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8))
+    (hnewMsg : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls s log.toNat,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hnew : (logOwnedIvls s log.toNat).Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls s log.toNat))
+    (hnewWorld : ∀ Nd, WorldTypedWith s S Nd →
+      IvlsDisj (logOwnedIvls s log.toNat) (worldOwned s S Nd))
+    (hprotected : ∀ ec ∈ evmChain s, ∀ o ∈ ([(ec.1, 280), (ec.2, 104)] : List Ivl),
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8))
+    (htail : ∀ ec ∈ tail, ∀ o ∈ ([(memW s (ec.1 + 88), 24),
+        (memW s (memW s (ec.1 + 88)), 8 * memW s (memW s (ec.1 + 88) + 8))] : List Ivl),
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8))
+    (hrecords : ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let o := (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40)
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    EvmInvAt post S := by
+  have hm : head ∈ evmChain s := by rw [hcons]; exact List.mem_cons_self
+  obtain ⟨Nd, hWT, hcell, hFW, hold, holdWorld⟩ :=
+    op_log_no_growth_store_world_of_capacity_g09 s S head l p n cap log hA hinv hm
+      hl hm0 hm16 hlt hd8 hdslot
+  obtain ⟨_, _, hlb, hpb⟩ :=
+    op_log_no_growth_store_bounds_g09 l p n cap hA (hFW head hm) hl hm0 hm16 hlt
+  obtain ⟨hfields, hcont, hheaders, hslots, hreads⟩ :=
+    op_log_no_growth_readback_g09 s tail l p n log hlb hpb hprotected htail hrecords
+  have hh := hprotected head hm (head.1, 280) (by simp)
+  exact op_log_no_growth_invariant_g09 s head tail S Nd l p n cap log
+    hA hinv hWT hFW hpw hcons hl hn hm0 hm16 hnonnull hlt hlb hpb hdisj hd8 hdslot
+    hh.1 hh.2.1 hh.2.2 hlog hdheader hdbuffer hnewMsg hold hnew hnewOld holdWorld
+    (hnewWorld Nd hWT) hcell hfields hcont hheaders hslots hreads
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
