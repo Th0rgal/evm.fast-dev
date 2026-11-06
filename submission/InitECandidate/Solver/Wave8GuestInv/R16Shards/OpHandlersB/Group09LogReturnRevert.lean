@@ -13682,4 +13682,42 @@ theorem log_no_growth_chain_records_preserved_g09 {F : Type}
     log_no_growth_protected_words_g09 s l p n log (ec.2, 104)
     hl hp (hbounds ec hec).2 (hheader ec hec).2 (hbuffer ec hec).2⟩
 
+/-- Typed-cell and chain-record preservation assemble the in-place append
+invariant, leaving only the changed object ownership obligations. -/
+theorem evmInvAt_of_log_no_growth_cells_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64) (S Nd : List Nat)
+    (hAs : ArenaReady s) (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * cap.toNat ≤ 2 ^ 64) (hlt : n.toNat < cap.toNat)
+    (hheaderWorld : ∀ i ∈ worldTypedIvls s S Nd, Disj (l.toNat, 24) i)
+    (hbufferWorld : ∀ i ∈ worldTypedIvls s S Nd, Disj (p.toNat, 8 * cap.toNat) i)
+    (hbounds : ∀ ec ∈ evmChain s, ec.1 + 280 ≤ 2 ^ 64 ∧ ec.2 + 104 ≤ 2 ^ 64)
+    (hheader : ∀ ec ∈ evmChain s,
+      Disj (ec.1, 280) (l.toNat, 24) ∧ Disj (ec.2, 104) (l.toNat, 24))
+    (hbuffer : ∀ ec ∈ evmChain s,
+      Disj (ec.1, 280) (p.toNat, 8 * n.toNat + 8) ∧
+      Disj (ec.2, 104) (p.toNat, 8 * n.toNat + 8)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    ArenaReady post → evmChain post = evmChain s →
+    (∀ ec ∈ evmChain s, FrameWF post S ec) →
+    ((evmChain post).map (frameObjects post)).flatten.Pairwise Disj →
+    IvlsDisj ((evmChain post).map (frameObjects post)).flatten (worldOwned s S Nd) →
+    (∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec) →
+    (∀ ec ∈ (evmChain s).tail, frameLogs post ec = frameLogs s ec) →
+    EvmInvAt post S := by
+  dsimp only
+  intro hAp hchain hframes hpairwise hdisj hobjects hlogs
+  have hcell := log_no_growth_final_typed_cells_g09 s l p n cap log S Nd
+    hAs.1.memaddrs hWT hd8 hdslot hl hp hlt hheaderWorld hbufferWorld
+  have hrecords := log_no_growth_chain_records_preserved_g09 s l p n log
+    hl (by omega) hbounds hheader hbuffer
+  exact evmInvAt_of_log_growth_cells_g09 hAs hAp hinv hWT
+    (le_refl _) (le_refl _) (by intros; rfl) hcell hchain
+    (fun ec hec k hk _ => (hrecords ec hec).1 k hk)
+    (fun ec hec k hk _ => (hrecords ec hec).2 k hk)
+    hframes hpairwise hdisj hobjects hlogs
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
