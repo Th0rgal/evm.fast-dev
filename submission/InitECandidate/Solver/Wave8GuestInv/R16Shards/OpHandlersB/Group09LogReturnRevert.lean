@@ -17433,4 +17433,67 @@ theorem op_log_no_growth_frame_protection_g09 {F : Type}
     exact ⟨R11Shards.Disj.symm (hpw.2.2 _ hh _ hom), shrink _
       (R11Shards.Disj.symm (hpw.2.2 _ (by rw [← hb]; simp [frameObjects]) _ hom))⟩
 
+/-- All objects of suspended frames avoid both in-place append write regions. -/
+theorem op_log_no_growth_tail_object_protection_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {head : Ivl} {tail : List Ivl}
+    (l p n cap : BitVec 64) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) :
+    ∀ ec ∈ tail, ∀ o ∈ frameObjects s ec,
+      Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8) := by
+  obtain ⟨_, _, _, hpw, _⟩ := op_log_old_ownership_g09 hinv
+  rw [hcons, List.map_cons, List.flatten_cons, List.pairwise_append] at hpw
+  intro ec hec o ho
+  have hom : o ∈ (tail.map (frameObjects s)).flatten :=
+    List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨ec, hec, rfl⟩, ho⟩
+  have hh : (l.toNat, 24) ∈ frameObjects s head := by simp [frameObjects, hl]
+  have hb : (p.toNat, 8 * cap.toNat) ∈ frameObjects s head := by
+    have heq : frameLogs s head = (p.toNat, 8 * cap.toNat) := by
+      simp [frameLogs, hl, hm0, hm16]
+    rw [← heq]; simp [frameObjects]
+  refine ⟨R11Shards.Disj.symm (hpw.2.2 _ hh _ hom), ?_⟩
+  have hd := R11Shards.Disj.symm (hpw.2.2 _ hb _ hom)
+  unfold Disj at hd ⊢
+  dsimp only at hd ⊢
+  rcases hd with hd | hd | hd | hd <;> omega
+
+/-- Suspended list headers and live slot prefixes inherit bounded write protection. -/
+theorem op_log_no_growth_tail_list_protection_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} {head : Ivl} {tail : List Ivl}
+    (l p n cap : BitVec 64) (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) :
+    ∀ ec ∈ tail, ∀ o ∈ ([(memW s (ec.1 + 88), 24),
+      (memW s (memW s (ec.1 + 88)), 8 * memW s (memW s (ec.1 + 88) + 8))] : List Ivl),
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8) := by
+  obtain ⟨_, _, hFW, _, _⟩ := op_log_old_ownership_g09 hinv
+  have protect := op_log_no_growth_tail_object_protection_g09 l p n cap hinv hcons hl hm0 hm16 hlt
+  intro ec hec o ho
+  have hmem : ec ∈ evmChain s := by rw [hcons]; exact List.mem_cons_of_mem _ hec
+  have hf := hFW ec hmem
+  have bounds := frameWF_bounds hA.2 hf
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+  rcases ho with rfl | rfl
+  · exact ⟨bounds.2.2.1, protect ec hec _ (by simp [frameObjects])⟩
+  · have hc := frameWF_logs_cap_bounds hA.2 hf
+    have hp := protect ec hec (frameLogs s ec) (by simp [frameObjects])
+    have hse : scratchEnd ≤ 2^64 := by rw [R11Shards.scratchEnd_val]; decide
+    refine ⟨by dsimp only; have := hc.2.1; have := hc.2.2.2.2.2; omega, ?_, ?_⟩
+    · have hd := hp.1
+      unfold frameLogs at hd
+      unfold Disj at hd ⊢
+      dsimp only at hd ⊢
+      rcases hd with hd | hd | hd | hd <;> omega
+    · have hd := hp.2
+      unfold frameLogs at hd
+      unfold Disj at hd ⊢
+      dsimp only at hd ⊢
+      rcases hd with hd | hd | hd | hd <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
