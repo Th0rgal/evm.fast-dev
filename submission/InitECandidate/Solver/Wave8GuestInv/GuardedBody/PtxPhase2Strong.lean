@@ -17167,4 +17167,24 @@ theorem phase2_htabExit_aa_message_fields {F : Type}
     omega
   · constructor <;> omega
 
+/-- Address warming jointly preserves tables, backing, and the message gas bound. -/
+theorem phase2_htabExit_aa_tables_backing_gas {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (he : TxEnv s) (hm : PtxMessageTables s aa ak)
+    (hb : R16Shards.TxBacking s)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hal : locN s "m" % 8 = 0)
+    (hg : memW s (locN s "m" + 40) < 2 ^ 63)
+    (hl : locN post "m" = locN s "m") (hbe : post.be = s.be)
+    (ht : locN s "t" = aa) (hx : HtabExit s post) :
+    PtxMessageTables post aa ak ∧ R16Shards.TxBacking post ∧
+      memW post (locN post "m" + 40) < 2 ^ 63 := by
+  refine ⟨phase2_htabExit_aa_message_tables hs hm hin hl hbe ht hx, ?_, ?_⟩
+  · obtain ⟨S, Nd, hw, ha, _⟩ := hm
+    exact phase2_htabExit_backing hs he hw (ht.symm ▸ ha) hb hx
+  · have hf := phase2_htabExit_aa_message_fields hs hm hin hal hl hbe ht hx 5 (by decide)
+    change memW post (locN post "m" + 40) = memW s (locN s "m" + 40) at hf
+    rw [hf]
+    exact hg
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
