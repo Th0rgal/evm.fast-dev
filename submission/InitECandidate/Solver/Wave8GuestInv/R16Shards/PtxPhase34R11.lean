@@ -19635,4 +19635,51 @@ theorem jdel_journal_append_backing_resume {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The concrete deletion journal and table tail preserve transaction backing headers. -/
+theorem jdel_journal_delete_tail_header_words {F : Type}
+    (s cur out : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (j n cap p tw kw f0 f1 : BitVec 64) (key result : ExpHOL 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (heff : WorldEff s cur [] [] ["heap_ptr"])
+    (hg : ∀ k : MlS, cur.globals.lookup k = s.globals.lookup k)
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : cur.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (ho : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (htw : ∀ S, TablesTyped s S → tw.toNat ∈ S ∧
+      ∀ q ∈ (tw.toNat, journalRole s tw.toNat) ::
+        (if journalRole s tw.toNat = "ts+32" then [(f1.toNat, "ts.inner")] else []),
+        q ∈ worldRoleSlots s)
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg 5#64 (.const 1#64)
+      (.seq (.call (some (none, none)) (ofString "htab_del")
+        [.var .local (ofString "t"), key]) (.return result))) = (some (.returned rv), out)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW out (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  apply journal_append_delete_tail_header_words s cur out S Nd n cap 5#64 tw kw f0 f1 1#64
+    (.const 1#64) key result rv hW hT heff hg
+    ((hg _).trans hn) ((hg _).trans hc) ht hk ho ?_ ?_ ?_ hr
+  · intro st hs; rfl
+  · simpa using htw
+  · intro cut hcut k hkm
+    have hb := txWorld_header_fixed hW k hkm
+    have ha := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+    have hbo : (memW s (globN s "bo" + k), 24) ∈ blockOutObjects s := by
+      have hk' : k = 40 ∨ k = 72 := by simpa using hkm
+      rcases hk' with rfl | rfl <;> simp [blockOutObjects, hW.2.bo_nz, hW.2.bo40, hW.2.bo72]
+    obtain ⟨mid, u, hf, ht', hm⟩ := jdel_journal_append_backing_resume j n cap p tw f0 f1 _ _
+      hW.1.1.2 hT.2.1 hT.2.2.1 hbo ha.1 ha.2.1 (by simp) heff hj hn hc hp ht ho hcut
+    have he := hm.trans (return_memory_eq ht')
+    intro a hal hit
+    rw [he]
+    exact hf a hal hit
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
