@@ -15249,4 +15249,22 @@ theorem record_pre_state_read_fixed_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Convert a fixed-object frame into the two backing-word equalities. -/
+theorem tx_header_words_of_fixed_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hframe : ∀ b ∈ fixedObjects s, b.2 ≠ 0 → IvlUnhit s post b) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have hb := txWorld_header_fixed hW k hk
+  have hf := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  apply memW_eq_of_ivlUnhit (hframe _ hb (by simp)) hf.2.1
+    (ivl_allocated_bound hW.1.1.2 hf.1).2
+  exact ⟨le_rfl, by dsimp; omega⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
