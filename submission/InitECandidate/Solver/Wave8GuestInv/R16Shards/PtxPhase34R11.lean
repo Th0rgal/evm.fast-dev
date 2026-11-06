@@ -19147,4 +19147,95 @@ theorem set_account_call_header_roots {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs InitECandidate.Solver.GuestTrapAndLookup
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Cut the concrete commit after installation, retaining typing, roots, backing,
+and the original emptiness-check continuation at one state. -/
+theorem modify_state_commit_prefix_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_modify_state_commit) =
+      (some (.returned v), post)) :
+    ∃ mid S' Nd', TxWorld mid ∧ WorldTypedWith mid S' Nd' ∧
+      globN mid "bo" = globN s "bo" ∧
+      (∀ k ∈ ([40, 72] : List Nat), memW mid (globN s "bo" + k) = memW s (globN s "bo" + k)) ∧
+      (∀ k ∈ ([40, 72] : List Nat),
+        memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k))) ∧
+      evaluateHOLFiniteState mid
+        (.decCall (ofString "e") .one (ofString "acct_is_empty") [.var .local (ofString "a")]
+          (.seq (.ite (.cmp .notEqual (.var .local (ofString "e")) (.const 0))
+            (.call (some (none, none)) (ofString "destroy_account") [.var .local (ofString "addr")]) .skip)
+            (.return (.const 0)))) = (some (.returned v), post) := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "set_account")
+    [.var .local (ofString "addr"), .var .local (ofString "a")]) _) = _ at hr
+  obtain ⟨mid, hm, ht⟩ := seq_call0_ret_inv hr
+  obtain ⟨hw, S', Nd', hty⟩ := set_account_call_txWorld s mid S Nd _ hW hT hm
+  have roots := set_account_call_header_roots s mid _ hW hm
+  exact ⟨mid, S', Nd', hw, hty, roots.1, roots.2,
+    set_account_call0_header_words s mid S Nd _ hW hT hm, ht⟩
+
+end PtxP34
+
+namespace PtxP34
+
+/-- The emptiness test reaches its continuation with unchanged memory and globals. -/
+theorem acct_is_empty_continuation_cut {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (args : List (ExpHOL 64)) (cont : ProgHOL 64) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "e") .one (ofString "acct_is_empty") args cont) =
+      (some (.returned v), post)) :
+    ∃ cur out : PanSemStateFiniteExact 64 F, TxWorld cur ∧ WorldTypedWith cur S Nd ∧
+      cur.memory = s.memory ∧ cur.globals = s.globals ∧
+      evaluateHOLFiniteState cur cont = (some (.returned v), out) ∧ post.memory = out.memory := by
+  obtain ⟨vs, body, callee, ret, rv, cp, out, _, hl, hb, ht, hm⟩ := dec_call_return_inv_args hr
+  have he := acct_is_empty_restored_state s cp vs body callee ret rv hW.1.1.1 hl hb
+  rw [he] at ht
+  let cur := setVarHOLFinite (ofString "e") rv {s with clock := cp.clock}
+  have hwc := localsOnly_txWorld s s.locals cp.clock (by intros; rfl) hW
+  have hw := LocalsOnly.setVar localsOnly_txWorld (name := ofString "e") (by decide) rv _ hwc
+  have hty : WorldTypedWith cur S Nd :=
+    (R13Shards.worldTypedWith_with_locals s cur.locals cp.clock S Nd).2 hT
+  exact ⟨cur, out, hw, hty, rfl, rfl, ht, hm⟩
+
+end PtxP34
+
+namespace PtxP34
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Isolate the concrete destruction obligation from the conditional and return. -/
+theorem conditional_destroy_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (cond e : ExpHOL 64)
+    (args : List (ExpHOL 64)) (v : ValueHOL 64)
+    (hd : ∀ mid, evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "destroy_account") args) = (none, mid) →
+      ∀ k ∈ ([40, 72] : List Nat),
+        memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)))
+    (hr : evaluateHOLFiniteState s
+      (.seq (.ite cond (.call (some (none, none)) (ofString "destroy_account") args) .skip)
+        (.return e)) = (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hr
+  split at hr
+  · split at hr
+    · have hm := return_memory_eq (by simpa only [evaluateHOLFiniteState_skip] using hr)
+      intro k hk
+      simp only [memW, hm]
+    · have hh : evaluateHOLFiniteState s
+          (.seq (.call (some (none, none)) (ofString "destroy_account") args) (.return e)) =
+          (some (.returned v), post) := by
+        rw [evaluateHOLFiniteState_seq_line780]
+        exact hr
+      obtain ⟨mid, hc, ht⟩ := seq_call0_ret_inv hh
+      have hm := return_memory_eq ht
+      intro k hk
+      simpa only [memW, hm] using hd mid hc k hk
+  · cases hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

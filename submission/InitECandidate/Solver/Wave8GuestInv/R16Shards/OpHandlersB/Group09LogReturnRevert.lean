@@ -17015,4 +17015,71 @@ theorem op_log_fresh_disj_messages_g09 {F : Type}
   exact R11Shards.Disj.symm (op_log_fresh_disj_allocated_g09 hlo hhi
     (hFW ec hec).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1)
 
+/-- Copies and stores confined to fresh heap allocations preserve all typed-world cells. -/
+theorem op_log_fresh_effect_cells_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {writes : List Ivl}
+    (hA : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hfresh : ∀ x ∈ writes, globN s "heap_ptr" ≤ x.1 ∧
+      x.1 + x.2 ≤ globN s "scratch_ptr")
+    (heff : ByteRegionEffect s post writes) : SameTypedCells s post S Nd := by
+  apply ByteRegionEffect.sameTypedCells (Rl := writes) (extra := []) hA.1.memaddrs hWT
+  · intro x hx
+    exact op_log_fresh_disj_world_cells_g09 hWT (hfresh x hx).1 (hfresh x hx).2
+  · intro x hx
+    simp at hx
+  · simpa using heff
+
+/-- Fresh record/data writes may be combined with separately protected list-header writes. -/
+theorem op_log_append_effect_cells_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {fresh headerWrites : List Ivl}
+    (hA : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hfresh : ∀ x ∈ fresh, globN s "heap_ptr" ≤ x.1 ∧
+      x.1 + x.2 ≤ globN s "scratch_ptr")
+    (hprotected : ∀ x ∈ headerWrites, ∀ i ∈ worldTypedIvls s S Nd,
+      i.2 = 0 ∨ Disj x i)
+    (heff : ByteRegionEffect s post (fresh ++ headerWrites)) :
+    SameTypedCells s post S Nd := by
+  apply ByteRegionEffect.sameTypedCells hA.1.memaddrs hWT
+    (fun x hx => op_log_fresh_disj_world_cells_g09 hWT (hfresh x hx).1
+      (hfresh x hx).2) hprotected heff
+
+/-- Every typed-cell interval is included among the world-owned regions. -/
+theorem op_log_typed_interval_owned_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {i : Ivl}
+    (hi : i ∈ worldTypedIvls s S Nd) : i ∈ worldOwned s S Nd := by
+  unfold worldTypedIvls at hi
+  simp only [List.mem_append] at hi
+  have hfixed : i ∈ fixedObjects s → i ∈ worldOwned s S Nd := by
+    intro h
+    exact List.mem_append_left _ (List.mem_append_right _ h)
+  rcases hi with ((((h1 | h2) | h3) | h4) | h5) | h6
+  · exact List.mem_append_left _ (List.mem_append_left _ h1)
+  · obtain ⟨r, hr, rfl⟩ := List.mem_map.1 h2
+    exact hfixed (typedRec_in_fixedObjects s hr)
+  · simp only [List.mem_singleton] at h3
+    subst i
+    apply hfixed
+    unfold fixedObjects
+    exact List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _ (by simp)))
+  · exact hfixed (blockOut_in_fixedObjects h4)
+  · exact hfixed (bal_in_fixedObjects h5)
+  · exact List.mem_append_right _ h6
+
+/-- Old frame-object writes and fresh allocations jointly preserve typed-world cells. -/
+theorem op_log_append_effect_cells_of_ownership_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {fresh headerWrites : List Ivl}
+    (hA : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hfresh : ∀ x ∈ fresh, globN s "heap_ptr" ≤ x.1 ∧
+      x.1 + x.2 ≤ globN s "scratch_ptr")
+    (hheaders : ∀ x ∈ headerWrites, x ∈ ((evmChain s).map (frameObjects s)).flatten)
+    (hold : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd))
+    (heff : ByteRegionEffect s post (fresh ++ headerWrites)) :
+    SameTypedCells s post S Nd := by
+  apply op_log_append_effect_cells_g09 hA hWT hfresh
+  · intro x hx i hi
+    exact Or.inr (hold x (hheaders x hx) i (op_log_typed_interval_owned_g09 hi))
+  · exact heff
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
