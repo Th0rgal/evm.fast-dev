@@ -9504,6 +9504,55 @@ theorem precompile_sha256_padding_copy_effect {F : Type}
     · simp at hv2
   · simp at hv
 
+theorem precompile_sha256_padding_length_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad total : BitVec 64) (value : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (ht : s.locals.lookup (ofString "total") = some (.val (.word total)))
+    (hb : total.toNat = 64 ∨ total.toNat = 128)
+    (hpad : pad.toNat + 128 < 2^64)
+    (hnt : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "st_be64")
+      [.op .sub [.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "total")],
+        .const 8], value])).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "st_be64")
+      [.op .sub [.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "total")],
+        .const 8], value])).1 = none ∨
+      Resumes (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "st_be64")
+      [.op .sub [.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "total")],
+        .const 8], value])).1) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "st_be64")
+        [.op .sub [.op .add [.var .global (ofString "sha_pad"), .var .local (ofString "total")],
+          .const 8], value])).2 [(pad.toNat,128)] := by
+  have ha : (pad + total).toNat = pad.toNat + total.toNat := by
+    rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by rcases hb with h|h <;> omega)]
+  have hs : (pad + total - (8 : BitVec 64)).toNat = pad.toNat + total.toNat - 8 := by
+    have hle : (8 : BitVec 64) ≤ pad+total := by
+      change (8 : BitVec 64).toNat ≤ (pad+total).toNat
+      change 8 ≤ (pad+total).toNat
+      rw [ha]; rcases hb with h|h <;> omega
+    rw [BitVec.toNat_sub_of_le hle, ha]
+    rfl
+  apply R10Shards.P26_P28.call0_byteEff R10Shards.P26_P28.funByteEff_st_be64 s _ _ hc hi ?_ hnt hr
+  intro vals hv r hr hpos
+  simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hp, ht,
+    valueIsWord, valueWord, wordOpHOL, wordOp] at hv
+  split at hv
+  · rename_i v vs hv1 hv2
+    injection hv1 with hv1
+    subst v
+    injection hv with hv
+    subst vals
+    simp only [List.getElem?_cons_zero, Option.getD_some, R10Shards.P26_P28.valWordNat,
+      List.mem_singleton] at hr
+    subst r
+    refine ⟨(pad.toNat,128), List.mem_singleton.mpr rfl, ?_, ?_⟩
+    · change pad.toNat ≤ (pad+total-(8 : BitVec 64)).toNat
+      rw [hs]; rcases hb with h|h <;> omega
+    · change (pad+total-(8 : BitVec 64)).toNat + 8 ≤ pad.toNat+128
+      rw [hs]; rcases hb with h|h <;> omega
+  · simp at hv
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
