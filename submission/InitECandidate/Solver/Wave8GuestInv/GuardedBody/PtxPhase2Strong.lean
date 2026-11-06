@@ -15994,4 +15994,46 @@ theorem phase2_htab_set_bs72_message_tables
       exact hp.2.2)
     hmt.symm hbe hbs hnz (hpt.trans ht) hxp
 
+/-- The concrete pre-state-read body preserves its private-table witness on return. -/
+theorem phase2_record_pre_state_read_message_tables {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    {aa ak : Nat} (hp : ArenaReady s ∧ PtxMessageTables s aa ak ∧
+      Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read) =
+      (some (.returned v), post)) :
+    PtxMessageTables {post with locals := s.locals} aa ak := by
+  change evaluateHOLFiniteState s (.seq
+    (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+        .var .local (ofString "addr"), .const 1]) (.return (.const 0))) = _ at hr
+  rw [evaluateHOLFiniteState_seq] at hr
+  dsimp only at hr
+  rw [fixClockHOLFinite_evaluateState] at hr
+  generalize he : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+        .var .local (ofString "addr"), .const 1]) = out at hr
+  obtain ⟨r, t⟩ := out
+  cases r with
+  | none =>
+    have hb := (phase2_htab_set_bs72_message_tables aa ak
+      (.var .local (ofString "addr")) (.const 1)).run
+      s hc hp (by rw [he]; simp) (by rw [he])
+    rw [he] at hb
+    simp only [evaluateHOLFiniteState_return] at hr
+    simp [evalHOLExact, shapeOfHOLExact] at hr
+    obtain ⟨_, rfl⟩ := hr
+    have hl := phase2_call0_locals s (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+        .var .local (ofString "addr"), .const 1] (by rw [he])
+    apply phase2_message_tables_with_locals t s.locals t.clock hb
+    rw [← hl, he]
+  | some r =>
+    have hn := phase2_call0_ne_returned s (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+        .var .local (ofString "addr"), .const 1] v
+    rw [he] at hn
+    exact (hn (congrArg Prod.fst hr)).elim
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
