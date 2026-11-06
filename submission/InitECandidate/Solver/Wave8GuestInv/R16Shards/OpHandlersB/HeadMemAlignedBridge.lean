@@ -14969,7 +14969,7 @@ theorem preludeRel_pop_MlS {F : Type}
     rw [hmw]
     exact hrw0'
   refine ⟨S', hBs, ?_, ?_, ?_⟩
-  · refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+  · refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
       hacc_ok 168 "frame.addr" (Or.inl ⟨rfl, rfl⟩),
       hacc_ok 176 "frame.key" (Or.inr ⟨rfl, rfl⟩),
       hproom, hout_win⟩
@@ -15080,6 +15080,17 @@ theorem preludeRel_pop_MlS {F : Type}
       refine hAT_at_s o1 ?_ j hj
       exact List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨_, hmem_s, rfl⟩,
         by unfold frameObjects; exact List.mem_append_right _ ho1⟩
+    · intro o1 ho1 ec hec
+      rw [hflo_eq] at ho1; rw [hch_p] at hec; rw [hmw]
+      first
+      | exact (hFW_s ec (List.mem_of_mem_tail hec)).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+          _ hmem_s o1 (by unfold frameObjects; exact List.mem_append_right _ ho1)
+      | exact (hFW_s ec (List.mem_of_mem_tail hec)).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+          _ hmem_s o1 (by unfold frameObjects; exact List.mem_append_right _ ho1)
+      | exact (hFW_s ec (List.mem_of_mem_tail hec)).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+          _ hmem_s o1 (by unfold frameObjects; exact List.mem_append_right _ ho1)
+      | exact (hFW_s ec (List.mem_of_mem_tail hec)).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+          _ hmem_s o1 (by unfold frameObjects; exact List.mem_append_right _ ho1)
   · rw [hmw, hmw, ← hev_s]
     have := h.r_le
     omega
@@ -15297,4 +15308,60 @@ theorem fcBranchState_dec_empty {F : Type}
     fcEntryLocals_setVar (by decide) (by decide) (by decide) (by decide) (by decide)
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) h.locals_ok
   exact fcBranchState_congr_locals_clock _ st.clock h hL
+
+-- rung 18: popped-child dec-state lifting
+
+/-- Bridge port of the staging `fcPoppedChild_with_locals_clock` (private there):
+every popped-child fact is locals- and clock-free. -/
+theorem fcPoppedChild_locals_clock {F : Type}
+    {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (h : FcPoppedChild s0 st S)
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (ck : Nat) :
+    FcPoppedChild s0 { st with locals := L, clock := ck } S := by
+  refine {
+    child_scr := h.child_scr
+    rec_scr := h.rec_scr
+    child_disj_fo := ?_
+    rec_disj_fo := ?_
+    child_disj_ht := h.child_disj_ht
+    rec_disj_ht := h.rec_disj_ht
+    child_disj_fix := h.child_disj_fix
+    rec_disj_fix := h.rec_disj_fix
+    child_logs_scr := h.child_logs_scr
+    child_logs_disj_fo := ?_
+    child_logs_disj_ht := h.child_logs_disj_ht
+    child_logs_arr_in := h.child_logs_arr_in
+    child_logs_arr_wok := h.child_logs_arr_wok
+    child_logs_ok := h.child_logs_ok
+    child_logs_len_le := h.child_logs_len_le
+    child_log_objs_pw := h.child_log_objs_pw
+    child_log_objs_disj_fo := ?_
+    child_log_objs_disj_ht := h.child_log_objs_disj_ht
+    child_log_objs_disj_fix := h.child_log_objs_disj_fix
+    child_log_objs_avoids_tries := h.child_log_objs_avoids_tries
+    child_log_objs_disj_msg := ?_
+    addr_table_ok := ?_
+    key_table_ok := ?_
+    parent_room := h.parent_room
+    out_win_ok := h.out_win_ok }
+  · simpa only [evmChain_lc_fc st L ck, frameObjects_locals_eq] using h.child_disj_fo
+  · simpa only [evmChain_lc_fc st L ck, frameObjects_locals_eq] using h.rec_disj_fo
+  · simpa only [evmChain_lc_fc st L ck, frameObjects_locals_eq, frameLogs, memW] using h.child_logs_disj_fo
+  · simpa only [evmChain_lc_fc st L ck, frameObjects_locals_eq, frameLogObjects, logOwnedIvls,
+      logRecordIvls, globN, memW] using h.child_log_objs_disj_fo
+  · simpa only [evmChain_lc_fc st L ck, frameLogObjects, logOwnedIvls, logRecordIvls, globN, memW]
+      using h.child_log_objs_disj_msg
+  · exact (nonDelAccessTable_locals_iff st L ck S _).2 h.addr_table_ok
+  · exact (nonDelAccessTable_locals_iff st L ck S _).2 h.key_table_ok
+
+/-- The `empty` declaration extends the popped state without disturbing the
+popped-child bundle. -/
+theorem fcPoppedChild_dec_empty {F : Type}
+    {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat} {v : ValueHOL 64}
+    (h : FcPoppedChild s0 st S) :
+    FcPoppedChild s0 (setVarHOLFinite (ofString "empty") v st) S := by
+  have hst' : setVarHOLFinite (ofString "empty") v st =
+      { st with locals := st.locals.update (ofString "empty", v), clock := st.clock } := rfl
+  rw [hst']
+  exact fcPoppedChild_locals_clock h _ st.clock
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
