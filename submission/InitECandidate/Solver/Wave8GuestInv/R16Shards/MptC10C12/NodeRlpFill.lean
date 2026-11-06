@@ -8780,6 +8780,293 @@ private theorem eval_finishBranchLen_none {F : Type}
       show ofString "payload" ≠ ofString "clen" by decide,
       show ofString "vl2" ≠ ofString "clen" by decide]
 
+/-! ## Main `_node_rlp_fill` loop: scan machinery (adapted from the R10 shard). -/
+
+private def fillScanCond : ExpHOL 64 :=
+  .op .and [.cmp .notEqual (.const 0) (.cmp .less (.var .local (ofString "i")) (.const 16)),
+    .cmp .notEqual (.const 0) (.cmp .equal (.var .local (ofString "found")) (.const 0))]
+
+private def fillScanBody : ProgHOL 64 :=
+  .seq (.assign .local (ofString "child")
+    (.load .one (.op .add [.var .local (ofString "nd"), .const 32,
+      .panop .mul [.var .local (ofString "i"), .const 8]])))
+    (.seq (.assign .local (ofString "i")
+      (.op .add [.var .local (ofString "i"), .const 1]))
+      (.call (some (some (.local, ofString "found"), none)) (ofString "_node_needs_rlp")
+        [.var .local (ofString "child")]))
+
+private def FillScanReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => GuestInv s ∧ locN s "i" ≤ 16
+
+private theorem fillSeq_none {F : Type} (s : PanSemStateFiniteExact 64 F) (p q : ProgHOL 64)
+    (h : (evaluateHOLFiniteState s (.seq p q)).1 = none) :
+    (evaluateHOLFiniteState s p).1 = none ∧
+    (evaluateHOLFiniteState (evaluateHOLFiniteState s p).2 q).1 = none ∧
+    (evaluateHOLFiniteState s (.seq p q)).2 =
+      (evaluateHOLFiniteState (evaluateHOLFiniteState s p).2 q).2 := by
+  rw [evaluateHOLFiniteState_seq_line780] at h ⊢
+  rcases hr : evaluateHOLFiniteState s p with ⟨r, t⟩
+  simp only [hr] at h ⊢
+  cases r with
+  | none => exact ⟨rfl, h, rfl⟩
+  | some r => simp at h
+
+private theorem fillScan_advance {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (w : BitVec 64)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hn : (evaluateHOLFiniteState s fillScanBody).1 = none) :
+    (evaluateHOLFiniteState s fillScanBody).2.locals.lookup (ofString "i") =
+      some (.val (.word (w + 1))) := by
+  unfold fillScanBody at hn ⊢
+  obtain ⟨hn1, hn2, heq⟩ := fillSeq_none _ _ _ hn
+  rw [heq]
+  obtain ⟨hn3, hn4, heq2⟩ := fillSeq_none _ _ _ hn2
+  rw [heq2]
+  rw [evaluate_avoidsLocal_flowing (ofString "i") _ (by decide) _ (Or.inl hn4)]
+  have hkeep := evaluate_avoidsLocal_flowing (ofString "i") _ (by decide) s (Or.inl hn1)
+  have hcount : CountedBody (ofString "i") 1
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])) 0 :=
+    CountedBody.incr
+  exact (hcount.run _ ((evaluateHOLFiniteState_metadata s _).1.trans hc) w
+    (hkeep.trans hi) (Nat.zero_le _)).2.2.2.2 hn3 |>.1
+
+private theorem fillScan_active {F : Type} (s : PanSemStateFiniteExact 64 F) (hP : FillScanReady s)
+    (ha : LoopActive fillScanCond s) :
+    ∃ w : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word w)) ∧ w.toNat < 16 := by
+  obtain ⟨word, he, hw⟩ := ha
+  rw [evalHOLFinite_eq_toExact] at he
+  rcases hi : s.locals.lookup (ofString "i") with _ | vi
+  · simp [fillScanCond, evalHOLExact, evalListHOLExact, hi] at he
+  · rcases vi with ⟨⟨i⟩⟩ | fs | ⟨n, fs⟩
+    · have hle : i.toNat ≤ 16 := by simpa [FillScanReady, locN, hi] using hP.2
+      refine ⟨i, rfl, ?_⟩
+      by_contra hn
+      have hi16 : i = 16 := BitVec.eq_of_toNat_eq (by simpa using (show i.toNat = 16 by omega))
+      subst hi16
+      rcases hf : s.locals.lookup (ofString "found") with _ | vf
+      · simp [fillScanCond, evalHOLExact, evalListHOLExact, hi, hf] at he
+      · rcases vf with ⟨⟨f⟩⟩ | fs | ⟨n, fs⟩
+        · simp [fillScanCond, evalHOLExact, evalListHOLExact, hi, hf,
+            Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+            Flapjack.Compiler.Encoders.Asm.holAsmSignedLess, valueIsWord, valueWord,
+            wordOpHOL, wordOp] at he
+          exact hw he.symm
+        · simp [fillScanCond, evalHOLExact, evalListHOLExact, hi, hf,
+            Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+            Flapjack.Compiler.Encoders.Asm.holAsmSignedLess, valueIsWord, valueWord,
+            wordOpHOL, wordOp] at he
+        · simp [fillScanCond, evalHOLExact, evalListHOLExact, hi, hf,
+            Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+            Flapjack.Compiler.Encoders.Asm.holAsmSignedLess, valueIsWord, valueWord,
+            wordOpHOL, wordOp] at he
+    · simp [fillScanCond, evalHOLExact, evalListHOLExact, hi] at he
+    · simp [fillScanCond, evalHOLExact, evalListHOLExact, hi] at he
+
+private theorem fillScan_step {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hP : FillScanReady s) (ha : LoopActive fillScanCond s)
+    (hnone : (evaluateHOLFiniteState (decClockHOLFinite s) fillScanBody).1 = none) :
+    FillScanReady (evaluateHOLFiniteState (decClockHOLFinite s) fillScanBody).2 ∧
+      16 - locN (evaluateHOLFiniteState (decClockHOLFinite s) fillScanBody).2 "i" <
+        16 - locN s "i" := by
+  obtain ⟨i, hi, hil⟩ := fillScan_active s hP ha
+  have hnew := fillScan_advance (decClockHOLFinite s) hc i hi hnone
+  have hadd : (i + 1).toNat = i.toNat + 1 :=
+    BitVec.toNat_add_of_lt (by change i.toNat + 1 < 2^64; omega)
+  have hnloc : locN (evaluateHOLFiniteState (decClockHOLFinite s) fillScanBody).2 "i" =
+      i.toNat + 1 := by simp only [locN, hnew, hadd]
+  have hiloc : locN s "i" = i.toNat := by simp only [locN, hi]
+  refine ⟨⟨guestInv_evaluate _ _ (guestInv_congr (s := s) rfl rfl rfl rfl hP.1), ?_⟩, ?_⟩
+  · rw [hnloc]; omega
+  · rw [hnloc, hiloc]; omega
+
+private theorem fillScan_bound
+    (hn : TerminatingFunBoundedOn GuestInv (ofString "_node_needs_rlp") K.«_node_needs_rlp») :
+    TerminatingProgBoundedOn FillScanReady (.while fillScanCond fillScanBody)
+      ((16 + 1) * ((K.«_node_needs_rlp» + 1) + 1)) := by
+  apply TerminatingProgBoundedOn.while_rank (fun s => 16 - locN s "i")
+  · intro F s hP
+    exact ⟨guestInv_congr (s := s) rfl rfl rfl rfl hP.1, hP.2⟩
+  · refine weakenGuard (P := FillScanReady) (Q := GuestInv) ?_ (fun s h => h.1)
+    unfold fillScanBody
+    refine TerminatingProgBoundedOn.mono_bound
+      (TerminatingProgBoundedOn.seq_guestInv (straight _ rfl)
+        (TerminatingProgBoundedOn.seq_guestInv (straight _ rfl)
+          (TerminatingProgBoundedOn.call_guestInv hn _ _))) (by omega)
+  · intro F s hc hP ha
+    exact Nat.sub_le _ _
+  · intro F s hc hP ha hf
+    have hnc := evaluate_noTopContinue fillScanBody (by rfl) (decClockHOLFinite s)
+    have hnone : (evaluateHOLFiniteState (decClockHOLFinite s) fillScanBody).1 = none :=
+      hf.elim id (fun h => False.elim (hnc h))
+    exact fillScan_step s hc hP ha hnone
+
+/-- The saved child index of the current scratch frame is in range. -/
+private def FillScanEntry : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => GuestInv s ∧ memW s (locN s "top" + 16) ≤ 16
+
+private theorem fillScanEntry_locals : LocalsOnly ["top"] FillScanEntry := by
+  intro F s ls k hl hs
+  have ht := locN_congr s ls k "top" (hl "top" (by simp))
+  refine ⟨guestInv_with_locals_clock s ls k hs.1, ?_⟩
+  change memW s (locN { s with locals := ls, clock := k } "top" + 16) ≤ 16
+  rw [ht]
+  exact hs.2
+
+private def fillScanProgram : ProgHOL 64 :=
+  .dec (ofString "i") .one (.load .one (.op .add [.var .local (ofString "top"), .const 16]))
+    (.seq (.while fillScanCond fillScanBody)
+      (.store (.op .add [.var .local (ofString "top"), .const 16]) (.var .local (ofString "i"))))
+
+private theorem fillScan_program_bound
+    (hn : TerminatingFunBoundedOn GuestInv (ofString "_node_needs_rlp") K.«_node_needs_rlp») :
+    TerminatingProgBoundedOn FillScanEntry fillScanProgram
+      ((16 + 1) * ((K.«_node_needs_rlp» + 1) + 1)) := by
+  unfold fillScanProgram
+  refine TerminatingProgBoundedOn.mono_bound (dec_guard _ _ _ ?_
+    (TerminatingProgBoundedOn.seq_guestInv_after (fillScan_bound hn) (fun s h => h.1)
+      (straight _ rfl))) (by omega)
+  intro F s v hs hv
+  obtain ⟨w, rfl, hw⟩ := evalAt_loadL s "top" 16 v hv
+  refine ⟨guestInv_setVar _ _ _ hs.1, ?_⟩
+  rw [locN_setVar_same, hw]
+  exact hs.2
+
+/-- Extract the two nested loops from the installed body without changing its AST. -/
+private def fillBody : ProgHOL 64 :=
+  match sourceFnBody Guest.Software.guestFn__node_rlp_fill with
+  | .decCall _ _ _ _ (.decCall _ _ _ _
+      (.seq _ (.seq _ (.seq _ (.seq _ (.dec _ _ _ (.seq (.while _ b) _))))))) => b
+  | _ => .skip
+
+private def fillSearch : ProgHOL 64 :=
+  match fillBody with
+  | .dec _ _ _ (.dec _ _ _ (.dec _ _ _ (.dec _ _ _ (.seq p _)))) => p
+  | _ => .skip
+
+private def fillTail : ProgHOL 64 :=
+  match fillBody with
+  | .dec _ _ _ (.dec _ _ _ (.dec _ _ _ (.dec _ _ _ (.seq _ p)))) => p
+  | _ => .skip
+
+private theorem fillSearch_bound
+    (hn : TerminatingFunBoundedOn GuestInv (ofString "_node_needs_rlp") K.«_node_needs_rlp») :
+    TerminatingProgBoundedOn FillScanEntry fillSearch
+      (max (max (K.«_node_needs_rlp» + 1) 0)
+        (max ((16 + 1) * ((K.«_node_needs_rlp» + 1) + 1)) 0)) := by
+  change TerminatingProgBoundedOn FillScanEntry
+    (.ite _ (.ite _ (.seq _ (.seq _ (.call _ _ _))) .skip)
+      (.ite _ fillScanProgram .skip)) _
+  apply TerminatingProgBoundedOn.ite_on
+  · apply TerminatingProgBoundedOn.ite_on
+    · refine weakenGuard (P := FillScanEntry) (Q := GuestInv) ?_ (fun s h => h.1)
+      exact TerminatingProgBoundedOn.mono_bound
+        (TerminatingProgBoundedOn.seq_guestInv (straight _ rfl)
+          (TerminatingProgBoundedOn.seq_guestInv (straight _ rfl)
+            (TerminatingProgBoundedOn.call_guestInv hn _ _))) (by omega)
+    · exact weakenGuard (straight _ rfl) (fun s h => h.1)
+  · exact TerminatingProgBoundedOn.ite_on (fillScan_program_bound hn)
+      (weakenGuard (straight _ rfl) (fun s h => h.1))
+
+private theorem fillTail_bound
+    (ha : TerminatingFunBoundedOn GuestInv (ofString "scratch_alloc") K.«scratch_alloc»)
+    (hb : TerminatingFunBoundedOn GuestInv (ofString "_node_rlp_begin") K.«_node_rlp_begin»)
+    (hf : TerminatingFunBoundedOn GuestInv (ofString "_node_rlp_finish") K.«_node_rlp_finish») :
+    TerminatingProgBoundedOn GuestInv fillTail
+      (max ((K.«scratch_alloc» + 1) + (K.«_node_rlp_begin» + 1)) (K.«_node_rlp_finish» + 1)) := by
+  change TerminatingProgBoundedOn GuestInv (.ite _ (.decCall _ _ _ _
+    (.seq _ (.seq _ (.seq _ (.seq (.call _ _ _) (.assign _ _ _))))))
+    (.seq (.call _ _ _) (.assign _ _ _))) _
+  apply TerminatingProgBoundedOn.ite_on
+  · refine TerminatingProgBoundedOn.mono_bound
+      (TerminatingProgBoundedOn.decCall_guestInv ha _ _ _
+        (TerminatingProgBoundedOn.seq_guestInv (straight _ rfl)
+          (TerminatingProgBoundedOn.seq_guestInv (straight _ rfl)
+            (TerminatingProgBoundedOn.seq_guestInv (straight _ rfl)
+              (TerminatingProgBoundedOn.seq_guestInv
+                (TerminatingProgBoundedOn.call_guestInv hb _ _) (straight _ rfl)))))) (by omega)
+  · exact TerminatingProgBoundedOn.mono_bound
+      (TerminatingProgBoundedOn.seq_guestInv
+        (TerminatingProgBoundedOn.call_guestInv hf _ _) (straight _ rfl)) (by omega)
+
+private def fillBodyCost : Nat :=
+  max (max (K.«_node_needs_rlp» + 1) 0)
+    (max ((16 + 1) * ((K.«_node_needs_rlp» + 1) + 1)) 0) +
+  max ((K.«scratch_alloc» + 1) + (K.«_node_rlp_begin» + 1)) (K.«_node_rlp_finish» + 1)
+
+private theorem fillBody_bound
+    (hn : TerminatingFunBoundedOn GuestInv (ofString "_node_needs_rlp") K.«_node_needs_rlp»)
+    (ha : TerminatingFunBoundedOn GuestInv (ofString "scratch_alloc") K.«scratch_alloc»)
+    (hb : TerminatingFunBoundedOn GuestInv (ofString "_node_rlp_begin") K.«_node_rlp_begin»)
+    (hf : TerminatingFunBoundedOn GuestInv (ofString "_node_rlp_finish") K.«_node_rlp_finish») :
+    TerminatingProgBoundedOn FillScanEntry fillBody fillBodyCost := by
+  change TerminatingProgBoundedOn FillScanEntry (.dec _ _ _ (.dec _ _ _ (.dec _ _ _
+    (.dec _ _ _ (.seq fillSearch fillTail))))) _
+  exact TerminatingProgBoundedOn.dec_onLocals fillScanEntry_locals _ (by decide) _ _
+    (TerminatingProgBoundedOn.dec_onLocals fillScanEntry_locals _ (by decide) _ _
+      (TerminatingProgBoundedOn.dec_onLocals fillScanEntry_locals _ (by decide) _ _
+        (TerminatingProgBoundedOn.dec_onLocals fillScanEntry_locals _ (by decide) _ _
+          (TerminatingProgBoundedOn.seq_guestInv_after (fillSearch_bound hn) (fun s h => h.1)
+            (fillTail_bound ha hb hf)))))
+
+/-- Remaining allocator capacity; either a scratch push or a nonempty encoding lowers it. -/
+private def fillMeasure : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat :=
+  fun s => heapLimit - globN s "heap_ptr" + (globN s "scratch_ptr" - scratchStart)
+
+private theorem fillMeasure_le {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hs : ArenaReady s) : fillMeasure s ≤ 2 ^ 62 := by
+  have hsp := hs.2.2.2.2.2.1
+  dsimp only [fillMeasure, heapLimit, scratchStart, scratchEnd] at *
+  omega
+
+private theorem fillMeasure_decreases {F : Type} (s t : PanSemStateFiniteExact 64 F)
+    (ht : ArenaReady t) (hg : AllocatorGrows s t)
+    (hstrict : globN s "heap_ptr" < globN t "heap_ptr" ∨
+      globN t "scratch_ptr" < globN s "scratch_ptr") :
+    fillMeasure t < fillMeasure s := by
+  have hhp := ht.2.2.1
+  have hsl : scratchStart ≤ globN t "scratch_ptr" := ht.2.2.2.1.trans ht.2.2.2.2.1
+  rcases hg with ⟨hh, hsp⟩
+  unfold fillMeasure
+  omega
+
+/-- Frame chain: the current frame, its parent, and so on, are all valid, and parent
+pointers strictly increase (new frames are pushed at lower scratch addresses). -/
+private inductive ChainOK {F : Type} (Nd : List Nat) :
+    PanSemStateFiniteExact 64 F → Nat → Prop
+  | chainNil : ∀ s : PanSemStateFiniteExact 64 F, ChainOK Nd s 0
+  | chainDone : ∀ (s : PanSemStateFiniteExact 64 F) (fr : Nat), ValidRlpFrame s Nd fr →
+      memW s (fr + 0) = 0 → ChainOK Nd s fr
+  | chainStep : ∀ (s : PanSemStateFiniteExact 64 F) (fr p : Nat), ValidRlpFrame s Nd fr →
+      memW s (fr + 0) = p → fr < p → ChainOK Nd s p → ChainOK Nd s fr
+
+private theorem chainOK_with_locals_clock {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ls : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) (Nd : List Nat) {fr : Nat}
+    (h : ChainOK Nd s fr) :
+    ChainOK Nd { s with locals := ls, clock := k } fr := by
+  induction h with
+  | chainNil =>
+    exact ChainOK.chainNil ({ s with locals := ls, clock := k } : PanSemStateFiniteExact 64 F)
+  | chainDone fr' hv hl =>
+    exact ChainOK.chainDone ({ s with locals := ls, clock := k } : PanSemStateFiniteExact 64 F) fr'
+      hv hl
+  | chainStep fr' p hv hl hlt _ ih =>
+    exact ChainOK.chainStep ({ s with locals := ls, clock := k } : PanSemStateFiniteExact 64 F) fr'
+      p hv hl hlt ih
+
+/-- The main-loop invariant. -/
+private def FillLoopInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ KeccakBufsSafe s Nd ∧
+    ChainOK Nd s (locN s "top")
+
+private theorem fillLoopInv_locals : LocalsOnly ["top"] FillLoopInv := by
+  intro F s ls k hl hs
+  obtain ⟨ha, Nd, hN, hK, hch⟩ := hs
+  refine ⟨⟨guestInv_with_locals_clock s ls k ha.1, ha.2⟩, Nd, hN, hK, ?_⟩
+  have ht : locN { s with locals := ls, clock := k } "top" = locN s "top" :=
+    locN_congr s ls k "top" (hl "top" (by simp))
+  rw [show locN { s with locals := ls, clock := k } "top" = locN s "top" from ht]
+  exact chainOK_with_locals_clock s ls k Nd hch
+
 end NodeRlpFillProof
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
