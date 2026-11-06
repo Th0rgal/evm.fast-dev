@@ -11626,4 +11626,111 @@ theorem progWStep_builderNonceChange {B : BufList} {gw : List String}
   exact progWStep_ite (progWStep_call0 (fun _ h => h) (fun _ h => h) hadd)
     (progWStep_callBalRemove _ _ _ _ (by decide))
 
+def builderAccountChanges : ProgHOL 64 :=
+  .decCall (ofString "eq") .one (ofString "u256_eq")
+    [.var .local (ofString "pre_bal"), .var .local (ofString "post_bal")]
+    (.seq builderBalanceChange (.seq builderNonceChange
+      (.seq (.call (some (some (.local, ofString "eq"), none)) (ofString "memeq")
+        [.var .local (ofString "pre_ch"), .var .local (ofString "post_ch"), .const 32#64])
+        builderCodeChange)))
+
+theorem progWStep_builderAccountChanges {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (heq : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "u256_eq"))
+    (hmem : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "memeq"))
+    (hget : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "get_code"))
+    (hbal : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_balance_change"))
+    (hnonce : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_nonce_change"))
+    (hcode : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_code_change")) :
+    ProgWStep B gw builderAccountChanges := by
+  unfold builderAccountChanges
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) heq
+  apply progWStep_seq hB hgw (progWStep_builderBalanceChange hbal)
+  apply progWStep_seq hB hgw (progWStep_builderNonceChange hnonce)
+  exact progWStep_seq hB hgw
+    (progWStep_call_local (fun _ h => h) (fun _ h => h) hmem)
+    (progWStep_builderCodeChange hB hgw hget hcode)
+
+def builderPostAccountLoad : ProgHOL 64 :=
+  .ite (.cmp .notEqual (.var .local (ofString "post")) (.const 1#64))
+    (.seq (.assign .local (ofString "post_bal")
+      (.load (.comb [.one, .one, .one, .one]) (.op .add [.var .local (ofString "post"), .const 8#64])))
+      (.seq (.assign .local (ofString "post_nonce")
+        (.load .one (.op .add [.var .local (ofString "post"), .const 0#64])))
+        (.assign .local (ofString "post_ch")
+          (.load .one (.op .add [.var .local (ofString "post"), .const 48#64]))))) .skip
+
+theorem progWStep_builderPostAccountLoad {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw) :
+    ProgWStep B gw builderPostAccountLoad := by
+  unfold builderPostAccountLoad
+  exact progWStep_ite
+    (progWStep_seq hB hgw (progWStep_assign_local _ _ _ _)
+      (progWStep_seq hB hgw (progWStep_assign_local _ _ _ _)
+        (progWStep_assign_local _ _ _ _))) (progWStep_skip _ _)
+
+def builderAccountEntry : ProgHOL 64 :=
+  .dec (ofString "addr") .one (.rfield 1 (.var .local (ofString "s")))
+    (.dec (ofString "post") .one (.rfield 2 (.var .local (ofString "s")))
+      (.decCall (ofString "pre") .one (ofString "idx_start_account") [.var .local (ofString "addr")]
+        (.dec (ofString "pre_bal") (.comb [.one, .one, .one, .one])
+          (.load (.comb [.one, .one, .one, .one]) (.op .add [.var .local (ofString "pre"), .const 16#64]))
+          (.dec (ofString "pre_nonce") .one (.load .one (.op .add [.var .local (ofString "pre"), .const 8#64]))
+            (.dec (ofString "pre_ch") .one (.op .add [.var .local (ofString "pre"), .const 48#64])
+              (.dec (ofString "post_bal") (.comb [.one, .one, .one, .one])
+                (.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64])
+                (.dec (ofString "post_nonce") .one (.const 0#64)
+                  (.dec (ofString "post_ch") .one (.var .global (ofString "empty_code_hash"))
+                    (.seq builderPostAccountLoad builderAccountChanges)))))))))
+
+theorem progWStep_builderAccountEntry {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hidx : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "idx_start_account"))
+    (hchanges : ProgWStep B gw builderAccountChanges) :
+    ProgWStep B gw builderAccountEntry := by
+  unfold builderAccountEntry
+  apply progWStep_dec
+  apply progWStep_dec
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hidx
+  repeat first | apply progWStep_dec
+  exact progWStep_seq hB hgw (progWStep_builderPostAccountLoad hB hgw) hchanges
+
+def builderAccountLoop : ProgHOL 64 :=
+  .while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+    (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item")
+      [.var .local (ofString "aw"), .var .local (ofString "i")]
+      (.seq (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0#64))
+        builderAccountEntry .skip)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1#64]))))
+
+theorem progWStep_builderAccountLoop {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hitem : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "htab_item"))
+    (hentry : ProgWStep B gw builderAccountEntry) :
+    ProgWStep B gw builderAccountLoop := by
+  unfold builderAccountLoop
+  apply progWStep_while hB hgw
+  apply progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hitem
+  exact progWStep_seq hB hgw (progWStep_ite hentry (progWStep_skip _ _))
+    (progWStep_assign_local _ _ _ _)
+
+def builderBody : ProgHOL 64 :=
+  .dec (ofString "idx") .one (.var .global (ofString "bal_index"))
+    (.dec (ofString "aw") .one (.load .one (.op .add [.var .global (ofString "ts"), .const 16#64]))
+      (.dec (ofString "cap") .one (.load .one (.op .add [.var .local (ofString "aw"), .const 24#64]))
+        (.dec (ofString "i") .one (.const 0#64) (.seq builderAccountLoop builderStorageSuffix))))
+
+theorem builderBody_eq : builderBody =
+    (sourceFunctionEntry Guest.Software.guestFn_update_builder_from_tx).2.2.1 := by
+  rfl
+
+theorem progWStep_builderBody {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (haccounts : ProgWStep B gw builderAccountLoop)
+    (hstorage : ProgWStep B gw builderStorageSuffix) :
+    ProgWStep B gw builderBody := by
+  unfold builderBody
+  exact progWStep_dec (progWStep_dec (progWStep_dec (progWStep_dec
+    (progWStep_seq hB hgw haccounts hstorage))))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
