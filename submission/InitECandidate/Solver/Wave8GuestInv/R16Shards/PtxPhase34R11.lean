@@ -15481,4 +15481,35 @@ theorem dec_call_return_inv_args {F : Type} {s t : PanSemStateFiniteExact 64 F}
 
 end PtxP34
 
+namespace PtxP34
+
+theorem return_memory_eq {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e : ExpHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.return e) = (some (.returned v), post)) :
+    post.memory = s.memory := by
+  rw [evaluateHOLFiniteState_return] at hr
+  split at hr
+  · cases hr
+  · split at hr
+    · exact congrArg (fun st => st.memory) (Prod.mk.inj hr).2.symm
+    · cases hr
+
+/-- The trie-lookup-and-return suffix preserves both backing words. -/
+theorem ws_get_account_optional_return_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+        [.var .local (ofString "addr")] (.return (.var .local (ofString "a")))) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨vs, body, callee, ret, rv, cp, u, _, hl, hc, ht, hm⟩ := dec_call_return_inv_args hr
+  have hu := return_memory_eq ht
+  have hk := ws_get_account_optional_tx_header_words s cp vs body callee ret rv S Nd hW hT hl hc
+  intro k hmem
+  simpa only [memW, hm, hu, setVarHOLFinite] using hk k hmem
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
