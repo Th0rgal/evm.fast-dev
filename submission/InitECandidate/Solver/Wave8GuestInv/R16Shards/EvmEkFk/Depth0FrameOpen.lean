@@ -9202,4 +9202,34 @@ theorem ext_code_tail_of_world_nonzero {F : Type} (s : PanSemStateFiniteExact 64
     hsk hws hts hbs hdn htn hcn hl
   exact ⟨S,Nd,db,hash,tw,h⟩
 
+/-- Full external-code retrieval reduces to strong entry facts after account lookup. -/
+theorem ext_code_of_return_of_world_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hentry : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "addr")] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post) →
+      ∀ vals b cl r,
+      let st := setVarHOLFinite (ofString "a") v {post with locals := s.locals}
+      evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+          .var .local (ofString "addr")] = some vals →
+      lookupCodeHOLFinite st.code.lookup (ofString "get_code") vals = some (b,cl,r) →
+      ∃ S Nd db hash tw, GetCodeEntryStrong (callEntryStateHOLFinite st cl) S Nd db hash tw) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ext_code_of)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  change Ret s (.decCall (ofString "a") .one (ofString "get_account")
+    [.var .local (ofString "addr")]
+    (.decCall (ofString "c") (.comb [.one,.one]) (ofString "get_code")
+      [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+        .var .local (ofString "addr")] (.return (.var .local (ofString "c"))))) _
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  have hm := (InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).1
+  rw [hb] at hm
+  exact ext_code_tail_of_world_entry _ (hm.trans hc) (hentry values body callee ret v post ha hl hb)
+
 end HeadStore
