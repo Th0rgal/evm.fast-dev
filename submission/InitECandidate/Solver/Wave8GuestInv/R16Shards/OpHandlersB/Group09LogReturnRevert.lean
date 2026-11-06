@@ -14958,4 +14958,82 @@ theorem op_log_charge_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
       exact ⟨hbound,hmod,hHMres.2⟩
   · exact hcont
 
+/-- A saturated log cost cannot continue past charge_gas. -/
+theorem op_log_saturated_charge_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (cont : ProgHOL 64) :
+    HandlerRun s0 (fun t => t.locals.lookup (ofString "cost") =
+      some (.val (.word 18446744073709551615#64))) false
+      (.seq (.call (some (none, none)) (ofString "charge_gas")
+        [.var .local (ofString "cost")]) cont) := by
+  apply seq_charge_gas_exact_g09 (Q := fun _ => False)
+  · intro t w he hInv hP
+    have hw : w = 18446744073709551615#64 := by
+      simpa [evalHOLExact, hP] using he.symm
+    subst hw
+    decide
+  · intro t post amount he hlt hInv hP hPost hg hchain hmem
+    have hw : amount = 18446744073709551615#64 := by
+      simpa [evalHOLExact, hP] using he.symm
+    subst hw
+    norm_num at hlt
+  · intro t hc hInv hlen hR hFalse hnt
+    exact False.elim hFalse
+
+/-- The overflow assignment followed by gas charging closes independently
+of the later allocation and append continuation. -/
+theorem op_log_overflow_assign_charge_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (cont : ProgHOL 64) :
+    HandlerRun s0 (fun _ => True) false
+      (.seq (.assign .local (ofString "cost") (.const 18446744073709551615#64))
+        (.seq (.call (some (none, none)) (ofString "charge_gas")
+          [.var .local (ofString "cost")]) cont)) := by
+  apply HandlerRun.seq_assign_local (Q := fun t => t.locals.lookup (ofString "cost") =
+    some (.val (.word 18446744073709551615#64)))
+  · intro t v he hInv hP
+    have hv : v = .val (.word 18446744073709551615#64) := by
+      simpa [evalHOLExact] using he.symm
+    subst hv
+    simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · exact op_log_saturated_charge_g09 s0 cont
+
+/-- The non-overflow data-cost addition preserves caller facts and a
+positive gas operand through the actual local-assignment call. -/
+theorem op_log_data_cost_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (base lo hi : BitVec 64) (P : PanSemStateFiniteExact 64 F → Prop)
+    (cont : ProgHOL 64)
+    (hpres : ∀ t post cost, LocFrame t post → P t →
+      P (setVarHOLFinite (ofString "cost") (.val (.word cost)) {post with locals := t.locals}))
+    (hcont : HandlerRun s0 (fun t => P t ∧ ∃ cost : BitVec 64,
+      t.locals.lookup (ofString "cost") = some (.val (.word cost)) ∧ 0 < cost.toNat) false cont) :
+    HandlerRun s0 (fun t => P t ∧
+      t.locals.lookup (ofString "cost") = some (.val (.word base)) ∧ 0 < base.toNat ∧
+      t.locals.lookup (ofString "dc") = some (.rStruct [.val (.word lo), .val (.word hi)])) false
+      (.seq (.call (some (some (.local, ofString "cost"), none)) (ofString "add_sat")
+        [.var .local (ofString "cost"), .rfield 0 (.var .local (ofString "dc"))]) cont) := by
+  have hev (t : PanSemStateFiniteExact 64 F)
+      (hc : t.locals.lookup (ofString "cost") = some (.val (.word base)))
+      (hd : t.locals.lookup (ofString "dc") = some (.rStruct [.val (.word lo), .val (.word hi)])) :
+      evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a))
+        [.var .local (ofString "cost"), .rfield 0 (.var .local (ofString "dc"))] =
+        some [.val (.word base), .val (.word lo)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hc, hd]
+  apply HandlerRun.seq_call_assign_local (Q := fun t => P t ∧ ∃ cost : BitVec 64,
+      t.locals.lookup (ofString "cost") = some (.val (.word cost)) ∧ 0 < cost.toNat) eps_add_sat_pos
+  · intro t values body callee ret hc hInv hP hargs hl
+    rw [hev t hP.2.1 hP.2.2.2] at hargs
+    injection hargs with hvs
+    subst hvs
+    have hl_orig := hc ▸ hl
+    obtain ⟨_, _, a, b, heq, ha, hb⟩ := two_word_arg_lookup (by decide) lookup_add_sat hl_orig
+    injection heq with hhd htl
+    injection hhd with h1
+    injection h1 with h2
+    subst h2
+    exact ⟨_, ha, hP.2.2.1⟩
+  · intro t values body callee ret v post hInv hP hargs hl hPost hchain hQc
+    obtain ⟨hlf, cost, rfl, hpositive⟩ := hQc
+    refine ⟨hpres t post cost hlf hP.1, cost, ?_, hpositive⟩
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · exact hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
