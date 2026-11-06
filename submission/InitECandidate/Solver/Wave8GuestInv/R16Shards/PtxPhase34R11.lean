@@ -14525,4 +14525,58 @@ theorem receipt_cursor_scope_return_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- The receipt buffer's one-byte type-prefix reservation initializes all
+three scoped locals and preserves the entry frame through return. -/
+theorem receipt_start_scope_return_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (he : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (buf logs gas succeeded : BitVec 64) (bound : Nat) (v : ValueHOL 64)
+    (hb : mid.locals.lookup (ofString "buf") = some (.val (.word buf)))
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hg : mid.locals.lookup (ofString "cumulative_gas") = some (.val (.word gas)))
+    (hsu : mid.locals.lookup (ofString "succeeded") = some (.val (.word succeeded)))
+    (hfresh : globN s "heap_ptr" ≤ buf.toNat ∧ buf.toNat + 285 + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hr : evaluateHOLFiniteState mid
+      (.dec (ofString "start") .one (.op .add [.var .local (ofString "buf"), .const 1])
+        (.dec (ofString "p") .one (.op .add [.var .local (ofString "start"), .const 9])
+          (.dec (ofString "w") .one (.const 0) receiptStatusReturnCode))) =
+      (some (.returned v), post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  apply receipt_dec_word_continuation_frame he _ _ _ v ?_ hr
+  intro start final hev he' hr'
+  have hs : buf + 1#64 = start := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hb, wordOpHOL, wordOp,
+      valueIsWord, valueWord] using hev
+  have hsn : start.toNat = buf.toNat + 1 := by
+    rw [← hs, BitVec.toNat_add]
+    change (buf.toNat + 1) % 2 ^ 64 = buf.toNat + 1
+    apply Nat.mod_eq_of_lt
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    omega
+  apply receipt_cursor_scope_return_frame hA hma he' start logs gas succeeded bound v
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "start" ≠ ofString "logs" by decide] using hl
+  · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "start" ≠ ofString "cumulative_gas" by decide] using hg
+  · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "start" ≠ ofString "succeeded" by decide] using hsu
+  · constructor <;> omega
+  · exact hnz
+  · exact hL
+  · exact hD
+  · exact hfit
+  · exact hr'
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
