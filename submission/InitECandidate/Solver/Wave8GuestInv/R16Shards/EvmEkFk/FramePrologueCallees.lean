@@ -10286,6 +10286,25 @@ theorem precompile_sha256_remainder_then {F : Type}
   · exact hntb
   · exact hrb
 
+theorem precompile_sha256_blocks_exit_remainder {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len i : BitVec 64)
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hx : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hle : i.toNat ≤ len.toNat) (hbound : len.toNat + 64 < 2^64)
+    (hexit : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a))
+      (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"), .const 64])) = some (.val (.word 0))) :
+    len.toNat - i.toNat < 64 := by
+  have hadd : (i+(64 : BitVec 64)).toNat = i.toNat+64 := by
+    rw [BitVec.toNat_add]
+    change (i.toNat+64) % 2^64 = i.toNat+64
+    exact Nat.mod_eq_of_lt (by omega)
+  simp [evalHOLFinite, evalHOLExact, evalListHOLExact, hl, hx, valueIsWord, valueWord,
+    wordOpHOL, wordOp, Compiler.Encoders.Asm.wordCmpHOL] at hexit
+  change len.toNat < (i+(64 : BitVec 64)).toNat at hexit
+  rw [hadd] at hexit
+  omega
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
