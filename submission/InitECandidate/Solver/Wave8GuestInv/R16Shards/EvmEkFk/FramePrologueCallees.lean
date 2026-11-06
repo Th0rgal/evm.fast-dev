@@ -10536,6 +10536,63 @@ theorem precompile_sha256_blocks_normal_remainder {F : Type}
       exact ⟨hln,i+64,hin,hbn⟩
     · exact False.elim ((precompile_sha256_blocks_body_control t).2 hflow)
 
+theorem precompile_sha256_blocks_body_local {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (name : MlS) (hne : name ≠ ofString "i") :
+    let body := ProgHOL.seq
+      (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64]))
+    (evaluateHOLFiniteState s body).1 = none →
+    (evaluateHOLFiniteState s body).2.locals.lookup name = s.locals.lookup name := by
+  dsimp only
+  intro hr
+  rw [evaluateHOLFiniteState_seq_line780] at hr ⊢
+  rcases run : evaluateHOLFiniteState s
+    (.call (some (none, none)) (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"), .var .local (ofString "i")]]) with ⟨r,m⟩
+  cases r with
+  | none =>
+    dsimp only
+    have hloc := precompile_call0_locals_on_flow s (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"), .var .local (ofString "i")]] (by rw [run])
+    rw [run] at hloc
+    rw [evaluateHOLFiniteState_assign]
+    split
+    · exact congrArg (fun l => l.lookup name) hloc
+    · simp only [setKvarHOLFinite, setVarHOLFinite]
+      split
+      · simpa [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne] using
+          congrArg (fun l => l.lookup name) hloc
+      · exact congrArg (fun l => l.lookup name) hloc
+  | some r => simp [run] at hr
+
+theorem precompile_sha256_blocks_normal_local {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (name : MlS) (hne : name ≠ ofString "i") :
+    let loop := ProgHOL.while
+      (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"), .const 64]))
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64])))
+    (evaluateHOLFiniteState s loop).1 = none →
+    (evaluateHOLFiniteState s loop).2.locals.lookup name = s.locals.lookup name := by
+  dsimp only
+  intro hr
+  have he := precompile_while_normal_exit
+    (fun (t : PanSemStateFiniteExact 64 F) => t.locals.lookup name = s.locals.lookup name)
+    _ _ (fun t ht => ht) ?_ s rfl hr
+  · exact he.1
+  · intro t ht ha
+    refine ⟨(precompile_sha256_blocks_body_control t).1, ?_⟩
+    intro hflow
+    rcases hflow with hflow|hflow
+    · exact (precompile_sha256_blocks_body_local t name hne hflow).trans ht
+    · exact False.elim ((precompile_sha256_blocks_body_control t).2 hflow)
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
