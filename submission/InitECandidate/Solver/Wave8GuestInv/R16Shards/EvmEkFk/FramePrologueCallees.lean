@@ -8397,6 +8397,87 @@ theorem precompile_charge_gas_chainCellsKept :
     EvmFrameSpecs.lookup_charge_gas hex
   exact precompile_charge_gas_chain_cells s hInv amtw hamt
 
+private theorem precompile_step_locals_left {F : Type} {gw : List String}
+    {s post : PanSemStateFiniteExact 64 F} (ls : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (h : EvmStepCC gw {s with locals := ls, clock := k} post) : EvmStepCC gw s post := by
+  refine ⟨⟨h.1.1, h.1.2.1, h.1.2.2.1,
+    h.1.2.2.2.trans (evmChain_with_locals s ls k)⟩, ?_⟩
+  intro ec hec
+  exact h.2 ec ((evmChain_with_locals s ls k).symm ▸ hec)
+
+private theorem precompile_step_locals_right {F : Type} {gw : List String}
+    {s post : PanSemStateFiniteExact 64 F} (ls : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (h : EvmStepCC gw s post) : EvmStepCC gw s {post with locals := ls, clock := k} := by
+  refine ⟨⟨localsFree_evmInv post ls k h.1.1, h.1.2.1, h.1.2.2.1,
+    (evmChain_with_locals post ls k).trans h.1.2.2.2⟩, ?_⟩
+  exact h.2
+
+theorem precompile_step_call0 {fname : MlS}
+    (hk : EvmKeeps EvmInv frameStartGw fname) (hc : ChainCellsKept EvmInv fname)
+    (args : List (ExpHOL 64)) :
+    EvmProgStep frameStartGw (.call (some (none, none)) fname args) := by
+  have bad : ¬ R13.FlowsOrResumes (some (.error : PanSemResultExact 64)) := by
+    rintro (h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩) <;> cases h
+  intro F s hcode hInv hnt hfr
+  rw [evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rcases hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | values
+  · simp only [hargs] at hfr; exact absurd hfr bad
+  · simp only [hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · simp only [hl] at hfr; exact absurd hfr bad
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt hfr ⊢
+        have heq : callEntryStateHOLFinite s callee =
+            {s with locals := callee, clock := (callEntryStateHOLFinite s callee).clock} := by
+          cases s; rfl
+        have hi : EvmInv (callEntryStateHOLFinite s callee) := by
+          rw [heq]; exact localsFree_evmInv s callee _ hInv
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨res, post⟩
+        simp only [hrun] at hnt hfr ⊢
+        have hp (hsafe : res ≠ some .timeOut) (hr : Resumes res) : EvmStepCC frameStartGw s post := by
+          have hst := FunSpec.at_lookup hk s hcode values body' callee ret' hl hi
+            (by rw [hrun]; exact hsafe)
+          have hcc := FunSpec.at_lookup hc s hcode values body' callee ret' hl hi
+            (by rw [hrun]; exact hsafe)
+          rw [hrun] at hst hcc
+          have hh : EvmStepCC frameStartGw (callEntryStateHOLFinite s callee) post := ⟨hst hr, hcc hr⟩
+          rw [heq] at hh
+          exact precompile_step_locals_left _ _ hh
+        cases res with
+        | none => exact absurd hfr bad
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hfr ⊢
+            by_cases hsh : shapeEqHOL (shapeOfHOLExact v) ret' = true
+            · simp only [hsh, ↓reduceIte] at hfr ⊢
+              exact precompile_step_locals_right s.locals post.clock
+                (hp (by simp) (Or.inl ⟨v, rfl⟩))
+            · simp only [hsh, Bool.false_eq_true, ↓reduceIte] at hfr
+              exact absurd hfr bad
+          | exception e v =>
+            dsimp only at hfr ⊢
+            have hr : Resumes (some (.exception e v)) := by
+              rcases hfr with h | h | h | hr <;> [simp at h; simp at h; simp at h; exact hr]
+            have hemp : emptyLocalsHOLFinite post =
+                {post with locals := (emptyLocalsHOLFinite post).locals, clock := post.clock} := by
+              cases post; rfl
+            rw [hemp]
+            exact precompile_step_locals_right _ post.clock (hp (by simp) hr)
+          | timeOut => simp at hnt
+          | _ => rcases hfr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
+
+theorem precompile_charge_gas_call_step (args : List (ExpHOL 64)) :
+    EvmProgStep frameStartGw (.call (some (none, none)) (ofString "charge_gas") args) := by
+  apply precompile_step_call0 (hc := precompile_charge_gas_chainCellsKept)
+  obtain ⟨params, body, ret, hl, hs⟩ := EvmFrameSpecs.ek_charge_gas
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hcode hInv hex hnt hr
+  have hh := hs s hcode hInv hex hnt hr
+  exact ⟨hh.1, hh.2.1, fun k _ => hh.2.2.1 k (by simp), hh.2.2.2⟩
+
 private theorem dispatch_step_trans {F : Type} {s mid post : PanSemStateFiniteExact 64 F}
     (h1 : EvmStepCC frameStartGw s mid) (h2 : EvmStepCC frameStartGw mid post) :
     EvmStepCC frameStartGw s post := by
