@@ -17015,4 +17015,33 @@ theorem op_log_fresh_disj_messages_g09 {F : Type}
   exact R11Shards.Disj.symm (op_log_fresh_disj_allocated_g09 hlo hhi
     (hFW ec hec).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1)
 
+/-- Copies and stores confined to fresh heap allocations preserve all typed-world cells. -/
+theorem op_log_fresh_effect_cells_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {writes : List Ivl}
+    (hA : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hfresh : ∀ x ∈ writes, globN s "heap_ptr" ≤ x.1 ∧
+      x.1 + x.2 ≤ globN s "scratch_ptr")
+    (heff : ByteRegionEffect s post writes) : SameTypedCells s post S Nd := by
+  apply ByteRegionEffect.sameTypedCells (Rl := writes) (extra := []) hA.1.memaddrs hWT
+  · intro x hx
+    exact op_log_fresh_disj_world_cells_g09 hWT (hfresh x hx).1 (hfresh x hx).2
+  · intro x hx
+    simp at hx
+  · simpa using heff
+
+/-- Fresh record/data writes may be combined with separately protected list-header writes. -/
+theorem op_log_append_effect_cells_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {fresh headerWrites : List Ivl}
+    (hA : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hfresh : ∀ x ∈ fresh, globN s "heap_ptr" ≤ x.1 ∧
+      x.1 + x.2 ≤ globN s "scratch_ptr")
+    (hprotected : ∀ x ∈ headerWrites, ∀ i ∈ worldTypedIvls s S Nd,
+      i.2 = 0 ∨ Disj x i)
+    (heff : ByteRegionEffect s post (fresh ++ headerWrites)) :
+    SameTypedCells s post S Nd := by
+  apply ByteRegionEffect.sameTypedCells hA.1.memaddrs hWT
+    (fun x hx => op_log_fresh_disj_world_cells_g09 hWT (hfresh x hx).1
+      (hfresh x hx).2) hprotected heff
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
