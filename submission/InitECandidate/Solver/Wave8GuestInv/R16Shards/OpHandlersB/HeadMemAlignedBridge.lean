@@ -11992,4 +11992,42 @@ theorem laInvContents_complete {F : Type} {s u post : PanSemStateFiniteExact 64 
   simp only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq, hm]
   rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by omega), hieq]
 
+/-- Protected log records retain their validity throughout the append loop,
+including the heap bounds of their topics and data payloads. -/
+theorem laInv_logEntryOK {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 cap0 n0 nc : BitVec 64} {log : Nat}
+    (h : LAInv s L arr0 cap0 n0 nc u) (hlog : LogEntryOK s log)
+    (hbound : log + 40 ≤ 2 ^ 64)
+    (hun : Wave8Contracts.M08.IvlUnhit s u (log, 40)) :
+    LogEntryOK u log := by
+  obtain ⟨_, hd, _, _, hh, _⟩ := h
+  have hmem (k : Nat) (hk : k < 5) :
+      u.memory (BitVec.ofNat 64 (log + 8 * k)) =
+        s.memory (BitVec.ofNat 64 (log + 8 * k)) := by
+    apply hun _ (by
+      simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)]
+      have ha : log % 8 = 0 := hlog.1.1
+      omega)
+    · simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)]
+      omega
+    · simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)]
+      omega
+  apply logEntryOK_of_record_preserved hlog hh
+  · obtain ⟨ha, hn, hw⟩ := hlog.1
+    refine ⟨ha, hn, fun k hk => ?_⟩
+    have hk5 : k < 5 := by simpa using hk
+    obtain ⟨w, hdom, hm⟩ := hw k hk
+    exact ⟨w, by rw [hd]; exact hdom, (hmem k hk5).trans hm⟩
+  · intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    have hread (j : Nat) (hj : j < 5) : memW u (log + 8 * j) = memW s (log + 8 * j) := by
+      unfold memW
+      rw [hmem j hj]
+    rcases hk with rfl | rfl | rfl | rfl | rfl
+    · exact hread 0 (by decide)
+    · exact hread 1 (by decide)
+    · exact hread 2 (by decide)
+    · exact hread 3 (by decide)
+    · exact hread 4 (by decide)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
