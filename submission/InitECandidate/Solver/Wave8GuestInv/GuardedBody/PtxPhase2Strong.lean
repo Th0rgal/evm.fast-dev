@@ -16953,4 +16953,40 @@ theorem phase2_final_source_eq (tail : ProgHOL 64) :
   simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
   rfl
 
+/-- The last two source instructions establish suffix readiness at zero clock cost. -/
+theorem phase2_final_pointer_source_bound {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (ha : "aa" ∈ names) (hk : "ak" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (spinePlug 2 (spineAt 96 ptxCode) tail) b := by
+  let P := fun {F : Type} (s : PanSemStateFiniteExact 64 F) =>
+    PtxMessageTableStoreReady buffers contents names aa ak s
+  let Q := fun {F : Type} (s : PanSemStateFiniteExact 64 F) =>
+    P s ∧ memW s (locN s "m" + 152) = aa
+  have hh : Hoare P
+      (.store (.op .add [.var .local (ofString "m"), .const 152]) (.var .local (ofString "aa")))
+      (fun r s => r = none → Q s) := by
+    refine ⟨fun s hc hp hn hr => ?_⟩
+    have hf := (phase2_message_table_pointer_store buffers contents names aa ak 152
+      (by decide) (by decide) "aa" ha).run s hc hp hn hr
+    exact ⟨hf.1, hf.2.trans hf.1.2.2.2.2.2.1⟩
+  have hb : TerminatingProgBoundedOn Q
+      (.seq (.store (.op .add [.var .local (ofString "m"), .const 160])
+        (.var .local (ofString "ak"))) tail) b := by
+    intro F s hc hp
+    simpa only [Nat.zero_add] using seq_bound_trans
+      (PtxP1.bound_of_clock (P := Q) (fun s => clock_store s _ _))
+      (phase2_message_ak_store_suffix buffers contents names aa ak hk) ht s hc hp
+  have he : spinePlug 2 (spineAt 96 ptxCode) tail =
+      .seq (.store (.op .add [.var .local (ofString "m"), .const 152]) (.var .local (ofString "aa")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 160]) (.var .local (ofString "ak"))) tail) := by
+    simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
+    rfl
+  rw [he]
+  intro F s hc hp
+  simpa only [Nat.zero_add] using seq_bound_trans
+    (PtxP1.bound_of_clock (P := P) (fun s => clock_store s _ _)) hh hb s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
