@@ -12433,4 +12433,26 @@ theorem salt_write_head_alignment_g10 {F : Type}
       unfold Disj at hc ⊢
       rcases hc with h | h | h | h <;> simp_all
 
+theorem heap_frontier_disj_allocated_g10 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (ha : ArenaOK s)
+    (p n : Nat) (hp : globN s "heap_ptr" ≤ p) (hb : p + n ≤ heapLimit)
+    {i : Ivl} (hi : i.2 = 0 ∨ Allocated s i) : Disj (p, n) i := by
+  rcases hi with hz | hh | hsc
+  · exact Or.inr (Or.inl hz)
+  · exact Or.inr (Or.inr (Or.inr (by have h := hh.2; dsimp; omega)))
+  · have hf := ha.2.2.1
+    have hs := ha.2.2.2.1
+    have hlim : heapLimit = InitE.scratchStart := rfl
+    exact Or.inr (Or.inr (Or.inl (by have h := hsc.1; dsimp; omega)))
+
+theorem heap_frontier_disj_world_g10 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (ha : ArenaOK s) (hw : WorldTypedWith s S Nd)
+    (p n : Nat) (hp : globN s "heap_ptr" ≤ p) (hb : p + n ≤ heapLimit) :
+    IvlsDisj [(p, n)] (worldTypedIvls s S Nd) := by
+  intro j hj i hi
+  simp only [List.mem_singleton] at hj
+  subst j
+  exact heap_frontier_disj_allocated_g10 ha p n hp hb (worldTypedIvls_allocated hw hi)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

@@ -18321,4 +18321,28 @@ theorem phase2_ct_alloc_output_typed_separation (h : PtxCallees) {F : Type}
   · exact Or.inl hz
   · exact Or.inr hh.2
 
+/-- Transport the selected joint table witness without requiring a world step
+for every possible witness of the input state. -/
+theorem phase2_message_tables_selected_world_step {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (aa ak : Nat) (S Nd : List Nat)
+    (ha : aa ∈ S) (hk : ak ∈ S)
+    (hal : hdr s aa 0 = 20) (hkl : hdr s ak 0 = 52)
+    (haf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ aa)
+    (hkf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ ak)
+    (hd : IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd))
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hm : locN post "m" = locN s "m")
+    (hwr : worldRoleSlots post = worldRoleSlots s)
+    (hjr : journalRoleSlots post = journalRoleSlots s)
+    (haa : hdr post aa 0 = hdr s aa 0) (hak : hdr post ak 0 = hdr s ak 0)
+    (hs : ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+      OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd')) :
+    PtxMessageTables post aa ak := by
+  obtain ⟨S', Nd', hsub, hw', hg⟩ := hs
+  refine ⟨S', Nd', hw', hsub aa ha, hsub ak hk, haa.trans hal, hak.trans hkl, ?_, ?_, ?_⟩
+  · rw [hwr, hjr]; exact haf
+  · rw [hwr, hjr]; exact hkf
+  · rw [hm]
+    exact phase2_packed_owned_growth s post _ _ _ hin hg hd
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
