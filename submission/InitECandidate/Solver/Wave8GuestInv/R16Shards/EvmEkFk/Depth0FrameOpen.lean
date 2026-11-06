@@ -9394,4 +9394,47 @@ theorem codeDbPayloadStrong_of_fresh_frame {F : Type}
   exact ⟨old_heap_word_of_fresh_world_effect hAs hframe p (by omega),
     old_heap_word_of_fresh_world_effect hAs hframe (p+8) (by omega)⟩
 
+/-- Protected code words survive writes to tables, fixed objects, and fresh regions. -/
+theorem protected_payload_words_of_world_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db) (hA : ArenaReady s)
+    (hframe : ∀ a : BitVec 64, post.memory a ≠ s.memory a →
+      (∃ i, ((∃ t ∈ S, i ∈ htabFootprint s t) ∨ i ∈ fixedObjects s) ∧
+        0 < i.2 ∧ i.1 < a.toNat+8 ∧ a.toNat < i.1+i.2) ∨
+      ((freeGap s).1 < a.toNat+8 ∧ a.toNat < (freeGap s).1+(freeGap s).2) ∨
+      ((heapFree s).1 < a.toNat+8 ∧ a.toNat < (heapFree s).1+(heapFree s).2)) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  intro p hp
+  obtain ⟨hin,hbound,ht,hfix⟩ := he.2 p hp
+  have hw : ∀ a, p ≤ a → a+8 ≤ p+16 → memW post a = memW s a := by
+    intro a hlo hhi
+    have hb : a < 2^64 := by omega
+    unfold memW
+    have hm : post.memory (BitVec.ofNat 64 a) = s.memory (BitVec.ofNat 64 a) := by
+      by_contra hn
+      have hc := hframe (BitVec.ofNat 64 a) hn
+      rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb] at hc
+      rcases hc with ⟨i,hi,hpos,h1,h2⟩ | ⟨h1,h2⟩ | ⟨h1,h2⟩
+      · have hd : Disj (p,16) i := by
+          rcases hi with ⟨t,ht',hi'⟩ | hi'
+          · exact ht t ht' i hi'
+          · exact hfix i hi'
+        unfold Disj at hd
+        dsimp only at hd
+        rcases hd with hd | hd | hd | hd <;> omega
+      · have hh := hA.2.2.1
+        have hfmp := hA.2.2.2.1
+        have hs : heapLimit ≤ scratchStart := by decide
+        have hip := hin.2
+        unfold freeGap at h1
+        dsimp only at h1 hip
+        omega
+      · have hip := hin.2
+        unfold heapFree at h1
+        dsimp only at h1 hip
+        omega
+    rw [hm]
+  exact ⟨hw p (by omega) (by omega),hw (p+8) (by omega) (by omega)⟩
+
 end HeadStore
