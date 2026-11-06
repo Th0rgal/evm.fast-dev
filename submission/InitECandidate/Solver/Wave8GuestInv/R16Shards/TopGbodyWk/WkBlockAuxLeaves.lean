@@ -7,6 +7,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalRemove
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.SetLstNew
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkBalAddChanges
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkIdxStateInit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_has
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_item
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.RlpHelpers
@@ -11397,5 +11398,19 @@ theorem wkSc_bal_remove_change :
     WorldKeepsSc BalChangeArg (fun _ => []) [] stdKeep NoExtra
       (ofString "bal_remove_change") :=
   worldKeepsSc_of_scratch_kept wk_bal_remove_change (by decide)
+
+theorem wkSc_idx_start_account :
+    WorldKeepsSc WorldOK (bufRegions WkBalStateInit.idxBufs)
+      ["heap_ptr", "scratch_ptr"] stdKeep NoExtra (ofString "idx_start_account") :=
+  WkBalStateInit.wkSc_idx_start_account
+
+theorem wk_idx_start_account :
+    WorldKeeps WorldOK
+      (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64),
+        (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
+      ["heap_ptr", "scratch_ptr"] stdKeep NoExtra (ofString "idx_start_account") :=
+  wkSc_idx_start_account.to_worldKeeps
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
