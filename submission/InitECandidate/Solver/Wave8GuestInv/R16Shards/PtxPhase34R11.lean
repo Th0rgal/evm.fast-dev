@@ -20230,4 +20230,42 @@ theorem sk_make_call_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+
+theorem htab_set_ts24_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (key value : ExpHOL 64) (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 24]), key, value]) =
+      (none, post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  apply tx_header_words_of_fixed_frame hW hT
+  intro b hb hn
+  exact htab_set_recSlot_fixed_frame s post S Nd b "ts" 24 key value hW.1.1 hT hb hn
+    (by decide) (fun hts ht => (nonValueSlot_ts24 s S hT.1 hts ht).1) hr
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Storage iteration's item lookup restores every nonlocal field. -/
+theorem htab_item_restored_state {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (hG : GuestInv s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_item") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) = {s with clock := post.clock} := by
+  have hs := PtxP1.funSpec_at_lookup EvmEkFk.ro_htab_item s hG.code vs body callee ret hl
+    (guestInv_callEntry s callee hG) (by rw [hr]; simp)
+  rw [hr] at hs
+  have he := hs (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  rw [he]
+  rfl
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
