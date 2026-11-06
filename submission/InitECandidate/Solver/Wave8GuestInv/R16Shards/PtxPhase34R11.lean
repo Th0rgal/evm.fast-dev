@@ -16343,4 +16343,29 @@ theorem acct_is_empty_restored_state {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open EvmEkFk R10Shards.P26_P28
+
+/-- Journal append writes preserve aligned allocated objects disjoint from the record. -/
+theorem journal_append_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (i jrec : Ivl)
+    (hA : ArenaOK s) (hal : Allocated s i) (hi1 : i.1 % 8 = 0) (hi2 : i.2 % 8 = 0)
+    (hdj : Disj i jrec)
+    (hcell : ∀ x : BitVec 64, post.memory x ≠ s.memory x →
+      CellHitsPos x.toNat jrec ∨ CellHitsPos x.toNat (freeGap s) ∨ CellHitsPos x.toNat (heapFree s)) :
+    IvlUnhit s post i := by
+  intro x hx8 hhit
+  by_contra hne
+  have hfg := disj_allocated_freeGap hA hal
+  have hhf := disj_allocated_heapFree hA hal
+  have hin : i.1 ≤ x.toNat ∧ x.toNat + 8 ≤ i.1 + i.2 := by
+    unfold CellHits at hhit
+    omega
+  rcases hcell x hne with hj | hg | hh
+  · exact not_cellHitsPos_of_disj hin hdj hj
+  · exact not_cellHitsPos_of_disj hin hfg hg
+  · exact not_cellHitsPos_of_disj hin hhf hh
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
