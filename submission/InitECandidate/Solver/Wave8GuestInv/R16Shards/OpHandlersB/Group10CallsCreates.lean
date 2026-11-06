@@ -11844,4 +11844,46 @@ theorem extend_memory_sequence_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
   · intros; trivial
   · exact hcont
 
+theorem charge_gas_call_keep32_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hc : s.code = originalRuntimeCode) (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (amt : ExpHOL 64)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "charge_gas") [amt]) = (none, post)) :
+    post.locals = s.locals ∧ post.globals = s.globals ∧
+      memW post (globN s "ev" + 32) = memW s (globN s "ev" + 32) := by
+  obtain ⟨values, body, callee, rs, v, cp, ha, hl, hrun, rfl⟩ := call0_returned_inv_g10 hr
+  obtain ⟨params, body0, rs0, hl0, hs⟩ := epsA_charge_gas_keep32
+  have hb : body = body0 := lookupCodeHOLFinite_installed_body s.code.lookup
+    (ofString "charge_gas") params body0 body rs0 rs values callee (by rwa [hc]) hl
+  subst body
+  have hrs : rs = rs0 := by
+    have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some s.code.lookup
+      (ofString "charge_gas") values body0 callee rs hl
+    rw [hc] at hx
+    simp only [Flapjack.lookupCodeHOLExact, hl0] at hx
+    split at hx
+    · exact (congrArg (fun x => x.2.2) (Option.some.inj hx)).symm
+    · cases hx
+  subst rs
+  have hp := hs (callEntryStateHOLFinite s callee) hc
+    (localsFree_evmInv s callee (s.clock - 1) hi)
+    (Group10.headMemChainWF_locals s callee (s.clock - 1) hw)
+    trivial ⟨values, by rwa [← hc]⟩
+  dsimp only at hp
+  rw [hrun] at hp
+  have hkeep := ((hp (by simp)).1 v rfl).2.2.2
+  exact ⟨rfl, hkeep.1, hkeep.2⟩
+
+theorem memoryExpansionLocal_charge_gas_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hc : s.code = originalRuntimeCode) (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (hp : MemoryExpansionLocal_g10 s) (amt : ExpHOL 64)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "charge_gas") [amt]) = (none, post)) :
+    MemoryExpansionLocal_g10 post := by
+  obtain ⟨hl, hg, hm⟩ := charge_gas_call_keep32_g10 hc hi hw amt hr
+  apply memoryExpansionLocal_transport_g10 hp
+  · rw [hl]
+  · unfold globN; rw [hg]
+  · exact hm
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
