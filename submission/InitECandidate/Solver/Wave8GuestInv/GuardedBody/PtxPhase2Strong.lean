@@ -19016,4 +19016,62 @@ theorem phase2_heapByteEff_allocated_unhit {F : Type}
         have sep : heapLimit ≤ InitE.scratchStart := by decide
         omega)))
 
+open R10Shards.P26_P28 in
+/-- A concrete heap effect separated from the selected typed world preserves
+all world and journal role slots. -/
+theorem phase2_heapByteEff_roles {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    (ha : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (he : R16Shards.WkBlockTxEnc.HeapByteEff s post R ["heap_ptr"])
+    (hd : IvlsDisj R (worldTypedIvls s S Nd)) :
+    worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
+  have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
+    intro g hgm
+    apply R16Shards.globN_eq_of_lookup (he.globals _ _)
+    have hn : ofString g ≠ ofString "heap_ptr" := by revert g hgm; decide
+    simpa using hn
+  have hu : ∀ i ∈ worldTypedIvls s S Nd, Allocated s i → i.1 % 8 = 0 → i.2 % 8 = 0 →
+      IvlUnhit s post i := by
+    intro i hi hal h1 h2
+    exact phase2_heapByteEff_allocated_unhit he ha ⟨h1, h2⟩ hal
+      (fun j hj => disj_symm (hd j hj i hi))
+  have huf : ∀ i ∈ worldTypedIvls s S Nd, i ∈ fixedObjects s → i.2 ≠ 0 → IvlUnhit s post i := by
+    intro i hi hf hn
+    have hh := (hw.2.2.1.1 i hf).resolve_left hn
+    exact hu i hi hh.1 hh.2.1 hh.2.2.1
+  have hut : ∀ t ∈ S, ∀ i ∈ htabFootprint s t, IvlUnhit s post i := by
+    intro t ht i hi
+    have hf := ((hw.1.2.1 t ht).1.1 i hi).2
+    apply hu i _ ((hw.1.2.1 t ht).2 i hi).1 hf.1 hf.2.1
+    simp only [worldTypedIvls, List.mem_append]
+    exact Or.inl (Or.inl (Or.inl (Or.inl (Or.inl (List.mem_flatMap.mpr ⟨t, ht, hi⟩)))))
+  have hur : ∀ (g : String) (n : Nat), (g, n) ∈ typedRecords → n ≠ 0 →
+      globN s g ≠ 0 → IvlUnhit s post (globN s g, n) := by
+    intro g n hrec hn hgn
+    apply huf _ _ _ hn
+    · simp only [worldTypedIvls, List.mem_append]
+      left; left; left; left; right
+      exact List.mem_map.mpr ⟨(g, n), hrec, by simp [hgn]⟩
+    · simpa [hgn] using typedRecord_mem_fixedObjects s hrec
+  have huts := hur "ts" 72 (by decide) (by decide)
+  have hujr : globN s "journal_cap" ≠ 0 →
+      IvlUnhit s post (globN s "journal", 32 * globN s "journal_cap") := by
+    intro hn
+    apply huf _ _ _ (by dsimp; omega)
+    · simp [worldTypedIvls, hn]
+    · simp [fixedObjects, hn]
+  have hjr := R10Shards.P26_P28.journalRoleSlots_eq_of_unhit ha.1 he.arena.1 ha.2
+    ⟨he.hp_le, he.sp_le⟩ (fun (x : Nat) (hx : x ∈ S) => hx) hw.2.1 hw.2.2.1 hcore huts hujr
+  refine ⟨?_, hjr.1⟩
+  apply R10Shards.P26_P28.worldRoleSlots_eq_of_unhit ha.2 hw.1 hw.2.2.1 hcore hut
+    (hur "ws" 40 (by decide) (by decide)) (hur "bs" 80 (by decide) (by decide)) huts
+  · intro i hi hn
+    apply huf i _ _ hn
+    · simp only [worldTypedIvls, List.mem_append]
+      exact Or.inl (Or.inr hi)
+    · simp only [fixedObjects, List.mem_append]
+      exact Or.inr hi
+  · exact ⟨mem_low_eq_of_domain_writes he.out_dom ha.1 (by decide),
+      mem_low_eq_of_domain_writes he.out_dom ha.1 (by decide)⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
