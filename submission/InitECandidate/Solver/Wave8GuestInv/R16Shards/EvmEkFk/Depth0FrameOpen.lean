@@ -9153,4 +9153,26 @@ theorem get_code_entry_at_call {F : Type} (s : PanSemStateFiniteExact 64 F)
     ((worldTypedCodeStrong_with_locals_clock s S _ _).2 hW) hWT' hc hs
     (fun hn => key_buffer_fit_of_world s hA hWT.2.2.1 hn) hsk hws hts hbs hh hdn htn hcn
 
+/-- Bounded return at an actual installed call, with structural caller premises. -/
+theorem get_code_call_return_of_world_nonzero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (hash addr : BitVec 64) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S) (hWT : WorldTypedWith s S Nd)
+    (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hsk : globN s "sk_buf" ≠ 0) (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hbs : globN s "bs" ≠ 0)
+    (hdn : memW s (globN s "ws" + 16) ≠ 0)
+    (htn : memW s (globN s "ts" + 40) ≠ 0)
+    (hcn : ∀ owner, owner = "ts" ∨ owner = "bs" → memW s (globN s owner + 48) ≠ 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_code")
+      [.val (.word hash), .val (.word addr)] = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40 := by
+  obtain ⟨db,tw,he⟩ := get_code_entry_at_call s S Nd hash addr body callee ret hA hW hWT hc hs
+    hsk hws hts hbs hdn htn hcn hl
+  exact get_code_call_return_entry_world_strong s _ body callee ret v post S Nd db hash tw hc he hl hb
+
 end HeadStore
