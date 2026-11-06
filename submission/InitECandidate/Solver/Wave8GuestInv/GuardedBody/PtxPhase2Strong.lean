@@ -16901,4 +16901,23 @@ theorem phase2_get_account_message_suffix_bound (h : PtxCallees)
   · exact phase2_get_account_message_suffix h buffers contents names aa ak name args hm hi hn hshape
   · exact ht
 
+/-- Lookup followed by transaction warming retains the complete message suffix. -/
+theorem phase2_get_account_warm_message_suffix_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (key value : ExpHOL 64)
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    (hshape : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (.decCall name .one (ofString "get_account") args
+        (.seq (.call (some (none, none)) (ofString "htab_set")
+          [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value]) tail))
+      (K.get_account + (K.htab_set + 1 + b) + 1) := by
+  exact phase2_get_account_message_suffix_bound h buffers contents names aa ak name args hm hi hn hshape
+    (phase2_htab_set_ts8_message_suffix_bound h buffers contents names aa ak key value ht)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
