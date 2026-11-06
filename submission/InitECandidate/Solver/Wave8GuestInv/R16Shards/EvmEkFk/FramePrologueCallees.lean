@@ -9260,6 +9260,65 @@ theorem precompile_sha256_init_call_null_not_flows {F : Type}
       rw [precompile_sha256_state_init_null _ (guestInv_callEntry s callee hi) hpe]
       simp [R13.FlowsOrResumes,Resumes]
 
+theorem precompile_memzero_call_null_128_not_flows {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ptr : ExpHOL 64) (hi : GuestInv s)
+    (hp : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) ptr =
+      some (.val (.word 0))) :
+    ¬ R13.FlowsOrResumes (evaluateHOLFiniteState s
+      (.call (some (none,none)) (ofString "memzero") [ptr,.const 128])).1 := by
+  have hl : originalRuntimeCode.lookup (ofString "memzero") =
+      some ([(ofString "dst",.one),(ofString "n",.one)],
+        sourceFnBody Guest.Software.guestFn_memzero,.one) :=
+    lookup_of_guestAst_getElem 17 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_memzero) rfl
+  intro hr
+  rw [evaluateHOLFiniteState_call] at hr
+  have hv : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [ptr,.const 128] = some [.val (.word 0),.val (.word 128)] := by
+    change @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) ptr = _ at hp
+    simp [evalListHOLFinite,evalListHOLExact,evalHOLExact,hp]
+  rw [hv] at hr
+  dsimp only at hr
+  rcases hlook : lookupCodeHOLFinite s.code.lookup (ofString "memzero")
+      [.val (.word 0),.val (.word 128)] with _ | ⟨body,callee,ret⟩
+  · rw [hlook] at hr
+    simp [R13.FlowsOrResumes,Resumes] at hr
+  · rw [hlook] at hr
+    dsimp only at hr
+    have heq := lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ body _ ret _ callee
+      (by rw [hi.code]; exact hl) hlook
+    subst heq
+    have heq := lookupCodeHOLFinite_installed_return s _ _ _ _ .one ret _ callee
+      (by rw [hi.code]; exact hl) hlook
+    subst heq
+    obtain ⟨p,n,hvals,hpe,hne⟩ := R10Shards.P26_P28.lookupCode_two_words (by decide) hl
+      (by simpa only [hi.code] using hlook)
+    have he : p = 0 ∧ n = 128 := by simpa using hvals.symm
+    rcases he with ⟨rfl,rfl⟩
+    by_cases hz : s.clock = 0
+    · simp [hz,R13.FlowsOrResumes,Resumes] at hr
+    · rw [if_neg hz] at hr
+      apply precompile_memzero_null_128 _ (guestInv_callEntry s callee hi) hpe hne
+      rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+          (sourceFnBody Guest.Software.guestFn_memzero) with ⟨r,post⟩
+      cases r with
+      | none => exact Or.inl rfl
+      | some r => cases r <;> simp_all [R13.FlowsOrResumes,Resumes]
+
+theorem precompile_memzero_128_nonzero_of_flow {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ptr : ExpHOL 64) (pad : BitVec 64)
+    (hi : GuestInv s)
+    (hp : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) ptr =
+      some (.val (.word pad)))
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s
+      (.call (some (none,none)) (ofString "memzero") [ptr,.const 128])).1) :
+    pad.toNat ≠ 0 := by
+  intro hz
+  have he : pad = 0 := BitVec.eq_of_toNat_eq hz
+  subst pad
+  exact precompile_memzero_call_null_128_not_flows s ptr hi hp hr
+
 theorem precompile_sha256_init_nonzero_of_flow {F : Type}
     (s : PanSemStateFiniteExact 64 F) (ptr : ExpHOL 64) (stp : BitVec 64)
     (hi : GuestInv s)
