@@ -10307,3 +10307,132 @@ theorem codeDbPayloadStrong_of_nonbal_htab_exit {F : Type}
   exact hf i hm
 
 end HeadStore
+
+section FrameOpenRich
+
+/-! ## Rich `frame_new` run for `fk_frame_open`
+
+`HeadMemAlignedBridge.frame_new_run` establishes only `FNPost` (frame-memory facts).  The
+`fk_frame_open` obligation (`EvmMsgReady` after `frame_open(msg, 0)`) needs the full exit
+bundle: every record field, the write frame of the whole body relative to the entry state, the
+globals kept, the fresh deletion table with its header words and footprint, and the geometry of
+the allocated blocks.  `FNR` below is `FNI` with that bookkeeping made relative to the entry
+state `s` of the `frame_new` run; `FrameNewRich` is the exit bundle itself. -/
+
+/-- Rich `frame_new` step invariant relative to the entry state `s`: the arena facts of `FNI`
+plus the exact write frame (fresh scratch below the entry `scratch_ptr`, heap growth), the
+globals kept except the three arena pointers, and unchanged domain/endianness. -/
+def FNR {F : Type} (s t : PanSemStateFiniteExact 64 F) (m e : BitVec 64) : Prop :=
+  t.code = originalRuntimeCode ∧ t.memaddrs = s.memaddrs ∧ t.be = s.be ∧ ArenaReady t ∧
+    globN t "frame_mem_ptr" ≤ globN t "scratch_ptr" ∧ globN t "scratch_ptr" ≤ e.toNat ∧
+    e.toNat + 280 ≤ globN s "scratch_ptr" ∧ globN s "scratch_ptr" ≤ scratchEnd ∧
+    e.toNat % 8 = 0 ∧
+    globN s "heap_ptr" ≤ globN t "heap_ptr" ∧ m.toNat + 176 ≤ globN s "heap_ptr" ∧
+    (∀ k, k ≠ ofString "scratch_ptr" → k ≠ ofString "heap_ptr" → k ≠ ofString "frame_mem_ptr" →
+      t.globals.lookup k = s.globals.lookup k) ∧
+    (∀ a : BitVec 64, ¬ CellHits a.toNat
+        (globN t "scratch_ptr", globN s "scratch_ptr" - globN t "scratch_ptr") →
+      ¬ CellHits a.toNat (globN s "heap_ptr", globN t "heap_ptr" - globN s "heap_ptr") →
+      t.memory a = s.memory a) ∧
+    t.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+    t.locals.lookup (ofString "e") = some (.val (.word e))
+
+theorem FNR.facts {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    (h : FNR s t m e) :
+    e.toNat + 280 < 2 ^ 64 ∧ m.toNat + 176 ≤ scratchStart ∧ scratchStart ≤ e.toNat := by
+  obtain ⟨-, -, -, ⟨-, hA⟩, h5, h6, h7, h7b, -, h9, h10, -, -, -, -⟩ := h
+  have hlim : heapLimit = scratchStart := rfl
+  have := scratchEnd_lt64
+  have h1 := hA.2.1
+  have h2 := hA.2.2.1
+  have h4 := hA.2.2.2.1
+  refine ⟨?_, ?_, ?_⟩ <;> omega
+
+/-- The message record is heap-resident below the entry `heap_ptr`, so its words are untouched. -/
+theorem FNR.msg_word {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    (h : FNR s t m e) (k : Nat) (hk : k + 8 ≤ 176) :
+    memW t (m.toNat + k) = memW s (m.toNat + k) := by
+  obtain ⟨-, -, -, ⟨-, hA⟩, hfmp, -, h7, h7b, -, hhp, hmhp, -, heff, -, -⟩ := h
+  have hlt : m.toNat + k < 2 ^ 64 := by
+    have := scratchEnd_lt64
+    have h1 := hA.2.1
+    have h2 := hA.2.2.1
+    have h4 := hA.2.2.2.1
+    have h5 := hA.2.2.2.2.1
+    have hlim : heapLimit = scratchStart := rfl
+    omega
+  have haddr : (BitVec.ofNat 64 (m.toNat + k)).toNat = m.toNat + k :=
+    OpHandlersB.HeadMemBridge.toNat_ofNat_lt _ hlt
+  have hsc : scratchStart ≤ globN t "scratch_ptr" := by
+    have := hA.2.2.1
+    have := hA.2.2.2.1
+    omega
+  have hlim : heapLimit = scratchStart := rfl
+  have hhp0 : globN s "heap_ptr" ≤ heapLimit := by
+    have := hA.2.1
+    omega
+  have h1 : ¬ CellHits (BitVec.ofNat 64 (m.toNat + k)).toNat
+      (globN t "scratch_ptr", globN s "scratch_ptr" - globN t "scratch_ptr") := by
+    rw [haddr]; unfold CellHits; dsimp only; omega
+  have h2 : ¬ CellHits (BitVec.ofNat 64 (m.toNat + k)).toNat
+      (globN s "heap_ptr", globN t "heap_ptr" - globN s "heap_ptr") := by
+    rw [haddr]; unfold CellHits; dsimp only; omega
+  have heq := heff _ h1 h2
+  unfold memW
+  rw [heq]
+
+theorem FNR.mem120 {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    (h : FNR s t m e) : memW t (m.toNat + 120) = memW s (m.toNat + 120) :=
+  h.msg_word 120 (by omega)
+
+/-- Rich exit bundle of a `frame_new(msg)` body run from entry `s` with message `m`: the
+returned record pointer `e`, its stack base `stk`, logs header `l`, logs backing `q` and fresh
+deletion table `tb`, with every field, the write frame, the kept globals and the block geometry.
+`sp1 ≤ tb ≤ q ≤ l ≤ stk ≤ e` and `fmp0 + 1024 ≤ fmp1 ≤ tb`, where `fmp0`/`fmp1` are the EVM
+memory block and the exit `frame_mem_ptr`. -/
+def FrameNewRich {F : Type} (s : PanSemStateFiniteExact 64 F) (m : BitVec 64)
+    (v : ValueHOL 64) (p : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ e stk l q tb : BitVec 64,
+    v = .val (.word e) ∧
+    ArenaReady p ∧ p.code = originalRuntimeCode ∧ p.memaddrs = s.memaddrs ∧ p.be = s.be ∧
+    (∀ k, k ≠ ofString "scratch_ptr" → k ≠ ofString "heap_ptr" → k ≠ ofString "frame_mem_ptr" →
+      p.globals.lookup k = s.globals.lookup k) ∧
+    globN s "heap_ptr" ≤ globN p "heap_ptr" ∧
+    globN p "frame_mem_ptr" ≤ globN p "scratch_ptr" ∧
+    (FrameOutside s p [(globN p "scratch_ptr", globN s "scratch_ptr" - globN p "scratch_ptr")]
+      (globN s "heap_ptr", globN p "heap_ptr" - globN s "heap_ptr")) ∧
+    e.toNat % 8 = 0 ∧ stk.toNat % 8 = 0 ∧ l.toNat % 8 = 0 ∧ q.toNat % 8 = 0 ∧
+    tb.toNat % 8 = 0 ∧
+    globN p "scratch_ptr" ≤ tb.toNat ∧ tb.toNat ≤ q.toNat ∧ q.toNat + 32 ≤ l.toNat ∧
+    l.toNat + 24 ≤ stk.toNat ∧ stk.toNat + 1024 ≤ e.toNat ∧
+    e.toNat + 280 ≤ globN s "scratch_ptr" ∧
+    globN p "frame_mem_ptr" ≤ q.toNat ∧ globN p "frame_mem_ptr" ≤ tb.toNat ∧
+    memW p (e.toNat + 24) + 1024 ≤ globN p "frame_mem_ptr" ∧
+    globN p "frame_mem_ptr" ≤ stk.toNat ∧
+    memW p (e.toNat + 8) = stk.toNat ∧ memW p (e.toNat + 232) = 32 ∧
+    memW p (e.toNat + 16) = 0 ∧ memW p (e.toNat + 32) = 0 ∧ memW p (e.toNat + 192) = 0 ∧
+    memW p (e.toNat + 40) = 1024 ∧ memW p (e.toNat + 64) = memW s (m.toNat + 40) ∧
+    memW p (e.toNat + 88) = l.toNat ∧ memW p (l.toNat + 0) = q.toNat ∧
+    memW p (l.toNat + 8) = 0 ∧ memW p (l.toNat + 16) = 4 ∧
+    memW p (e.toNat + 112) = m.toNat ∧ memW p (e.toNat + 136) = tb.toNat ∧
+    memW p (e.toNat + 168) = memW s (m.toNat + 152) ∧
+    memW p (e.toNat + 176) = memW s (m.toNat + 160) ∧
+    memW p (e.toNat + 216) = 0 ∧ memW p (e.toNat + 144) = globN s "evm_empty" ∧
+    memW p (e.toNat + 104) = 1 ∧
+    HtabWF p tb.toNat ∧ hdr p tb.toNat 0 = 20 ∧ hdr p tb.toNat 3 = 0 ∧ tb.toNat ≠ 0 ∧
+    tb.toNat ≠ memW s (m.toNat + 152) ∧ tb.toNat ≠ memW s (m.toNat + 160) ∧
+    (∀ i ∈ htabFootprint p tb.toNat, Allocated p i ∧
+      (Inside i (globN s "heap_ptr") (globN p "heap_ptr") ∨
+        Inside i (globN p "scratch_ptr") (globN s "scratch_ptr")))
+
+theorem frameNewRich_locIns {F : Type} (s : PanSemStateFiniteExact 64 F) (m : BitVec 64) :
+    LocIns (FrameNewRich (F := F) s m) := by
+  intro v t L h
+  obtain ⟨e, stk, l, q, tb, hv, hAR, hc⟩ := h
+  have key : ∀ w : Nat, HtabWF {t with locals := L} w = HtabWF t w :=
+    fun w => (htabWF_with_locals t L t.clock w).eq
+  refine ⟨e, stk, l, q, tb, hv, ⟨guestInv_congr (s := t) rfl rfl rfl rfl hAR.1, hAR.2⟩, ?_⟩
+  simp only [key]
+  exact hc
+
+end FrameOpenRich

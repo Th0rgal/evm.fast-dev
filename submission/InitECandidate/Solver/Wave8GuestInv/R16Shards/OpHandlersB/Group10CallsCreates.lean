@@ -12684,4 +12684,404 @@ theorem alloc_return_avoids_g10 {F : Type}
     rw [hg]
     simp [HolFiniteMapExact.lookup_update, FUPDATE, hne]
 
+
+/-! ## ChildContinuationA step combinators and head-frame word readers (ccA) -/
+
+/-! ## 1. Head-frame word readers -/
+
+theorem wordAt_ev_off_g10 {F : Type} {s : PanSemStateFiniteExact 64 F} {k : Nat}
+    (hInv : EvmInv s) (hk8 : k % 8 = 0) (hk : k + 8 ≤ 280) : WordAt s (globN s "ev" + k) := by
+  have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    simp [evmChain, evmChainFrom]
+  have hFW0 := hInv.2.choose_spec.2.2.2.2.1 _ hhead_mem
+  have hwok := (hFW0.1 (globN s "ev", 280) (by simp)).2
+  have hidx : k / 8 < 280 / 8 := by omega
+  have hkm : 8 * (k / 8) = k := by omega
+  rw [← hkm]
+  exact hwok.2.2 (k / 8) hidx
+
+theorem msgOwned_head_g10 {F : Type} {s : PanSemStateFiniteExact 64 F} (hInv : EvmInv s) :
+    ∃ S : List Nat, MsgOwned s S (memW s (globN s "ev" + 112)) := by
+  have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    simp [evmChain, evmChainFrom]
+  have hFW0 := hInv.2.choose_spec.2.2.2.2.1 _ hhead_mem
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, hmo⟩ := hFW0
+  exact ⟨_, hmo⟩
+
+theorem wordAt_msg_off_g10 {F : Type} {s : PanSemStateFiniteExact 64 F} {k : Nat}
+    (hInv : EvmInv s) (hk8 : k % 8 = 0) (hk : k + 8 ≤ 176) :
+    WordAt s (memW s (globN s "ev" + 112) + k) := by
+  obtain ⟨_, hmo⟩ := msgOwned_head_g10 hInv
+  have hwok := hmo.2.1
+  have hidx : k / 8 < 176 / 8 := by omega
+  have hkm : 8 * (k / 8) = k := by omega
+  rw [← hkm]
+  exact hwok.2.2 (k / 8) hidx
+
+/-! ## 2. ChildContinuationA step combinator: void callee -/
+
+
+theorem ccA_seq_call_g10 {F : Type} {P Q : PanSemStateFiniteExact 64 F → Prop}
+    {Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hf : EvmPreservingSpecA Pc Qc fname)
+    (hentry : ∀ (t : PanSemStateFiniteExact 64 F) (values : List (ValueHOL 64)) (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (rs : ShapeHOL),
+      t.code = originalRuntimeCode → EvmInv t → Group10.HeadMemChainWF t → P t →
+      evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a)) args = some values →
+      lookupCodeHOLFinite t.code.lookup fname values = some (body, callee, rs) →
+      Pc (callEntryStateHOLFinite t callee))
+    (hstep : ∀ (t : PanSemStateFiniteExact 64 F) (values : List (ValueHOL 64)) (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (rs : ShapeHOL) (v : ValueHOL 64) (cpost : PanSemStateFiniteExact 64 F),
+      EvmInv t → Group10.HeadMemChainWF t → P t →
+      EvmInv cpost → Group10.HeadMemChainWF cpost →
+      evmChain cpost = evmChain (callEntryStateHOLFinite t callee) →
+      Qc (callEntryStateHOLFinite t callee) v cpost →
+      Q { cpost with locals := t.locals })
+    (hcont : ChildContinuationA Q cont) :
+    ChildContinuationA P (.seq (.call (some (none, none)) fname args) cont) := by
+  intro t hc hi hw hp hnt
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_call] at hnt ⊢
+  rcases hargs : evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a)) args with _ | values
+  · refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+      fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+  · simp only [hargs] at hnt ⊢
+    rcases hl : lookupCodeHOLFinite t.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+        fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+    · simp only [hl] at hnt ⊢
+      by_cases hz : t.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt ⊢
+        obtain ⟨params, body, retShape, hlook, hspec⟩ := hf
+        have hbody_eq : body' = body :=
+          lookupCodeHOLFinite_installed_body t.code.lookup fname params body body'
+            retShape ret' values callee (by rw [hc]; exact hlook) hl
+        subst body'
+        have hret_eq : ret' = retShape := by
+          have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
+            t.code.lookup fname values body callee ret' hl
+          rw [hc] at hx; simp only [Flapjack.lookupCodeHOLExact, hlook] at hx
+          split at hx
+          · exact (congrArg (fun x => x.2.2) (Option.some.inj hx)).symm
+          · cases hx
+        subst ret'
+        have hi_ce : EvmInv (callEntryStateHOLFinite t callee) :=
+          localsFree_evmInv t callee (t.clock - 1) hi
+        have hw_ce : Group10.HeadMemChainWF (callEntryStateHOLFinite t callee) :=
+          Group10.headMemChainWF_locals t callee (t.clock - 1) hw
+        have hPc : Pc (callEntryStateHOLFinite t callee) :=
+          hentry t values body callee retShape hc hi hw hp hargs hl
+        have hl_orig : lookupCodeHOLFinite originalRuntimeCode.lookup fname values =
+            some (body, callee, retShape) := by rwa [← hc]
+        have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata
+          (callEntryStateHOLFinite t callee) body).1
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite t callee) body with ⟨res, cpost⟩
+        simp only [hrun] at hnt hmeta ⊢
+        change cpost.code = t.code at hmeta
+        have hc_ce := evm_congr (s := t) (t := callEntryStateHOLFinite t callee) rfl rfl
+        have hQ (hsafe : res ≠ some .timeOut) :
+            (∀ v, res = some (.returned v) →
+              (EvmInv cpost ∧ Group10.HeadMemChainWF cpost) ∧
+              evmChain cpost = evmChain (callEntryStateHOLFinite t callee) ∧
+              evmR cpost ≤ evmR (callEntryStateHOLFinite t callee) ∧
+              Qc (callEntryStateHOLFinite t callee) v cpost) ∧
+            (IsEvmErr res →
+              (EvmInv cpost ∧ Group10.HeadMemChainWF cpost) ∧
+              evmChain cpost = evmChain (callEntryStateHOLFinite t callee) ∧
+              evmR cpost ≤ evmR (callEntryStateHOLFinite t callee)) := by
+          have hs := hspec (callEntryStateHOLFinite t callee) hc hi_ce hw_ce hPc
+            ⟨values, hl_orig⟩ (by rw [hrun]; exact hsafe)
+          dsimp only at hs; rw [hrun] at hs; exact hs
+        cases res with
+        | none => refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+            fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+        | some r0 =>
+          cases r0 with
+          | timeOut => simp at hnt
+          | returned v =>
+            by_cases hsh_ok : shapeEqHOL (shapeOfHOLExact v) retShape = true
+            · simp only [hsh_ok, ↓reduceIte] at hnt ⊢
+              obtain ⟨⟨hi_cp, hw_cp⟩, hch_cp, hR_cp, hQc_cp⟩ := (hQ (by simp)).1 v rfl
+              have hQres : Q { cpost with locals := t.locals } :=
+                hstep t values body callee retShape v cpost hi hw hp hi_cp hw_cp hch_cp hQc_cp
+              have hc_res := evm_congr (s := cpost)
+                (t := ({ cpost with locals := t.locals } : PanSemStateFiniteExact 64 F)) rfl rfl
+              have hcode_res : (({ cpost with locals := t.locals } :
+                  PanSemStateFiniteExact 64 F)).code = originalRuntimeCode := hmeta.trans hc
+              have hi_res : EvmInv ({ cpost with locals := t.locals } :
+                  PanSemStateFiniteExact 64 F) :=
+                localsFree_evmInv cpost t.locals cpost.clock hi_cp
+              have hw_res : Group10.HeadMemChainWF ({ cpost with locals := t.locals } :
+                  PanSemStateFiniteExact 64 F) :=
+                Group10.headMemChainWF_locals cpost t.locals cpost.clock hw_cp
+              have hR_cp' : evmR cpost ≤ evmR t := by
+                rw [hc_ce.2.1] at hR_cp; exact hR_cp
+              have hR_le : evmR ({ cpost with locals := t.locals } :
+                  PanSemStateFiniteExact 64 F) ≤ evmR t := by
+                rw [hc_res.2.1]; exact hR_cp'
+              obtain ⟨hret, herr⟩ := hcont _ hcode_res hi_res hw_res hQres
+                (by simpa using hnt)
+              refine ⟨fun hr => ?_, fun he => ?_⟩
+              · obtain ⟨hinv, hle⟩ := hret hr
+                exact ⟨hinv, le_trans hle hR_le⟩
+              · obtain ⟨hinv, hdepth, hle⟩ := herr he
+                refine ⟨hinv, ?_, le_trans hle hR_le⟩
+                rw [hdepth, hc_res.2.2.1, hch_cp, hc_ce.2.2.1]
+            · simp only [hsh_ok, Bool.false_eq_true, ↓reduceIte]
+              refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+                fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+          | exception eid ev =>
+            by_cases heid : eid = ofString "EvmErr"
+            · subst heid
+              dsimp only
+              obtain ⟨⟨hi_cp, hw_cp⟩, hch_cp, hR_cp⟩ := (hQ (by simp)).2 ⟨ev, rfl⟩
+              have hi_el : EvmInv cpost.emptyLocalsHOLFinite :=
+                localsFree_evmInv cpost _ cpost.clock hi_cp
+              have hw_el : Group10.HeadMemChainWF cpost.emptyLocalsHOLFinite :=
+                Group10.headMemChainWF_locals cpost _ cpost.clock hw_cp
+              have hc_el := evm_congr (s := cpost) (t := cpost.emptyLocalsHOLFinite) rfl rfl
+              refine ⟨fun hr => absurd hr (by rintro ⟨_, h⟩; cases h), fun _ => ?_⟩
+              exact ⟨⟨hi_el, hw_el⟩, by rw [hc_el.2.2.1, hch_cp, hc_ce.2.2.1],
+                by rw [hc_el.2.1]; rw [hc_ce.2.1] at hR_cp; exact hR_cp⟩
+            · refine ⟨fun hr => absurd hr (by rintro ⟨_, h⟩; cases h),
+                fun he => absurd he ?_⟩
+              intro hc
+              obtain ⟨_, hv⟩ := hc
+              injection hv with h'; injection h' with h1 _
+              exact heid h1
+          | «break» | «continue» | error | finalFfi _ =>
+            dsimp only
+            refine ⟨fun hr => absurd hr (by rintro ⟨_, h⟩; cases h),
+              fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+
+/-! ## 5. ChildContinuationA step combinators -/
+
+theorem ccA_dec_g10 {F : Type} {P Q : PanSemStateFiniteExact 64 F → Prop}
+    {nm : MlS} {sh : ShapeHOL} {init : ExpHOL 64} {body : ProgHOL 64}
+    (hinit : ∀ (t : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) init = some v →
+      EvmInv t → P t → Q (setVarHOLFinite nm v t))
+    (hbody : ChildContinuationA Q body) :
+    ChildContinuationA P (.dec nm sh init body) := by
+  intro t hc hi hw hp hnt
+  rw [evaluateHOLFiniteState_dec_total] at hnt ⊢
+  dsimp only at hnt ⊢
+  revert hnt
+  split
+  · intro _; exact ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+      fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+  · rename_i v hv
+    split
+    · rename_i hsh
+      simp only [hsh, ↓reduceIte] at ⊢
+      intro hnt
+      have hi1 : EvmInv (setVarHOLFinite nm v t) := localsFree_evmInv t _ t.clock hi
+      have hw1 : Group10.HeadMemChainWF (setVarHOLFinite nm v t) := Group10.headMemChainWF_locals t _ t.clock hw
+      have hc1 := evm_congr (s := t) (t := (setVarHOLFinite nm v t : PanSemStateFiniteExact 64 F)) rfl rfl
+      obtain ⟨hret, herr⟩ := hbody (setVarHOLFinite nm v t) hc hi1 hw1 (hinit t v hv hi hp) hnt
+      refine ⟨fun hr => ?_, fun he => ?_⟩
+      · obtain ⟨hinv, hle⟩ := hret hr
+        have hc2 := evm_congr (s := ((evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2 :
+            PanSemStateFiniteExact 64 F))
+          (t := ({ (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2 with
+            locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2.locals
+              (nm, t.locals.lookup nm) } : PanSemStateFiniteExact 64 F)) rfl rfl
+        have hi2 : EvmInv ({ (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2 with
+            locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2.locals
+              (nm, t.locals.lookup nm) }) :=
+          localsFree_evmInv _ _ _ hinv.1
+        have hw2 : Group10.HeadMemChainWF ({ (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2 with
+            locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2.locals
+              (nm, t.locals.lookup nm) }) :=
+          Group10.headMemChainWF_locals _ _ _ hinv.2
+        exact ⟨⟨hi2, hw2⟩, le_trans (le_of_eq hc2.2.1) (le_trans hle (le_of_eq hc1.2.1))⟩
+      · obtain ⟨hinv, hdepth, hle⟩ := herr he
+        have hc2 := evm_congr (s := ((evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2 :
+            PanSemStateFiniteExact 64 F))
+          (t := ({ (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2 with
+            locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2.locals
+              (nm, t.locals.lookup nm) } : PanSemStateFiniteExact 64 F)) rfl rfl
+        have hi2 : EvmInv ({ (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2 with
+            locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2.locals
+              (nm, t.locals.lookup nm) }) :=
+          localsFree_evmInv _ _ _ hinv.1
+        have hw2 : Group10.HeadMemChainWF ({ (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2 with
+            locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState (setVarHOLFinite nm v t) body).2.locals
+              (nm, t.locals.lookup nm) }) :=
+          Group10.headMemChainWF_locals _ _ _ hinv.2
+        refine ⟨⟨hi2, hw2⟩, Eq.trans (Eq.trans hc2.2.2.1 hdepth) hc1.2.2.1,
+          le_trans (le_of_eq hc2.2.1) (le_trans hle (le_of_eq hc1.2.1))⟩
+    · intro _; exact ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+        fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+
+theorem ccA_ret_g10 {F : Type} {P : PanSemStateFiniteExact 64 F → Prop} (e : ExpHOL 64) :
+    ChildContinuationA P (.return e) := by
+  intro t hc hi hw _ hnt
+  rw [evaluateHOLFiniteState_return] at hnt ⊢
+  dsimp only at hnt ⊢
+  revert hnt
+  split
+  · intro _; exact ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+      fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+  · rename_i v hv
+    split
+    · dsimp only
+      have hi' : EvmInv (emptyLocalsHOLFinite t) := localsFree_evmInv t _ t.clock hi
+      have hw' : Group10.HeadMemChainWF (emptyLocalsHOLFinite t) := Group10.headMemChainWF_locals t _ t.clock hw
+      have hc' := evm_congr (s := t) (t := (emptyLocalsHOLFinite t : PanSemStateFiniteExact 64 F)) rfl rfl
+      intro hnt
+      refine ⟨fun _ => ⟨⟨hi', hw'⟩, ?_⟩, fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+      rw [hc'.2.1]
+    · intro _; exact ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+        fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+
+theorem ccA_decCall_g10 {F : Type} {P Q : PanSemStateFiniteExact 64 F → Prop}
+    {Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    {nm : MlS} {sh : ShapeHOL} {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hf : EvmPreservingSpecA Pc Qc fname)
+    (hentry : ∀ (t : PanSemStateFiniteExact 64 F) (values : List (ValueHOL 64)) (body : ProgHOL 64)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret' : ShapeHOL),
+      t.code = originalRuntimeCode → EvmInv t → Group10.HeadMemChainWF t → P t →
+      evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a)) args = some values →
+      lookupCodeHOLFinite t.code.lookup fname values = some (body, callee, ret') →
+      Pc (callEntryStateHOLFinite t callee))
+    (hstep : ∀ (t : PanSemStateFiniteExact 64 F) (values : List (ValueHOL 64)) (body : ProgHOL 64)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (retShape : ShapeHOL) (v : ValueHOL 64)
+      (cpost : PanSemStateFiniteExact 64 F),
+      EvmInv t → Group10.HeadMemChainWF t → P t →
+      evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a)) args = some values →
+      lookupCodeHOLFinite originalRuntimeCode.lookup fname values = some (body, callee, retShape) →
+      EvmInv cpost → Group10.HeadMemChainWF cpost →
+      evmChain cpost = evmChain (callEntryStateHOLFinite t callee) →
+      Qc (callEntryStateHOLFinite t callee) v cpost →
+      Q (setVarHOLFinite nm v { cpost with locals := t.locals }))
+    (hcont : ChildContinuationA Q cont) :
+    ChildContinuationA P (.decCall nm sh fname args cont) := by
+  intro t hc hi hw hp hnt
+  obtain ⟨params, body, retShape, hlook, hspec⟩ := hf
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt ⊢
+  rcases hargs : evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a)) args with _ | values
+  · refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+      fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+  · simp only [hargs] at hnt ⊢
+    rcases hl : lookupCodeHOLFinite t.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+        fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+    · simp only [hl] at hnt ⊢
+      by_cases hz : t.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt ⊢
+        have hbody_eq : body' = body :=
+          lookupCodeHOLFinite_installed_body t.code.lookup fname params body body'
+            retShape ret' values callee (by rw [hc]; exact hlook) hl
+        subst body'
+        have hret_eq : ret' = retShape := by
+          have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
+            t.code.lookup fname values body callee ret' hl
+          rw [hc] at hx; simp only [Flapjack.lookupCodeHOLExact, hlook] at hx
+          split at hx
+          · exact (congrArg (fun x => x.2.2) (Option.some.inj hx)).symm
+          · cases hx
+        subst ret'
+        have hi_ce : EvmInv (callEntryStateHOLFinite t callee) :=
+          localsFree_evmInv t callee (t.clock - 1) hi
+        have hw_ce : Group10.HeadMemChainWF (callEntryStateHOLFinite t callee) :=
+          Group10.headMemChainWF_locals t callee (t.clock - 1) hw
+        have hPc : Pc (callEntryStateHOLFinite t callee) := hentry t values body callee retShape hc hi hw hp hargs hl
+        have hl_orig : lookupCodeHOLFinite originalRuntimeCode.lookup fname values =
+            some (body, callee, retShape) := by rwa [← hc]
+        have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata
+          (callEntryStateHOLFinite t callee) body).1
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite t callee) body with ⟨res, cpost⟩
+        simp only [hrun] at hnt hmeta ⊢
+        change cpost.code = t.code at hmeta
+        have hc_ce := evm_congr (s := t) (t := (callEntryStateHOLFinite t callee : PanSemStateFiniteExact 64 F)) rfl rfl
+        have hQ (hsafe : res ≠ some .timeOut) :
+            (∀ v, res = some (.returned v) →
+              (EvmInv cpost ∧ Group10.HeadMemChainWF cpost) ∧
+              evmChain cpost = evmChain (callEntryStateHOLFinite t callee) ∧
+              evmR cpost ≤ evmR (callEntryStateHOLFinite t callee) ∧
+              Qc (callEntryStateHOLFinite t callee) v cpost) ∧
+            (IsEvmErr res →
+              (EvmInv cpost ∧ Group10.HeadMemChainWF cpost) ∧
+              evmChain cpost = evmChain (callEntryStateHOLFinite t callee) ∧
+              evmR cpost ≤ evmR (callEntryStateHOLFinite t callee)) := by
+          have hs := hspec (callEntryStateHOLFinite t callee) hc hi_ce hw_ce hPc ⟨values, hl_orig⟩
+            (by rw [hrun]; exact hsafe)
+          dsimp only at hs; rw [hrun] at hs; exact hs
+        cases res with
+        | none =>
+          refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+            fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+        | some r0 =>
+          cases r0 with
+          | timeOut => simp at hnt
+          | returned v =>
+            dsimp only at hnt ⊢
+            split
+            · rename_i hsh_ok
+              rw [if_pos hsh_ok] at hnt
+              dsimp only at hnt ⊢
+              obtain ⟨⟨hi_cp, hw_cp⟩, hch_cp, hR_cp, hQc_cp⟩ := (hQ (by simp)).1 v rfl
+              have hQ_res : Q (setVarHOLFinite nm v { cpost with locals := t.locals }) :=
+                hstep t values body callee retShape v cpost hi hw hp hargs hl_orig hi_cp hw_cp hch_cp hQc_cp
+              have hcode_res : ((setVarHOLFinite nm v { cpost with locals := t.locals } :
+                  PanSemStateFiniteExact 64 F)).code = originalRuntimeCode := hmeta.trans hc
+              have hi_res : EvmInv (setVarHOLFinite nm v { cpost with locals := t.locals }) :=
+                localsFree_evmInv cpost _ cpost.clock hi_cp
+              have hw_res : Group10.HeadMemChainWF (setVarHOLFinite nm v { cpost with locals := t.locals }) :=
+                Group10.headMemChainWF_locals cpost _ cpost.clock hw_cp
+              have hc_res := evm_congr (s := cpost)
+                (t := (setVarHOLFinite nm v { cpost with locals := t.locals } :
+                  PanSemStateFiniteExact 64 F)) rfl rfl
+              have hR_res : evmR (setVarHOLFinite nm v { cpost with locals := t.locals }) ≤
+                  evmR t := by
+                rw [hc_res.2.1]; rw [hc_ce.2.1] at hR_cp; exact hR_cp
+              obtain ⟨hret, herr⟩ := hcont (setVarHOLFinite nm v { cpost with locals := t.locals })
+                hcode_res hi_res hw_res hQ_res hnt
+              have hc_fin := evm_congr
+                (s := ((evaluateHOLFiniteState (setVarHOLFinite nm v { cpost with locals := t.locals }) cont).2 :
+                  PanSemStateFiniteExact 64 F))
+                (t := ({ (evaluateHOLFiniteState (setVarHOLFinite nm v { cpost with locals := t.locals }) cont).2 with
+                  locals := HolFiniteMapExact.resVarEq
+                    (evaluateHOLFiniteState (setVarHOLFinite nm v { cpost with locals := t.locals }) cont).2.locals
+                    (nm, t.locals.lookup nm) } : PanSemStateFiniteExact 64 F)) rfl rfl
+              refine ⟨fun hr => ?_, fun he => ?_⟩
+              · obtain ⟨hinv, hle⟩ := hret hr
+                refine ⟨⟨?_, ?_⟩, ?_⟩
+                · exact localsFree_evmInv _ _ _ hinv.1
+                · exact Group10.headMemChainWF_locals _ _ _ hinv.2
+                · rw [hc_fin.2.1]; exact le_trans hle hR_res
+              · obtain ⟨hinv, hdepth, hle⟩ := herr he
+                refine ⟨⟨?_, ?_⟩, ?_, ?_⟩
+                · exact localsFree_evmInv _ _ _ hinv.1
+                · exact Group10.headMemChainWF_locals _ _ _ hinv.2
+                · rw [hc_fin.2.2.1, hdepth, hc_res.2.2.1, hch_cp, hc_ce.2.2.1]
+                · rw [hc_fin.2.1]; exact le_trans hle hR_res
+            · refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+                fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+          | exception eid ev =>
+            by_cases heid : eid = ofString "EvmErr"
+            · subst heid
+              dsimp only at hnt ⊢
+              obtain ⟨⟨hi_cp, hw_cp⟩, hch_cp, hR_cp⟩ := (hQ (by simp)).2 ⟨ev, rfl⟩
+              have hi_el : EvmInv cpost.emptyLocalsHOLFinite :=
+                localsFree_evmInv cpost _ cpost.clock hi_cp
+              have hw_el : Group10.HeadMemChainWF cpost.emptyLocalsHOLFinite :=
+                Group10.headMemChainWF_locals cpost _ cpost.clock hw_cp
+              have hc_el := evm_congr (s := cpost) (t := (cpost.emptyLocalsHOLFinite : PanSemStateFiniteExact 64 F)) rfl rfl
+              refine ⟨fun hr => absurd hr (by rintro ⟨_, h⟩; cases h), fun _ => ?_⟩
+              exact ⟨⟨hi_el, hw_el⟩, by rw [hc_el.2.2.1, hch_cp, hc_ce.2.2.1],
+                by rw [hc_el.2.1]; rw [hc_ce.2.1] at hR_cp; exact hR_cp⟩
+            · refine ⟨fun hr => absurd hr (by rintro ⟨_, h⟩; cases h),
+                fun he => absurd he ?_⟩
+              intro hc
+              obtain ⟨_, hv⟩ := hc
+              injection hv with h'; injection h' with h1 _
+              exact heid h1
+          | «break» | «continue» | error | finalFfi _ =>
+            refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+              fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
