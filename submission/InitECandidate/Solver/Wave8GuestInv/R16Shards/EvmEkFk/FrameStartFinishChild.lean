@@ -9591,6 +9591,221 @@ theorem lookup_log_append_fc :
   lookup_of_guestAst_getElem 523 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn_log_append) rfl
 
+private abbrev R14W := InitECandidate.Solver.Wave8GuestInv.R14Shards.OpHandlersA.updW
+
+theorem lookup_set_retdata_fc :
+    originalRuntimeCode.lookup (ofString "set_retdata") =
+      some ([(ofString "p", .one), (ofString "n", .one)],
+        sourceFnBody Guest.Software.guestFn_set_retdata, .one) :=
+  lookup_of_guestAst_getElem 595 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_set_retdata) rfl
+
+/-- Forward form of `store_global_off_word`: when the stored value's evaluation
+is known and the target address is in the domain, the store runs to `(none, …)`. -/
+private theorem store_global_off_word_run {F : Type} (t : PanSemStateFiniteExact 64 F)
+    {gname : String} {gbase off : Nat} {gw w : BitVec 64} {valExp : ExpHOL 64}
+    (hg_lk : t.globals.lookup (ofString gname) = some (.val (.word gw)))
+    (hg_nat : gw.toNat = gbase)
+    (hbnd : gbase + off < 2 ^ 64)
+    (hdom : t.memaddrs (BitVec.ofNat 64 (gbase + off)))
+    (hvalEval : @evalHOLExact 64 F _ t.toExact
+        (fun a => Classical.propDecidable (t.memaddrs a)) valExp = some (.val (.word w))) :
+    evaluateHOLFiniteState t
+        (.store (.op .add [.var .global (ofString gname), .const (BitVec.ofNat 64 off)]) valExp) =
+      (none, { t with memory := R14W t.memory (BitVec.ofNat 64 (gbase + off)) w }) := by
+  have hdst : @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a))
+      (.op .add [.var .global (ofString gname), .const (BitVec.ofNat 64 off)]) =
+      some (.val (.word (BitVec.ofNat 64 (gbase + off)))) := by
+    simp only [evalHOLExact, evalListHOLExact, hg_lk, wordOpHOL, wordOp, valueIsWord, valueWord,
+      List.all, List.map, Option.map, Bool.and_self, ↓reduceIte, List.foldr]
+    congr 3
+    apply BitVec.eq_of_toNat_eq
+    have hz0 : (0 : BitVec 64).toNat = 0 := rfl
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat, hg_nat, hz0, Nat.add_zero,
+      Nat.mod_eq_of_lt (show off < 2 ^ 64 by omega), Nat.mod_eq_of_lt hbnd]
+  rw [evaluateHOLFiniteState_store, hdst, hvalEval]
+  dsimp only
+  have hmem : @panMemStoresHOL 64 _ (BitVec.ofNat 64 (gbase + off)) (flattenHOL (.val (.word w)))
+      t.memaddrs (fun a => Classical.propDecidable (t.memaddrs a)) t.memory
+      = some (R14W t.memory (BitVec.ofNat 64 (gbase + off)) w) := by
+    simp only [flattenHOL, panMemStoresHOL, panMemStoreHOL, hdom, ↓reduceIte]
+    rfl
+  rw [hmem]
+
+/-- `set_retdata(p, 0)` writes only `ev+144 := evm_empty`, `ev+152 := 0`, `ev+216 := 0`
+and returns `0`; the outer `dec cap` tail is unreachable. -/
+theorem set_retdata_zero_body_run {F : Type} (X : PanSemStateFiniteExact 64 F)
+    {e evw pv : BitVec 64}
+    (he : X.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hev : X.globals.lookup (ofString "evm_empty") = some (.val (.word evw)))
+    (_hp : X.locals.lookup (ofString "p") = some (.val (.word pv)))
+    (hn : X.locals.lookup (ofString "n") = some (.val (.word 0#64)))
+    (hbnd : e.toNat + 232 < 2 ^ 64)
+    (hdom144 : X.memaddrs (e + 144#64))
+    (hdom152 : X.memaddrs (e + 152#64))
+    (hdom216 : X.memaddrs (e + 216#64)) :
+    evaluateHOLFiniteState X (sourceFnBody Guest.Software.guestFn_set_retdata) =
+      (some (.returned (.val (.word 0#64))),
+       emptyLocalsHOLFinite
+         { X with memory :=
+             (R14W (R14W (R14W X.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+               (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+               (BitVec.ofNat 64 (e.toNat + 216)) 0#64) }) := by
+  have hb144 : e.toNat + 144 < 2 ^ 64 := by omega
+  have hb152 : e.toNat + 152 < 2 ^ 64 := by omega
+  have hb216 : e.toNat + 216 < 2 ^ 64 := by omega
+  have heq144 : (e + 144#64) = BitVec.ofNat 64 (e.toNat + 144) := by
+    apply BitVec.eq_of_toNat_eq
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb144]
+  have heq152 : (e + 152#64) = BitVec.ofNat 64 (e.toNat + 152) := by
+    apply BitVec.eq_of_toNat_eq
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb152]
+  have heq216 : (e + 216#64) = BitVec.ofNat 64 (e.toNat + 216) := by
+    apply BitVec.eq_of_toNat_eq
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb216]
+  have hvalEv : @evalHOLExact 64 F _ X.toExact (fun a => Classical.propDecidable (X.memaddrs a))
+      (.var .global (ofString "evm_empty")) = some (.val (.word evw)) := by
+    simp [evalHOLExact, hev]
+  have hval0 (t : PanSemStateFiniteExact 64 F) :
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a))
+      (.const 0#64) = some (.val (.word 0#64)) := by
+    simp [evalHOLExact]
+  have hst1 : evaluateHOLFiniteState X
+      (.store (.op .add [.var .global (ofString "ev"), .const 144#64])
+        (.var .global (ofString "evm_empty"))) =
+      (none, { X with memory := R14W X.memory (BitVec.ofNat 64 (e.toNat + 144)) evw }) :=
+    store_global_off_word_run X he rfl hb144 (by rw [← heq144]; exact hdom144) hvalEv
+  have hst2 : evaluateHOLFiniteState
+      { X with memory := R14W X.memory (BitVec.ofNat 64 (e.toNat + 144)) evw }
+      (.store (.op .add [.var .global (ofString "ev"), .const 152#64]) (.const 0#64)) =
+      (none, { X with memory :=
+          (R14W (R14W X.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+            (BitVec.ofNat 64 (e.toNat + 152)) 0#64) }) :=
+    store_global_off_word_run _ he rfl hb152 (by rw [← heq152]; exact hdom152) (hval0 _)
+  have hst3 : evaluateHOLFiniteState
+      { X with memory :=
+          (R14W (R14W X.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+            (BitVec.ofNat 64 (e.toNat + 152)) 0#64) }
+      (.store (.op .add [.var .global (ofString "ev"), .const 216#64]) (.const 0#64)) =
+      (none, { X with memory :=
+          (R14W (R14W (R14W X.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+            (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+            (BitVec.ofNat 64 (e.toNat + 216)) 0#64) }) :=
+    store_global_off_word_run _ he rfl hb216 (by rw [← heq216]; exact hdom216) (hval0 _)
+  have hthen : evaluateHOLFiniteState X
+      (ProgHOL.seq
+        (ProgHOL.store (ExpHOL.op BinOp.add [ExpHOL.var VarKind.global (ofString "ev"),
+            ExpHOL.const 144#64])
+          (ExpHOL.var VarKind.global (ofString "evm_empty")))
+        (ProgHOL.seq
+          (ProgHOL.store (ExpHOL.op BinOp.add [ExpHOL.var VarKind.global (ofString "ev"),
+              ExpHOL.const 152#64])
+            (ExpHOL.const 0#64))
+          (ProgHOL.seq
+            (ProgHOL.store (ExpHOL.op BinOp.add [ExpHOL.var VarKind.global (ofString "ev"),
+                ExpHOL.const 216#64])
+              (ExpHOL.const 0#64))
+            (ProgHOL.return (ExpHOL.const 0#64))))) =
+      (some (.returned (.val (.word 0#64))),
+       emptyLocalsHOLFinite
+         { X with memory :=
+             (R14W (R14W (R14W X.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+               (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+               (BitVec.ofNat 64 (e.toNat + 216)) 0#64) }) := by
+    rw [evaluateHOLFiniteState_seq_line780, hst1]; dsimp only
+    rw [evaluateHOLFiniteState_seq_line780, hst2]; dsimp only
+    rw [evaluateHOLFiniteState_seq_line780, hst3]; dsimp only
+    rw [evaluateHOLFiniteState_return]
+    rw [hval0 _]
+    dsimp only
+    have hsz : Flapjack.Pancake.PanLang.sizeOfShapeWithContextHOL
+        { X with memory :=
+            (R14W (R14W (R14W X.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+              (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+              (BitVec.ofNat 64 (e.toNat + 216)) 0#64) }.structs
+        (shapeOfHOLExact (.val (.word 0#64) : ValueHOL 64)) ≤ 32 := by
+      simp [shapeOfHOLExact]
+    rw [if_pos hsz]
+  have hb : sourceFnBody Guest.Software.guestFn_set_retdata =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_set_retdata).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_set_retdata,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  rw [evaluateHOLFiniteState_seq_line780]
+  rw [evaluateHOLFiniteState_ite]
+  have hcmp : @evalHOLExact 64 F _ X.toExact
+      (fun a => Classical.propDecidable (X.memaddrs a))
+      (.cmp .equal (.var .local (ofString "n")) (.const (0#64))) =
+      some (.val (.word (1#64))) := by
+    simp [evalHOLExact, hn, Compiler.Encoders.Asm.wordCmpHOL]
+  rw [hcmp]
+  dsimp only
+  have h10 : ¬ (1#64 = (0 : BitVec 64)) := by decide
+  rw [if_neg h10]
+  rw [hthen]
+
+/-- Call-level wrapper for `set_retdata(p, 0)`: the void call with `n = 0`
+writes exactly `ev+144 := evm_empty`, `ev+152 := 0`, `ev+216 := 0`, keeps the
+caller's locals, and decrements the clock. -/
+theorem set_retdata_zero_call_run {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pExp nExp : ExpHOL 64) (pv e evw : BitVec 64)
+    (hcode : s.code = originalRuntimeCode)
+    (hp : evalAt s pExp = some (.val (.word pv)))
+    (hn : evalAt s nExp = some (.val (.word 0#64)))
+    (hclk : s.clock ≠ 0)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hev : s.globals.lookup (ofString "evm_empty") = some (.val (.word evw)))
+    (hbnd : e.toNat + 232 < 2 ^ 64)
+    (hdom144 : s.memaddrs (e + 144#64))
+    (hdom152 : s.memaddrs (e + 152#64))
+    (hdom216 : s.memaddrs (e + 216#64)) :
+    evaluateHOLFiniteState s
+        (.call (some (none, none)) (ofString "set_retdata") [pExp, nExp]) =
+      (none, { s with clock := s.clock - 1, memory :=
+          (R14W (R14W (R14W s.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+            (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+            (BitVec.ofNat 64 (e.toNat + 216)) 0#64) }) := by
+  have hent_p : (callEntryStateHOLFinite s
+      ((HolFiniteMapExact.empty.update (ofString "p", ValueHOL.val (.word pv))).update
+        (ofString "n", ValueHOL.val (.word 0#64)))).locals.lookup (ofString "p") =
+      some (ValueHOL.val (.word pv)) := by
+    have h1 : ofString "n" ≠ ofString "p" := by decide
+    simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, h1]
+  have hent_n : (callEntryStateHOLFinite s
+      ((HolFiniteMapExact.empty.update (ofString "p", ValueHOL.val (.word pv))).update
+        (ofString "n", ValueHOL.val (.word 0#64)))).locals.lookup (ofString "n") =
+      some (ValueHOL.val (.word 0#64)) := by
+    simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hrun := set_retdata_zero_body_run
+    (X := callEntryStateHOLFinite s
+      ((HolFiniteMapExact.empty.update (ofString "p", ValueHOL.val (.word pv))).update
+        (ofString "n", ValueHOL.val (.word 0#64))))
+    he hev hent_p hent_n hbnd hdom144 hdom152 hdom216
+  rw [evaluateHOLFiniteState_call]
+  have hargs : evalListHOLFinite s
+      (h := fun address => Classical.propDecidable (s.memaddrs address)) [pExp, nExp] =
+      some [ValueHOL.val (.word pv), ValueHOL.val (.word 0#64)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalAt] at hp hn ⊢
+    simp [hp, hn]
+  rw [hargs]; dsimp only
+  have hlook := pan_two_word_lookup s.code.lookup (ofString "set_retdata")
+    (ofString "p") (ofString "n") (sourceFnBody Guest.Software.guestFn_set_retdata) pv 0#64
+    (by decide)
+    (by rw [hcode]; exact lookup_set_retdata_fc)
+  rw [hlook]; dsimp only
+  rw [if_neg hclk]
+  rw [hrun]
+  dsimp only
+  have hsh : shapeEqHOL (shapeOfHOLExact (.val (.word 0#64) : ValueHOL 64)) .one = true := by
+    simp [shapeOfHOLExact, shapeEqHOL]
+  rw [if_pos hsh]
+  rfl
+
 theorem alloc_entry_returned_fc {F : Type}
     (s : PanSemStateFiniteExact 64 F) (nw : BitVec 64)
     (hP : ArenaReady s)
