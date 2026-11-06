@@ -10617,4 +10617,134 @@ theorem mergeStorageInv_body_preserved {F : Type} (s : PanSemStateFiniteExact 64
   exact mergeStorageInv_body_post s hc
     ⟨hW, tw, ow, ht, ho, hbs, ht0, htbs, hts, hots⟩ hnt hflow hs.1 hs.2
 
+theorem mergeStorageInv_clock {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ck : Nat) (h : MergeStorageInv s) : MergeStorageInv {s with clock := ck} := by
+  obtain ⟨hW, tw, ow, ht, ho, hb, ht0, htb, hts, hto⟩ := h
+  exact ⟨localsFree_worldOK s s.locals ck hW, tw, ow, ht, ho, hb, ht0, htb, hts, hto⟩
+
+/-- The storage invariant closes the withdrawal frame for the entire loop. -/
+theorem eval_merge_storage_loop {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (cond : ExpHOL 64) (hc0 : s0.code = originalRuntimeCode) (hI0 : MergeStorageInv s0)
+    (hnt0 : (evaluateHOLFiniteState s0 (.while cond mergeStorageBody)).1 ≠ some .timeOut)
+    (hfr0 : FlowingOrResumes (evaluateHOLFiniteState s0 (.while cond mergeStorageBody)).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s0 (evaluateHOLFiniteState s0 (.while cond mergeStorageBody)).1
+        (evaluateHOLFiniteState s0 (.while cond mergeStorageBody)).2 := by
+  suffices ∀ (k : Nat) (s : PanSemStateFiniteExact 64 F), s.clock = k →
+      s.code = originalRuntimeCode → MergeStorageInv s →
+      (evaluateHOLFiniteState s (.while cond mergeStorageBody)).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState s (.while cond mergeStorageBody)).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        s (evaluateHOLFiniteState s (.while cond mergeStorageBody)).1
+          (evaluateHOLFiniteState s (.while cond mergeStorageBody)).2 from
+    this s0.clock s0 rfl hc0 hI0 hnt0 hfr0
+  intro k
+  induction k using Nat.strong_induction_on with
+  | h k ih =>
+    intro s hclk hc hI hnt hfr
+    rw [evaluateHOLFiniteState_while_fixClockRewrite] at hnt hfr ⊢
+    rcases hev : @evalHOLFinite 64 F _ s
+        (fun a => Classical.propDecidable (s.memaddrs a)) cond with _ | cv
+    · simp only [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hev] at hnt hfr ⊢
+      rcases cv with ⟨⟨w⟩⟩ | _ | _
+      · dsimp only at hnt hfr ⊢
+        by_cases hw : w = 0
+        · subst hw; exact WorldStepSc.refl s none hI.1.1
+        · rw [if_pos hw] at hnt hfr ⊢
+          by_cases hk0 : s.clock = 0
+          · simp [hk0] at hnt
+          · rw [if_neg hk0] at hnt hfr ⊢
+            set sd := decClockHOLFinite s
+            have hId : MergeStorageInv sd := mergeStorageInv_clock s (s.clock - 1) hI
+            have hclk_le := evaluateHOLFiniteState_clock_le sd mergeStorageBody
+            have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata sd mergeStorageBody).1
+            rcases hbo : evaluateHOLFiniteState sd mergeStorageBody with ⟨rb, mid⟩
+            have hbo' : evaluateHOLFiniteState (decClockHOLFinite s) mergeStorageBody = (rb, mid) := hbo
+            simp only [sd, hbo'] at hnt hfr hclk_le hmeta ⊢
+            have hmid_lt : mid.clock < k := by
+              change mid.clock ≤ s.clock - 1 at hclk_le; omega
+            have hnt_b : (evaluateHOLFiniteState sd mergeStorageBody).1 ≠ some .timeOut := by
+              rw [hbo]; rintro rfl; exact hnt rfl
+            have hstep := mergeStorageInv_body_step sd hc hId hnt_b
+            have hinv := mergeStorageInv_body_preserved sd hc hId hnt_b
+            rw [hbo] at hstep hinv
+            cases rb with
+            | none =>
+              have hs := hstep (Or.inl rfl)
+              exact withdrawalStep_trans (r1 := none) ((WorldStepSc.of_pre_locals_clock hs).with_locals_clock mid.locals mid.clock)
+                (ih mid.clock hmid_lt mid rfl (hmeta.trans hc) (hinv (Or.inl rfl)) hnt hfr)
+            | some r =>
+              cases r with
+              | «continue» =>
+                have hs := hstep (Or.inr (Or.inl rfl))
+                exact withdrawalStep_trans (r1 := some .continue) ((WorldStepSc.of_pre_locals_clock hs).with_locals_clock mid.locals mid.clock)
+                  (ih mid.clock hmid_lt mid rfl (hmeta.trans hc) (hinv (Or.inr (Or.inr rfl))) hnt hfr)
+              | «break» =>
+                exact (WorldStepSc.of_pre_locals_clock (hstep (Or.inr (Or.inr (Or.inl rfl))))).with_locals_clock mid.locals mid.clock
+              | timeOut => exact absurd rfl hnt
+              | error => exact absurd hfr not_flowingOrResumes_error
+              | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+              | returned v =>
+                exact (WorldStepSc.of_pre_locals_clock (hstep (Or.inr (Or.inr (Or.inr (Or.inl ⟨v, rfl⟩)))))).with_locals_clock mid.locals mid.clock
+              | exception eid ev =>
+                have hres : Resumes (some (.exception eid ev)) := by
+                  rcases hfr with h | h | h | hr <;> try simp at h
+                  exact hr
+                exact (WorldStepSc.of_pre_locals_clock (hstep (Or.inr (Or.inr (Or.inr hres))))).with_locals_clock mid.locals mid.clock
+      · exact absurd hfr not_flowingOrResumes_error
+      · exact absurd hfr not_flowingOrResumes_error
+
+theorem progWithdrawalStep_return (e : ExpHOL 64) : ProgWithdrawalStep (.return e) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_return]
+  split
+  · exact WorldStepSc.refl s _ hW.1
+  · split
+    · exact (WorldStepSc.refl s none hW.1).with_locals_clock _ _
+    · exact WorldStepSc.refl s _ hW.1
+
+/-- The storage loop composes with the function's final return. -/
+theorem eval_merge_storage_loop_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (cond : ExpHOL 64) (hc : s.code = originalRuntimeCode) (hI : MergeStorageInv s)
+    (hnt : (evaluateHOLFiniteState s (.seq (.while cond mergeStorageBody) (.return (.const 0#64)))).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq (.while cond mergeStorageBody) (.return (.const 0#64)))).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s (.seq (.while cond mergeStorageBody) (.return (.const 0#64)))).1
+        (evaluateHOLFiniteState s (.seq (.while cond mergeStorageBody) (.return (.const 0#64)))).2 := by
+  exact eval_withdrawal_then s _ _ hc hI.1
+    (eval_merge_storage_loop s cond hc hI) (progWithdrawalStep_return _) hnt hfr
+
+/-- Updating a non-root local preserves the storage invariant. -/
+theorem mergeStorageInv_setLocal {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (x : MlS) (v : ValueHOL 64) (hx : x ≠ ofString "bouter")
+    (ho : x ≠ ofString "outer") (hI : MergeStorageInv s) :
+    MergeStorageInv (setVarHOLFinite x v s) := by
+  obtain ⟨hW, tw, ow, ht, hot, hb, ht0, htb, hts, hto⟩ := hI
+  refine ⟨localsFree_worldOK s _ s.clock hW, tw, ow, ?_, ?_, hb, ht0, htb, hts, hto⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hx] using ht
+  · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, ho] using hot
+
+/-- Cursor initialization establishes the concrete loop-and-return continuation. -/
+theorem eval_merge_storage_cursor_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hI : MergeStorageInv s)
+    (hnt : (evaluateHOLFiniteState s (.dec (ofString "i") .one (.const 0#64)
+      (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+        mergeStorageBody) (.return (.const 0#64))))).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.dec (ofString "i") .one (.const 0#64)
+      (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+        mergeStorageBody) (.return (.const 0#64))))).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s (.dec (ofString "i") .one (.const 0#64)
+        (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+          mergeStorageBody) (.return (.const 0#64))))).1
+        (evaluateHOLFiniteState s (.dec (ofString "i") .one (.const 0#64)
+        (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+          mergeStorageBody) (.return (.const 0#64))))).2 := by
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  simp only [evalHOLExact, shapeOfHOLExact, shapeEqHOL, ↓reduceIte] at hnt hfr ⊢
+  have hs := eval_merge_storage_loop_return (setVarHOLFinite (ofString "i") (.val (.word 0#64)) s)
+    _ hc (mergeStorageInv_setLocal s _ _ (by decide) (by decide) hI) hnt hfr
+  exact (WorldStepSc.of_pre_locals_clock hs).with_locals_clock _ _
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
