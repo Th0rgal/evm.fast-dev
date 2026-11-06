@@ -9060,4 +9060,17 @@ theorem eval_merge_set_then_union {F : Type}
     rw [he] at hn
     contradiction
 
+/-- Exact transaction-initialization export for the frozen C08 contract. -/
+theorem wk_state_fresh_tx :
+    WorldKeeps WorldOK (fun _ => [])
+      ["heap_ptr", "journal_n", "ts"]
+      [("ws", [0, 8, 16, 24, 32]),
+       ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "state_fresh_tx") := by
+  obtain ⟨params, body, ret, hl, hb⟩ := wkSc_state_fresh_tx
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hW hex hnt hres
+  exact (hb s hc hW hex hnt hres).1
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
