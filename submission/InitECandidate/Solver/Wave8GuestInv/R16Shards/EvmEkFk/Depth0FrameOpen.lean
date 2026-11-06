@@ -9530,4 +9530,36 @@ theorem codeDbPayloadStrong_of_frame_and_growth {F : Type}
   exact codeDbPayloadStrong_of_owned_growth he hAs hAp hhp hv
     (protected_payload_words_of_frameOutside he hAs hF hk) hg
 
+/-- A separated write frame protects code words independently of object categories. -/
+theorem protected_payload_words_of_disjoint_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat} {keep : List Ivl}
+    (he : CodeDbPayloadStrong s S db)
+    (hF : FrameOutside s post keep (heapFree s))
+    (hsep : ∀ p ∈ htabValues s db, ∀ i ∈ keep, 0 < i.2 ∧ Disj (p,16) i) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  intro p hp
+  obtain ⟨hin,hbound,_,_⟩ := he.2 p hp
+  have hw : ∀ a, p ≤ a → a+8 ≤ p+16 → memW post a = memW s a := by
+    intro a hlo hhi
+    have hb : a < 2^64 := by omega
+    have hn : (BitVec.ofNat 64 a).toNat = a := by
+      rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb]
+    unfold memW
+    rw [hF (BitVec.ofNat 64 a) (by
+      intro i hi hit
+      rw [hn] at hit
+      obtain ⟨hpos,hd⟩ := hsep p hp i hi
+      unfold CellHits at hit
+      unfold Disj at hd
+      dsimp only at hd
+      rcases hd with hd | hd | hd | hd <;> omega) (by
+      intro hit
+      rw [hn] at hit
+      have hi := hin.2
+      unfold CellHits heapFree at hit
+      dsimp only at hit hi
+      omega)]
+  exact ⟨hw p (by omega) (by omega),hw (p+8) (by omega) (by omega)⟩
+
 end HeadStore
