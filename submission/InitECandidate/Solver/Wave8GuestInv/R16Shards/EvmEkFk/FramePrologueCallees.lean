@@ -8795,6 +8795,40 @@ theorem precompile_store_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [evaluateHOLFiniteState_store]
   split <;> (try split) <;> (try split) <;> rfl
 
+theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : MlS) (out size : BitVec 64)
+    (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
+    (hout : s.locals.lookup name = some (.val (.word out))) :
+    let p : ProgHOL 64 := .seq
+      (.store (.op .add [.var .global (ofString "ev"), .const 120]) (.var .local name))
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 128]) (.const size))
+        (.return (.const 0)))
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    R13.FlowsOrResumes (evaluateHOLFiniteState s p).1 →
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s p).2 := by
+  dsimp only
+  intro hnt hfr
+  apply precompile_step_seq_at s _ _ _ _ hnt hfr
+  · intro _ hfr
+    exact precompile_store_output_local_at s 120 (Or.inl rfl) name out hi hout hfr
+  · intro hflow hnt hfr
+    let mid := (evaluateHOLFiniteState s (.store
+      (.op .add [.var .global (ofString "ev"), .const 120]) (.var .local name))).2
+    have hs := precompile_store_output_local_at s 120 (Or.inl rfl) name out hi hout (Or.inl hflow)
+    have hc : mid.code = originalRuntimeCode := ((evaluateHOLFiniteState_metadata s _).1).trans hcode
+    apply precompile_step_seq_at mid _ _ _ _ hnt hfr
+    · exact precompile_store_output_step 128 (Or.inr rfl) (.const size)
+        (by intro F s v hv; simp only [evalHOLExact, Option.some.injEq] at hv; exact ⟨size, hv.symm⟩)
+        mid hc hs.1.1
+    · intro hflow hnt hfr
+      change (evaluateHOLFiniteState mid (.store
+        (.op .add [.var .global (ofString "ev"), .const 128#64]) (.const size))).1 = none at hflow
+      have ht := precompile_store_output_step 128 (Or.inr rfl) (.const size)
+        (by intro F s v hv; simp only [evalHOLExact, Option.some.injEq] at hv; exact ⟨size, hv.symm⟩)
+        mid hc hs.1.1 (by rw [hflow]; simp) (Or.inl hflow)
+      exact dispatch_step_ro (ReadOnlyProg.ret _) _
+        (((evaluateHOLFiniteState_metadata mid _).1).trans hc) ht.1.1 hnt hfr
+
 theorem precompile_identity_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (args : List (ExpHOL 64)) (n : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
