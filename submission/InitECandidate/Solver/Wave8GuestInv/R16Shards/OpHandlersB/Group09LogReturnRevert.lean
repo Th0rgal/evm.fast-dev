@@ -14078,14 +14078,19 @@ theorem log_no_growth_handler_post_g09 {F : Type}
     let post := {s with memory := fun a =>
       if a = p + n * 8#64 then .word log
       else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
-    ArenaReady post → evmChain post = evmChain s →
+    evmChain post = evmChain s →
     (∀ ec ∈ evmChain s, FrameWF post S ec) →
     frameObjects post head = frameObjects s head ++ newObjects →
     (∀ ec ∈ tail, frameObjects post ec = frameObjects s ec) →
     (∀ ec ∈ tail, frameLogs post ec = frameLogs s ec) →
     EvmInv post ∧ evmR post = evmR s ∧ HeadMemAligned post := by
   dsimp only
-  intro hAp hchain hframes hhead htail hlogs
+  intro hchain hframes hhead htail hlogs
+  have hAp : ArenaReady {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a} :=
+    ⟨⟨hAs.1.code, hAs.1.memaddrs, hAs.1.shMemaddrs, hAs.1.baseAddr⟩,
+      arenaOK_congr rfl hAs.2⟩
   have hcell := log_no_growth_final_typed_cells_g09 s l p n cap log S Nd
     hAs.1.memaddrs hWT hd8 hdslot hl hp hlt hheaderWorld hbufferWorld
   have hrecords := log_no_growth_chain_records_preserved_g09 s l p n log
