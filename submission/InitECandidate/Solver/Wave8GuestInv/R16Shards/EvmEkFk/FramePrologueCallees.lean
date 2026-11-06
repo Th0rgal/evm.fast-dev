@@ -10907,6 +10907,46 @@ theorem precompile_sha256_call_then {F : Type}
     (guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hi)
     heff.globals hl heff hntm hrm
 
+open R10Shards.P26_P28 in
+theorem precompile_output_tail_byteEff {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ev out size : BitVec 64) (name : MlS)
+    (hi : GuestInv s)
+    (hev : s.globals.lookup (ofString "ev") = some (.val (.word ev)))
+    (hout : s.locals.lookup name = some (.val (.word out)))
+    (hb : ev.toNat+136 ≤ heapEnd) :
+    let p := ProgHOL.seq
+      (.store (.op .add [.var .global (ofString "ev"), .const 120]) (.var .local name))
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 128]) (.const size))
+        (.return (.const 0)))
+    ByteEff s (evaluateHOLFiniteState s p).2 [(ev.toNat,136)] := by
+  dsimp only
+  have he : ByteEff s (evaluateHOLFiniteState s (.store
+      (.op .add [.var .global (ofString "ev"), .const 120]) (.var .local name))).2
+      [(ev.toNat,136)] := by
+    refine byteEff_store_at hi _ _ ev 120 136 hb
+      (fun _ => ⟨(ev.toNat,136), by simp, le_rfl, le_rfl⟩) ?_ (by decide) ?_
+    · intro v hv
+      simp [evalHOLExact, hout] at hv
+      exact ⟨out,hv.symm⟩
+    · simp [evalHOLExact, evalListHOLExact, hev, valueIsWord, valueWord, wordOpHOL, wordOp]
+  refine byteEff_seq he ?_
+  intro m run
+  have hem := he
+  rw [run] at hem
+  have him : GuestInv m := guestInv_congr hem.code hem.memaddrs hem.shMemaddrs hem.baseAddr hi
+  have hev' : m.globals.lookup (ofString "ev") = some (.val (.word ev)) := by
+    rw [hem.globals]; exact hev
+  have he2 : ByteEff m (evaluateHOLFiniteState m (.store
+      (.op .add [.var .global (ofString "ev"), .const 128]) (.const size))).2
+      [(ev.toNat,136)] := by
+    refine byteEff_store_at him _ _ ev 128 136 hb
+      (fun _ => ⟨(ev.toNat,136), by simp, le_rfl, le_rfl⟩) ?_ (by decide) ?_
+    · intro v hv
+      simp only [evalHOLExact, Option.some.injEq] at hv
+      exact ⟨size,hv.symm⟩
+    · simp [evalHOLExact, evalListHOLExact, hev', valueIsWord, valueWord, wordOpHOL, wordOp]
+  exact byteEff_seq he2 (fun n _ => byteEff_return n _ _)
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
