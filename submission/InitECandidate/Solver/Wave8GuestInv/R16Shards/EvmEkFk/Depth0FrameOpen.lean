@@ -9886,4 +9886,21 @@ theorem ws_get_account_execution_entries_strong {F : Type} (s : PanSemStateFinit
     (htabValues_eq_of_witness_effect hWT hA heff db hm)
     (protected_payload_words_of_witness_effect he hA heff)
 
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+/-- Expose typed table-layout preservation from the witness effect's world bridge. -/
+theorem htabFootprint_eq_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    ∀ t ∈ S, htabFootprint post t = htabFootprint s t := by
+  let Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+    fun a _ b T _ => ∀ t ∈ T, htabFootprint b t = htabFootprint a t
+  have hw : WorldStep (fun {_} _ => []) wsGw stdKeep Q s none post :=
+    heff.to_worldStep_Q ⟨hA,S,(worldTyped_iff_with _ _).2 ⟨Nd,hWT⟩⟩
+      (by decide) (by decide) (fun _ _ _ _ _ _ _ hf => hf)
+  obtain ⟨S',Nd',hsub,hWT',hg,hf,hq⟩ := hw.2.2.2.2 S Nd hWT (by intro i hi; cases hi)
+  intro t ht
+  exact hq t (hsub t ht)
+
 end HeadStore
