@@ -9645,6 +9645,62 @@ theorem precompile_sha256_optional_block_locals {F : Type}
       exact precompile_call0_locals_on_flow s _ _ hr
   · rfl
 
+theorem precompile_sha256_final_tail_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (stp out : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (ho : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hob : out.toNat + 32 < 2^64) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"), .var .global (ofString "sha_pad")])
+        (.seq (.ite (.cmp .equal (.var .local (ofString "total")) (.const 128))
+          (.call (some (none, none)) (ofString "sha256_block")
+            [.var .global (ofString "sha_st"),
+              .op .add [.var .global (ofString "sha_pad"), .const 64]]) .skip)
+          (.seq (.call (some (none, none)) (ofString "sha256_finish")
+            [.var .global (ofString "sha_st"), .var .local (ofString "out")])
+            (.return (.const 0)))))).2 [(stp.toNat,64),(out.toNat,32)] := by
+  have he := precompile_sha256_block_call_effect s stp
+    (.var .global (ofString "sha_st")) (.var .global (ofString "sha_pad")) hc hi
+    (by simp [evalHOLFinite, evalHOLExact, hp])
+  have he' := he.mono (R2 := [(stp.toNat,64),(out.toNat,32)]) (by
+    intro i hi hpos; simp only [List.mem_singleton] at hi; subst i
+    exact ⟨_, by simp, le_rfl, le_rfl⟩)
+  apply R10Shards.P26_P28.byteEff_seq he'
+  intro m hm
+  have hl := precompile_call0_locals_on_flow s (ofString "sha256_block")
+    [.var .global (ofString "sha_st"), .var .global (ofString "sha_pad")]
+    (by rw [hm])
+  rw [hm] at he hl
+  have hgm : GuestInv m := guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi
+  have hpm : m.globals.lookup (ofString "sha_st") = some (.val (.word stp)) := by
+    rw [he.globals]; exact hp
+  have he2 : R10Shards.P26_P28.ByteEff m (evaluateHOLFiniteState m
+      (.ite (.cmp .equal (.var .local (ofString "total")) (.const 128))
+        (.call (some (none, none)) (ofString "sha256_block")
+          [.var .global (ofString "sha_st"),
+            .op .add [.var .global (ofString "sha_pad"), .const 64]]) .skip)).2
+      [(stp.toNat,64)] := by
+    apply R10Shards.P26_P28.byteEff_ite
+    · exact precompile_sha256_block_call_effect m stp
+        (.var .global (ofString "sha_st"))
+        (.op .add [.var .global (ofString "sha_pad"), .const 64]) (he.code.trans hc) hgm
+        (by simp [evalHOLFinite, evalHOLExact, hpm])
+    · exact R10Shards.P26_P28.byteEff_skip m _
+  apply R10Shards.P26_P28.byteEff_seq (he2.mono (by
+    intro i hi hpos; simp only [List.mem_singleton] at hi; subst i
+    exact ⟨_, by simp, le_rfl, le_rfl⟩))
+  intro n hn
+  have hl2 := precompile_sha256_optional_block_locals m (by rw [hn])
+  rw [hn] at he2 hl2
+  have hgn : GuestInv n := guestInv_congr he2.code he2.memaddrs he2.shMemaddrs he2.baseAddr hgm
+  have hon : n.locals.lookup (ofString "out") = some (.val (.word out)) := by
+    rw [hl2, hl]; exact ho
+  exact (precompile_sha256_finish_return_effect n out (he2.code.trans (he.code.trans hc)) hgn hon hob).mono (by
+    intro i hi hpos; simp only [List.mem_singleton] at hi; subst i
+    exact ⟨_, by simp, le_rfl, le_rfl⟩)
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
