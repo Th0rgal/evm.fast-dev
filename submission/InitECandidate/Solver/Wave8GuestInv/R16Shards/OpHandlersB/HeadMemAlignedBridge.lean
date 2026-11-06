@@ -11904,4 +11904,92 @@ theorem laInv_unhit {F : Type} {s u : PanSemStateFiniteExact 64 F}
   · change 2952790016 ≤ obj.1 at hr
     omega
 
+/-- A normally completed loop whose body cannot break has a false guard in
+its final state. This distinguishes exhausted child-log loops from early exits. -/
+theorem while_normal_exit {F : Type} (cond : ExpHOL 64) (body : ProgHOL 64)
+    (hnb : ∀ t : PanSemStateFiniteExact 64 F,
+      (evaluateHOLFiniteState t body).1 ≠ some .break)
+    (s post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s (.while cond body) = (none, post)) :
+    ev post cond = some (.val (.word 0)) := by
+  generalize hn : s.clock = n
+  induction n using Nat.strong_induction_on generalizing s post with
+  | h n ih =>
+    rw [evaluateHOLFiniteState_while_fixClockRewrite] at hr
+    split at hr
+    · rename_i w hw
+      by_cases hz : w = 0
+      · simp [hz] at hr
+        subst post
+        exact hw.trans (by rw [hz])
+      · rw [if_pos hz] at hr
+        by_cases hc : s.clock = 0
+        · simp [hc] at hr
+        · rw [if_neg hc] at hr
+          have hle := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+          rcases hb : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r, t⟩
+          rw [hb] at hr hle
+          change t.clock ≤ s.clock - 1 at hle
+          have hsmall : t.clock < n := by omega
+          cases r with
+          | none => exact ih t.clock hsmall t post hr rfl
+          | some r =>
+            cases r with
+            | «continue» => exact ih t.clock hsmall t post hr rfl
+            | «break» => exact False.elim (hnb _ (by rw [hb]))
+            | _ => simp at hr
+    · simp at hr
+
+/-- The concrete append-and-increment body cannot exit via `break`. -/
+theorem la_body_no_break {F : Type} (t : PanSemStateFiniteExact 64 F) (a2 : ExpHOL 64) :
+    (evaluateHOLFiniteState t
+      (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))).1 ≠
+      some .break := by
+  rw [evaluateHOLFiniteState_seq_line780]
+  have hcall := InitECandidate.Solver.Wave8M19.Htab.call0_noRetBrk t
+    (ofString "log_append") [.var .global (ofString "ev"), a2]
+  rcases hc : evaluateHOLFiniteState t
+    (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2]) with ⟨r, u⟩
+  rw [hc] at hcall
+  cases r with
+  | none =>
+    simp only
+    rw [evaluateHOLFiniteState_assign]
+    split
+    · simp
+    · split <;> simp
+  | some r =>
+    cases r <;> simp_all [InitECandidate.Solver.Wave8M19.Htab.NoRetBrk]
+
+/-- At an actual normal child-log loop exit, both contents segments are
+complete and the header count is exactly the sum of the two entry counts. -/
+theorem laInvContents_complete {F : Type} {s u post : PanSemStateFiniteExact 64 F}
+    {L arr cap n nc : BitVec 64} {child : Nat → Nat} (a2 : ExpHOL 64)
+    (h : LAInvContents s L arr cap n nc child post)
+    (hsum : n.toNat + nc.toNat < 2 ^ 58)
+    (hr : evaluateHOLFiniteState u
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n")))
+        (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))) =
+      (none, post)) :
+    LAContents s L arr n child nc.toNat post ∧
+      memW post (L + 8).toNat = n.toNat + nc.toNat := by
+  have hexit := while_normal_exit _ _ (fun t => la_body_no_break t a2) u post hr
+  have hcontents := laInvContents_exit h (by omega) hexit
+  obtain ⟨_, _, _, _, _, hn, i, ar, cp, hi, hle, _, hm, _⟩ := h.1
+  have hc := h.2 i hi
+  obtain ⟨a, b, ha, hb, hcw⟩ := evalAt_cmp post .less _ _ 0 hexit
+  simp [evalAt, evalHOLExact, hn, hi] at ha hb
+  subst ha hb
+  have hieq : i.toNat = nc.toNat := by
+    by_contra hh
+    have hlt : i.toNat < nc.toNat := by omega
+    simp [Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+      Flapjack.Compiler.Encoders.Asm.holAsmSignedLess] at hcw
+    split at hcw <;> omega
+  refine ⟨hcontents, ?_⟩
+  simp only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq, hm]
+  rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by omega), hieq]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
