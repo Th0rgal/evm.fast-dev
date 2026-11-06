@@ -5234,6 +5234,22 @@ theorem decoderNodeStep_evm_and_witness {F : Type}
   exact ⟨evmStep_of_worldStepSc hB hgw hInv.1 hInv.2 hplain,
     witnessDbOK_of_worldStepSc hB hgw hInv.1 hdb hplain, hfull⟩
 
+theorem decoder_evm_witness_contract_so
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {fname : MlS}
+    (hdecode : FunSpec (fun s => ArenaReady s ∧ P s)
+      (fun s r post => Resumes r → ∀ Nd, NodeHeap s Nd →
+        ∃ Nd', DecoderNodeStep s post Nd Nd' ∧ RetRootIn s r post [] Nd') fname) :
+    FunSpec (fun s => EvmInv s ∧ WitnessDbOK s ∧ P s)
+      (fun s r post => Resumes r →
+        EvmStep ["heap_ptr", "scratch_ptr"] s post ∧ WitnessDbOK post ∧
+        R16WkAcctWs.WorldStepSc (R16WkAcctWs.bufRegions [])
+          ["heap_ptr", "scratch_ptr"] EvmBase.stdKeep RetRootIn s r post) fname := by
+  obtain ⟨params, body, rs, hlk, hdecode⟩ := hdecode
+  refine ⟨params, body, rs, hlk, ?_⟩
+  intro F s hc hpre hex hnt hr
+  exact decoderNodeStep_evm_and_witness hpre.1 hpre.2.1
+    (hdecode s hc ⟨hpre.1.1, hpre.2.2⟩ hex hnt hr)
+
 theorem nodeStep_of_stepFrame {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {Nd : List Nat}
     (ha : ArenaReady s) (hNd : NodeHeap s Nd)
