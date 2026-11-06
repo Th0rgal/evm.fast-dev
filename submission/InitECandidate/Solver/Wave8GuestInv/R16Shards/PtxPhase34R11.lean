@@ -16885,4 +16885,33 @@ theorem journal_record_address_eval {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The record-address declaration retains the narrow effect and exposes its continuation. -/
+theorem journal_address_dec_effect {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} (j n : BitVec 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [(j.toNat + 32 * n.toNat, 32)] [] ["heap_ptr"])
+    (hj : cur.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : cur.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hbound : j.toNat + 32 * n.toNat + 32 < 2 ^ 64)
+    (hr : evaluateHOLFiniteState cur
+      (.dec (ofString "r") .one (.op .add [.var .global (ofString "journal"),
+        .panop .mul [.var .global (ofString "journal_n"), .const 32#64]]) tail) = (some (.returned rv), out)) :
+    ∃ mid u, WorldEff s mid [((j + n * 32#64).toNat, 32)] [] ["heap_ptr"] ∧
+      mid.locals = cur.locals.update (ofString "r", .val (.word (j + n * 32#64))) ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨w, hw, u, ht, hout⟩ := dec_ret_inv hr
+  obtain ⟨hev, hnat⟩ := journal_record_address_eval cur j n hj hn hbound
+  rw [hev] at hw
+  have heq : w = j + n * 32#64 := by injection hw with h; injection h with h; injection h with h; exact h.symm
+  subst w
+  refine ⟨_, u, ?_, rfl, ht, ?_⟩
+  · rw [hnat]
+    exact heff.locals_clock _ _
+  · rw [hout]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
