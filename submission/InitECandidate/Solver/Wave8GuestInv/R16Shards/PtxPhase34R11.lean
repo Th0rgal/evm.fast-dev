@@ -15944,4 +15944,24 @@ theorem get_account_optional_call_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Missing-account allocation followed by return preserves transaction backing. -/
+theorem acct_empty_return_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (name : MlS) (args : List (ExpHOL 64)) (e : ExpHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.decCall name .one (ofString "acct_empty") args (.return e)) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨vs, body, callee, ret, rv, cp, u, _, hl, hc, ht, hm⟩ := dec_call_return_inv_args hr
+  have hu := return_memory_eq ht
+  have hf := acct_empty_tx_header_words s cp vs body callee ret rv S Nd hW hT hl hc
+  intro k hk
+  simpa only [memW, hm, hu, setVarHOLFinite] using hf k hk
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
