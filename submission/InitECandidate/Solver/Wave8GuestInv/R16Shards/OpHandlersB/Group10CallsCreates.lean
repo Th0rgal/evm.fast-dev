@@ -12193,4 +12193,36 @@ theorem alloc_return_aligned_heap_g10 {F : Type}
   rw [hpn]
   omega
 
+theorem alloc_return_aligned_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p n : BitVec 64)
+    (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (hc : s.code = originalRuntimeCode)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    EvmInv post ∧ Group10.HeadMemChainWF post ∧ evmChain post = evmChain s ∧
+      OpDispatchSpec.evmR post = OpDispatchSpec.evmR s := by
+  have hpn : globN s "heap_ptr" = p.toNat := by unfold globN; rw [hp]
+  have hple : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat := by
+    rw [← hpn]; exact hi.1.2.2.1
+  have h := M13.evaluate_alloc_body_general s p n hc hple hp hn v
+  rw [hr] at h
+  obtain ⟨_, hg, hm, hlo, _, _⟩ := h rfl
+  have hiu := (alloc_return_aligned_heap_g10 s p n hi hw hc hp hn v post hr).1
+  have hGp := guestInv_evaluate s (sourceFnBody Guest.Software.guestFn_alloc) hi.1.1
+  rw [hr] at hGp
+  have ha : ArenaReady post := ⟨hGp, arenaOK_congr rfl hiu.1.2⟩
+  have hbe := R16Shards.evaluate_be_eq s (sourceFnBody Guest.Software.guestFn_alloc)
+  rw [hr] at hbe
+  apply aligned_heap_growth_g10 hi hw ha hbe ?_ ?_ hm
+  · unfold globN
+    rw [hg, hp]
+    simp only [HolFiniteMapExact.lookup_update, FUPDATE, beq_self_eq_true, ite_true]
+    omega
+  · intro k hk
+    have hne : ofString "heap_ptr" ≠ k := by intro he; subst k; exact hk (by simp)
+    rw [hg]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, hne]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
