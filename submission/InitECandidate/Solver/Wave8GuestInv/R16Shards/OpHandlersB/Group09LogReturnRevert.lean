@@ -14764,4 +14764,39 @@ theorem op_log_sat_size_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
     · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
   · exact hcont
 
+/-- The memory-cost call establishes the aligned expansion operand while
+preserving the log parameters needed by the gas and allocation stages. -/
+theorem op_log_memory_cost_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (nt : BitVec 64) (start size : ValueHOL 64) (n : BitVec 64) (cont : ProgHOL 64)
+    (hcont : HandlerRun s0 (fun t => (HeadMemAligned t ∧ XCostAligned t) ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word n))) false cont) :
+    HandlerRun s0 (fun t => HeadMemAligned t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word n))) false
+      (.decCall (ofString "x") (.comb [.one, .one]) (ofString "extend_memory_cost1")
+        [.var .local (ofString "start"), .var .local (ofString "size")] cont) := by
+  apply HandlerRun.decCall (Q := fun t => (HeadMemAligned t ∧ XCostAligned t) ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "start") = some start ∧
+      t.locals.lookup (ofString "size") = some size ∧
+      t.locals.lookup (ofString "n") = some (.val (.word n))) eps_extend_memory_cost1_bounds
+  · intros; trivial
+  · intro t values body callee ret v post hInv hP hargs hl hPost hchain hQc
+    obtain ⟨hlf, cw, ebw, rfl, heb⟩ := hQc
+    refine ⟨xCostAligned_of_cost1 hP.1 hlf rfl rfl heb, ?_, hP.2.2.1, ?_, ?_, ?_⟩
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "x" ≠ ofString "ntopics")] using hP.2.1
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "x" ≠ ofString "start")] using hP.2.2.2.1
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "x" ≠ ofString "size")] using hP.2.2.2.2.1
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        (by decide : ofString "x" ≠ ofString "n")] using hP.2.2.2.2.2
+  · exact hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
