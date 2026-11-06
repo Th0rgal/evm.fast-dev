@@ -11075,6 +11075,29 @@ theorem precompile_sha256_output_precise_effect {F : Type}
         subst i
         exact ⟨(ev.toNat+120,16),by simp,le_rfl,le_rfl⟩)
 
+theorem precompile_sha256_call_evmStep {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad stp out len : BitVec 64)
+    (ptr count dest : ExpHOL 64)
+    (hc : s.code = originalRuntimeCode)
+    (hav : Wave8Contracts.M23.EvmAvoids
+      (fun {_} _ => [(pad.toNat,128),(stp.toNat,64),(out.toNat,32)]) s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hlength : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) count =
+      some (.val (.word len)))
+    (hout : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) dest =
+      some (.val (.word out)))
+    (hbound : len.toNat+64 < 2^64) (hpad : pad.toNat+128 ≤ heapEnd)
+    (hob : out.toNat+32 < 2^64)
+    (hnt : (evaluateHOLFiniteState s (.call (some (none,none)) (ofString "sha256") [ptr,count,dest])).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (.call (some (none,none)) (ofString "sha256") [ptr,count,dest])).1 = none ∨
+      Resumes (evaluateHOLFiniteState s (.call (some (none,none)) (ofString "sha256") [ptr,count,dest])).1) :
+    Wave8Contracts.M23.EvmStep [] s
+      (evaluateHOLFiniteState s (.call (some (none,none)) (ofString "sha256") [ptr,count,dest])).2 := by
+  exact Wave8Contracts.M23.ByteRegionEffect.to_evmStep_avoids hav
+    (precompile_byteEff_to_region (precompile_sha256_call_effect s pad stp out len ptr count dest hc
+      hav.1.1 hp hs hlength hout hbound hpad hob hnt hr))
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
