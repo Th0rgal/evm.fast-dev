@@ -13496,4 +13496,37 @@ theorem log_no_growth_concrete_frame_post_g09 {F : Type}
     (by simpa only [hframe, hl] using hlist) hmsg
   exact ⟨hWF, hbuffer, hobjects⟩
 
+/-- The two in-place append stores preserve typed world cells whenever the
+existing log header and backing array are separated from that world. -/
+theorem log_no_growth_final_typed_cells_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64) (S Nd : List Nat)
+    (hma : s.memaddrs = ordinaryDomain) (hWT : WorldTypedWith s S Nd)
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * cap.toNat ≤ 2 ^ 64) (hlt : n.toNat < cap.toNat)
+    (hheader : ∀ i ∈ worldTypedIvls s S Nd, Disj (l.toNat, 24) i)
+    (hbuffer : ∀ i ∈ worldTypedIvls s S Nd, Disj (p.toNat, 8 * cap.toNat) i) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    SameTypedCells s post S Nd := by
+  dsimp only
+  have heff := log_no_growth_final_effect_g09 s l p n log hma hd8 hdslot hl (by omega)
+  apply ByteRegionEffect.sameTypedCells
+    (Rl := [(l.toNat + 8, 8), (p.toNat + 8 * n.toNat, 8)])
+    (extra := []) hma hWT ?_ (by simp) (by simpa using heff)
+  intro x hx i hi
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+  rcases hx with rfl | rfl
+  · rcases hheader i hi with hz | hz | hleft | hright
+    · cases hz
+    · exact Or.inr (Or.inl hz)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+    · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
+  · rcases hbuffer i hi with hz | hz | hleft | hright
+    · dsimp only at hz; omega
+    · exact Or.inr (Or.inl hz)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+    · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
