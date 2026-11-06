@@ -13577,4 +13577,47 @@ theorem log_no_growth_new_record_preserved_g09 {F : Type}
   exact ⟨logEntryOK_of_record_agree_g09 (s := s) rfl (le_refl _) hrecord hlog,
     logOwnedIvls_of_record_agree_g09 (s := s) rfl hrecord⟩
 
+/-- Concrete in-place frame reconstruction needs new-record validity only
+before the two finishing stores; separation transports it to their result. -/
+theorem log_no_growth_frame_post_from_new_record_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hn_bound : n.toNat + 1 < 2 ^ 64)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hp_bound : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    (∀ k ∈ ([8, 16, 24, 32, 40, 88, 112, 136, 144, 168, 176, 216, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k)) →
+    WordsOK post (l.toNat, 24) → Allocated post (l.toNat, 24) →
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8 * i)) →
+    MsgOwned post S (memW s (ec.1 + 112)) →
+    FrameWF post S ec ∧ frameLogs post ec = frameLogs s ec ∧
+      frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls s log.toNat := by
+  dsimp only
+  intro hfields hwords hallocated hslots hmsg
+  have hheap : globN s "heap_ptr" ≤ 2 ^ 64 := by
+    have hh := hA.2.2.1
+    rw [R11Shards.heapLimit_val] at hh
+    omega
+  obtain ⟨hlog_post, howned⟩ := log_no_growth_new_record_preserved_g09 s l p n log
+    hl_bound hp_bound (le_trans hlog.2.1.2 hheap) hdheader hdbuffer hlog
+  obtain ⟨hWF, hbuffer, hobjects⟩ := log_no_growth_concrete_frame_post_g09 s ec S l p n cap log
+    hA hFW hpw hl hn hm0 hm16 hnonnull hlt hn_bound hl_bound hp_bound hdisj
+    hd8 hdslot hfields hwords hallocated hslots hmsg hlog_post
+  exact ⟨hWF, hbuffer, by rw [hobjects, howned]⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
