@@ -18185,4 +18185,34 @@ theorem phase2_ct_alloc_ready_write_separated (h : PtxCallees) {ι : Type} [None
     s vs body callee ret v post hc hp he hl hr
   exact ⟨ht, phase2_creation_write_separation buffers contents _ ht.1.1 hm hb⟩
 
+/-- Contract-address world growth retains the joint private-table witness when
+the role slots and table headers are framed. -/
+theorem phase2_compute_contract_address_tables (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (aa ak : Nat)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "compute_contract_address") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hnt : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK s) (ht : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hwr : worldRoleSlots post = worldRoleSlots s)
+    (hjr : journalRoleSlots post = journalRoleSlots s)
+    (haa : hdr post aa 0 = hdr s aa 0) (hak : hdr post ak 0 = hdr s ak 0)
+    (hd : ∀ S Nd, WorldTypedWith s S Nd → IvlsDisj
+      [(locN (callEntryStateHOLFinite s callee) "out", 20),
+      (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+      (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)] (worldTypedIvls s S Nd)) :
+    PtxMessageTables {post with locals := s.locals} aa ak := by
+  have hh := PtxP1.funSpec_at_lookup h.wk_compute_contract_address s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp callee) (by rw [he]; exact hnt)
+  rw [he] at hh
+  have step := hh hr
+  apply phase2_message_tables_world_step s {post with locals := s.locals} ht hin rfl hwr hjr haa hak
+  intro S Nd hw
+  obtain ⟨S', Nd', hsub, hw', hg, _⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (hd S Nd hw)
+  exact ⟨S', Nd', hsub, (worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hw', hg⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
