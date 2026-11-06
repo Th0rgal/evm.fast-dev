@@ -18061,4 +18061,30 @@ theorem journal_cut_state_tail_output {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+
+/-- Combine the cut world step and backing frames at the same original tail entry. -/
+theorem journal_worldStep_frames_of_cut {F : Type}
+    (s mid cut entry : PanSemStateFiniteExact 64 F) (bs : List Ivl)
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (hm : cut = {mid with locals := cut.locals})
+    (he : cut.emptyLocalsHOLFinite = entry.emptyLocalsHOLFinite)
+    (hf : ∀ b ∈ bs, IvlUnhit s cut b) :
+    WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none entry ∧
+      (∀ b ∈ bs, IvlUnhit s entry b) := by
+  have hs : entry = {mid with locals := entry.locals} := by
+    have hh := congrArg (fun st : PanSemStateFiniteExact 64 F => {st with locals := entry.locals}) he
+    rw [hm] at hh
+    exact hh.symm
+  constructor
+  · rw [hs]
+    exact hw.with_locals_clock entry.locals mid.clock
+  · have hmem : cut.memory = entry.memory := congrArg (fun st => st.memory) he
+    intro b hb a ha hit
+    rw [← hmem]
+    exact hf b hb a ha hit
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
