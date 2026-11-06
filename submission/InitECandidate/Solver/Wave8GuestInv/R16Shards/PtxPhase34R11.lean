@@ -17659,12 +17659,20 @@ theorem journal_cut_world_entry {F : Type}
     (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
       (some (.returned (.val (.word 0#64))), cut)) :
     ∃ mid, WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid ∧
-      mid.locals.lookup (ofString "t") = some (.val (.word tw)) ∧ cut.memory = mid.memory := by
+      mid.locals.lookup (ofString "t") = some (.val (.word tw)) ∧ cut.memory = mid.memory ∧
+      cut = {mid with locals := cut.locals} := by
   obtain ⟨mid, u, hw, ht', _, _, hu, hc⟩ := journal_append_block_step s cur trapCode e16 tw kw f0 f1 w16
     hW heff hg ht hk ho he htw hr
-  refine ⟨mid, hw, ht', ?_⟩
-  have hm : cut.memory = u.memory := by rw [hc]
-  exact hm.trans (return_memory_eq hu)
+  have hu' : u = mid.emptyLocalsHOLFinite := by
+    have he' : evaluateHOLFiniteState mid (.return (.const 0#64)) =
+        (some (.returned (.val (.word 0#64))), mid.emptyLocalsHOLFinite) := by
+      simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+    exact (Prod.mk.inj (hu.symm.trans he')).2
+  have hstate : cut = {mid with locals := cut.locals} := by
+    rw [hu'] at hc
+    exact hc
+  refine ⟨mid, hw, ht', ?_, hstate⟩
+  exact congrArg (fun st => st.memory) hstate
 
 end PtxP34
 
