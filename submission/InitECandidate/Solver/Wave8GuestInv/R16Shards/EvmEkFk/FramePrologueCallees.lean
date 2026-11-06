@@ -8438,6 +8438,32 @@ private theorem precompile_step_locals_right {F : Type} {gw : List String}
     (evmChain_with_locals post ls k).trans h.1.2.2.2⟩, ?_⟩
   exact h.2
 
+theorem precompile_call0_locals_on_flow {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fn : MlS) (args : List (ExpHOL 64))
+    (hr : (evaluateHOLFiniteState s (.call (some (none, none)) fn args)).1 = none) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) fn args)).2.locals = s.locals := by
+  rw [evaluateHOLFiniteState_call] at hr ⊢
+  simp only [evalListHOLFinite_eq_toExact] at hr ⊢
+  rcases ha : @evalListHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · simp [ha] at hr
+  · simp only [ha] at hr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fn vals with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hr
+      · simp only [hz, ↓reduceIte] at hr ⊢
+        rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, post⟩
+        simp only [run] at hr ⊢
+        cases res with
+        | none => simp at hr
+        | some r =>
+          cases r <;> try simp at hr
+          case returned v =>
+            dsimp only at hr ⊢
+            split at hr <;> simp_all
+
 theorem precompile_step_call0 {fname : MlS}
     (hk : EvmKeeps EvmInv frameStartGw fname) (hc : ChainCellsKept EvmInv fname)
     (args : List (ExpHOL 64)) :
