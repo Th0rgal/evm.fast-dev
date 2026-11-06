@@ -9805,4 +9805,28 @@ theorem ws_get_account_execution_effect {F : Type} (s : PanSemStateFiniteExact 6
   rw [hb] at he
   exact he
 
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+/-- The narrow witness effect preserves payload words without trie separation. -/
+theorem protected_payload_words_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) :
+    ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8) := by
+  apply protected_payload_words_of_world_frame he hA
+  intro a hn
+  rcases heff.cell_frame a hn with ⟨i,hi,_⟩ | ⟨b,hb,hpos,hlo,hhi⟩ | ⟨_,hlo,hhi⟩ | ⟨_,hlo,hhi⟩
+  · cases hi
+  · refine Or.inl ⟨bufferRegion s b,Or.inr ?_,hpos,hlo,hhi⟩
+    have hgb : b ∈ globalBuffers := by
+      simp only [wsBufs,List.mem_cons,List.not_mem_nil,or_false] at hb
+      rcases hb with rfl | rfl | rfl <;> decide
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    exact List.mem_map.2 ⟨b,hgb,rfl⟩
+  · exact Or.inr (Or.inl ⟨hlo,hhi⟩)
+  · exact Or.inr (Or.inr ⟨hlo,hhi⟩)
+
 end HeadStore
