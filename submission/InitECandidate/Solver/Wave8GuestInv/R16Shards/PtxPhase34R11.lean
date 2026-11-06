@@ -17055,4 +17055,37 @@ theorem journal_klen_dec_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private seq_call0_ret_inv trap_with_call_no_none_resumes from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- A returned journal sequence passes its capacity guard and resumes the tail unchanged. -/
+theorem journal_guard_seq_resume {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hcode : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap")))
+        (.call (some (none, none)) (ofString "trap_with") [.const trapCode]) .skip) tail) = (some (.returned rv), out)) :
+    jn.toNat < jc.toNat ∧ evaluateHOLFiniteState s tail = (some (.returned rv), out) := by
+  by_cases hn : jn.toNat < jc.toNat
+  · have hc : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+      simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+    rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hr
+    simp [evalHOLExact, hjn, hjc, hc, evaluateHOLFiniteState_skip] at hr
+    exact ⟨hn, hr⟩
+  · have hc : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = true := by
+      simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+    have hg : evaluateHOLFiniteState s
+        (.ite (.cmp .notLower (.var .global (ofString "journal_n")) (.var .global (ofString "journal_cap")))
+          (.call (some (none, none)) (ofString "trap_with") [.const trapCode]) .skip) =
+        evaluateHOLFiniteState s (.call (some (none, none)) (ofString "trap_with") [.const trapCode]) := by
+      rw [evaluateHOLFiniteState_ite]
+      simp [evalHOLExact, hjn, hjc, hc]
+    rw [evaluateHOLFiniteState_seq_line780, hg] at hr
+    obtain ⟨mid, hm, _⟩ := seq_call0_ret_inv (by rw [evaluateHOLFiniteState_seq_line780]; exact hr)
+    exact False.elim ((trap_with_call_no_none_resumes s trapCode hcode).1 (congrArg Prod.fst hm))
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
