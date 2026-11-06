@@ -11520,4 +11520,110 @@ theorem progWStep_builderStorageSuffix {B : BufList} {gw : List String}
       (progWStep_builderStorageEntry hB hgw hidx heq hwrite hremove))
     (progWStep_return _ _ _)
 
+theorem progWStep_call0_guarded {B Bf : BufList} {gw gwf : List String} {fname : MlS}
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {args : List (ExpHOL 64)}
+    (hB : ∀ p ∈ Bf, p ∈ B) (hgw : ∀ g ∈ gwf, g ∈ gw)
+    (hf : WorldKeepsSc P (bufRegions Bf) gwf stdKeep NoExtra fname)
+    (hentry : CallEntryOn WorldOK P fname args) :
+    ProgWStep B gw (.call (some (none, none)) fname args) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, hargs] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        let ent := callEntryStateHOLFinite s callee
+        have hWent : P ent := hentry s vs body' callee ret' hc hW hargs hl
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent] at hrun
+        simp only [hrun] at hnt hfr ⊢
+        have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+          simp only [ent, hrun]; rintro rfl; simp at hnt
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hfr ⊢
+            split
+            · have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+              simp only [hrun] at hspec
+              exact ((hspec (Or.inl ⟨v, rfl⟩)).mono_bufs hB hgw).from_entry
+            · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres_ex : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | hr <;> try simp at h
+              exact hr
+            have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+            simp only [hrun] at hspec
+            exact ((hspec hres_ex).mono_bufs hB hgw).from_entry
+
+theorem progWStep_callBalRemove {B : BufList} {gw : List String}
+    (addr idx : ExpHOL 64) (which esz : BitVec 64)
+    (hwe : (which.toNat = 16 ∧ esz.toNat = 40) ∨
+      (which.toNat = 24 ∧ esz.toNat = 16) ∨
+      (which.toNat = 32 ∧ esz.toNat = 24)) :
+    ProgWStep B gw (.call (some (none, none)) (ofString "bal_remove_change")
+      [addr, .const which, .const esz, idx]) :=
+  progWStep_call0_guarded (Bf := []) (by simp) (by simp) wkSc_bal_remove_change
+    (R10GbodyIdxBuilder.callEntryOn_balChangeArg addr idx which esz hwe)
+
+def builderCodeChange : ProgHOL 64 :=
+  .ite (.cmp .equal (.var .local (ofString "eq")) (.const 0#64))
+    (.decCall (ofString "code") (.comb [.one, .one]) (ofString "get_code")
+      [.var .local (ofString "post_ch"), .var .local (ofString "addr")]
+      (.call (some (none, none)) (ofString "add_code_change")
+        [.var .local (ofString "addr"), .var .local (ofString "idx"),
+         .rfield 0 (.var .local (ofString "code")), .rfield 1 (.var .local (ofString "code"))]))
+    (.call (some (none, none)) (ofString "bal_remove_change")
+      [.var .local (ofString "addr"), .const 32#64, .const 24#64, .var .local (ofString "idx")])
+
+theorem progWStep_builderCodeChange {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hget : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "get_code"))
+    (hadd : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_code_change")) :
+    ProgWStep B gw builderCodeChange := by
+  unfold builderCodeChange
+  apply progWStep_ite
+  · exact progWStep_decCall hB hgw (fun _ h => h) (fun _ h => h) hget
+      (progWStep_call0 (fun _ h => h) (fun _ h => h) hadd)
+  · exact progWStep_callBalRemove _ _ _ _ (by decide)
+
+def builderBalanceChange : ProgHOL 64 :=
+  .ite (.cmp .equal (.var .local (ofString "eq")) (.const 0#64))
+    (.call (some (none, none)) (ofString "add_balance_change")
+      [.var .local (ofString "addr"), .var .local (ofString "idx"), .var .local (ofString "post_bal")])
+    (.call (some (none, none)) (ofString "bal_remove_change")
+      [.var .local (ofString "addr"), .const 16#64, .const 40#64, .var .local (ofString "idx")])
+
+def builderNonceChange : ProgHOL 64 :=
+  .ite (.cmp .notEqual (.var .local (ofString "pre_nonce")) (.var .local (ofString "post_nonce")))
+    (.call (some (none, none)) (ofString "add_nonce_change")
+      [.var .local (ofString "addr"), .var .local (ofString "idx"), .var .local (ofString "post_nonce")])
+    (.call (some (none, none)) (ofString "bal_remove_change")
+      [.var .local (ofString "addr"), .const 24#64, .const 16#64, .var .local (ofString "idx")])
+
+theorem progWStep_builderBalanceChange {B : BufList} {gw : List String}
+    (hadd : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_balance_change")) :
+    ProgWStep B gw builderBalanceChange := by
+  unfold builderBalanceChange
+  exact progWStep_ite (progWStep_call0 (fun _ h => h) (fun _ h => h) hadd)
+    (progWStep_callBalRemove _ _ _ _ (by decide))
+
+theorem progWStep_builderNonceChange {B : BufList} {gw : List String}
+    (hadd : WorldKeepsSc WorldOK (bufRegions B) gw stdKeep NoExtra (ofString "add_nonce_change")) :
+    ProgWStep B gw builderNonceChange := by
+  unfold builderNonceChange
+  exact progWStep_ite (progWStep_call0 (fun _ h => h) (fun _ h => h) hadd)
+    (progWStep_callBalRemove _ _ _ _ (by decide))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
