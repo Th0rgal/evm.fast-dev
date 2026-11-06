@@ -8078,6 +8078,18 @@ theorem ek_cc_emit_transfer_log_of_system_heap
   exact ⟨⟨ps, body, ret, lookup, fun s code h => keeps s code ⟨h, ready s h⟩⟩,
     ⟨ps', body', ret', lookup', fun s code h => cells s code ⟨h, ready s h⟩⟩⟩
 
+theorem system_heap_premise_iff_evmInv :
+    (∀ {F : Type} (s : PanSemStateFiniteExact 64 F), EvmAvoids FrameStartAvoids s →
+      Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr")) ↔
+    (∀ {F : Type} (s : PanSemStateFiniteExact 64 F), EvmInv s →
+      Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr")) := by
+  constructor
+  · intro h F s inv
+    exact h s (evmAvoids_frameStart_of_evmInv s inv)
+  · intro h F s avoids
+    obtain ⟨arena, S, invAt, _⟩ := avoids
+    exact h s ((evmInv_iff_at s).2 ⟨arena, S, invAt⟩)
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
