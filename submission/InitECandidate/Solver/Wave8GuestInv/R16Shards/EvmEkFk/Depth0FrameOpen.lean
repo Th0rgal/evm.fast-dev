@@ -8707,4 +8707,29 @@ theorem typed_record_word_key_separation {F : Type}
   dsimp only at hd' ⊢
   omega
 
+/-- The access-tail load bounds and separation follow from world typing. -/
+theorem get_code_access_tail_of_world_preloads {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (db hash tw : BitVec 64)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hdb : db.toNat ∈ S) (ht : tw.toNat ∈ S) (hne : db.toNat ≠ tw.toNat)
+    (h : CodeDbPayloadStrong s S db.toNat) (hc : s.code = originalRuntimeCode)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hsk : globN s "sk_buf" ≠ 0)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hhash : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hwl : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (htl : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ts"), .const 40])) = some (.val (.word tw))) :
+    Ret s getCodeAccessTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply get_code_access_tail_of_preloads s S Nd db hash tw hAs hWT hdb ht hne h hc hfit hs hws hhash
+  intro g k w hcase
+  rcases hcase with ⟨rfl,rfl,rfl⟩ | ⟨rfl,rfl,rfl⟩
+  · obtain ⟨hb,hd⟩ := typed_record_word_key_separation hAs hWT "ws" 40 16 (by decide) hws hsk (by decide)
+    exact ⟨hb,hd,hwl⟩
+  · obtain ⟨hb,hd⟩ := typed_record_word_key_separation hAs hWT "ts" 72 40 (by decide) hts hsk (by decide)
+    exact ⟨hb,hd,htl⟩
+
 end HeadStore
