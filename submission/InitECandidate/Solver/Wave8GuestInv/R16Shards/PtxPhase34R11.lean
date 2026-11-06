@@ -16410,4 +16410,23 @@ theorem journal_append_blockOut_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open EvmEkFk R10Shards.P26_P28
+
+/-- Retain backing preservation from the journal implementation's narrow effect. -/
+theorem journal_worldEff_blockOut_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {b : Ivl} {n : Nat} {gw : List String}
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hn : n < globN s "journal_cap")
+    (heff : WorldEff s post [(globN s "journal" + 32 * n, 32)] [] gw) :
+    IvlUnhit s post b := by
+  apply journal_append_blockOut_frame s post b n hA hfix hb hal hb1 hb2 hn
+  intro x hx
+  simpa only [List.mem_singleton, exists_eq_left, List.not_mem_nil,
+    false_and, exists_false, false_or, Fast_C08WkShard03.CellHitsPos,
+    CellHitsPos] using heff.cell_frame x hx
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
