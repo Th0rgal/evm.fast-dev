@@ -11813,4 +11813,23 @@ theorem wkSc_update_builder_from_tx_of_idx_storage
   change ProgWStep builderBufs ["heap_ptr", "scratch_ptr"] builderBody
   exact progWStep_builderBody_of_idx_storage hidx
 
+theorem wkSc_process_withdrawals_of_idx_storage
+    (hidx : WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "idx_start_storage")) :
+    WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "process_withdrawals") := by
+  apply wkSc_process_withdrawals_of_builder
+  obtain ⟨ps, body, ret, hl, hb⟩ := wkSc_update_builder_from_tx_of_idx_storage hidx
+  refine ⟨ps, body, ret, hl, ?_⟩
+  intro F s hc hW hex hnt hres
+  apply worldStepSc_mono_mask (B1 := builderBufs) (gw1 := ["heap_ptr", "scratch_ptr"])
+    (keep1 := stdKeep) (fun _ h => h) (by decide) ?_ (hb s hc hW hex hnt hres)
+  intro rec hr k hk
+  simp only [withdrawalKeep, List.mem_cons, List.not_mem_nil, or_false] at hr
+  rcases hr with rfl | rfl | rfl | rfl
+  · exact ⟨_, by simp [stdKeep], hk⟩
+  · exact ⟨_, by simp [stdKeep], hk⟩
+  · cases hk
+  · exact ⟨_, by simp [stdKeep], hk⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
