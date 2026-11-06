@@ -14264,4 +14264,55 @@ theorem log_tail_frameWF_of_readback_g09 {F : Type}
     exact hFW.2.2.2.2.2.2.2.2.2.2.2.2.1
   · rw [hb]; exact (hw _).2 hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.1
 
+/-- Head-frame reconstruction derives its message ownership from pre-state
+ownership and the independently reconstructed object append. -/
+theorem log_no_growth_head_frame_owned_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ec : Ivl) (S Nd : List Nat)
+    (tail : List Ivl) (l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hWT : WorldTypedWith s S Nd)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hn_bound : n.toNat + 1 < 2 ^ 64)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hp_bound : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hec : ec.1 + 280 ≤ 2 ^ 64)
+    (hecHeader : Disj (ec.1, 280) (l.toNat, 24))
+    (hecBuffer : Disj (ec.1, 280) (p.toNat, 8 * n.toNat + 8))
+    (hlogBound : log.toNat + 40 ≤ 2 ^ 64)
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8))
+    (hcons : evmChain s = ec :: tail)
+    (hnew : ∀ o ∈ logOwnedIvls s log.toNat, Disj (memW s (ec.1 + 112), 176) o) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    SameTypedCells s post S Nd → evmChain post = evmChain s →
+    (∀ frame ∈ tail, frameObjects post frame = frameObjects s frame) →
+    FrameWF post S ec ∧ frameObjects post ec = frameObjects s ec ++ logOwnedIvls s log.toNat := by
+  dsimp only
+  intro hcell hchain htail
+  let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+  have hAp : ArenaReady post :=
+    ⟨⟨hA.1.code, hA.1.memaddrs, hA.1.shMemaddrs, hA.1.baseAddr⟩,
+      arenaOK_congr rfl hA.2⟩
+  have hobjects := log_no_growth_objects_without_msg_g09 s ec S l p n cap log
+    hA hFW hpw hl hn hm0 hm16 hnonnull hlt hn_bound hl_bound hp_bound hdisj
+    hd8 hdslot hec hecHeader hecBuffer hlogBound hlog hdheader hdbuffer
+  have hmsg : MsgOwned post S (memW s (ec.1 + 112)) :=
+    msgOwned_of_log_no_growth_g09 hA hAp hWT hcell rfl rfl hchain hcons
+      hobjects htail hnew hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+  exact log_no_growth_frame_post_of_separation_g09 s ec S l p n cap log
+    hA hFW hpw hl hn hm0 hm16 hnonnull hlt hn_bound hl_bound hp_bound hdisj
+    hd8 hdslot hec hecHeader hecBuffer hlog hdheader hdbuffer hmsg
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
