@@ -11480,6 +11480,57 @@ theorem precompile_sha256_alloc_tail_step {F : Type}
   exact ⟨⟨localsFree_evmInv _ _ _ both.1.1,both.1.2.1,both.1.2.2.1,
     (evmChain_with_locals _ _ _).trans both.1.2.2.2⟩,both.2⟩
 
+theorem precompile_sha256_gas_alloc_tail_step {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len : BitVec 64) (ptr : ExpHOL 64)
+    (args : List (ExpHOL 64)) (hi : EvmInv s)
+    (hpad : globN s "sha_pad" ≠ 0) (hst : globN s "sha_st" ≠ 0)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word len)))
+    (hbound : len.toNat+64 < 2^64) :
+    let tail : ProgHOL 64 := .seq
+      (.call (some (none,none)) (ofString "sha256") [ptr,.var .local (ofString "n"),.var .local (ofString "out")])
+      (.seq (.store (.op .add [.var .global (ofString "ev"),.const 120]) (.var .local (ofString "out")))
+        (.seq (.store (.op .add [.var .global (ofString "ev"),.const 128]) (.const 32)) (.return (.const 0))))
+    let p : ProgHOL 64 := .seq (.call (some (none,none)) (ofString "charge_gas") args)
+      (.decCall (ofString "out") .one (ofString "alloc") [.const 32] tail)
+    Resumes (evaluateHOLFiniteState s p).1 →
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s p).2 := by
+  intro tail p hr
+  change Resumes (evaluateHOLFiniteState s (.seq _ _)).1 at hr
+  change EvmStepCC frameStartGw s (evaluateHOLFiniteState s (.seq _ _)).2
+  rw [evaluateHOLFiniteState_seq_line780] at hr ⊢
+  rcases heval : evaluateHOLFiniteState s (.call (some (none,none)) (ofString "charge_gas") args) with ⟨r,mid⟩
+  simp only [heval] at hr ⊢
+  cases r with
+  | some r =>
+    simp only at hr ⊢
+    have hg := precompile_charge_gas_call_step args s hi.1.1.code hi
+      (by rw [heval]; exact fun ht => EvmFrameSpecs.not_resumes_timeOut (ht ▸ hr))
+      (by rw [heval]; exact Or.inr (Or.inr (Or.inr hr)))
+    simpa only [heval] using hg
+  | none =>
+    simp only at hr ⊢
+    have hg := precompile_charge_gas_call_step args s hi.1.1.code hi
+      (by rw [heval]; simp) (by rw [heval]; exact Or.inl rfl)
+    rw [heval] at hg
+    have hpv : globN mid "sha_pad" = globN s "sha_pad" := by
+      unfold globN; rw [←hg.1.2.2.1 _ (by decide)]
+    have hsv : globN mid "sha_st" = globN s "sha_st" := by
+      unfold globN; rw [←hg.1.2.2.1 _ (by decide)]
+    obtain ⟨pad,stp,out,hp,hs,hh,hpz,hsz,_⟩ := precompile_sha256_globals_of_evmInv mid hg.1.1
+      (hpv ▸ hpad) (hsv ▸ hst)
+    have hflow : (evaluateHOLFiniteState s (.call (some (none,none)) (ofString "charge_gas") args)).1 = none := by rw [heval]
+    have hlocals := precompile_call0_locals_on_flow s _ _ hflow
+    rw [heval] at hlocals
+    have hc := precompile_sha256_alloc_tail_step mid pad stp out len ptr hg.1.1 hh hp hs hpz hsz
+      (by rw [hlocals]; exact hn) hbound hr
+    exact ⟨⟨hc.1.1,le_trans hg.1.2.1 hc.1.2.1,
+      fun k hk => (hg.1.2.2.1 k hk).trans (hc.1.2.2.1 k hk),
+      hc.1.2.2.2.trans hg.1.2.2.2⟩,by
+        intro ec hec
+        obtain ⟨a,b,c,d⟩ := hg.2 ec hec
+        obtain ⟨a',b',c',d'⟩ := hc.2 ec (hg.1.2.2.2.symm ▸ hec)
+        exact ⟨a'.trans a,b'.trans b,c'.trans c,d'.trans d⟩⟩
+
 theorem precompile_identity_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (args : List (ExpHOL 64)) (n : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
