@@ -8090,6 +8090,27 @@ theorem system_heap_premise_iff_evmInv :
     obtain ⟨arena, S, invAt, _⟩ := avoids
     exact h s ((evmInv_iff_at s).2 ⟨arena, S, invAt⟩)
 
+theorem system_heap_excludes_scratch {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hArena : ArenaOK s)
+    (hscratch : globN s "scratch_ptr" ≤ globN s "vm_system_address") :
+    ¬ Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr") := by
+  intro hheap
+  have hhi := hArena.2.1
+  have hlo := hArena.2.2.1
+  have hsep := hArena.2.2.2.1
+  dsimp [Inside] at hheap
+  unfold heapLimit at hhi
+  omega
+
+theorem system_log_excludes_scratch {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {log : Nat} (hArena : ArenaOK s) (hlog : LogEntryOK s log)
+    (haddr : memW s log = globN s "vm_system_address") :
+    ¬ globN s "scratch_ptr" ≤ globN s "vm_system_address" := by
+  intro hscratch
+  apply system_heap_excludes_scratch hArena hscratch
+  rw [← haddr]
+  exact hlog.2.2.2.2.1
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
