@@ -18534,4 +18534,83 @@ theorem journal_cut_table_tail_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Construct the journal cut and its world step before rejoining the table tail. -/
+theorem journal_append_table_tail_header_words {F : Type}
+    (s cur out : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (jn jc trapCode tw kw f0 f1 w16 : BitVec 64)
+    (e16 key value result : ExpHOL 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (heff : WorldEff s cur [] [] ["heap_ptr"])
+    (hg : ∀ k : MlS, cur.globals.lookup k = s.globals.lookup k)
+    (hjn : cur.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : cur.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : cur.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (ho : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (he : ∀ st : PanSemStateFiniteExact 64 F,
+      st.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]) →
+      @evalHOLExact 64 F _ st.toExact (fun a => Classical.propDecidable (st.memaddrs a)) e16 = some (.val (.word w16)))
+    (htw : ∀ S, TablesTyped s S → tw.toNat ∈ S ∧
+      ∀ p ∈ (tw.toNat, journalRole s tw.toNat) ::
+        (if w16.toNat ≠ 0 ∧ journalRole s tw.toNat = "ts+32" then [(f1.toNat, "ts.inner")] else []),
+        p ∈ worldRoleSlots s)
+    (hf : ∀ cut, evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut) →
+      ∀ k ∈ ([40, 72] : List Nat), IvlUnhit s cut (memW s (globN s "bo" + k), 24))
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.var .local (ofString "t"), key, value]) (.return result))) = (some (.returned rv), out)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW out (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨cut, hcut⟩ := journal_append_cut_return cur out jn jc trapCode e16 _ rv
+    heff.arena.1.code hjn hjc hr
+  obtain ⟨mid, hw, _, _, hm⟩ := journal_cut_world_entry s cur cut trapCode e16 tw kw f0 f1 w16
+    hW.1 heff hg ht hk ho he htw hcut
+  exact journal_cut_table_tail_header_words s cur out cut mid S Nd jn jc trapCode tw e16 key value result rv
+    hW hT (htw S hT.1).1 heff.arena.1.code hjn hjc ht hr hcut hw hm (hf cut hcut)
+
+/-- The concrete jset journal append and table mutation preserve both nested
+block-output header words; the cut backing frame is discharged internally. -/
+theorem jset_journal_table_tail_header_words {F : Type}
+    (s cur out : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (j n cap p tw kw f0 f1 : BitVec 64) (key value result : ExpHOL 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (heff : WorldEff s cur [] [] ["heap_ptr"])
+    (hg : ∀ k : MlS, cur.globals.lookup k = s.globals.lookup k)
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : cur.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (ho : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (htw : ∀ S, TablesTyped s S → tw.toNat ∈ S ∧
+      ∀ q ∈ (tw.toNat, journalRole s tw.toNat) ::
+        (if f0.toNat ≠ 0 ∧ journalRole s tw.toNat = "ts+32" then [(f1.toNat, "ts.inner")] else []),
+        q ∈ worldRoleSlots s)
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg 4#64 (.rfield 0 (.var .local (ofString "old")))
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.var .local (ofString "t"), key, value]) (.return result))) = (some (.returned rv), out)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW out (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  apply journal_append_table_tail_header_words s cur out S Nd n cap 4#64 tw kw f0 f1 f0
+    (.rfield 0 (.var .local (ofString "old"))) key value result rv hW hT heff hg
+    ((hg _).trans hn) ((hg _).trans hc) ht hk ho ?_ htw ?_ hr
+  · intro st hs
+    simp [evalHOLExact, hs]
+  · intro cut hcut k hkm
+    have hb := txWorld_header_fixed hW k hkm
+    have ha := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+    have hbo : (memW s (globN s "bo" + k), 24) ∈ blockOutObjects s := by
+      have hk' : k = 40 ∨ k = 72 := by simpa using hkm
+      rcases hk' with rfl | rfl <;> simp [blockOutObjects, hW.2.bo_nz, hW.2.bo40, hW.2.bo72]
+    exact jset_journal_cut_backing_frame j n cap p tw f0 f1 hW.1.1.2 hT.2.1 hT.2.2.1
+      hbo ha.1 ha.2.1 (by simp) heff hj hn hc hp ht ho hcut
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
