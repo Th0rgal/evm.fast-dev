@@ -6859,4 +6859,77 @@ theorem get_code_cache_branch_return {F : Type} (s : PanSemStateFiniteExact 64 F
       obtain ⟨code, code_n, hv', hn, _⟩ := get_code_cache_record_return s hA found ptr hwlocal hw hin v hv
       exact ⟨code, code_n, hv', hn⟩
 
+/-- Concrete cache lookup supplies the hit payload from its live table values;
+only a genuine miss requires the next-cache/fallback continuation. -/
+theorem get_code_cache_lookup_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (db hash : BitVec 64) (args : List (ExpHOL 64)) (tail : ProgHOL 64)
+    (hcode : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args =
+      some [.val (.word db), .val (.word hash)])
+    (hW : HtabWF s db.toNat) (hentries : NodeDbEntriesStrong s db.toNat)
+    (hmiss : ∀ values body callee ret post (ptr : BitVec 64),
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "htab_get") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned (.rStruct [.val (.word 0), .val (.word ptr)])), post) →
+      Ret (setVarHOLFinite (ofString "w") (.rStruct [.val (.word 0), .val (.word ptr)])
+        {post with locals := s.locals}) tail
+        (fun v _ => ∃ code code_n : BitVec 64,
+          v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40)) :
+    Ret s (.decCall (ofString "w") (.comb [.one, .one]) (ofString "htab_get") args
+      (.seq (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "w"))) (.const 0))
+        (.return (.rstruct [
+          .load .one (.rfield 1 (.var .local (ofString "w"))),
+          .load .one (.op .add [.rfield 1 (.var .local (ofString "w")), .const 8])])) .skip) tail))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  have hvals : values = [.val (.word db), .val (.word hash)] := by
+    rw [hargs] at ha; exact Option.some.inj ha.symm
+  subst values
+  obtain ⟨hbody, ht⟩ := lookupCodeHOLFinite_param_at
+    s.code.lookup (ofString "htab_get") [] (ofString "t") .one [(ofString "key", .one)]
+    (sourceFnBody Guest.Software.guestFn_htab_get) (.comb [.one, .one])
+    (by intro p hp; simp at hp; rw [hp]; decide)
+    (by rw [hcode]; exact WkBal.lookup_htab_get) (vpre := []) (by simp) hl
+  obtain ⟨_, hk⟩ := lookupCodeHOLFinite_param_at
+    s.code.lookup (ofString "htab_get") [(ofString "t", .one)] (ofString "key") .one []
+    (sourceFnBody Guest.Software.guestFn_htab_get) (.comb [.one, .one])
+    (by simp) (by rw [hcode]; exact WkBal.lookup_htab_get)
+    (vpre := [.val (.word db)]) (by simp) hl
+  subst body
+  let ce := callEntryStateHOLFinite s callee
+  have hWce : HtabWF ce db.toNat := WkBal.htabWF_with_locals s callee (s.clock - 1) db.toNat |>.2 hW
+  obtain ⟨found, ptr, hv, hm⟩ := WkBal.htab_get_ret_in_values ce db hash hcode ht hk hWce v
+    (congrArg Prod.fst hb)
+  have hframe := R16WkAcctWs.evaluate_roProgR16 R16WkAcctWs.wsGetCodeCallees
+    R16WkAcctWs.wsGetCodeCallees_good (sourceFnBody Guest.Software.guestFn_htab_get)
+    (by decide) ce hcode
+  rw [hb] at hframe
+  have hpost : post = {s with locals := post.locals, clock := post.clock} := by
+    simpa [R16WkAcctWs.LocFrameR16, ce, callEntryStateHOLFinite] using hframe
+  subst v
+  let st := setVarHOLFinite (ofString "w")
+    (.rStruct [.val (.word found), .val (.word ptr)]) {post with locals := s.locals}
+  have hst : st = {s with locals := st.locals, clock := st.clock} := by
+    dsimp only [st, setVarHOLFinite]; rw [hpost]
+  have hr : st.locals.lookup (ofString "w") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]) := by
+    simp [st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hAst : ArenaReady st := by rw [hst]; exact localsFree_arenaReady s _ _ hA
+  have hrecord : found ≠ 0 → WordsOK st (ptr.toNat, 16) ∧
+      Inside (memW st ptr.toNat, memW st (ptr.toNat + 8)) sourceBase (globN st "heap_ptr") := by
+    intro hf
+    have hin : ptr.toNat ∈ htabValues s db.toNat := by
+      simpa [ce, callEntryStateHOLFinite, htabValues, hdr, nodeF, memW] using hm hf
+    have he := hentries ptr.toNat hin
+    rw [hst]
+    simpa [WordsOK, WordAt, memW, globN] using he
+  intro w hw
+  apply get_code_cache_branch_return st hAst found ptr tail hr hrecord ?_ w hw
+  intro hz
+  subst found
+  exact hmiss _ _ _ _ post ptr ha hl hb
+
 end HeadStore
