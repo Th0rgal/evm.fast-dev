@@ -8053,6 +8053,31 @@ theorem cc_emit_transfer_log_ready :
       (ofString "emit_transfer_log") :=
   ek_cc_emit_transfer_log_ready.2
 
+theorem frameStartSysReady_of_system_log {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {log : Nat}
+    (hInv : EvmInv s) (hlog : LogEntryOK s log)
+    (haddr : memW s log = globN s "vm_system_address") :
+    FrameStartSysReady s := by
+  apply frameStartSysReady_of_evmInv hInv
+  rw [← haddr]
+  exact hlog.2.2.2.2.1
+
+theorem ek_cc_emit_transfer_log_of_system_heap
+    (hready : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      EvmAvoids FrameStartAvoids s →
+      Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr")) :
+    EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw (ofString "emit_transfer_log") ∧
+      ChainCellsKept (EvmAvoids FrameStartAvoids) (ofString "emit_transfer_log") := by
+  obtain ⟨⟨ps, body, ret, lookup, keeps⟩, ⟨ps', body', ret', lookup', cells⟩⟩ :=
+    ek_cc_emit_transfer_log_ready
+  have ready {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (h : EvmAvoids FrameStartAvoids s) : FrameStartSysReady s := by
+    have inv := h
+    obtain ⟨arena, S, invAt, _⟩ := inv
+    exact frameStartSysReady_of_evmInv ⟨arena, S, invAt⟩ (hready s h)
+  exact ⟨⟨ps, body, ret, lookup, fun s code h => keeps s code ⟨h, ready s h⟩⟩,
+    ⟨ps', body', ret', lookup', fun s code h => cells s code ⟨h, ready s h⟩⟩⟩
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
