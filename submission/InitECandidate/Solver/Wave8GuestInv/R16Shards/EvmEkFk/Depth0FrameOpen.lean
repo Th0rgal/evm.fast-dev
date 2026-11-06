@@ -9608,4 +9608,29 @@ theorem code_roots_kept_of_recordsKept {F : Type}
   obtain ⟨ks,hks,hk⟩ := hr
   exact hR (g,ks) hks hn k hk (hsep g k hm)
 
+/-- Valid nonempty untyped buffers cannot hit fields of a live typed record. -/
+theorem typed_record_field_avoids_buffers {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) {B : R16WkAcctWs.BufList}
+    (hB : R16WkAcctWs.ValidBufList B)
+    (hpos : ∀ b ∈ B, 0 < b.2)
+    (g : String) (sz k : Nat) (hg : (g,sz) ∈ typedRecords)
+    (hn : globN s g ≠ 0) (hk : k+8 ≤ sz) :
+    ∀ i ∈ R16WkAcctWs.bufRegions B s, ¬ CellHits (globN s g+k) i := by
+  have hi : (globN s g,sz) ∈ worldTypedIvls s S Nd := by
+    unfold worldTypedIvls
+    simp only [List.mem_append]
+    exact Or.inl (Or.inl (Or.inl (Or.inl (Or.inr (List.mem_map.2 ⟨(g,sz),hg,by simp [hn]⟩)))))
+  intro i him hit
+  have hd := R16WkAcctWs.validBufList_disj hB hWT i him _ hi
+  obtain ⟨b,hb,rfl⟩ := List.mem_map.1 him
+  by_cases hz : globN s b.1 = 0
+  · simp [bufferRegion,hz,CellHits] at hit
+  · simp only [bufferRegion,hz,↓reduceIte] at hd hit
+    have hbp := hpos b hb
+    unfold Disj at hd
+    unfold CellHits at hit
+    dsimp only at hd hit
+    rcases hd with hd | hd | hd | hd <;> omega
+
 end HeadStore
