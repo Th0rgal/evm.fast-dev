@@ -15378,4 +15378,73 @@ theorem op_log_data_allocation_g09 {F : Type}
     rw [hl]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
   · exact hncont
 
+/-- Concrete record-field readback and allocation extents establish log validity. -/
+theorem op_log_record_valid_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (log address topics data nt n : BitVec 64)
+    (hwords : WordsOK s (log.toNat, 40))
+    (hl : sourceBase ≤ log.toNat) (hlend : log.toNat + 40 ≤ globN s "heap_ptr")
+    (ha : sourceBase ≤ address.toNat) (haend : address.toNat + 20 ≤ globN s "heap_ptr")
+    (ht : sourceBase ≤ topics.toNat) (htend : topics.toNat + 32 * nt.toNat ≤ globN s "heap_ptr")
+    (hd : sourceBase ≤ data.toNat) (hdend : data.toNat + n.toNat ≤ globN s "heap_ptr")
+    (hnt : nt.toNat ≤ 4) (hn : n.toNat < 2^32)
+    (h0 : memW s log.toNat = address.toNat)
+    (h8 : memW s (log.toNat + 8) = topics.toNat)
+    (h16 : memW s (log.toNat + 16) = nt.toNat)
+    (h24 : memW s (log.toNat + 24) = data.toNat)
+    (h32 : memW s (log.toNat + 32) = n.toNat) :
+    LogEntryOK s log.toNat := by
+  unfold LogEntryOK
+  rw [h0, h8, h16, h24, h32]
+  exact ⟨hwords, ⟨hl, hlend⟩, hnt, hn, ⟨ha, haend⟩, ⟨ht, htend⟩, ⟨hd, hdend⟩⟩
+
+/-- The data-field writes have a byte-accurate effect confined to the record. -/
+theorem op_log_data_stores_effect_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (log data n : BitVec 64) (hma : s.memaddrs = ordinaryDomain)
+    (hb : log.toNat + 40 ≤ 2^64)
+    (hd24 : s.memaddrs (log + 24#64)) (hd32 : s.memaddrs (log + 32#64)) :
+    ByteRegionEffect s {s with memory := fun a => if a = log + 32#64 then .word n else
+      if a = log + 24#64 then .word data else s.memory a} [(log.toNat, 40)] := by
+  have h24 : (log + 24#64).toNat = log.toNat + 24 := by
+    rw [BitVec.toNat_add]
+    change (log.toNat + 24) % 2^64 = _
+    exact Nat.mod_eq_of_lt (by omega)
+  have h32 : (log + 32#64).toNat = log.toNat + 32 := by
+    rw [BitVec.toNat_add]
+    change (log.toNat + 32) % 2^64 = _
+    exact Nat.mod_eq_of_lt (by omega)
+  have he1 := log_growth_store_effect_g09 s (log + 24#64) data [(log.toNat, 40)] hma hd24
+    ⟨(log.toNat, 40), by simp, by dsimp only; rw [h24]; omega⟩
+  have he2 := log_growth_store_effect_g09
+    {s with memory := fun a => if a = log + 24#64 then .word data else s.memory a}
+    (log + 32#64) n [(log.toNat, 40)] hma hd32
+    ⟨(log.toNat, 40), by simp, by dsimp only; rw [h32]; omega⟩
+  exact he1.trans he2
+
+/-- The header writes have a byte-accurate effect confined to the record. -/
+theorem op_log_header_stores_effect_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (log address topics nt : BitVec 64) (hma : s.memaddrs = ordinaryDomain)
+    (hb : log.toNat + 40 ≤ 2^64)
+    (hd0 : s.memaddrs log) (hd8 : s.memaddrs (log + 8#64))
+    (hd16 : s.memaddrs (log + 16#64)) :
+    ByteRegionEffect s {s with memory := fun a => if a = log + 16#64 then .word nt else
+      if a = log + 8#64 then .word topics else if a = log then .word address else s.memory a}
+      [(log.toNat, 40)] := by
+  have h8 : (log + 8#64).toNat = log.toNat + 8 := by
+    rw [BitVec.toNat_add]
+    change (log.toNat + 8) % 2^64 = _
+    exact Nat.mod_eq_of_lt (by omega)
+  have h16 : (log + 16#64).toNat = log.toNat + 16 := by
+    rw [BitVec.toNat_add]
+    change (log.toNat + 16) % 2^64 = _
+    exact Nat.mod_eq_of_lt (by omega)
+  have he0 := log_growth_store_effect_g09 s log address [(log.toNat, 40)] hma hd0
+    ⟨(log.toNat, 40), by simp, by simp⟩
+  let s0 := {s with memory := fun a => if a = log then .word address else s.memory a}
+  have he8 := log_growth_store_effect_g09 s0 (log + 8#64) topics [(log.toNat, 40)] hma hd8
+    ⟨(log.toNat, 40), by simp, by dsimp only; rw [h8]; omega⟩
+  let s8 := {s0 with memory := fun a => if a = log + 8#64 then .word topics else s0.memory a}
+  have he16 := log_growth_store_effect_g09 s8 (log + 16#64) nt [(log.toNat, 40)] hma hd16
+    ⟨(log.toNat, 40), by simp, by dsimp only; rw [h16]; omega⟩
+  exact (he0.trans he8).trans he16
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
