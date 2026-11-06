@@ -16731,4 +16731,25 @@ theorem journal_stores_counter_backing_resume {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.HeapPotential
+
+/-- Allocation establishes the fresh destination bounds needed by the journal key copy. -/
+theorem journal_alloc_copy_bounds {F : Type}
+    {s cur next : PanSemStateFiniteExact 64 F} {jrec : Ivl} (p n : BitVec 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hc1 : ¬ ((cMax - p).toNat < n.toNat))
+    (hc2 : ¬ (cMax.toNat < ((p + (n + 7)) &&& ((0 : BitVec 64) - 8)).toNat))
+    (hnext : next = {cur with
+      globals := cur.globals.update (ofString "heap_ptr", .val (.word ((p + (n + 7)) &&& ((0 : BitVec 64) - 8)))),
+      locals := next.locals, clock := next.clock}) :
+    WorldEff s next [jrec] [] ["heap_ptr"] ∧
+      globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + n.toNat ≤ heapLimit := by
+  obtain ⟨he, _, _, _, hlo, hadd, hlim, _⟩ := worldEff_alloc_step heff (by simp) hp hc1 hc2 hnext
+  refine ⟨he, hlo, ?_⟩
+  omega
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
