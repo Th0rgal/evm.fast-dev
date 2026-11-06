@@ -17736,4 +17736,49 @@ theorem phase2_message_call_stores_final_bound (h : PtxCallees) {ι : Type} [Non
     (phase2_message_call_stores_table_ready buffers contents names aa ak he)
     (phase2_final_source_bound h buffers contents names aa ak ha hk ht) s hc hp
 
+/-- Account lookup frames readiness before the final table-pointer writes. -/
+theorem phase2_get_account_message_table_ready (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (ha : name ≠ ofString "aa") (hk : name ≠ ofString "ak")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    (hshape : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n) :
+    DecCallResumeOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (PtxMessageTableStoreReady buffers contents names aa ak) name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp he hl hr
+  have hs := phase2_get_account_message_scalar_backing_tables h buffers contents names aa ak name args hm hi hn
+    s vs body callee ret v post hc ⟨⟨hp.1, hp.2.2.1⟩, hp.2.1⟩ he hl hr
+  have hf := phase2_get_account_message_fields h s post vs body callee ret v hc hp.1.1 hl hr
+  have hmp : locN (setVarHOLFinite name v {post with locals := s.locals}) "m" = locN s "m" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hm]
+  refine ⟨hs.1.1, hs.2, hs.1.2, ?_, ?_, ?_, ?_⟩
+  · apply phase2_phase4_shapes_localsOnly s _ post.clock (fun n hmem => ?_) hp.2.2.2.1
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hshape n hmem]
+  · change memW post (_ + 40) < 2 ^ 63
+    rw [hmp, show 40 = 8 * 5 from rfl, hf 5 (by decide)]
+    exact hp.2.2.2.2.1
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ha] using hp.2.2.2.2.2.1
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hk] using hp.2.2.2.2.2.2
+
+theorem phase2_get_account_message_table_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (ha : name ≠ ofString "aa") (hk : name ≠ ofString "ak")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    (hshape : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.decCall name .one (ofString "get_account") args tail) (K.get_account + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := PtxMessageTableStoreReady buffers contents names aa ak) h.fb_get_account
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · exact phase2_get_account_message_table_ready h buffers contents names aa ak name args hm hi ha hk hn hshape
+  · exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
