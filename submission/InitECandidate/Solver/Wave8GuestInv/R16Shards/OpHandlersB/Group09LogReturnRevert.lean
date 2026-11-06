@@ -15884,4 +15884,43 @@ theorem op_log_no_growth_owned_record_g09 {F : Type}
   obtain ⟨hpair, hsep⟩ := op_log_detached_ownership_g09 h0 h8 h16 h24 h32 ht hlog ha hdj
   exact ⟨hv, heq, heq ▸ hpair, heq ▸ hsep⟩
 
+/-- Growing append preserves the validity and separated ownership of its new entry. -/
+theorem op_log_growth_owned_record_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (l p count cap log : BitVec 64)
+    (address topics data nt size : Nat) (objects : List Ivl)
+    (hl : l.toNat + 24 ≤ 2^64)
+    (hp : p.toNat + 8 * count.toNat + 8 ≤ 2^64)
+    (hb : log.toNat + 40 ≤ 2^64)
+    (hheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hbuffer : Disj (log.toNat, 40) (p.toNat, 8 * count.toNat + 8))
+    (hdom : copy.memaddrs = s.memaddrs)
+    (hheap : globN s "heap_ptr" ≤ globN copy "heap_ptr")
+    (hsys : globN copy "vm_system_address" = globN s "vm_system_address")
+    (hrecord : ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW copy (log.toNat + k) = memW s (log.toNat + k))
+    (hvalid : LogEntryOK s log.toNat)
+    (h0 : memW s log.toNat = address)
+    (h8 : memW s (log.toNat + 8) = topics)
+    (h16 : memW s (log.toNat + 16) = nt)
+    (h24 : memW s (log.toNat + 24) = data)
+    (h32 : memW s (log.toNat + 32) = size)
+    (ht : topics + 32 * nt ≤ log.toNat)
+    (hlog : log.toNat + 40 ≤ address)
+    (ha : address + 20 ≤ data)
+    (hdj : IvlsDisj [(log.toNat, 40), (address, 20), (topics, 32 * nt), (data, size)] objects) :
+    let post := {copy with memory := fun a =>
+      if a = p + count * 8#64 then .word log
+      else if a = l + 8#64 then .word (count + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    LogEntryOK post log.toNat ∧
+      logOwnedIvls post log.toNat = logOwnedIvls s log.toNat ∧
+      (logOwnedIvls post log.toNat).Pairwise Disj ∧
+      IvlsDisj (logOwnedIvls post log.toNat) objects := by
+  dsimp only
+  obtain ⟨hv, heq⟩ := log_growth_record_preserved_g09 s copy l p count cap log log.toNat
+    hl hp hb hheader hbuffer hdom hheap hsys hrecord hvalid
+  obtain ⟨hpair, hsep⟩ := op_log_detached_ownership_g09 h0 h8 h16 h24 h32 ht hlog ha hdj
+  exact ⟨hv, heq, heq ▸ hpair, heq ▸ hsep⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
