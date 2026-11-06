@@ -13620,4 +13620,66 @@ theorem log_no_growth_frame_post_from_new_record_g09 {F : Type}
     hd8 hdslot hfields hwords hallocated hslots hmsg hlog_post
   exact ⟨hWF, hbuffer, by rw [hobjects, howned]⟩
 
+/-- Every word contained in an interval separated from the header and used
+buffer prefix survives the two in-place append writes. -/
+theorem log_no_growth_protected_words_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n log : BitVec 64) (o : Ivl)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hb : o.1 + o.2 ≤ 2 ^ 64)
+    (hdheader : Disj o (l.toNat, 24))
+    (hdbuffer : Disj o (p.toNat, 8 * n.toNat + 8)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    ∀ k, k + 8 ≤ o.2 → memW post (o.1 + k) = memW s (o.1 + k) := by
+  dsimp only
+  intro k hk
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  have hnat : (BitVec.ofNat 64 (o.1 + k)).toNat = o.1 + k :=
+    Nat.mod_eq_of_lt (by omega)
+  have hne1 : BitVec.ofNat 64 (o.1 + k) ≠ p + n * 8#64 := by
+    intro heq
+    have heq' := congrArg BitVec.toNat heq
+    rw [hnat, hs] at heq'
+    rcases hdbuffer with h | h | h | h <;> omega
+  have hne2 : BitVec.ofNat 64 (o.1 + k) ≠ l + 8#64 := by
+    intro heq
+    have heq' := congrArg BitVec.toNat heq
+    rw [hnat, hl8] at heq'
+    rcases hdheader with h | h | h | h <;> omega
+  simp only [memW, hne1, hne2, ↓reduceIte]
+
+/-- Separation of frame and continuation records gives all chain-record
+readback facts for the concrete in-place append transition. -/
+theorem log_no_growth_chain_records_preserved_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n log : BitVec 64)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hbounds : ∀ ec ∈ evmChain s, ec.1 + 280 ≤ 2 ^ 64 ∧ ec.2 + 104 ≤ 2 ^ 64)
+    (hheader : ∀ ec ∈ evmChain s,
+      Disj (ec.1, 280) (l.toNat, 24) ∧ Disj (ec.2, 104) (l.toNat, 24))
+    (hbuffer : ∀ ec ∈ evmChain s,
+      Disj (ec.1, 280) (p.toNat, 8 * n.toNat + 8) ∧
+      Disj (ec.2, 104) (p.toNat, 8 * n.toNat + 8)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    ∀ ec ∈ evmChain s,
+      (∀ k, k + 8 ≤ 280 → memW post (ec.1 + k) = memW s (ec.1 + k)) ∧
+      (∀ k, k + 8 ≤ 104 → memW post (ec.2 + k) = memW s (ec.2 + k)) := by
+  dsimp only
+  intro ec hec
+  exact ⟨log_no_growth_protected_words_g09 s l p n log (ec.1, 280)
+    hl hp (hbounds ec hec).1 (hheader ec hec).1 (hbuffer ec hec).1,
+    log_no_growth_protected_words_g09 s l p n log (ec.2, 104)
+    hl hp (hbounds ec hec).2 (hheader ec hec).2 (hbuffer ec hec).2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
