@@ -11693,6 +11693,39 @@ theorem precompile_step_dec_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     · simp only [hsh, Bool.false_eq_true, ↓reduceIte] at hfr
       exact absurd hfr bad
 
+theorem precompile_dec_flows_resumes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : MlS) (shape : ShapeHOL) (init : ExpHOL 64) (body : ProgHOL 64)
+    (hc : ∀ t : PanSemStateFiniteExact 64 F,
+      R13.FlowsOrResumes (evaluateHOLFiniteState t body).1 → Resumes (evaluateHOLFiniteState t body).1)
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.dec name shape init body)).1) :
+    Resumes (evaluateHOLFiniteState s (.dec name shape init body)).1 := by
+  have bad : ¬ R13.FlowsOrResumes (some (.error : PanSemResultExact 64)) := by
+    rintro (h|h|h|⟨⟨_,h⟩|⟨_,_,h,_⟩⟩) <;> cases h
+  rw [evaluateHOLFiniteState_dec_total] at hr ⊢
+  dsimp only at hr ⊢
+  revert hr
+  split
+  · intro hr; exact False.elim (bad hr)
+  · split
+    · intro hr; exact hc _ hr
+    · intro hr; exact False.elim (bad hr)
+
+theorem pre_sha256_body_flows_resumes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hr : R13.FlowsOrResumes
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_pre_sha256)).1) :
+    Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_pre_sha256)).1 := by
+  dsimp only [sourceFnBody,sourceFunctionEntry,Guest.Software.guestFn_pre_sha256,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural] at hr ⊢
+  exact precompile_dec_flows_resumes s _ _ _ _ (fun t ht =>
+    precompile_dec_flows_resumes t _ _ _ _ (fun t ht =>
+      precompile_decCall_flows_resumes t _ _ _ _ _ (fun t ht =>
+        precompile_seq_call0_flows_resumes t _ _ _ (fun t ht =>
+          precompile_decCall_flows_resumes t _ _ _ _ _ (fun t ht =>
+            precompile_seq_call0_flows_resumes t _ _ _ (fun t ht =>
+              precompile_seq_store_flows_resumes t _ _ _ (fun t ht =>
+                precompile_seq_store_flows_resumes t _ _ _ (fun t ht =>
+                  precompile_return_flows_resumes t _ ht) ht) ht) ht) ht) ht) ht) ht) hr
+
 theorem pre_sha256_body_step_of_input_bound {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
     (hpad : globN s "sha_pad" ≠ 0) (hst : globN s "sha_st" ≠ 0)
