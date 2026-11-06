@@ -12385,4 +12385,28 @@ theorem alloc_salt_buffer_sequence_g10 {F : Type}
         simpa [locN, callEntryStateHOLFinite, hn] using hb
   · exact hcont
 
+theorem salt_buffer_disj_headers_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s) (hs : SaltBufferLocal_g10 s) :
+    ∀ ec ∈ evmChain s,
+      Disj (locN s "salt", 32) (ec.1, 280) ∧
+      Disj (locN s "salt", 32) (ec.2, 104) := by
+  obtain ⟨p, hp, _, hb⟩ := hs
+  have hloc : locN s "salt" = p.toNat := by unfold locN; rw [hp]
+  obtain ⟨ha, S, _, _, _, _, hfw, _⟩ := hi
+  have hheap := ha.2.2.1
+  have hframe := ha.2.2.2.1
+  have hscratch := ha.2.2.2.2.1
+  have hlim : heapLimit = scratchStart := rfl
+  intro ec hec
+  have hw := hfw ec hec
+  have he : globN s "scratch_ptr" ≤ ec.1 := (hw.1 (ec.1, 280) (by simp)).1.1
+  have hc : globN s "scratch_ptr" ≤ ec.2 := (hw.1 (ec.2, 104) (by simp)).1.1
+  constructor <;> apply Or.inr ∘ Or.inr ∘ Or.inl
+  · change locN s "salt" + 32 ≤ ec.1
+    rw [hloc]
+    omega
+  · change locN s "salt" + 32 ≤ ec.2
+    rw [hloc]
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
