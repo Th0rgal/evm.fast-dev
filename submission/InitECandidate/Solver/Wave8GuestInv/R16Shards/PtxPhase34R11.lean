@@ -15698,4 +15698,34 @@ theorem htab_get_restored_state {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- The read-only table lookup and both continuation branches preserve backing. -/
+theorem htab_get_guarded_trie_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (args : List (ExpHOL 64)) (cond e : ExpHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "w") (.comb [.one, .one]) (ofString "htab_get") args
+        (.seq (.ite cond (.return e) .skip)
+          (.seq (.call (some (none, none)) (ofString "record_pre_state_read") [.var .local (ofString "addr")])
+            (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+              [.var .local (ofString "addr")] (.return (.var .local (ofString "a"))))))) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨vs, body, callee, ret, rv, cp, u, _, hl, hb, ht, hm⟩ := dec_call_return_inv_args hr
+  have he := htab_get_restored_state s cp vs body callee ret rv hW.1.1.1 hl hb
+  rw [he] at ht
+  have hwc : TxWorld ({s with clock := cp.clock}) :=
+    localsOnly_txWorld s s.locals cp.clock (by intros; rfl) hW
+  have hwr := LocalsOnly.setVar localsOnly_txWorld (name := ofString "w") (by decide) rv _ hwc
+  have htr : WorldTypedWith (setVarHOLFinite (ofString "w") rv {s with clock := cp.clock}) S Nd :=
+    (R13Shards.worldTypedWith_with_locals s (s.locals.update (ofString "w", rv)) cp.clock S Nd).2 hT
+  have hf := guarded_recorded_trie_header_words _ u S Nd v cond e hwr htr ht
+  intro k hk
+  simpa only [memW, hm, globN, setVarHOLFinite] using hf k hk
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
