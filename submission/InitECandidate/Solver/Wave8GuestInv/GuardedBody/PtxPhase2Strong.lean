@@ -16228,4 +16228,40 @@ theorem phase2_record_pre_state_read_saved_tables
     simpa [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact,
       emptyLocalsHOLFinite] using hp
 
+/-- The concrete pre-state-read call restores the outer saved table witness. -/
+theorem phase2_record_pre_state_read_call_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat)
+    (args : List (ExpHOL 64)) :
+    Hoare (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (.call (some (none, none)) (ofString "record_pre_state_read") args)
+      (fun r s => r = none → PtxMessageTables {s with locals := saved} aa ak) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "record_pre_state_read")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16WkAcctWs.lookup_record_pre_state_read] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_record_pre_state_read,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL,
+      InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read) =
+      (some (.returned v), post) at hr
+  have ht := (phase2_record_pre_state_read_saved_tables saved aa ak).run
+    (callEntryStateHOLFinite s callee) hc
+    ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1,
+      phase2_message_tables_with_locals {s with locals := saved} saved (s.clock - 1) hp.2.1 rfl,
+      hp.2.2⟩ (by rw [hr]; simp) (by rw [hr]; exact ⟨v, rfl⟩)
+  rw [hr] at ht
+  exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
