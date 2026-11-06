@@ -8861,4 +8861,49 @@ theorem get_code_return_entry_world_strong {F : Type} (s : PanSemStateFiniteExac
   exact get_code_access_tail_of_world_preloads st S Nd db hash tw h.arena h.world h.db_mem h.table_mem
     h.distinct h.payload h.code h.fit h.key_nonzero h.shape h.ws_nonzero h.ts_nonzero h.hash_local h.ws_load h.ts_load
 
+/-- Lift the concrete strong entry proof through the installed code call. -/
+theorem get_code_call_return_entry_world_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db hash tw : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (h : GetCodeEntryStrong (callEntryStateHOLFinite s callee) S Nd db hash tw)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_code") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40 := by
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "get_code")
+    _ _ body _ ret values callee (by rw [hc]; exact R16WkAcctWs.lookup_get_code) hl
+  subst body
+  exact get_code_return_entry_world_strong _ S Nd db hash tw h v (congrArg Prod.fst hb)
+
+/-- Forward the bounded code-call result through the external-code suffix. -/
+theorem ext_code_tail_of_world_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hentry : ∀ values body callee ret,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+          .var .local (ofString "addr")] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "get_code") values = some (body,callee,ret) →
+      ∃ S Nd db hash tw, GetCodeEntryStrong (callEntryStateHOLFinite s callee) S Nd db hash tw) :
+    Ret s (.decCall (ofString "c") (.comb [.one,.one]) (ofString "get_code")
+      [.load .one (.op .add [.var .local (ofString "a"), .const 48]),
+        .var .local (ofString "addr")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  obtain ⟨S,Nd,db,hash,tw,h⟩ := hentry values body callee ret ha hl
+  obtain ⟨code,code_n,hv,hn⟩ := get_code_call_return_entry_world_strong s values body callee ret v post
+    S Nd db hash tw hc h hl hb
+  subst v
+  have hlocal : (setVarHOLFinite (ofString "c")
+      (.rStruct [.val (.word code), .val (.word code_n)]) {post with locals := s.locals}).locals.lookup
+      (ofString "c") = some (.rStruct [.val (.word code), .val (.word code_n)]) := by
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  intro w hw
+  obtain ⟨hv,hn,_⟩ := ext_code_of_tail_return _ code code_n hlocal hn w hw
+  exact ⟨code,code_n,hv,hn⟩
+
 end HeadStore
