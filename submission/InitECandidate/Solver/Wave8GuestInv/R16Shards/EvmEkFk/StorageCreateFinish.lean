@@ -67,6 +67,18 @@ theorem witnessSliceOK_with_locals_clock {F : Type} {s : PanSemStateFiniteExact 
     (L : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
     WitnessSliceOK { s with locals := L, clock := k } v := h
 
+theorem witnessDbOK_with_locals_clock {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : WitnessDbOK s) (L : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    WitnessDbOK { s with locals := L, clock := k } := by
+  obtain ⟨S, Nd, hWT, hDb⟩ := h
+  refine ⟨S, Nd, (WkBal.worldTypedWith_with_locals s L k S Nd).2 hWT, ?_⟩
+  intro hws
+  dsimp only
+  intro hnz
+  obtain ⟨hwf, hk, hfp, hd, hvals⟩ := hDb hws hnz
+  exact ⟨(htabWF_with_locals s L k _).2 hwf, hk, hfp, hd,
+    fun v hv => ⟨witnessSliceOK_with_locals_clock (hvals v hv).1 L k, (hvals v hv).2⟩⟩
+
 theorem witnessSliceOK_subslice {F : Type} {s : PanSemStateFiniteExact 64 F}
     {v p n : Nat} (h : WitnessSliceOK s v)
     (hp : memW s v ≤ p) (hn : p + n ≤ memW s v + memW s (v + 8)) :
@@ -9371,14 +9383,7 @@ theorem nodedb_lookup_ret_evm_witness_so {F : Type}
     exact evmStep_with_locals_clock (evmStep_refl_gw hInv) _ _
   refine ⟨hstep, ?_, found, p, n, hrv, ?_⟩
   · rw [heff]
-    obtain ⟨S, Nd, hWT, hDb⟩ := hW
-    refine ⟨S, Nd, (WkBal.worldTypedWith_with_locals s _ _ S Nd).2 hWT, ?_⟩
-    intro hws'
-    dsimp only
-    intro hnz'
-    obtain ⟨hwf, hk, hfp, hd, hvals⟩ := hDb hws' hnz'
-    exact ⟨(htabWF_with_locals s _ _ _).2 hwf, hk, hfp, hd,
-      fun v hv => ⟨witnessSliceOK_with_locals_clock (hvals v hv).1 _ _, (hvals v hv).2⟩⟩
+    exact witnessDbOK_with_locals_clock hW _ _
   · rw [heff]
     exact hb
 
