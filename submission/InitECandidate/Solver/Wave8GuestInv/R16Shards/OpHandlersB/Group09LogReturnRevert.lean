@@ -17251,4 +17251,112 @@ theorem op_log_no_growth_invariant_from_store_world_g09 {F : Type}
     hh.1 hh.2.1 hh.2.2 hlog hdheader hdbuffer hnewMsg hold hnew hnewOld holdWorld
     (hnewWorld Nd hWT) hcell hfields hcont hheaders hslots hreads
 
+/-- Concrete store-world preservation feeds the in-place execution postcondition. -/
+theorem op_log_no_growth_execution_from_store_world_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (head : Ivl) (tail : List Ivl) (S : List Nat)
+    (e l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hpw : (frameObjects s head).Pairwise Disj)
+    (hcons : evmChain s = head :: tail)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hnonnull : l.toNat ≠ 0) (hlt : n.toNat < cap.toNat)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hlog : LogEntryOK s log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8))
+    (hnewMsg : ∀ ec ∈ evmChain s, ∀ o ∈ logOwnedIvls s log.toNat,
+      Disj (memW s (ec.1 + 112), 176) o)
+    (hnew : (logOwnedIvls s log.toNat).Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (logOwnedIvls s log.toNat))
+    (hnewWorld : ∀ Nd, WorldTypedWith s S Nd →
+      IvlsDisj (logOwnedIvls s log.toNat) (worldOwned s S Nd))
+    (hprotected : ∀ ec ∈ evmChain s, ∀ o ∈ ([(ec.1, 280), (ec.2, 104)] : List Ivl),
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8))
+    (htail : ∀ ec ∈ tail, ∀ o ∈ ([(memW s (ec.1 + 88), 24),
+        (memW s (memW s (ec.1 + 88)), 8 * memW s (memW s (ec.1 + 88) + 8))] : List Ivl),
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8))
+    (hrecords : ∀ ec ∈ tail, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let o := (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40)
+      o.1 + o.2 ≤ 2^64 ∧ Disj o (l.toNat, 24) ∧ Disj o (p.toNat, 8 * n.toNat + 8))
+    (hclock : s.clock ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hd0 : s.memaddrs l) (hd16 : s.memaddrs (l + 16#64))
+    (hm0w : s.memory l = .word p) (hm8w : s.memory (l + 8#64) = .word n)
+    (hm16w : s.memory (l + 16#64) = .word cap)
+    (hne : l ≠ l + 8#64) (hHM : HeadMemAligned s) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append)
+    out.1 = some (.returned (.val (.word 0))) ∧
+      EvmInv out.2 ∧ evmR out.2 = evmR s ∧ HeadMemAligned out.2 := by
+  have hm : head ∈ evmChain s := by rw [hcons]; exact List.mem_cons_self
+  obtain ⟨_, _, hFW, _, _⟩ := op_log_old_ownership_g09 hinv
+  obtain ⟨_, _, hlb, hpb⟩ :=
+    op_log_no_growth_store_bounds_g09 l p n cap hA (hFW head hm) hl hm0 hm16 hlt
+  obtain ⟨hfields, hcont, hheaders, hslots, hreads⟩ :=
+    op_log_no_growth_readback_g09 s tail l p n log hlb hpb hprotected htail hrecords
+  have hi := op_log_no_growth_invariant_from_store_world_g09 s head tail S l p n cap log
+    hA hinv hpw hcons hl hn hm0 hm16 hnonnull hlt hdisj hd8 hdslot hlog hdheader
+    hdbuffer hnewMsg hnew hnewOld hnewWorld hprotected htail hrecords
+  exact op_log_no_growth_execution_of_invariant_g09 s e log l n cap p S
+    hA hA.1.code hclock he hlg hde hme hd0 hd8 hd16 hm0w hm8w hm16w hlt hne hdslot hHM
+    hi hfields hcont
+
+/-- The growing copy followed by all four append stores preserves the input typed world. -/
+theorem op_log_growth_copy_stores_world_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (S : List Nat) (head : Ivl)
+    (l p n cap q log : BitVec 64)
+    (hA : ArenaReady s) (hinv : EvmInvAt s S) (hm : head ∈ evmChain s)
+    (hl : memW s (head.1 + 88) = l.toNat)
+    (hfresh : globN s "heap_ptr" ≤ p.toNat)
+    (hq : q.toNat ≤ globN s "scratch_ptr")
+    (hslot : p.toNat + 8 * n.toNat + 8 ≤ q.toNat)
+    (heff : ByteRegionEffect s copy [(p.toNat, q.toNat - p.toNat)])
+    (hd0 : copy.memaddrs l) (hd8 : copy.memaddrs (l + 8#64))
+    (hd16 : copy.memaddrs (l + 16#64)) (hds : copy.memaddrs (p + n * 8#64))
+    (hlb : l.toNat + 24 ≤ 2^64) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then HolWordLab.word p else copy.memory a}
+    ∃ Nd, WorldTypedWith s S Nd ∧ SameTypedCells s post S Nd ∧
+      (∀ ec ∈ evmChain s, FrameWF s S ec) ∧
+      ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj ∧
+      IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd) := by
+  dsimp only
+  let writes : List Ivl := [(p.toNat, q.toNat - p.toNat), (l.toNat, 24)]
+  have hc : ByteRegionEffect s copy writes := heff.mono (by
+    intro i hi
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact ⟨_, by simp [writes], le_refl _, le_refl _⟩)
+  have hs := log_growth_final_effect_g09 copy l p n cap log
+    (heff.memaddrs.trans hA.1.memaddrs) hd0 hd8 hd16 hds hlb (by have := q.isLt; omega)
+  have hs' : ByteRegionEffect copy _ writes := hs.mono (by
+    intro i hi
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl
+    · exact ⟨(l.toNat, 24), by simp [writes], le_refl _, le_refl _⟩
+    · refine ⟨(p.toNat, q.toNat - p.toNat), by simp [writes], le_refl _, ?_⟩
+      dsimp only
+      omega)
+  apply op_log_append_world_witness_g09 (fresh := [(p.toNat, q.toNat - p.toNat)])
+    (headerWrites := [(l.toNat, 24)]) hA hinv
+  · intro x hx
+    simp only [List.mem_singleton] at hx
+    subst x
+    exact ⟨hfresh, by dsimp only; omega⟩
+  · intro x hx
+    simp only [List.mem_singleton] at hx
+    subst x
+    apply List.mem_flatten.2
+    refine ⟨frameObjects s head, List.mem_map.2 ⟨head, hm, rfl⟩, ?_⟩
+    simp [frameObjects, hl]
+  · exact hc.trans hs'
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

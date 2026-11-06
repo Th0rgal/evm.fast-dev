@@ -8917,6 +8917,37 @@ theorem precompile_seq_while_flows_right {F : Type}
     · exact False.elim ((precompile_while_no_loop_control s cond body).2 h)
     · exact False.elim (precompile_while_not_resumes cond body hb s h)
 
+theorem precompile_while_not_resumes_code {F : Type}
+    (cond : ExpHOL 64) (body : ProgHOL 64)
+    (hb : ∀ t : PanSemStateFiniteExact 64 F, t.code = originalRuntimeCode →
+      ¬ Resumes (evaluateHOLFiniteState t body).1)
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode) :
+    ¬ Resumes (evaluateHOLFiniteState s (.while cond body)).1 := by
+  rw [evaluateHOLFiniteState_while_total]
+  split
+  · split
+    · split
+      · simp [Resumes]
+      · dsimp only
+        rw [fixClockHOLFinite_evaluateState]
+        have hn := hb (decClockHOLFinite s) hc
+        have hmeta := evaluateHOLFiniteState_metadata (decClockHOLFinite s) body
+        have hle := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+        rcases run : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r,m⟩
+        rw [run] at hn hle hmeta
+        have hlt : m.clock < s.clock := by
+          change m.clock ≤ s.clock - 1 at hle
+          omega
+        cases r with
+        | none => exact precompile_while_not_resumes_code cond body hb m (hmeta.1.trans hc)
+        | some r =>
+          cases r with
+          | «continue» => exact precompile_while_not_resumes_code cond body hb m (hmeta.1.trans hc)
+          | _ => simpa [Resumes] using hn
+    · simp [Resumes]
+  · simp [Resumes]
+termination_by s.clock
+
 theorem precompile_memzero_null_128 {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hi : GuestInv s)
     (hp : s.locals.lookup (ofString "dst") = some (.val (.word 0)))
@@ -9304,6 +9335,31 @@ theorem precompile_sha256_block_call_not_resumes {F : Type}
     subst he
     decide
 
+theorem precompile_sha256_blocks_body_not_resumes {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode) :
+    ¬ Resumes (evaluateHOLFiniteState s
+      (.seq (.call (some (none,none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"),.var .local (ofString "i")]])
+        (.assign .local (ofString "i")
+          (.op .add [.var .local (ofString "i"),.const 64])))).1 := by
+  have hn := precompile_sha256_block_call_not_resumes s
+    [.var .global (ofString "sha_st"),
+      .op .add [.var .local (ofString "p"),.var .local (ofString "i")]] hc
+  rw [evaluateHOLFiniteState_seq_line780]
+  rcases run : evaluateHOLFiniteState s
+      (.call (some (none,none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"),.var .local (ofString "i")]]) with ⟨r,m⟩
+  cases r with
+  | none =>
+    dsimp only
+    rw [evaluateHOLFiniteState_assign]
+    split
+    · simp [Resumes]
+    · split <;> simp [Resumes]
+  | some r => simpa only [run] using hn
+
 theorem precompile_sha256_block_call_effect {F : Type}
     (s : PanSemStateFiniteExact 64 F) (stp : BitVec 64) (ptr block : ExpHOL 64)
     (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
@@ -9507,14 +9563,6 @@ theorem precompile_sha256_loop_exit_padding_nonzero {F : Type}
     (init : ExpHOL 64) (cont : ProgHOL 64) (hi : GuestInv s)
     (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
     (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
-    (hloop : (evaluateHOLFiniteState s
-      (.while (.cmp .notLower (.var .local (ofString "len"))
-        (.op .add [.var .local (ofString "i"),.const 64]))
-        (.seq (.call (some (none,none)) (ofString "sha256_block")
-          [.var .global (ofString "sha_st"),
-            .op .add [.var .local (ofString "p"),.var .local (ofString "i")]])
-          (.assign .local (ofString "i")
-            (.op .add [.var .local (ofString "i"),.const 64]))))).1 = none)
     (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s
       (.seq (.while (.cmp .notLower (.var .local (ofString "len"))
         (.op .add [.var .local (ofString "i"),.const 64]))
@@ -9548,6 +9596,21 @@ theorem precompile_sha256_loop_exit_padding_nonzero {F : Type}
       (fun m hm => R10Shards.P26_P28.byteEff_assign_local m (ofString "i")
         (.op .add [.var .local (ofString "i"),.const 64]) _)
     exact ⟨hes,fun _ => by rw [hes.globals]; exact hpt⟩
+  have hloop : (evaluateHOLFiniteState s
+      (.while (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"),.const 64]))
+        (.seq (.call (some (none,none)) (ofString "sha256_block")
+          [.var .global (ofString "sha_st"),
+            .op .add [.var .local (ofString "p"),.var .local (ofString "i")]])
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"),.const 64]))))).1 = none := by
+    rcases precompile_seq_flow_cases s _ _ hr with h | h
+    · exact h.1
+    · rcases h with h | h | h
+      · exact False.elim ((precompile_while_no_loop_control s _ _).1 h)
+      · exact False.elim ((precompile_while_no_loop_control s _ _).2 h)
+      · exact False.elim (precompile_while_not_resumes_code _ _
+          (fun t ht => precompile_sha256_blocks_body_not_resumes t ht) s hi.code h)
   rw [evaluateHOLFiniteState_seq_line780] at hr
   dsimp only at hr
   rw [hloop] at hr
