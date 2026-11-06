@@ -17471,4 +17471,28 @@ theorem jset_journal_cut_backing_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- A declaration restores only locals, so a replacement body's memory predicate survives. -/
+theorem dec_return_replace_tail_memory {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {nm : MlS} {init : ExpHOL 64}
+    {body : ProgHOL 64} {rv : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.dec nm .one init body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (P : (BitVec 64 → HolWordLab 64) → Prop)
+    (hbody : ∀ w mid,
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) init = some (.val (.word w)) →
+      evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body = (some (.returned rv), mid) →
+      ∃ mid', evaluateHOLFiniteState (setVarHOLFinite nm (.val (.word w)) s) body' = (some (.returned rv'), mid') ∧ P mid'.memory) :
+    ∃ post', evaluateHOLFiniteState s (.dec nm .one init body') = (some (.returned rv'), post') ∧ P post'.memory := by
+  obtain ⟨w, he, mid, hb, _⟩ := dec_ret_inv h
+  obtain ⟨mid', hb', hP⟩ := hbody w mid he hb
+  refine ⟨{mid' with locals := HolFiniteMapExact.resVarEq mid'.locals (nm, s.locals.lookup nm)}, ?_, hP⟩
+  rw [evaluateHOLFiniteState_dec_total]
+  simp only [he]
+  simp [shapeEqHOL, shapeOfHOLExact, hb']
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
