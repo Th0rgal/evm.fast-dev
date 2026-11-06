@@ -10443,6 +10443,62 @@ theorem precompile_while_normal_exit {F : Type}
     split at hr <;> simp_all
 termination_by s.clock
 
+theorem precompile_call0_ne_break {F : Type} (u : PanSemStateFiniteExact 64 F)
+    (fn : MlS) (args : List (ExpHOL 64)) :
+    (evaluateHOLFiniteState u (.call (some (none, none)) fn args)).1 ≠ some .break := by
+  rw [evaluateHOLFiniteState_call]
+  rcases evalListHOLFinite u (h := fun a => Classical.propDecidable (u.memaddrs a)) args with _ | vals
+  · simp
+  · dsimp only
+    rcases lookupCodeHOLFinite u.code.lookup fn vals with _ | ⟨body, callee, ret⟩
+    · simp
+    · dsimp only
+      by_cases hk : u.clock = 0
+      · rw [if_pos hk]; simp
+      · rw [if_neg hk]
+        rcases evaluateHOLFiniteState (callEntryStateHOLFinite u callee) body with ⟨r, st⟩
+        cases r with
+        | none => simp
+        | some r1 =>
+          cases r1 with
+          | returned rv => dsimp only; split <;> simp
+          | _ => simp
+
+theorem precompile_sha256_blocks_body_control {F : Type}
+    (s : PanSemStateFiniteExact 64 F) :
+    let body := ProgHOL.seq
+      (.call (some (none, none)) (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]])
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 64]))
+    (evaluateHOLFiniteState s body).1 ≠ some .break ∧
+      (evaluateHOLFiniteState s body).1 ≠ some .continue := by
+  dsimp only
+  have hc := precompile_call0_ne_continue s (ofString "sha256_block")
+    [.var .global (ofString "sha_st"),
+      .op .add [.var .local (ofString "p"), .var .local (ofString "i")]]
+  rw [evaluateHOLFiniteState_seq_line780]
+  rcases run : evaluateHOLFiniteState s
+    (.call (some (none, none)) (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"), .var .local (ofString "i")]]) with ⟨r,m⟩
+  cases r with
+  | none =>
+    dsimp only
+    rw [evaluateHOLFiniteState_assign]
+    split
+    · simp
+    · split <;> simp
+  | some r =>
+    dsimp only
+    rw [run] at hc
+    constructor
+    · have hn := precompile_call0_ne_break s (ofString "sha256_block")
+        [.var .global (ofString "sha_st"),
+          .op .add [.var .local (ofString "p"), .var .local (ofString "i")]]
+      simpa only [run] using hn
+    · exact hc
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
