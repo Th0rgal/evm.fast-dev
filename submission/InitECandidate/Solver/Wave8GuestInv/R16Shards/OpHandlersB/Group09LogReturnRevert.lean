@@ -15656,4 +15656,55 @@ theorem op_log_record_preserved_by_copy_g09 {F : Type}
     exact ⟨(wordsOK_congr_of_dom_g09 he.memaddrs).2 hok.1, hok.2⟩
   · simp only [logOwnedIvls, logRecordIvls, h0,h8,h16,h24,h32,hg]
 
+/-- The final construction stores establish a valid log record directly. -/
+theorem op_log_data_stores_valid_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (log address topics data nt n : BitVec 64)
+    (hb : log.toNat + 40 ≤ 2^64) (hwords : WordsOK s (log.toNat, 40))
+    (hl : sourceBase ≤ log.toNat) (hlend : log.toNat + 40 ≤ globN s "heap_ptr")
+    (ha : sourceBase ≤ address.toNat) (haend : address.toNat + 20 ≤ globN s "heap_ptr")
+    (ht : sourceBase ≤ topics.toNat) (htend : topics.toNat + 32 * nt.toNat ≤ globN s "heap_ptr")
+    (hd : sourceBase ≤ data.toNat) (hdend : data.toNat + n.toNat ≤ globN s "heap_ptr")
+    (hnt : nt.toNat ≤ 4) (hn : n.toNat < 2^32)
+    (h0 : memW s log.toNat = address.toNat)
+    (h8 : memW s (log.toNat + 8) = topics.toNat)
+    (h16 : memW s (log.toNat + 16) = nt.toNat) :
+    let post := {s with memory := fun a => if a = log + 32#64 then .word n else
+      if a = log + 24#64 then .word data else s.memory a}
+    LogEntryOK post log.toNat := by
+  dsimp only
+  let post := {s with memory := fun a => if a = log + 32#64 then .word n else
+    if a = log + 24#64 then .word data else s.memory a}
+  have hoff : ∀ k : Nat, k < 40 → (log + BitVec.ofNat 64 k).toNat = log.toNat + k := by
+    intro k hk
+    rw [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)]
+  have hne : ∀ a b : Nat, a < 40 → b < 40 → a ≠ b →
+      BitVec.ofNat 64 (log.toNat + a) ≠ log + BitVec.ofNat 64 b := by
+    intro a b ha hb' hab he
+    have ht := congrArg BitVec.toNat he
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega), hoff b hb'] at ht
+    omega
+  have h24 := hoff 24 (by omega)
+  have h32 := hoff 32 (by omega)
+  apply op_log_record_valid_g09 post log address topics data nt n
+    ((wordsOK_congr_of_dom_g09 (s := s) (post := post) rfl).2 hwords)
+    hl hlend ha haend ht htend hd hdend hnt hn
+  · have he32 := hne 0 32 (by omega) (by omega) (by omega)
+    have he24 := hne 0 24 (by omega) (by omega) (by omega)
+    simp only [Nat.add_zero] at he32 he24
+    simpa only [post, memW, if_neg he32, if_neg he24] using h0
+  · simpa only [post, memW, if_neg (hne 8 32 (by omega) (by omega) (by omega)),
+      if_neg (hne 8 24 (by omega) (by omega) (by omega))] using h8
+  · simpa only [post, memW, if_neg (hne 16 32 (by omega) (by omega) (by omega)),
+      if_neg (hne 16 24 (by omega) (by omega) (by omega))] using h16
+  · change memW post (log.toNat + 24) = data.toNat
+    rw [← h24]
+    simp only [memW, BitVec.ofNat_toNat]
+    have hne' : log + 24#64 ≠ log + 32#64 := by
+      intro he; have := congrArg BitVec.toNat he; rw [h24,h32] at this; omega
+    simp [post, hne']
+  · change memW post (log.toNat + 32) = n.toNat
+    rw [← h32]
+    simp only [memW, BitVec.ofNat_toNat]
+    simp [post]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
