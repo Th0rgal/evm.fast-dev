@@ -16750,4 +16750,51 @@ theorem phase2_get_account_saved_tables
         cases hv
   · exact phase2_return_saved_tables saved aa ak _
 
+/-- Full account lookup restores private tables in an arbitrary saved environment. -/
+theorem phase2_get_account_resume_saved_tables
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat)
+    (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => PtxMessageTables {s with locals := saved} aa ak)
+      name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "get_account")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_get_account] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_get_account,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL,
+      InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account) =
+      (some (.returned v), post) at hr
+  have ht := (phase2_get_account_saved_tables saved aa ak).run
+    (callEntryStateHOLFinite s callee) hc
+    ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1,
+      phase2_message_tables_with_locals {s with locals := saved} saved (s.clock - 1) hp.2.1 rfl,
+      hp.2.2⟩ (by rw [hr]; simp) (by rw [hr]; exact ⟨v, rfl⟩)
+  rw [hr] at ht
+  exact ht
+
+/-- Full account lookup preserves caller-private tables when binding a non-message result. -/
+theorem phase2_get_account_resume_message_tables
+    (aa ak : Nat) (name : MlS) (hne : name ≠ ofString "m") (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+      Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => PtxMessageTables s aa ak) name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have ht := phase2_get_account_resume_saved_tables s.locals aa ak name args
+    s vs body callee ret v post hc hp ha hl hr
+  exact phase2_message_tables_with_locals {post with locals := s.locals} _ post.clock ht
+    (by simp [HolFiniteMapExact.update, FUPDATE, hne])
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
