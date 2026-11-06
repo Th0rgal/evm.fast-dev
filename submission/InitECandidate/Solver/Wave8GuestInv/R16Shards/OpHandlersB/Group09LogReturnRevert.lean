@@ -14050,6 +14050,43 @@ theorem log_no_growth_tail_objects_of_separation_g09 {F : Type}
       (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40)
       hl hp hr.1 hr.2.1 hr.2.2 k hkbound
 
+/-- Continuation readback suffices to preserve the active chain. -/
+theorem log_chainFrom_of_cont_readback_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (fuel e c : Nat)
+    (hread : ∀ ec ∈ evmChainFrom s fuel e c, ∀ k, k + 8 ≤ 104 →
+      memW post (ec.2 + k) = memW s (ec.2 + k)) :
+    evmChainFrom post fuel e c = evmChainFrom s fuel e c := by
+  induction fuel generalizing e c with
+  | zero => rfl
+  | succ fuel ih =>
+    have hc : (e, c) ∈ evmChainFrom s (fuel + 1) e c := by
+      simp only [evmChainFrom, List.mem_cons, true_or]
+    have h0 := hread (e, c) hc 0 (by omega)
+    have h8 := hread (e, c) hc 8 (by omega)
+    have h16 := hread (e, c) hc 16 (by omega)
+    simp only [Nat.add_zero] at h0 h8 h16
+    simp only [evmChainFrom, h16, h0, h8]
+    split
+    · rfl
+    · rename_i hn
+      congr 1
+      apply ih
+      intro ec hec k hk
+      apply hread ec _ k hk
+      simp only [evmChainFrom, hn, ite_false, List.mem_cons]
+      exact Or.inr hec
+
+theorem log_chain_of_cont_readback_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hev : globN post "ev" = globN s "ev")
+    (hc : globN post "cur_cont" = globN s "cur_cont")
+    (hread : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 →
+      memW post (ec.2 + k) = memW s (ec.2 + k)) :
+    evmChain post = evmChain s := by
+  unfold evmChain at *
+  rw [hev, hc]
+  exact log_chainFrom_of_cont_readback_g09 _ _ _ hread
+
 /-- Concrete in-place stores preserve the invariant, potential and head-memory
 alignment once the head append and unchanged tail have been reconstructed. -/
 theorem log_no_growth_handler_post_g09 {F : Type}
@@ -14078,14 +14115,13 @@ theorem log_no_growth_handler_post_g09 {F : Type}
     let post := {s with memory := fun a =>
       if a = p + n * 8#64 then .word log
       else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
-    evmChain post = evmChain s →
     (∀ ec ∈ evmChain s, FrameWF post S ec) →
     frameObjects post head = frameObjects s head ++ newObjects →
     (∀ ec ∈ tail, frameObjects post ec = frameObjects s ec) →
     (∀ ec ∈ tail, frameLogs post ec = frameLogs s ec) →
     EvmInv post ∧ evmR post = evmR s ∧ HeadMemAligned post := by
   dsimp only
-  intro hchain hframes hhead htail hlogs
+  intro hframes hhead htail hlogs
   have hAp : ArenaReady {s with memory := fun a =>
       if a = p + n * 8#64 then .word log
       else if a = l + 8#64 then .word (n + 1#64) else s.memory a} :=
@@ -14095,6 +14131,11 @@ theorem log_no_growth_handler_post_g09 {F : Type}
     hAs.1.memaddrs hWT hd8 hdslot hl hp hlt hheaderWorld hbufferWorld
   have hrecords := log_no_growth_chain_records_preserved_g09 s l p n log
     hl (by omega) hbounds hheader hbuffer
+  have hchain := log_chain_of_cont_readback_g09 (s := s)
+    (post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}) rfl rfl
+    (fun ec hec k hk => (hrecords ec hec).2 k hk)
   have hinv_post := evmInvAt_of_log_no_growth_new_objects_g09 hAs hAp hinv hWT
     rfl hcell hchain hcons
     (fun ec hec k hk _ => (hrecords ec hec).1 k hk)
