@@ -11559,4 +11559,26 @@ theorem laContents_array_aligned {F : Type} {s u : PanSemStateFiniteExact 64 F}
   have heq : old = arr := by have he := hold.symm.trans hm; cases he; rfl
   simpa only [heq] using ha8
 
+/-- A child source cell separated from the parent's original array and header
+survives every append iteration, whether it lies in old heap or scratch. -/
+theorem laInv_source_memW {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 cap0 n0 nc : BitVec 64} {a : Nat}
+    (h : LAInv s L arr0 cap0 n0 nc u) (hab : a < 2 ^ 64)
+    (harr : ¬ CellHits a (arr0.toNat, 8 * cap0.toNat))
+    (hregion : a + 8 ≤ globN s "heap_ptr" ∨ heapLimit ≤ a)
+    (h0 : BitVec.ofNat 64 a ≠ L) (h8 : BitVec.ofNat 64 a ≠ L + 8)
+    (h16 : BitVec.ofNat 64 a ≠ L + 16) : memW u a = memW s a := by
+  obtain ⟨_, _, hA, _, hh, _, _, _, _, _, _, _, _, _, _, _, _, _, hfr⟩ := h
+  have hheap : globN u "heap_ptr" ≤ 2952790016 := hA.2.2.1
+  have hnot : ¬ CellHits a (globN s "heap_ptr", globN u "heap_ptr" - globN s "heap_ptr") := by
+    unfold CellHits
+    dsimp only
+    rcases hregion with hregion | hregion
+    · omega
+    · change 2952790016 ≤ a at hregion
+      omega
+  unfold memW
+  rw [hfr.2 _ (by simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using harr)
+    (by simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hnot) h0 h8 h16]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
