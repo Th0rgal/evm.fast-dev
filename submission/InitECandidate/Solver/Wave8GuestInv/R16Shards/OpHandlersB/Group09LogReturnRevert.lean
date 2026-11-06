@@ -15707,4 +15707,57 @@ theorem op_log_data_stores_valid_g09 {F : Type} (s : PanSemStateFiniteExact 64 F
     simp only [memW, BitVec.ofNat_toNat]
     simp [post]
 
+/-- The concrete final stores deliver a valid detached entry to log_append. -/
+theorem op_log_valid_data_tail_step_g09 {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (log address topics data nt n : BitVec 64) (cont : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hw : EvmInvWith s S Nd)
+    (hl : (evmChain s).length = (evmChain s0).length) (hr : evmR s < evmR s0)
+    (hlog : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hdata : s.locals.lookup (ofString "data") = some (.val (.word data)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hb : log.toNat + 40 ≤ 2^64) (hwords : WordsOK s (log.toNat, 40))
+    (hlo : sourceBase ≤ log.toNat) (hlend : log.toNat + 40 ≤ globN s "heap_ptr")
+    (ha : sourceBase ≤ address.toNat) (haend : address.toNat + 20 ≤ globN s "heap_ptr")
+    (ht : sourceBase ≤ topics.toNat) (htend : topics.toNat + 32 * nt.toNat ≤ globN s "heap_ptr")
+    (hd : sourceBase ≤ data.toNat) (hdend : data.toNat + n.toNat ≤ globN s "heap_ptr")
+    (hnt4 : nt.toNat ≤ 4) (hnb : n.toNat < 2^32)
+    (h0 : memW s log.toNat = address.toNat)
+    (h8 : memW s (log.toNat + 8) = topics.toNat)
+    (h16 : memW s (log.toNat + 16) = nt.toNat)
+    (hd24 : s.memaddrs (log + 24#64)) (hd32 : s.memaddrs (log + 32#64))
+    (hdj : IvlsDisj [(log.toNat, 40)]
+      (worldTypedIvls s S Nd ++ ((evmChain s).map (frameObjects s)).flatten))
+    (hcont : ∀ last : PanSemStateFiniteExact 64 F,
+      last.code = originalRuntimeCode → EvmInvWith last S Nd →
+      (evmChain last).length = (evmChain s0).length → evmR last < evmR s0 →
+      ByteRegionEffect s last [(log.toNat, 40)] → last.locals = s.locals →
+      LogEntryOK last log.toNat →
+      (HeadMemAligned s → HeadMemAligned last) →
+      (evaluateHOLFiniteState last cont).1 ≠ some .timeOut →
+      OpDispatchPost s0 (evaluateHOLFiniteState last cont).1 (evaluateHOLFiniteState last cont).2)
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.store (.op .add [.var .local (ofString "log"), .const 24]) (.var .local (ofString "data")))
+        (.seq (.store (.op .add [.var .local (ofString "log"), .const 32]) (.var .local (ofString "n"))) cont))).1 ≠ some .timeOut) :
+    OpDispatchPost s0
+      (evaluateHOLFiniteState s (.seq
+        (.store (.op .add [.var .local (ofString "log"), .const 24]) (.var .local (ofString "data")))
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 32]) (.var .local (ofString "n"))) cont))).1
+      (evaluateHOLFiniteState s (.seq
+        (.store (.op .add [.var .local (ofString "log"), .const 24]) (.var .local (ofString "data")))
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 32]) (.var .local (ofString "n"))) cont))).2 := by
+  apply op_log_data_tail_step_g09 log data n cont hc hw hl hr hlog hdata hn hb hd24 hd32 hdj
+  · intro last hcL hwL hlL hrL he hlocals hmemory hHM hnL
+    have hv := op_log_data_stores_valid_g09 s log address topics data nt n
+      hb hwords hlo hlend ha haend ht htend hd hdend hnt4 hnb h0 h8 h16
+    let stores := {s with memory := fun a => if a = log + 32#64 then .word n else
+      if a = log + 24#64 then .word data else s.memory a}
+    have hvL : LogEntryOK last log.toNat := by
+      apply logEntryOK_of_record_agree_g09 (s := stores) (post := last)
+        he.memaddrs (by simp only [stores, globN, he.globals]; exact Nat.le_refl _) _ hv
+      intro k hk
+      simp only [memW, hmemory, stores]
+    exact hcont last hcL hwL hlL hrL he hlocals hvL hHM hnL
+  · exact hnt
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
