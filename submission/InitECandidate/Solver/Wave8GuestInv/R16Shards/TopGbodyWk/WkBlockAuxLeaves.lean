@@ -10108,4 +10108,66 @@ theorem merge_ts_outer_kept_trans {F : Type}
       memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) :=
   ⟨h2.1.trans h1.1, h2.2.trans h1.2⟩
 
+/-- Selected insertion followed by inner union preserves the transaction root. -/
+theorem eval_merge_set_then_union_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek src : ExpHOL 64)
+    (tw kw iw : BitVec 64) (S Nd : List Nat)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "binner") = some (.val (.word iw)))
+    (hc : s.code = originalRuntimeCode)
+    (hA : ArenaReady s) (hw : WorldTypedWith s S Nd)
+    (htS : tw.toNat ∈ S) (hiS : iw.toNat ∈ S)
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hkey : hdr s iw.toNat 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ iw.toNat)
+    (hts : globN s "ts" ≠ 0)
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, .var .local (ofString "binner")])
+      (.call (some (none, none)) (ofString "htab_union_into") [.var .local (ofString "binner"), src]))).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, .var .local (ofString "binner")])
+      (.call (some (none, none)) (ofString "htab_union_into") [.var .local (ofString "binner"), src]))).1) :
+    let post := (evaluateHOLFiniteState s (.seq
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, .var .local (ofString "binner")])
+      (.call (some (none, none)) (ofString "htab_union_into") [.var .local (ofString "binner"), src]))).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  have hiv : evalAt s (.var .local (ofString "binner")) = some (.val (.word iw)) := by
+    simpa [evalAt, evalHOLExact] using hi
+  dsimp only
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases he : evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")]) with ⟨r, mid⟩
+  simp only [he] at hnt hfr ⊢
+  cases r with
+  | none =>
+    have hflow : FlowingOrResumes (evaluateHOLFiniteState s
+        (.call (some (none, none)) (ofString "htab_set")
+          [et, ek, .var .local (ofString "binner")])).1 := by
+      rw [he]; exact Or.inl rfl
+    have hs := merge_set_call_worldStepIn s et ek _ tw kw iw S Nd ht hk hiv
+      hA hw htS hbs ht0 htbs hkey hf hflow
+    have hp := merge_set_call_union_entry_with s et ek tw kw iw S Nd ht hk hi
+      hA hw htS hiS hbs ht0 htbs hkey hf hflow
+    rw [he] at hs hp
+    have hcm := (PanRunBounded.evaluateHOLFiniteState_metadata s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).1
+    rw [he] at hcm
+    have hfirst := merge_heap_stepIn_ts_outer_kept hts hs.1
+    have hsecond := eval_call_union_bs_inner mid src (hcm.trans hc)
+      hp.1 hp.2.2.1 hp.2.2.2.1 hp.2.2.2.2 hnt hfr
+    exact merge_ts_outer_kept_trans hfirst
+      (merge_heap_ts_outer_kept (by rwa [hfirst.1]) hsecond.1)
+  | some r =>
+    have hflow : FlowingOrResumes (evaluateHOLFiniteState s
+        (.call (some (none, none)) (ofString "htab_set")
+          [et, ek, .var .local (ofString "binner")])).1 := by rwa [he]
+    have hn := merge_set_call_flow_none s et ek _ tw kw iw ht hk hiv hc hflow
+    rw [he] at hn
+    contradiction
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
