@@ -14430,4 +14430,46 @@ theorem evmInvAt_of_log_owned_frames_g09 {F : Type}
     (fun ec hec k hk _ => hcont ec hec k hk)
     hframes hhead hobjects hlogs hold hnew hnewOld holdWorld hnewWorld
 
+/-- The exact no-growth log_append execution transports a semantic finishing
+postcondition through the callee's local-variable cleanup and clock decrement. -/
+theorem log_append_no_growth_execution_post_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (e log l n cap p : BitVec 64)
+    (hcode : s.code = originalRuntimeCode) (hclock : s.clock ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8#64)) (hd16 : s.memaddrs (l + 16#64))
+    (hm0 : s.memory l = .word p) (hm8 : s.memory (l + 8#64) = .word n)
+    (hm16 : s.memory (l + 16#64) = .word cap)
+    (hlt : n.toNat < cap.toNat) (hne : l ≠ l + 8#64)
+    (hdslot : s.memaddrs (p + n * 8#64)) :
+    let stores := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    (EvmInv stores ∧ evmR stores = evmR s ∧ HeadMemAligned stores) →
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append)
+    out.1 = some (.returned (.val (.word 0))) ∧
+      EvmInv out.2 ∧ evmR out.2 = evmR s ∧ HeadMemAligned out.2 := by
+  dsimp only
+  intro hpost
+  let stores := {s with memory := fun a =>
+    if a = p + n * 8#64 then .word log
+    else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+  let final := {stores with clock := s.clock - 1, locals := HolFiniteMapExact.empty.resVarEq (ofString "slot", s.locals.lookup (ofString "slot"))}
+  rw [log_append_no_growth_exact_g09 s e log l n cap p hcode hclock he hlg
+    hde hme hd0 hd8 hd16 hm0 hm8 hm16 hlt hne hdslot]
+  dsimp only
+  refine ⟨rfl, ?_, ?_, ?_⟩
+  · exact localsFree_evmInv
+      {s with memory := fun a =>
+        if a = p + n * 8#64 then .word log
+        else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+      (HolFiniteMapExact.empty.resVarEq (ofString "slot", s.locals.lookup (ofString "slot")))
+      (s.clock - 1) hpost.1
+  · exact (evm_congr (s := stores) (t := final) rfl rfl).2.1.trans hpost.2.1
+  · change HeadMemAligned final
+    change EvmInv stores ∧ evmR stores = evmR s ∧ HeadMemAligned stores at hpost
+    unfold HeadMemAligned at hpost ⊢
+    exact hpost.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
