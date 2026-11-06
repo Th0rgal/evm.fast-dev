@@ -10979,4 +10979,137 @@ theorem eval_merge_storage_body_zero {F : Type}
         show ofString "s" ≠ ofString "bouter" by decide] using ht
     · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
 
+theorem eval_merge_get_zero_ts_kept {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (x : MlS) (tExp keyExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : ∀ tw : BitVec 64, evalAt s tExp = some (.val (.word tw)) → tw = 0)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1) :
+    let post := (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  apply eval_decCall_readOnly_ts_kept s x _ _ _ cont (fun _ => False)
+    hc hW InitECandidate.Solver.Wave8Contracts.M15.ro_htab_get ?_ ?_ hnt hfr
+  · intro vs body callee ret v post ha hl hr
+    rw [hc] at hl
+    obtain ⟨rfl, rfl, tw, kw, rfl, htw, hkw⟩ :=
+      lookup_two_word_result (by decide) WkBal.lookup_htab_get hl
+    have he : evalAt s tExp = some (.val (.word tw)) := by
+      obtain ⟨v1, rest, hh, hv⟩ := Wave8M19.Htab.evalList_cons_inv s _ _ ha
+      cases hh
+      exact hv
+    exact WkBal.htab_get_t_nonzero (callEntryStateHOLFinite s callee) tw kw
+      (guestInv_callEntry s callee hW.1.1) htw hkw v (congrArg Prod.fst hr) (ht tw he)
+  · intro v ck hv
+    exact hv.elim
+
+theorem eval_merge_occupied_zero_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word 0#64)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hnt : (evaluateHOLFiniteState s mergeOccupiedInner).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeOccupiedInner).1) :
+    let post := (evaluateHOLFiniteState s mergeOccupiedInner).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  dsimp only
+  unfold mergeOccupiedInner at hnt hfr ⊢
+  rw [evaluateHOLFiniteState_ite] at hnt hfr ⊢
+  by_cases hz : f0 = 0
+  · subst f0
+    simp [evalHOLExact, hk, Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+      evaluateHOLFiniteState_skip]
+  · have he : evalAt s (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0#64)) =
+        some (.val (.word 1#64)) := by
+      simpa [evalAt, evalHOLExact, hk, Flapjack.Compiler.Encoders.Asm.wordCmpHOL] using hz
+    unfold evalAt at he
+    rw [he] at hnt hfr ⊢
+    simp only [show (1#64 : BitVec 64) ≠ 0 by decide, ↓reduceIte] at hnt hfr ⊢
+    apply eval_merge_get_zero_ts_kept s _ _ _ _ hc hW ?_ hnt hfr
+    intro tw hw
+    simpa [evalAt, evalHOLExact, ht] using hw.symm
+
+theorem eval_merge_increment_zero_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word 0#64)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hnt : (evaluateHOLFiniteState s mergeOccupiedThenIncrement).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeOccupiedThenIncrement).1) :
+    let post := (evaluateHOLFiniteState s mergeOccupiedThenIncrement).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  dsimp only
+  unfold mergeOccupiedThenIncrement at hnt hfr ⊢
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases he : evaluateHOLFiniteState s mergeOccupiedInner with ⟨r, mid⟩
+  simp only [he] at hnt hfr ⊢
+  have hntb : (evaluateHOLFiniteState s mergeOccupiedInner).1 ≠ some .timeOut := by
+    rw [he]; rintro rfl; exact hnt rfl
+  have hfrb : FlowingOrResumes (evaluateHOLFiniteState s mergeOccupiedInner).1 := by
+    rw [he]; cases r with
+    | none => exact Or.inl rfl
+    | some r => exact hfr
+  have hs := eval_merge_occupied_zero_ts_kept s f0 kw vw hc hW ht hk hntb hfrb
+  rw [he] at hs
+  cases r with
+  | none => exact merge_ts_outer_kept_trans hs (eval_assign_local_ts_kept mid _ _)
+  | some r => exact hs
+
+theorem eval_merge_body_zero_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ow : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word 0#64)))
+    (ho : s.locals.lookup (ofString "outer") = some (.val (.word ow)))
+    (hts : globN s "ts" ≠ 0) (hots : ow.toNat = memW s (globN s "ts" + 32))
+    (hnt : (evaluateHOLFiniteState s mergeStorageBody).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeStorageBody).1) :
+    let post := (evaluateHOLFiniteState s mergeStorageBody).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  apply eval_decCall_readOnly_ts_kept s (ofString "s") _ _ _ _
+    (fun v => ∃ f0 kw vw : BitVec 64,
+      v = .rStruct [.val (.word f0), .val (.word kw), .val (.word vw)])
+    hc hW InitECandidate.Solver.Wave8Contracts.M15.ro_htab_item ?_ ?_ hnt hfr
+  · intro vs body callee ret v post ha hl hr
+    rw [hc] at hl
+    obtain ⟨rfl, rfl, t, ord, rfl, htw, how⟩ :=
+      lookup_two_word_result (by decide) lookup_htab_item_bal hl
+    have he : evalAt s (.var .local (ofString "outer")) = some (.val (.word t)) := by
+      obtain ⟨v1, rest, hh, hv⟩ := Wave8M19.Htab.evalList_cons_inv s _ _ ha
+      cases hh
+      exact hv
+    have he' : evalAt s (.var .local (ofString "outer")) = some (.val (.word ow)) := by
+      simp [evalAt, evalHOLExact, ho]
+    rw [he'] at he
+    cases he
+    have hret := congrArg Prod.fst hr
+    have hnz := htab_item_t_nonzero (callEntryStateHOLFinite s callee) ow ord
+      (guestInv_callEntry s callee hW.1.1) htw how v hret
+    obtain ⟨S, hT, _⟩ := hW.2
+    have hmem : ow.toNat ∈ S := by
+      have hm := hT.2.2.2.2.2.1 32 (by simp [tsTableSlots]) hts
+      rw [← hots] at hm
+      exact hm.resolve_left (by intro hz; apply hnz; exact BitVec.eq_of_toNat_eq hz)
+    have hWF : HtabWF (callEntryStateHOLFinite s callee) ow.toNat :=
+      (WkBal.htabWF_with_locals s callee (s.clock - 1) ow.toNat).2 (hT.2.1 _ hmem).1
+    obtain ⟨f0, f1, f2, hv, _⟩ :=
+      htab_item_ret_spec (callEntryStateHOLFinite s callee) ow ord htw how hWF v hret
+    exact ⟨f0, f1, f2, hv⟩
+  · intro v ck hv
+    obtain ⟨f0, kw, vw, rfl⟩ := hv
+    dsimp only
+    intro hnt hfr
+    apply eval_merge_increment_zero_ts_kept
+      (setVarHOLFinite (ofString "s") (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)])
+        {s with clock := ck}) f0 kw vw hc
+      (localsFree_worldOK s _ ck hW) ?_ ?_ hnt hfr
+    · simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "s" ≠ ofString "bouter" by decide] using ht
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
