@@ -10984,6 +10984,60 @@ theorem precompile_sha256_output_effect {F : Type}
         subst i
         exact ⟨(ev.toNat,136),by simp,le_rfl,le_rfl⟩)
 
+open R10Shards.P26_P28 in
+theorem precompile_output_store_precise {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ev : BitVec 64) (off : Nat) (value : ExpHOL 64)
+    (hi : GuestInv s)
+    (hev : s.globals.lookup (ofString "ev") = some (.val (.word ev)))
+    (hoff : off = 120 ∨ off = 128) (hb : ev.toNat+136 < 2^64)
+    (hv : ∀ v, @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) value =
+      some v → ∃ w : BitVec 64, v = .val (.word w)) :
+    ByteEff s (evaluateHOLFiniteState s (.store
+      (.op .add [.var .global (ofString "ev"),.const (BitVec.ofNat 64 off)]) value)).2
+      [(ev.toNat+120,16)] := by
+  refine (byteEff_store_one hi _ _ hv ?_).1
+  intro x hx hmem
+  have ho : off < 2^64 := by rcases hoff with rfl|rfl <;> decide
+  have heval : x = ev+BitVec.ofNat 64 off := by
+    simp [evalHOLExact,evalListHOLExact,hev,valueIsWord,valueWord,wordOpHOL,wordOp] at hx
+    exact hx.symm
+  subst x
+  have hnat : (ev+BitVec.ofNat 64 off).toNat = ev.toNat+off := by
+    rw [BitVec.toNat_add,BitVec.toNat_ofNat,Nat.mod_eq_of_lt ho,Nat.mod_eq_of_lt (by
+      rcases hoff with rfl|rfl <;> omega)]
+  exact ⟨(ev.toNat+120,16),by simp,by rw [hnat]; rcases hoff with rfl|rfl <;> omega,
+    by rw [hnat]; rcases hoff with rfl|rfl <;> omega⟩
+
+open R10Shards.P26_P28 in
+theorem precompile_output_tail_precise_byteEff {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ev out size : BitVec 64) (name : MlS)
+    (hi : GuestInv s)
+    (hev : s.globals.lookup (ofString "ev") = some (.val (.word ev)))
+    (hout : s.locals.lookup name = some (.val (.word out)))
+    (hb : ev.toNat+136 < 2^64) :
+    let p := ProgHOL.seq
+      (.store (.op .add [.var .global (ofString "ev"),.const 120]) (.var .local name))
+      (.seq (.store (.op .add [.var .global (ofString "ev"),.const 128]) (.const size))
+        (.return (.const 0)))
+    ByteEff s (evaluateHOLFiniteState s p).2 [(ev.toNat+120,16)] := by
+  dsimp only
+  have he := precompile_output_store_precise s ev 120 (.var .local name) hi hev (Or.inl rfl) hb (by
+    intro v hv
+    simp [evalHOLExact,hout] at hv
+    exact ⟨out,hv.symm⟩)
+  refine byteEff_seq he ?_
+  intro m run
+  change evaluateHOLFiniteState s (.store
+    (.op .add [.var .global (ofString "ev"),.const 120#64]) (.var .local name)) = (none,m) at run
+  rw [run] at he
+  have him : GuestInv m := guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi
+  have he2 := precompile_output_store_precise m ev 128 (.const size) him
+    (by rw [he.globals]; exact hev) (Or.inr rfl) hb (by
+      intro v hv
+      simp only [evalHOLExact,Option.some.injEq] at hv
+      exact ⟨size,hv.symm⟩)
+  exact byteEff_seq he2 (fun n _ => byteEff_return n _ _)
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
