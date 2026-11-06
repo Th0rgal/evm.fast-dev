@@ -12534,4 +12534,22 @@ theorem alloc_return_prestate_avoids_g10 {F : Type}
   · exact le_of_eq heq.symm
   · exact le_trans hb hlim
 
+theorem world_typed_heap_transport_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (ha : ArenaReady s) (hap : ArenaReady post)
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hsc : globN post "scratch_ptr" = globN s "scratch_ptr")
+    (hg : ∀ g ∈ coreWorldGlobals, globN post g = globN s g)
+    (hm : post.memory = s.memory) (hbe : post.be = s.be)
+    (hf : fixedObjects post = fixedObjects s)
+    (hw : WorldTypedWith s S Nd) : WorldTypedWith post S Nd := by
+  have hcell : SameTypedCells s post S Nd := by
+    refine ⟨hbe, hap.1.memaddrs.trans ha.1.memaddrs.symm, ha.1.memaddrs, ?_, ?_, ?_⟩
+    · intros; rw [hm]
+    · intros; rw [hm]
+    · intros; unfold memB; rw [hm, hbe]
+  have hfp := fixedTyped_of_eq hap hw.2.2.1 hh (le_of_eq hsc) hf
+  exact (worldTypedWith_congr_w1 ha hap hh (le_of_eq hsc) hg hcell hw
+    ⟨hfp, fun o ho => Or.inl (hf ▸ ho)⟩).1
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
