@@ -12540,6 +12540,60 @@ theorem precompile_sha256_blocks_body_locals_on_flow {F : Type}
       setKvarHOLFinite,setVarHOLFinite,
       HolFiniteMapExact.lookup_update,FUPDATE,hne]
 
+theorem precompile_seq_call0_assign_no_loop_control {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (fn : MlS) (args : List (ExpHOL 64))
+    (name : MlS) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.seq (.call (some (none,none)) fn args)
+      (.assign .local name e))).1 ≠ some .break ∧
+    (evaluateHOLFiniteState s (.seq (.call (some (none,none)) fn args)
+      (.assign .local name e))).1 ≠ some .continue := by
+  have hc := precompile_call0_no_loop_control s fn args
+  rw [evaluateHOLFiniteState_seq_line780]
+  rcases run : evaluateHOLFiniteState s (.call (some (none,none)) fn args) with ⟨r,m⟩
+  cases r with
+  | some r => simpa only [run] using hc
+  | none =>
+    dsimp only
+    rw [evaluateHOLFiniteState_assign]
+    split
+    · simp
+    · split <;> simp
+
+theorem precompile_sha256_blocks_large_no_normal_exit {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (i len : BitVec 64)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (halign : i.toNat % 64 = 0) (hlen : ¬ len.toNat + 64 < 2^64) :
+    (evaluateHOLFiniteState s
+      (.while (.cmp .notLower (.var .local (ofString "len"))
+        (.op .add [.var .local (ofString "i"),.const 64]))
+        (.seq (.call (some (none,none)) (ofString "sha256_block")
+          [.var .global (ofString "sha_st"),
+            .op .add [.var .local (ofString "p"),.var .local (ofString "i")]])
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"),.const 64]))))).1 ≠ none := by
+  let P := fun t : PanSemStateFiniteExact 64 F =>
+    t.locals.lookup (ofString "len") = some (.val (.word len)) ∧
+    ∃ j : BitVec 64, t.locals.lookup (ofString "i") = some (.val (.word j)) ∧
+      j.toNat % 64 = 0
+  apply precompile_while_invariant_no_normal_exit _ _ P ?_ ?_ ?_ s ⟨hl,i,hi,halign⟩
+  · intro t ht
+    obtain ⟨hlt,j,hj,hja⟩ := ht
+    exact precompile_sha256_block_guard_true t j len hj hlt hja hlen
+  · intro t ht; exact ht
+  · intro t ht
+    have hc := precompile_seq_call0_assign_no_loop_control t (ofString "sha256_block")
+      [.var .global (ofString "sha_st"),
+        .op .add [.var .local (ofString "p"),.var .local (ofString "i")]]
+      (ofString "i") (.op .add [.var .local (ofString "i"),.const 64])
+    refine ⟨hc.1,?_⟩
+    intro hr
+    rcases hr with hr | hr
+    · obtain ⟨hlt,j,hj,hja⟩ := ht
+      have he := precompile_sha256_blocks_body_locals_on_flow t j len hj hlt hr
+      exact ⟨he.2,j+64,he.1,(precompile_sha256_block_index_add_bound j hja).1⟩
+    · exact False.elim (hc.2 hr)
+
 theorem pre_sha256_body_step_of_input_bound {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
     (hbound : ∀ msg : ValueHOL 64, @evalHOLExact 64 F _ s.toExact
