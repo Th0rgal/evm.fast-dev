@@ -9232,4 +9232,49 @@ theorem ext_code_of_return_of_world_entry {F : Type} (s : PanSemStateFiniteExact
   rw [hb] at hm
   exact ext_code_tail_of_world_entry _ (hm.trans hc) (hentry values body callee ret v post ha hl hb)
 
+/-- Transport protected code records through an unchanged table/fixed layout. -/
+theorem codeDbPayloadStrong_of_preserved_layout {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hv : htabValues post db = htabValues s db)
+    (hw : ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hf : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hfixed : fixedObjects post = fixedObjects s) :
+    CodeDbPayloadStrong post S db := by
+  refine ⟨nodeDbEntriesStrong_of_preserved_payloads he.1 hAs hAp hhp hv hw, ?_⟩
+  intro p hp
+  rw [hv] at hp
+  obtain ⟨hi,hb,ht,hfix⟩ := he.2 p hp
+  refine ⟨⟨hi.1,le_trans hi.2 hhp⟩,hb,?_,?_⟩
+  · intro t ht' i hi'
+    rw [hf t ht'] at hi'
+    exact ht t ht' i hi'
+  · intro i hi'
+    rw [hfixed] at hi'
+    exact hfix i hi'
+
+/-- Structural preservation of the strengthened world's code-root payloads. -/
+theorem worldTypedCodeStrong_of_preserved_layout {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (he : WorldTypedCodeStrong s S) (hW : WorldTyped post S)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg : ∀ g, globN post g = globN s g)
+    (hr : ∀ g k, (g,k) ∈ ([("ws",16),("bs",48),("ts",48)] : List (String × Nat)) →
+      memW post (globN s g+k) = memW s (globN s g+k))
+    (hv : ∀ db, htabValues post db = htabValues s db)
+    (hw : ∀ db, ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hf : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hfixed : fixedObjects post = fixedObjects s) :
+    WorldTypedCodeStrong post S := by
+  refine ⟨hW,?_⟩
+  intro g k hmem hn
+  rw [hg g,hr g k hmem]
+  exact codeDbPayloadStrong_of_preserved_layout (he.2 g k hmem (by rwa [hg g] at hn))
+    hAs hAp hhp (hv _) (hw _) hf hfixed
+
 end HeadStore
