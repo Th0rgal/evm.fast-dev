@@ -5981,7 +5981,8 @@ private def ValidRlpFrame {F : Type} (s : PanSemStateFiniteExact 64 F)
     (∀ o ∈ nodeExtents s Nd, Disj (memW s (fr + 24), memW s (fr + 32)) o) ∧
     (∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
       Disj (memW s (fr + 24), memW s (fr + 32)) (bufferRegion s gs)) ∧
-    memW s (fr + 40) = rlpBytesLenPure (memB s (memW s (fr + 24))) (memW s (fr + 32)))
+    memW s (fr + 40) = rlpBytesLenPure (memB s (memW s (fr + 24))) (memW s (fr + 32))) ∧
+  (∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)], Disj (fr, 48) (bufferRegion s gs))
 
 private theorem validRlpFrame_of_heapByteEff_disj {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {Nd : List Nat} {fr : Nat}
@@ -6000,7 +6001,7 @@ private theorem validRlpFrame_of_heapByteEff_disj {F : Type}
       Disj iv (memW s (fr + 24), memW s (fr + 32)))
     (hv : ValidRlpFrame s Nd fr) :
     ValidRlpFrame post Nd fr := by
-  obtain ⟨hfr8, hfr_in, hfr_W, hnd_in, hk1, hk3, hidx, hpay, hk3_pay, hk1_pay, hk2_pay⟩ := hv
+  obtain ⟨hfr8, hfr_in, hfr_W, hnd_in, hk1, hk3, hidx, hpay, hk3_pay, hk1_pay, hk2_pay, hfr_kb⟩ := hv
   have hse : scratchEnd ≤ heapEnd := by rw [R16Shards.WkBlockTxEnc.heapEnd_val]; decide
   have h264 : heapEnd < 2 ^ 64 := by rw [R16Shards.WkBlockTxEnc.heapEnd_val]; decide
   have hhl264 : heapLimit < 2 ^ 64 := by decide
@@ -6054,7 +6055,8 @@ private theorem validRlpFrame_of_heapByteEff_disj {F : Type}
   refine ⟨hfr8, hfr_in_post, hfr_W_post, hnd_in',
     by rw [hk_eq]; exact hk1, by rw [hk_eq]; exact hk3,
     by rw [hw16]; exact hidx, by rw [hw40]; exact hpay,
-    fun h3 => by rw [hw40]; exact hk3_pay (hk_eq ▸ h3), ?_, ?_⟩
+    fun h3 => by rw [hw40]; exact hk3_pay (hk_eq ▸ h3), ?_, ?_,
+    fun gs hgs => by rw [hbuf_eq gs hgs]; exact hfr_kb gs hgs⟩
   · intro h1
     have h1s : memW s (memW s (fr + 8)) = 1 := hk_eq ▸ h1
     have hn48_eq : memW post (memW post (fr + 8) + 48) = memW s (memW s (fr + 8) + 48) := by
@@ -6252,6 +6254,8 @@ private theorem eval__node_rlp_begin_returned {F : Type}
     (hnode_loc : s.locals.lookup (ofString "node") = some (.val (.word nodew)))
     (hfr_in : Inside (frw.toNat, 48) (globN s "scratch_ptr") scratchEnd)
     (hfr_W : WordsOK s (frw.toNat, 48))
+    (hfr_kb : ∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
+      Disj (frw.toNat, 48) (bufferRegion s gs))
     (hnode_in : nodew.toNat ∈ Nd)
     (hk1 : 1 ≤ memW s nodew.toNat)
     (hfr8_eq : memW s (frw.toNat + 8) = nodew.toNat)
@@ -7240,6 +7244,13 @@ private theorem eval__node_rlp_begin_returned {F : Type}
         obtain ⟨hfr_lo, _⟩ := hfr_in; dsimp only at hfr_lo
         exact Or.inr (Or.inr (Or.inr (by omega)))
     refine ⟨rfl, heff_post, hN_post.1, hN_post.2, hKS_post, hnd_memW_eq, ?_⟩
+    have hbuf_post_eq : ∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
+        bufferRegion postSt gs = bufferRegion s gs := by
+      intro gs hgs
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hgs
+      rcases hgs with rfl | rfl
+      · simp [bufferRegion, hkp_eq]
+      · simp [bufferRegion, hks_eq]
     refine ⟨hfr_W.1, by rw [hsp_eq]; exact hfr_in, hfr_W_post,
       by rw [hw8_p]; exact hnode_in,
       by rw [hw8_p, hk_post_eq]; exact hk1,
@@ -7247,17 +7258,10 @@ private theorem eval__node_rlp_begin_returned {F : Type}
       by rw [hw16_p]; exact hfr16_le,
       by rw [hw40_p]; exact hpay_lt,
       fun h3 => by rw [hw40_p]; exact hk3_p (by rwa [hw8_p, hk_post_eq] at h3),
-      ?_, ?_⟩
+      ?_, ?_, fun gs hgs => by rw [hbuf_post_eq gs hgs]; exact hfr_kb gs hgs⟩
     · intro h1_post
       have h1s : memW s nodew.toNat = 1 := by rwa [hw8_p, hk_post_eq] at h1_post
       have hsz1 : nodeSize (memW s nodew.toNat) = 64 := by simp [nodeSize, h1s]
-      have hbuf_post_eq : ∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
-          bufferRegion postSt gs = bufferRegion s gs := by
-        intro gs hgs
-        simp only [List.mem_cons, List.not_mem_nil, or_false] at hgs
-        rcases hgs with rfl | rfl
-        · simp [bufferRegion, hkp_eq]
-        · simp [bufferRegion, hks_eq]
       obtain ⟨hcl1, hcl_hi, hcb_in, hcb_disj, hcb_kb, hpay1, hdom1⟩ := hk1_p h1s
       have hcb_b := hcb_b_post_s1 (Or.inl h1s) hcl1 hcb_in
       have hn40_eq := hnd_memW_eq nodew.toNat hnode_in 40 (by decide) (by omega)
@@ -7281,13 +7285,6 @@ private theorem eval__node_rlp_begin_returned {F : Type}
       obtain ⟨hcl1, hcl_hi, hcb_in, hcb_disj, hcb_kb, hpay2⟩ := hk2_p h2s
       have hcb_b := hcb_b_post_s1 (Or.inr h2s) hcl1 hcb_in
       have hn40_eq := hnd_memW_eq nodew.toNat hnode_in 40 (by decide) (by omega)
-      have hbuf_post_eq : ∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
-          bufferRegion postSt gs = bufferRegion s gs := by
-        intro gs hgs
-        simp only [List.mem_cons, List.not_mem_nil, or_false] at hgs
-        rcases hgs with rfl | rfl
-        · simp [bufferRegion, hkp_eq]
-        · simp [bufferRegion, hks_eq]
       refine ⟨by rw [hw32_p]; exact hcl1,
         by rw [hw32_p, hw8_p, hn40_eq]; exact hcl_hi,
         by rw [hw24_p, hw32_p, hhp_post_s1]; exact hcb_in,
@@ -7306,6 +7303,8 @@ private theorem eval_call__node_rlp_begin_none {F : Type}
       some (.val (.word nodew)))
     (hfr_in : Inside (frw.toNat, 48) (globN s "scratch_ptr") scratchEnd)
     (hfr_W : WordsOK s (frw.toNat, 48))
+    (hfr_kb : ∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
+      Disj (frw.toNat, 48) (bufferRegion s gs))
     (hnode_in : nodew.toNat ∈ Nd)
     (hk1 : 1 ≤ memW s nodew.toNat)
     (hfr8_eq : memW s (frw.toNat + 8) = nodew.toNat)
@@ -7354,7 +7353,7 @@ private theorem eval_call__node_rlp_begin_none {F : Type}
       | returned vc =>
         obtain ⟨rfl, heff_ent, hN_sc, hext_sc, hKS_sc, hnd_w, hv_sc⟩ :=
           eval__node_rlp_begin_returned ent Nd frw nodew vc hc hent_AR hN hKS
-            hent_fr hent_node hfr_in hfr_W hnode_in hk1 hfr8_eq hfr16_le (by rw [hcal])
+            hent_fr hent_node hfr_in hfr_W hfr_kb hnode_in hk1 hfr8_eq hfr16_le (by rw [hcal])
         rw [hcal] at heff_ent hN_sc hext_sc hKS_sc hnd_w hv_sc
         dsimp only at heff_ent hN_sc hext_sc hKS_sc hnd_w hv_sc
         have hsh : shapeEqHOL (shapeOfHOLExact (.val (.word 0) : ValueHOL 64)) .one = true := by
@@ -8134,7 +8133,7 @@ private theorem finishPayloadLen_lt {F : Type} (s : PanSemStateFiniteExact 64 F)
 private theorem finishPayloadLen_pos {F : Type} (s : PanSemStateFiniteExact 64 F)
     (Nd : List Nat) (fr : Nat) (hfr : ValidRlpFrame s Nd fr) :
     1 ≤ finishPayloadLen s fr (memW s (fr + 8)) := by
-  obtain ⟨_, _, _, _, hk1, hk3, _, _, _, hleaf, hext⟩ := hfr
+  obtain ⟨_, _, _, _, hk1, hk3, _, _, _, hleaf, hext, _⟩ := hfr
   unfold finishPayloadLen
   by_cases h2 : memW s (memW s (fr + 8)) = 2
   · rw [if_pos h2]
@@ -8199,7 +8198,7 @@ private theorem finishWriteLen_le_payload_add_one {F : Type}
     (hfr : ValidRlpFrame s Nd fr) :
     finishWriteLen s fr (memW s (fr + 8)) ≤
       finishPayloadLen s fr (memW s (fr + 8)) + 1 := by
-  obtain ⟨_, _, _, _, hk1, hk3, _, _, hbranch, hleaf, hext⟩ := hfr
+  obtain ⟨_, _, _, _, hk1, hk3, _, _, hbranch, hleaf, hext, _⟩ := hfr
   by_cases h3 : memW s (memW s (fr + 8)) = 3
   · have h2 : memW s (memW s (fr + 8)) ≠ 2 := by omega
     simp [finishWriteLen, finishPayloadLen, h3, h2, hbranch h3]
@@ -8257,7 +8256,7 @@ private theorem finishWriteLen_overflow_boundary {F : Type}
       memW s (memW s (fr + 8)) = 1 := by
   have hwrite := finishWriteLen_le_payload_add_one s Nd fr hfr
   have hkind : memW s (memW s (fr + 8)) = 1 := by
-    obtain ⟨_, _, _, _, hk1, hk3, _, _, hbranch, _, hext⟩ := hfr
+    obtain ⟨_, _, _, _, hk1, hk3, _, _, hbranch, _, hext, _⟩ := hfr
     by_cases h3 : memW s (memW s (fr + 8)) = 3
     · have h2 : memW s (memW s (fr + 8)) ≠ 2 := by omega
       have h32 : (3 : Nat) ≠ 2 := by decide
@@ -8297,7 +8296,7 @@ private theorem finishWriteLen_eq_payload {F : Type}
       leafPayloadExact s fr (memW s (fr + 8))) :
     finishWriteLen s fr (memW s (fr + 8)) =
       finishPayloadLen s fr (memW s (fr + 8)) := by
-  obtain ⟨_, _, _, _, hk1, hk3, _, _, hbranch, _, hext⟩ := hfr
+  obtain ⟨_, _, _, _, hk1, hk3, _, _, hbranch, _, hext, _⟩ := hfr
   by_cases h3 : memW s (memW s (fr + 8)) = 3
   · have h2 : memW s (memW s (fr + 8)) ≠ 2 := by omega
     simp [finishWriteLen, finishPayloadLen, h3, h2, hbranch h3]
