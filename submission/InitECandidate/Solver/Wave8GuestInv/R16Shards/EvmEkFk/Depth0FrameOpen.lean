@@ -9625,8 +9625,8 @@ theorem typed_record_field_avoids_buffers {F : Type}
   have hd := R16WkAcctWs.validBufList_disj hB hWT i him _ hi
   obtain ⟨b,hb,rfl⟩ := List.mem_map.1 him
   by_cases hz : globN s b.1 = 0
-  · simp [bufferRegion,hz,CellHits] at hit
-  · simp only [bufferRegion,hz,↓reduceIte] at hd hit
+  · simp [Wave8GuestInv.bufferRegion,hz,CellHits] at hit
+  · simp only [Wave8GuestInv.bufferRegion,hz,↓reduceIte] at hd hit
     have hbp := hpos b hb
     unfold Disj at hd
     unfold CellHits at hit
