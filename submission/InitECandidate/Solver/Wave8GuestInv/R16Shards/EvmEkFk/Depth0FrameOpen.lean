@@ -7860,4 +7860,38 @@ theorem fallback_ws_return_after_access_set {F : Type}
   · exact (WkBal.htabWF_with_locals post locals post.clock db.toNat).2 hw
   · simpa [NodeDbEntriesStrong, htabValues, hdr, nodeF, memW, WordsOK, WordAt, globN] using he
 
+/-- Transport the structural part as well as entry typing when the key
+builder leaves the old table and fixed-object footprints unchanged. -/
+theorem codeDbPayloadStrong_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hvalues : htabValues post db = htabValues s db)
+    (hfp : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hfixed : fixedObjects post = fixedObjects s) : CodeDbPayloadStrong post S db := by
+  refine ⟨codeDbPayloadStrong_entries_of_sk_make db h hc hma hfit v hb hAs hAp hvalues, ?_⟩
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  have hhp : globN post "heap_ptr" = globN s "heap_ptr" := by
+    unfold globN
+    rw [heff.globals]
+  intro p hp
+  rw [hvalues] at hp
+  obtain ⟨hin, hp64, htables, hobjects⟩ := h.2 p hp
+  refine ⟨?_, hp64, ?_, ?_⟩
+  · rw [hhp]; exact hin
+  · intro t ht i hi
+    rw [hfp t ht] at hi
+    exact htables t ht i hi
+  · intro i hi
+    rw [hfixed] at hi
+    exact hobjects i hi
+
 end HeadStore
