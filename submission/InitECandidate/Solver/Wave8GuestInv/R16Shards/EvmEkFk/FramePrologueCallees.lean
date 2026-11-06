@@ -9033,6 +9033,57 @@ theorem precompile_sha256_finish_increment {F : Type}
     HolFiniteMapExact.lookup_update, FUPDATE, hout, hvalid, setKvarHOLFinite,
     show ofString "i" ≠ ofString "out" by decide]
 
+theorem precompile_call0_byteEff_total {F : Type} (fname : MlS)
+    (params : List (MlS × ShapeHOL)) (body : ProgHOL 64) (ret : ShapeHOL)
+    (argR : List (ValueHOL 64) → List Ivl)
+    (hl : originalRuntimeCode.lookup fname = some (params, body, ret))
+    (hf : ∀ (entry : PanSemStateFiniteExact 64 F) vals,
+      entry.code = originalRuntimeCode → GuestInv entry →
+      lookupCodeHOLFinite originalRuntimeCode.lookup fname vals = some (body, entry.locals, ret) →
+      R10Shards.P26_P28.ByteEff entry (evaluateHOLFiniteState entry body).2 (argR vals))
+    (s : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64)) (Rl : List Ivl)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hsub : ∀ vals,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some vals →
+      ∀ i ∈ argR vals, 0 < i.2 → ∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2) :
+    R10Shards.P26_P28.ByteEff s
+      (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).2 Rl := by
+  rw [evaluateHOLFiniteState_call]
+  rcases hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · exact R10Shards.P26_P28.ByteEff.refl s Rl
+  · dsimp only
+    rcases hlook : lookupCodeHOLFinite s.code.lookup fname vals with _ | ⟨body', callee, ret'⟩
+    · exact R10Shards.P26_P28.ByteEff.refl s Rl
+    · dsimp only
+      have heq := lookupCodeHOLFinite_installed_body s.code.lookup fname params body body'
+        ret ret' vals callee (by rw [hc]; exact hl) hlook
+      subst heq
+      have heq := lookupCodeHOLFinite_installed_return s fname params body' body'
+        ret ret' vals callee (by rw [hc]; exact hl) hlook
+      subst heq
+      by_cases hz : s.clock = 0
+      · simp only [hz, ↓reduceIte]
+        exact (R10Shards.P26_P28.ByteEff.refl s Rl).locals_clock _ _
+      · simp only [hz, ↓reduceIte]
+        let entry := callEntryStateHOLFinite s callee
+        have hge : GuestInv entry := guestInv_callEntry s callee hi
+        have hle : lookupCodeHOLFinite originalRuntimeCode.lookup fname vals =
+            some (body', entry.locals, ret') := by
+          simpa [hc, entry, callEntryStateHOLFinite] using hlook
+        have he := hf entry vals hc hge hle
+        dsimp only [entry] at he
+        rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨res, post⟩
+        rw [run] at he
+        have eff : R10Shards.P26_P28.ByteEff s post Rl :=
+          (((R10Shards.P26_P28.ByteEff.refl s _).locals_clock _ _).trans he).mono (hsub vals hargs)
+        cases res with
+        | none => exact eff.locals_clock _ _
+        | some r =>
+          cases r <;> dsimp only
+          all_goals first
+            | exact eff.locals_clock _ _
+            | (split <;> exact eff.locals_clock _ _)
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
