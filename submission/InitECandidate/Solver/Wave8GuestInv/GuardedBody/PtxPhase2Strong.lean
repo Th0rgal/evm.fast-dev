@@ -16901,4 +16901,56 @@ theorem phase2_get_account_message_suffix_bound (h : PtxCallees)
   · exact phase2_get_account_message_suffix h buffers contents names aa ak name args hm hi hn hshape
   · exact ht
 
+/-- Lookup followed by transaction warming retains the complete message suffix. -/
+theorem phase2_get_account_warm_message_suffix_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (key value : ExpHOL 64)
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n)
+    (hshape : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (.decCall name .one (ofString "get_account") args
+        (.seq (.call (some (none, none)) (ofString "htab_set")
+          [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value]) tail))
+      (K.get_account + (K.htab_set + 1 + b) + 1) := by
+  exact phase2_get_account_message_suffix_bound h buffers contents names aa ak name args hm hi hn hshape
+    (phase2_htab_set_ts8_message_suffix_bound h buffers contents names aa ak key value ht)
+
+/-- Final transaction warming discharges the downstream message-ready cut. -/
+theorem phase2_message_final_warm_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (key value : ExpHOL 64)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value]) tail)
+      (K.htab_set + 1 + b) := by
+  apply phase2_htab_set_ts8_message_suffix_bound h buffers contents names aa ak key value
+  intro F s hc hp
+  obtain ⟨hi, ht'⟩ := phase2_message_initialized_tables_iff_suffix.mpr hp
+  exact ht s hc (phase2_message_initialized_ready hi ht')
+
+/-- The final six Phase-2 instructions warm the private address table before
+installing the two private-table pointers in the message. -/
+theorem phase2_final_source_eq (tail : ProgHOL 64) :
+    spinePlug 6 (spineAt 92 ptxCode) tail =
+      .seq .skip
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 136]) (.const 1))
+          (.seq (.call (some (none, none)) (ofString "htab_set")
+            [.var .local (ofString "aa"),
+             .load .one (.op .add [.var .local (ofString "m"), .const 32]), .const 1])
+            (.seq .skip
+              (.seq (.store (.op .add [.var .local (ofString "m"), .const 152])
+                (.var .local (ofString "aa")))
+                (.seq (.store (.op .add [.var .local (ofString "m"), .const 160])
+                  (.var .local (ofString "ak"))) tail))))) := by
+  simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
+  rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

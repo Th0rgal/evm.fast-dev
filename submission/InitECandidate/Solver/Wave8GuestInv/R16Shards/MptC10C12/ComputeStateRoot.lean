@@ -5123,4 +5123,1004 @@ theorem pBounded_alloc_csrBound_csrMptBufs
       simp [mid, locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne_w, Ne.symm hne_w]
     rw [hw_mid]; exact hs.2
 
+theorem worldEff_of_p26ByteEff_csr {F : Type} {s cur next : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {B : List (String × Nat)} {gw : List String} {Sub : List Ivl}
+    (h : R16Shards.WorldEff s cur Rl B gw) (hb : ByteEff cur next Sub)
+    (hsub : ∀ iv ∈ Sub, 0 < iv.2 →
+      (∃ j ∈ Rl, j.1 ≤ iv.1 ∧ iv.1 + iv.2 ≤ j.1 + j.2) ∨
+      (∃ gs ∈ B, (bufferRegion s gs).1 ≤ iv.1 ∧
+        iv.1 + iv.2 ≤ (bufferRegion s gs).1 + (bufferRegion s gs).2) ∨
+      (globN s "frame_mem_ptr" ≤ iv.1 ∧ iv.1 + iv.2 ≤ globN s "scratch_ptr") ∨
+      (globN s "heap_ptr" ≤ iv.1 ∧ iv.1 + iv.2 ≤ heapLimit)) :
+    R16Shards.WorldEff s next Rl B gw :=
+  h.of_byteEff ⟨hb.code, hb.memaddrs, hb.shMemaddrs, hb.baseAddr, hb.be, hb.globals, hb.eshapes,
+    hb.out_dom, hb.cell_frame, hb.byte_frame⟩ hsub
+
+theorem callee_param_three_exp_body_csr {F : Type} (state : PanSemStateFiniteExact 64 F)
+    (fname p1 p2 p3 : MlS) (s1 s2 s3 : ShapeHOL)
+    (body : ProgHOL 64) (ret : ShapeHOL)
+    (hl : state.code.lookup fname =
+      some ([(p1, s1), (p2, s2), (p3, s3)], body, ret))
+    (e1 e2 e3 : ExpHOL 64) (values : List (ValueHOL 64)) (body' : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret' : ShapeHOL)
+    (hargs : evalListHOLFinite state (h := fun a => Classical.propDecidable (state.memaddrs a))
+      [e1, e2, e3] = some values)
+    (hlook : lookupCodeHOLFinite state.code.lookup fname values = some (body', callee, ret')) :
+    ∃ v1 v2 v3,
+      evalAt state e1 = some v1 ∧ evalAt state e2 = some v2 ∧ evalAt state e3 = some v3 ∧
+      callee.lookup p1 = some v1 ∧ callee.lookup p2 = some v2 ∧ callee.lookup p3 = some v3 ∧
+      body' = body := by
+  obtain ⟨v1, v2, v3, he1, he2, he3, hc1, hc2, hc3⟩ :=
+    P3MptSet.callee_param_three_exp state fname p1 p2 p3 s1 s2 s3 body ret hl
+      e1 e2 e3 values body' callee ret' hargs hlook
+  have hb := lookupCodeHOLFinite_installed_body state.code.lookup fname
+    [(p1, s1), (p2, s2), (p3, s3)] body body' ret ret' values callee hl hlook
+  exact ⟨v1, v2, v3, he1, he2, he3, hc1, hc2, hc3, hb⟩
+
+theorem pBounded_call0_on_csr
+    {P Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {args : List (ExpHOL 64)} {B : Nat}
+    (hfb : TerminatingFunBoundedOn Pc fname B)
+    (hspec : FunSpec Pc Qc fname)
+    (hentry : CallEntryOn P Pc fname args)
+    (hret : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (values : List (ValueHOL 64)) (body : ProgHOL 64)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+      (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → P s →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      Qc (callEntryStateHOLFinite s callee) (some (.returned v)) post →
+      P { post with locals := s.locals }) :
+    PBounded P (.call (some (none, none)) fname args) (B + 1) := by
+  refine ⟨TerminatingProgBoundedOn.call_on hfb none args hentry, ?_⟩
+  refine ⟨fun {F} s hc hs _ hr => ?_⟩
+  rw [evaluateHOLFiniteState_call] at hr ⊢
+  rcases ha : @evalListHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [PanSemStateFiniteExact.evalListHOLFinite, ha] at hr
+  · simp only [PanSemStateFiniteExact.evalListHOLFinite, ha] at hr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hr
+      · simp only [hz, ↓reduceIte] at hr ⊢
+        have harg := hentry s vs body callee ret hc hs ha hl
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, post⟩
+        simp only [hb] at hr ⊢
+        cases res with
+        | none => simp at hr
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hr ⊢
+            split at hr
+            · rename_i hsh
+              rw [if_pos hsh]
+              have hq := FunSpec.at_lookup hspec s hc vs body callee ret hl harg (by rw [hb]; simp)
+              rw [hb] at hq
+              exact hret s vs body callee ret v post hc hs ha hl hb hq
+            · simp at hr
+          | _ => simp at hr
+
+private theorem csr_wsBufs_ok :
+    ∀ gs ∈ R16Shards.wsBufs, gs ∈ globalBuffers ∧ gs.1 ∉ typedRecords.map Prod.fst := by
+  decide
+
+private theorem csr_ws_core_out :
+    ∀ g ∈ coreWorldGlobals, ofString g ∉ R16Shards.wsGw.map ofString := by
+  decide
+
+private theorem csr_eaBufs_ok :
+    ∀ gs ∈ ([("mpt_hash_scratch", 40)] : List (String × Nat)),
+      gs ∈ globalBuffers ∧ gs.1 ∉ typedRecords.map Prod.fst := by
+  decide
+
+private theorem csr_empty_core_out :
+    ∀ g ∈ coreWorldGlobals, ofString g ∉ ([] : List String).map ofString := by
+  decide
+
+private theorem csr_mptRootBufs_ok :
+    ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      gs ∈ globalBuffers ∧ gs.1 ∉ typedRecords.map Prod.fst := by
+  decide
+
+private theorem csr_mptSetBufs_ok :
+    ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)] : List (String × Nat)),
+      gs ∈ globalBuffers ∧ gs.1 ∉ typedRecords.map Prod.fst := by
+  decide
+
+theorem pBounded_alloc_csrBound_csrNonNeg_csrMptBufs
+    (tf_alloc : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
+    (wname : String) (wbound : Nat) (pname : String)
+    (mname bname : String) (buffers : List (String × Nat)) (sz : BitVec 64)
+    {Bc : Nat} {cont : ProgHOL 64}
+    (hne_w : ofString wname ≠ ofString bname)
+    (hne_p : ofString pname ≠ ofString bname)
+    (hne : ∀ n ∈ ["cache", "new_roots", mname] ++ buffers.map Prod.fst,
+      ofString n ≠ ofString bname)
+    (hcont : PBounded (CsrBound wname wbound (CsrNonNeg pname
+      (CsrMptBufs mname ((bname, (sz.toNat + 7) / 8 * 8) :: buffers)))) cont Bc) :
+    PBounded (CsrBound wname wbound (CsrNonNeg pname (CsrMptBufs mname buffers)))
+      (.decCall (ofString bname) .one (ofString "alloc") [.const sz] cont)
+      (K.«alloc» + Bc + 1) := by
+  have hne_all : ∀ n ∈ wname :: pname :: (["cache", "new_roots", mname] ++ buffers.map Prod.fst),
+      ofString n ≠ ofString bname := by
+    intro n hn
+    rcases List.mem_cons.mp hn with rfl | hn1
+    · exact hne_w
+    · rcases List.mem_cons.mp hn1 with rfl | hn2
+      · exact hne_p
+      · exact hne n hn2
+  refine PBounded.decCallTrans tf_alloc
+    (localsOnly_csrBound (localsOnly_csrNonNeg (localsOnly_csrMptBufs mname buffers) pname) wname wbound)
+    (ofString bname) hne_all .one [.const sz]
+    (callEntryOn_guestInv_csr (fun s hs => (csrMptBufs_worldOK mname buffers hs.1.1).1.1) _ _)
+    ?_ hcont.1
+    ⟨fun s hc hR hnt hr => by
+      obtain ⟨⟨ht, hp_nn⟩, hw⟩ := hcont.2.run s hc hR hnt hr
+      have hpw : ((locN (evaluateHOLFiniteState s cont).2 bname, (sz.toNat + 7) / 8 * 8) ::
+          buffers.map fun b => (locN (evaluateHOLFiniteState s cont).2 b.1, b.2)).Pairwise Disj := by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, hpw0⟩ := ht
+        exact hpw0
+      exact ⟨⟨csrLiveBufsAt_sub ht (fun b hb => List.mem_cons_of_mem _ hb) (List.Pairwise.tail hpw), hp_nn⟩, hw⟩⟩
+  intro F s values body callee ret v post hc hs ha hl hb
+  obtain ⟨v1, he1, hc1, hbody_eq⟩ := callee_param_one_exp_csr s (ofString "alloc")
+    (ofString "n") .one (sourceFnBody Guest.Software.guestFn_alloc) .one
+    (hc ▸ R13Shards.lookup_alloc_r13) (.const sz) values body callee ret ha hl
+  subst hbody_eq
+  have hv1 : v1 = .val (.word sz) := by
+    simp [evalAt, evalHOLExact] at he1; exact he1.symm
+  subst hv1
+  let ent := callEntryStateHOLFinite s callee
+  have hn_ent : locN ent "n" = sz.toNat := by
+    unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+  have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN s mname)
+      (buffers.map fun b => (locN s b.1, b.2)) :=
+    localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs.1.1
+  obtain ⟨p, hrv, hpost_live⟩ := alloc_csrLiveBufsAt hs_ent (by rw [hb]; exact Or.inl ⟨v, rfl⟩)
+  rw [hb] at hrv hpost_live; rw [hn_ent] at hpost_live; dsimp only at hrv hpost_live
+  have hv_eq : v = .val (.word p) := by injection hrv with hr'; injection hr'
+  subst hv_eq
+  let mid := setVarHOLFinite (ofString bname) (.val (.word p)) { post with locals := s.locals }
+  refine ⟨⟨?_, ?_⟩, ?_⟩
+  · have hc_mid : locN mid "cache" = locN s "cache" := by
+      simp [mid, locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        hne "cache" (by simp), Ne.symm (hne "cache" (by simp))]
+    have hr_mid : locN mid "new_roots" = locN s "new_roots" := by
+      simp [mid, locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        hne "new_roots" (by simp), Ne.symm (hne "new_roots" (by simp))]
+    have hm_mid : locN mid mname = locN s mname := by
+      simp [mid, locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        hne mname (by simp), Ne.symm (hne mname (by simp))]
+    have hb_mid : locN mid bname = p.toNat := by
+      simp [mid, locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    have hbufs_mid : buffers.map (fun b => (locN mid b.1, b.2)) =
+        buffers.map (fun b => (locN s b.1, b.2)) := by
+      apply List.map_congr_left
+      intro b hb_mem
+      have hbn : ofString b.1 ≠ ofString bname :=
+        hne b.1 (List.mem_append_right _ (List.mem_map.mpr ⟨b, hb_mem, rfl⟩))
+      simp [mid, locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hbn, Ne.symm hbn]
+    show CsrMptBufs mname ((bname, (sz.toNat + 7) / 8 * 8) :: buffers) mid
+    unfold CsrMptBufs
+    simp only [List.map_cons, hc_mid, hr_mid, hm_mid, hb_mid, hbufs_mid]
+    exact localsFree_csrLiveBufsAt _ _ _ _ post mid.locals mid.clock hpost_live
+  · obtain ⟨wp, hwp, hwp0⟩ := hs.1.2
+    refine ⟨wp, ?_, hwp0⟩
+    simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne_p, Ne.symm hne_p, hwp]
+  · have hw_mid : locN mid wname = locN s wname := by
+      simp [mid, locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne_w, Ne.symm hne_w]
+    rw [hw_mid]; exact hs.2
+
+theorem pBounded_u256_to_be_min_csr
+    (tf_utbm : TerminatingFunBoundedOn GuestInv (ofString "u256_to_be_min") K.«u256_to_be_min»)
+    (rv_utbm : RetLe (fun _ => 32) (ofString "u256_to_be_min"))
+    (ev : ExpHOL 64) {Bc : Nat} {cont : ProgHOL 64}
+    (hcont : PBounded (CsrBound "n" 32 (CsrNonNeg "pass" (CsrMptBufs "mpt" [("vbuf", 96)]))) cont Bc) :
+    PBounded (CsrNonNeg "pass" (CsrMptBufs "mpt" [("vbuf", 96)]))
+      (.decCall (ofString "n") .one (ofString "u256_to_be_min")
+        [ev, .op .add [.var .local (ofString "vbuf"), .const (8#64)]] cont)
+      (K.«u256_to_be_min» + Bc + 1) := by
+  have hne : ∀ n ∈ "pass" :: (["cache", "new_roots", "mpt"] ++ ([("vbuf", 96)] : List (String × Nat)).map Prod.fst),
+      ofString n ≠ ofString "n" := by decide
+  refine pBounded_specDecCall_csr
+    (localsOnly_csrNonNeg (localsOnly_csrMptBufs "mpt" [("vbuf", 96)]) "pass")
+    tf_utbm rv_utbm
+    (callEntryOn_guestInv_csr (fun s hs => (csrMptBufs_worldOK "mpt" [("vbuf", 96)] hs.1).1.1) _ _)
+    hne ?_ hcont.1 ⟨fun s hc hR hnt hr => (hcont.2.run s hc hR hnt hr).1⟩
+  intro F s values body callee ret v post hc hs ha hl hb hq
+  obtain ⟨w, rfl, hw_le⟩ := hq v rfl
+  obtain ⟨_, v2, _, he2, _, hc2, hbody_eq⟩ := callee_param_two_exp_csr s (ofString "u256_to_be_min")
+    (ofString "a") (ofString "out") (.comb [.one, .one, .one, .one]) .one
+    (sourceFnBody Guest.Software.guestFn_u256_to_be_min) .one
+    (hc ▸ lookup_u256_to_be_min_csr)
+    ev (.op .add [.var .local (ofString "vbuf"), .const (8#64)]) values body callee ret ha hl
+  subst hbody_eq
+  have hvbuf_ex : ∃ vb : BitVec 64, s.locals.lookup (ofString "vbuf") = some (.val (.word vb)) ∧
+      v2 = .val (.word (vb + 8#64)) := by
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he2
+    rcases hlk : s.locals.lookup (ofString "vbuf") with _ | vv
+    · simp [hlk] at he2
+    · rcases vv with ⟨⟨vb⟩⟩ | _ | _
+      · simp [hlk, valueIsWord, valueWord, wordOpHOL, wordOp] at he2
+        exact ⟨vb, rfl, he2.symm⟩
+      · simp [hlk, valueIsWord] at he2
+      · simp [hlk, valueIsWord] at he2
+  obtain ⟨vb, hvb_lk, rfl⟩ := hvbuf_ex
+  let ent := callEntryStateHOLFinite s callee
+  have hout_ent : locN ent "out" = (vb + 8#64).toNat := by
+    unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc2]
+  have hs_live : CsrLiveBufsAt s (locN s "cache") (locN s "new_roots") (locN s "mpt") [(locN s "vbuf", 96)] := hs.1
+  have hvb_nat : locN s "vbuf" = vb.toNat := by simp [locN, hvb_lk]
+  have hvb_hi : vb.toNat + 96 ≤ heapLimit := by
+    obtain ⟨hA, _, _, _, _, _, _, _, _, _, _, _, hbs, _⟩ := hs_live
+    have hb_in := (hbs (locN s "vbuf", 96) (by simp)).1
+    have hhp_hi := hA.2.2.1
+    rw [hvb_nat] at hb_in
+    exact Nat.le_trans hb_in.2 hhp_hi
+  have h264 : heapLimit < 2 ^ 64 := by rw [heapLimit_val]; decide
+  have hout_add : (vb + 8#64).toNat = vb.toNat + 8 := by
+    apply BitVec.toNat_add_of_lt
+    change vb.toNat + 8 < 2 ^ 64
+    omega
+  have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN s "mpt") [(locN s "vbuf", 96)] :=
+    localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs_live
+  have hbf := byteFrame_u256_to_be_min_body_csr ent hc hs_ent.1.1.memaddrs
+  rw [hb] at hbf
+  have heff := worldEff_of_byteFrame_csr hs_ent.1 hc
+    (fun r hr => by obtain rfl := List.mem_singleton.mp hr; exact Nat.zero_lt_succ 31) hbf
+  have hpost_live : CsrLiveBufsAt post (locN s "cache") (locN s "new_roots") (locN s "mpt") [(locN s "vbuf", 96)] :=
+    worldEff_csrLiveBufsAt hs_ent (by decide) csr_empty_core_out heff (fun iv hiv _ => by
+      obtain rfl := List.mem_singleton.mp hiv
+      refine ⟨(locN s "vbuf", 96), by simp, ?_⟩
+      unfold Inside; dsimp only
+      rw [hout_ent, hout_add, hvb_nat]
+      omega)
+  let mid := setVarHOLFinite (ofString "n") (.val (.word w)) { post with locals := s.locals }
+  refine ⟨⟨?_, ?_⟩, ?_⟩
+  · have hc_mid : locN mid "cache" = locN s "cache" := locN_setVar_ne _ "cache" (ofString "n") _ (by decide)
+    have hr_mid : locN mid "new_roots" = locN s "new_roots" := locN_setVar_ne _ "new_roots" (ofString "n") _ (by decide)
+    have hm_mid : locN mid "mpt" = locN s "mpt" := locN_setVar_ne _ "mpt" (ofString "n") _ (by decide)
+    have hv_mid : locN mid "vbuf" = locN s "vbuf" := locN_setVar_ne _ "vbuf" (ofString "n") _ (by decide)
+    show CsrMptBufs "mpt" [("vbuf", 96)] mid
+    unfold CsrMptBufs
+    simp only [List.map_cons, List.map_nil, hc_mid, hr_mid, hm_mid, hv_mid]
+    exact localsFree_csrLiveBufsAt _ _ _ _ post mid.locals mid.clock hpost_live
+  · obtain ⟨wp, hwp, hwp0⟩ := hs.2
+    refine ⟨wp, ?_, hwp0⟩
+    simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hwp,
+      show ofString "pass" ≠ ofString "n" by decide, show ofString "n" ≠ ofString "pass" by decide]
+  · show locN mid "n" ≤ 32
+    rw [locN_setVar_same]
+    exact hw_le
+
+theorem pBounded_rlp_encode_bytes_csr
+    (tf_reb : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_bytes") K.«rlp_encode_bytes»)
+    {Bc : Nat} {cont : ProgHOL 64}
+    (hcont : PBounded (CsrBound "w" 33 (CsrNonNeg "pass" (CsrMptBufs "mpt" [("vbuf", 96)]))) cont Bc)
+    (hpres_n : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState s cont).1 = none →
+      (evaluateHOLFiniteState s cont).2.locals.lookup (ofString "n") = s.locals.lookup (ofString "n")) :
+    PBounded (CsrBound "n" 32 (CsrNonNeg "pass" (CsrMptBufs "mpt" [("vbuf", 96)])))
+      (.decCall (ofString "w") .one (ofString "rlp_encode_bytes")
+        [.op .add [.op .add [.var .local (ofString "vbuf"), .const (8#64)], .const (32#64)],
+         .op .add [.var .local (ofString "vbuf"), .const (8#64)],
+         .var .local (ofString "n")] cont)
+      (K.«rlp_encode_bytes» + Bc + 1) := by
+  have hne : ∀ nm ∈ "n" :: "pass" :: (["cache", "new_roots", "mpt"] ++ ([("vbuf", 96)] : List (String × Nat)).map Prod.fst),
+      ofString nm ≠ ofString "w" := by decide
+  refine PBounded.decCallTrans (R := CsrBound "n" 32 (CsrBound "w" 33 (CsrNonNeg "pass" (CsrMptBufs "mpt" [("vbuf", 96)]))))
+    tf_reb
+    (localsOnly_csrBound (localsOnly_csrNonNeg (localsOnly_csrMptBufs "mpt" [("vbuf", 96)]) "pass") "n" 32)
+    (ofString "w") hne .one _
+    (callEntryOn_guestInv_csr (fun s hs => (csrMptBufs_worldOK "mpt" [("vbuf", 96)] hs.1.1).1.1) _ _)
+    ?_ (fun s hc hR => hcont.1 s hc hR.1)
+    ⟨fun s hc hR hnt hr => by
+      have hpost := (hcont.2.run s hc hR.1 hnt hr).1
+      have hn_eq : locN (evaluateHOLFiniteState s cont).2 "n" = locN s "n" := by
+        unfold locN; rw [hpres_n s hr]
+      exact ⟨hpost, hn_eq ▸ hR.2⟩⟩
+  intro F s values body callee ret v post hc hs ha hl hb
+  obtain ⟨v1, v2, v3, he1, he2, he3, hc1, hc2, hc3, hbody_eq⟩ :=
+    callee_param_three_exp_body_csr s (ofString "rlp_encode_bytes")
+      (ofString "dst") (ofString "src") (ofString "n") .one .one .one
+      (sourceFnBody Guest.Software.guestFn_rlp_encode_bytes) .one
+      (hc ▸ R16Rlp.lookup_rlp_encode_bytes)
+      (.op .add [.op .add [.var .local (ofString "vbuf"), .const (8#64)], .const (32#64)])
+      (.op .add [.var .local (ofString "vbuf"), .const (8#64)])
+      (.var .local (ofString "n")) values body callee ret ha hl
+  subst hbody_eq
+  have hvbuf_ex : ∃ vb : BitVec 64, s.locals.lookup (ofString "vbuf") = some (.val (.word vb)) ∧
+      v1 = .val (.word ((vb + 8#64) + 32#64)) ∧ v2 = .val (.word (vb + 8#64)) := by
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he1 he2
+    rcases hlk : s.locals.lookup (ofString "vbuf") with _ | vv
+    · simp [hlk] at he2
+    · rcases vv with ⟨⟨vb⟩⟩ | _ | _
+      · simp [hlk, valueIsWord, valueWord, wordOpHOL, wordOp] at he1 he2
+        exact ⟨vb, rfl, he1.symm, he2.symm⟩
+      · simp [hlk, valueIsWord] at he2
+      · simp [hlk, valueIsWord] at he2
+  obtain ⟨vb, hvb_lk, rfl, rfl⟩ := hvbuf_ex
+  have hn_ex : ∃ n0 : BitVec 64, s.locals.lookup (ofString "n") = some (.val (.word n0)) ∧
+      v3 = .val (.word n0) := by
+    have hl_orig : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "rlp_encode_bytes") values =
+        some (sourceFnBody Guest.Software.guestFn_rlp_encode_bytes, callee, ret) := hc ▸ hl
+    have hret_eq : ret = .one :=
+      lookupCodeHOLFinite_installed_return s (ofString "rlp_encode_bytes")
+        _ _ _ _ ret values callee (hc ▸ R16Rlp.lookup_rlp_encode_bytes) hl
+    subst hret_eq
+    obtain ⟨_, _, n0, hvs, _, _, _⟩ := lookupCode_three_words
+      (by decide) (by decide) (by decide) R16Rlp.lookup_rlp_encode_bytes hl_orig
+    have hv3_eq : v3 = .val (.word n0) := by
+      rw [evalListHOLFinite_eq_toExact] at ha
+      simp only [evalListHOLExact] at ha
+      simp only [evalAt] at he1 he2 he3
+      rw [he1, he2, he3] at ha
+      injection ha with hvs'
+      rw [← hvs'] at hvs
+      injection hvs with _ htl1; injection htl1 with _ htl2; injection htl2 with hv3 _
+    subst hv3_eq
+    simp only [evalAt, evalHOLExact] at he3
+    exact ⟨n0, he3, rfl⟩
+  obtain ⟨n0, hn_lk, rfl⟩ := hn_ex
+  have hn0_le : n0.toNat ≤ 32 := by
+    have hln : locN s "n" = n0.toNat := by simp [locN, hn_lk]
+    have := hs.2; omega
+  let ent := callEntryStateHOLFinite s callee
+  have hs_live : CsrLiveBufsAt s (locN s "cache") (locN s "new_roots") (locN s "mpt") [(locN s "vbuf", 96)] := hs.1.1
+  have hvb_nat : locN s "vbuf" = vb.toNat := by simp [locN, hvb_lk]
+  have hvb_hi : vb.toNat + 96 ≤ heapLimit := by
+    obtain ⟨hA, _, _, _, _, _, _, _, _, _, _, _, hbs, _⟩ := hs_live
+    have hb_in := (hbs (locN s "vbuf", 96) (by simp)).1
+    rw [hvb_nat] at hb_in
+    exact Nat.le_trans hb_in.2 hA.2.2.1
+  have h264 : heapLimit < 2 ^ 64 := by rw [heapLimit_val]; decide
+  have hdst_nat : ((vb + 8#64) + 32#64).toNat = vb.toNat + 40 := by
+    have h1 : (vb + 8#64).toNat = vb.toNat + 8 :=
+      BitVec.toNat_add_of_lt (by change vb.toNat + 8 < 2 ^ 64; omega)
+    have h2 : ((vb + 8#64) + 32#64).toNat = (vb + 8#64).toNat + 32 :=
+      BitVec.toNat_add_of_lt (by rw [h1]; change (vb.toNat + 8) + 32 < 2 ^ 64; omega)
+    omega
+  have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN s "mpt") [(locN s "vbuf", 96)] :=
+    localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs_live
+  obtain ⟨r, hrb, _, hr_hi, _, heff_b⟩ := R16Rlp.eval_rlp_encode_bytes_bounded ent
+    ((vb + 8#64) + 32#64) (vb + 8#64) n0 [(locN s "vbuf", 96)]
+    hc hs_ent.1.1
+    (by unfold ent callEntryStateHOLFinite; dsimp only; exact hc1)
+    (by unfold ent callEntryStateHOLFinite; dsimp only; exact hc2)
+    (by unfold ent callEntryStateHOLFinite; dsimp only; exact hc3)
+    (by omega)
+    ⟨(locN s "vbuf", 96), by simp, by rw [hdst_nat, hvb_nat]; omega, by rw [hdst_nat, hvb_nat]; omega⟩
+    (by rw [hb]; simp)
+    (by rw [hb]; exact Or.inl ⟨v, rfl⟩)
+  rw [hb] at hrb heff_b; dsimp only at hrb heff_b
+  have hv_eq : v = .val (.word r) := by injection hrb with hr'; injection hr'
+  subst hv_eq
+  have heff_w : R16Shards.WorldEff ent post [(locN s "vbuf", 96)] [] [] :=
+    worldEff_of_p26ByteEff_csr (R16Shards.WorldEff.refl ent [(locN s "vbuf", 96)] [] [] hs_ent.1 hc) heff_b
+      (fun iv hiv _ => Or.inl ⟨iv, hiv, le_rfl, le_rfl⟩)
+  have hpost_live : CsrLiveBufsAt post (locN s "cache") (locN s "new_roots") (locN s "mpt") [(locN s "vbuf", 96)] :=
+    worldEff_csrLiveBufsAt hs_ent (by decide) csr_empty_core_out heff_w
+      (fun iv hiv _ => ⟨iv, hiv, le_rfl, le_rfl⟩)
+  let mid := setVarHOLFinite (ofString "w") (.val (.word r)) { post with locals := s.locals }
+  refine ⟨⟨⟨?_, ?_⟩, ?_⟩, ?_⟩
+  · have hc_mid : locN mid "cache" = locN s "cache" := locN_setVar_ne _ "cache" (ofString "w") _ (by decide)
+    have hr_mid : locN mid "new_roots" = locN s "new_roots" := locN_setVar_ne _ "new_roots" (ofString "w") _ (by decide)
+    have hm_mid : locN mid "mpt" = locN s "mpt" := locN_setVar_ne _ "mpt" (ofString "w") _ (by decide)
+    have hv_mid : locN mid "vbuf" = locN s "vbuf" := locN_setVar_ne _ "vbuf" (ofString "w") _ (by decide)
+    show CsrMptBufs "mpt" [("vbuf", 96)] mid
+    unfold CsrMptBufs
+    simp only [List.map_cons, List.map_nil, hc_mid, hr_mid, hm_mid, hv_mid]
+    exact localsFree_csrLiveBufsAt _ _ _ _ post mid.locals mid.clock hpost_live
+  · obtain ⟨wp, hwp, hwp0⟩ := hs.1.2
+    refine ⟨wp, ?_, hwp0⟩
+    simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hwp,
+      show ofString "pass" ≠ ofString "w" by decide, show ofString "w" ≠ ofString "pass" by decide]
+  · show locN mid "w" ≤ 33
+    rw [locN_setVar_same]; omega
+  · show locN mid "n" ≤ 32
+    rw [locN_setVar_ne _ "n" (ofString "w") _ (by decide)]; exact hs.2
+
+theorem pBounded_memcpy_csr
+    (tf_mc : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»)
+    (esrc : ExpHOL 64) :
+    PBounded (CsrBound "w" 33 (CsrNonNeg "pass" (CsrMptBufs "mpt" [("enc", 40), ("vbuf", 96)])))
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "enc"), esrc, .var .local (ofString "w")])
+      (K.«memcpy» + 1) := by
+  let P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+    CsrBound "w" 33 (CsrNonNeg "pass" (CsrMptBufs "mpt" [("enc", 40), ("vbuf", 96)]))
+  refine ⟨TerminatingProgBoundedOn.call_on tf_mc none _
+    (callEntryOn_guestInv_csr (fun s (hs : P s) => (csrMptBufs_worldOK "mpt" [("enc", 40), ("vbuf", 96)] hs.1.1).1.1) _ _), ?_⟩
+  refine ⟨fun {F} s hc hs _ hr => ?_⟩
+  have hbe_call := call0_byteEff funByteEff_memcpy s
+    [.var .local (ofString "enc"), esrc, .var .local (ofString "w")]
+    [(locN s "enc", 40)]
+    hc (csrMptBufs_worldOK "mpt" [("enc", 40), ("vbuf", 96)] hs.1.1).1.1
+    (by
+      intro vals hvals i hi hpos
+      rw [evalListHOLFinite_eq_toExact] at hvals
+      simp only [evalListHOLExact] at hvals
+      rcases he1 : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+          (.var .local (ofString "enc")) with _ | v1 <;>
+      rcases he2 : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+          esrc with _ | v2 <;>
+      rcases he3 : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+          (.var .local (ofString "w")) with _ | v3 <;>
+        simp only [he1, he2, he3, Option.some.injEq] at hvals <;>
+        cases hvals
+      obtain rfl := List.mem_singleton.mp hi
+      dsimp only at hpos ⊢
+      have henc_val : valWordNat v1 = locN s "enc" := by
+        simp only [evalHOLExact] at he1
+        unfold locN
+        rcases hlk : s.locals.lookup (ofString "enc") with _ | vv
+        · simp [hlk] at he1
+        · simp only [hlk, Option.some.injEq] at he1; subst he1
+          rcases vv with ⟨⟨w⟩⟩ | _ | _ <;> rfl
+      have hw_val : valWordNat v3 = locN s "w" := by
+        simp only [evalHOLExact] at he3
+        unfold locN
+        rcases hlk : s.locals.lookup (ofString "w") with _ | vv
+        · simp [hlk] at he3
+        · simp only [hlk, Option.some.injEq] at he3; subst he3
+          rcases vv with ⟨⟨w⟩⟩ | _ | _ <;> rfl
+      refine ⟨(locN s "enc", 40), by simp, ?_, ?_⟩
+      · simp only [List.getElem?_cons_zero, Option.getD_some]; rw [henc_val]
+      · simp only [List.getElem?_cons_zero, List.getElem?_cons_succ, Option.getD_some]
+        rw [henc_val, hw_val]; have := hs.2; omega)
+    (by rw [hr]; simp) (Or.inl hr)
+  have hloc_eq : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "enc"), esrc, .var .local (ofString "w")])).2.locals = s.locals := by
+    rw [evaluateHOLFiniteState_call] at hr ⊢
+    rcases ha : @evalListHOLExact 64 F _ s.toExact
+        (fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "enc"), esrc, .var .local (ofString "w")] with _ | vs
+    · simp [PanSemStateFiniteExact.evalListHOLFinite, ha] at hr
+    · simp only [PanSemStateFiniteExact.evalListHOLFinite, ha] at hr ⊢
+      rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs with _ | ⟨body, callee, ret⟩
+      · simp [hl] at hr
+      · simp only [hl] at hr ⊢
+        by_cases hz : s.clock = 0
+        · simp [hz] at hr
+        · simp only [hz, ↓reduceIte] at hr ⊢
+          rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, post⟩
+          simp only [hb] at hr ⊢
+          cases res with
+          | none => simp at hr
+          | some r =>
+            cases r with
+            | returned v =>
+              dsimp only at hr ⊢
+              split at hr
+              · rename_i hsh; rw [if_pos hsh]
+              · simp at hr
+            | _ => simp at hr
+  have hloc_lk : ∀ k : MlS, (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "enc"), esrc, .var .local (ofString "w")])).2.locals.lookup k =
+      s.locals.lookup k := by
+    intro k; rw [hloc_eq]
+  have hs_live : CsrLiveBufsAt s (locN s "cache") (locN s "new_roots") (locN s "mpt")
+      [(locN s "enc", 40), (locN s "vbuf", 96)] := hs.1.1
+  have heff_w : R16Shards.WorldEff s
+      (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "enc"), esrc, .var .local (ofString "w")])).2
+      [(locN s "enc", 40)] [] [] :=
+    worldEff_of_p26ByteEff_csr (R16Shards.WorldEff.refl s [(locN s "enc", 40)] [] [] hs_live.1 hc) hbe_call
+      (fun iv hiv _ => Or.inl ⟨iv, hiv, le_rfl, le_rfl⟩)
+  have hpost_live : CsrLiveBufsAt
+      (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "enc"), esrc, .var .local (ofString "w")])).2
+      (locN s "cache") (locN s "new_roots") (locN s "mpt")
+      [(locN s "enc", 40), (locN s "vbuf", 96)] :=
+    worldEff_csrLiveBufsAt hs_live (by decide) csr_empty_core_out heff_w
+      (fun iv hiv _ => by
+        obtain rfl := List.mem_singleton.mp hiv
+        exact ⟨(locN s "enc", 40), by simp, le_rfl, le_rfl⟩)
+  have hln : ∀ nm : String, locN (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "enc"), esrc, .var .local (ofString "w")])).2 nm = locN s nm := by
+    intro nm; unfold locN; rw [hloc_eq]
+  refine ⟨⟨?_, ?_⟩, ?_⟩
+  · unfold CsrMptBufs
+    simp only [List.map_cons, List.map_nil, hln "cache", hln "new_roots", hln "mpt", hln "enc", hln "vbuf"]
+    exact hpost_live
+  · obtain ⟨wp, hwp, hwp0⟩ := hs.1.2
+    exact ⟨wp, (hloc_lk (ofString "pass")).trans hwp, hwp0⟩
+  · rw [hln "w"]; exact hs.2
+
+private theorem mptSet_R_z_csr {F : Type} (ent : PanSemStateFiniteExact 64 F) :
+    ∀ j ∈ [(globN ent "keccak_pad", if globN ent "keccak_pad" = 0 then 0 else 136),
+           (globN ent "keccak_st", if globN ent "keccak_st" = 0 then 0 else 200),
+           (globN ent "mpt_hash_scratch", if globN ent "mpt_hash_scratch" = 0 then 0 else 40)],
+      j.2 = 0 → j.1 % 8 = 0 := by
+  intro j hj hz
+  rcases List.mem_cons.mp hj with rfl | hj1
+  · dsimp only at hz ⊢; split at hz <;> omega
+  · rcases List.mem_cons.mp hj1 with rfl | hj2
+    · dsimp only at hz ⊢; split at hz <;> omega
+    · obtain rfl := List.mem_singleton.mp hj2
+      dsimp only at hz ⊢; split at hz <;> omega
+
+private theorem mptSet_R_ti_csr {F : Type} (ent : PanSemStateFiniteExact 64 F)
+    {S Nd Nm : List Nat}
+    (hW : WorldTypedWith ent S Nd)
+    (hm : MptObjInWith ent S Nm (locN ent "m")) :
+    IvlsDisj
+      [(globN ent "keccak_pad", if globN ent "keccak_pad" = 0 then 0 else 136),
+       (globN ent "keccak_st", if globN ent "keccak_st" = 0 then 0 else 200),
+       (globN ent "mpt_hash_scratch", if globN ent "mpt_hash_scratch" = 0 then 0 else 40)]
+      (worldTypedIvls ent S Nd ++ mptObjIvls ent Nm (locN ent "m")) := by
+  let bufs : List (String × Nat) := [("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)]
+  change IvlsDisj (bufs.map (bufferRegion ent)) (worldTypedIvls ent S Nd ++ mptObjIvls ent Nm (locN ent "m"))
+  intro i hi j hj
+  obtain ⟨b, hb_mem, rfl⟩ := List.mem_map.mp hi
+  rcases List.mem_append.mp hj with hjw | hjm
+  · exact bufferRegion_disj hW b (csr_mptSetBufs_ok b hb_mem).1 (csr_mptSetBufs_ok b hb_mem).2 j hjw
+  · exact mptObjInWith_disj_buffer_csr hm (csr_mptSetBufs_ok b hb_mem).1 _ (List.mem_singleton_self _) j hjm
+
+theorem pBounded_mpt_set_const_csrMptBufs
+    (g_ms : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (mk_ms : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_set"))
+    (mname : String) (buffers : List (String × Nat))
+    (ekey evptr : ExpHOL 64) (klen vlen : BitVec 64)
+    (hk : klen.toNat ≤ 32) (hv : vlen.toNat ≤ 110) :
+    PBounded (CsrMptBufs mname buffers)
+      (.call (some (none, none)) (ofString "mpt_set")
+        [.var .local (ofString mname), ekey, .const klen, evptr, .const vlen])
+      (K.«mpt_set» + 1) := by
+  refine pBounded_call0_on_csr g_ms mk_ms ?_ ?_
+  · intro F s values body callee ret hc hs ha hl
+    obtain ⟨v1, _, v3, _, v5, he1, _, he3, _, he5, hc1, _, hc3, _, hc5⟩ :=
+      callee_param_five_exp_csr s (ofString "mpt_set")
+        (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+        .one .one .one .one .one (sourceFnBody Guest.Software.guestFn_mpt_set) .one
+        (hc ▸ P3MptSet.lookup_mpt_set)
+        (.var .local (ofString mname)) ekey (.const klen) evptr (.const vlen)
+        values body callee ret ha hl
+    let ent := callEntryStateHOLFinite s callee
+    have hm_eq : locN ent "m" = locN s mname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+      simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+    have hk_eq : locN ent "klen" = klen.toNat := by
+      simp only [evalAt, evalHOLExact, Option.some.injEq] at he3; subst v3
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc3]
+    have hv_eq : locN ent "vlen" = vlen.toNat := by
+      simp only [evalAt, evalHOLExact, Option.some.injEq] at he5; subst v5
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc5]
+    have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m")
+        (buffers.map fun b => (locN s b.1, b.2)) := by
+      rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs
+    exact csrLiveBufsAt_mptSetReady hs_ent (hk_eq ▸ hk) (hv_eq ▸ hv)
+  · intro F s values body callee ret v post hc hs ha hl _ hq
+    obtain ⟨v1, _, _, _, _, he1, _, _, _, _, hc1, _, _, _, _⟩ :=
+      callee_param_five_exp_csr s (ofString "mpt_set")
+        (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+        .one .one .one .one .one (sourceFnBody Guest.Software.guestFn_mpt_set) .one
+        (hc ▸ P3MptSet.lookup_mpt_set)
+        (.var .local (ofString mname)) ekey (.const klen) evptr (.const vlen)
+        values body callee ret ha hl
+    let ent := callEntryStateHOLFinite s callee
+    have hm_eq : locN ent "m" = locN s mname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+      simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+    have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m")
+        (buffers.map fun b => (locN s b.1, b.2)) := by
+      rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs
+    have hpost := mptObjStep_csrLiveBufsAt hs_ent (hq (Or.inl ⟨v, rfl⟩))
+      (mptSet_R_z_csr ent) (fun S Nd Nm hW hm _ _ => mptSet_R_ti_csr ent hW hm)
+    rw [hm_eq] at hpost
+    exact localsFree_csrLiveBufsAt _ _ _ _ post s.locals post.clock hpost
+
+theorem pBounded_mpt_set_const_csrNonNeg
+    (g_ms : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (mk_ms : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_set"))
+    (pname mname : String) (buffers : List (String × Nat))
+    (ekey evptr : ExpHOL 64) (klen vlen : BitVec 64)
+    (hk : klen.toNat ≤ 32) (hv : vlen.toNat ≤ 110) :
+    PBounded (CsrNonNeg pname (CsrMptBufs mname buffers))
+      (.call (some (none, none)) (ofString "mpt_set")
+        [.var .local (ofString mname), ekey, .const klen, evptr, .const vlen])
+      (K.«mpt_set» + 1) := by
+  have hb0 := pBounded_mpt_set_const_csrMptBufs g_ms mk_ms mname buffers ekey evptr klen vlen hk hv
+  refine pBounded_call0_on_csr g_ms mk_ms
+    (fun s vs body callee ret hc hs ha hl => by
+      obtain ⟨v1, _, v3, _, v5, he1, _, he3, _, he5, hc1, _, hc3, _, hc5⟩ :=
+        callee_param_five_exp_csr s (ofString "mpt_set")
+          (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+          .one .one .one .one .one (sourceFnBody Guest.Software.guestFn_mpt_set) .one
+          (hc ▸ P3MptSet.lookup_mpt_set)
+          (.var .local (ofString mname)) ekey (.const klen) evptr (.const vlen)
+          vs body callee ret ha hl
+      let ent := callEntryStateHOLFinite s callee
+      have hm_eq : locN ent "m" = locN s mname := by
+        unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+        simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+      have hk_eq : locN ent "klen" = klen.toNat := by
+        simp only [evalAt, evalHOLExact, Option.some.injEq] at he3; subst v3
+        unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc3]
+      have hv_eq : locN ent "vlen" = vlen.toNat := by
+        simp only [evalAt, evalHOLExact, Option.some.injEq] at he5; subst v5
+        unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc5]
+      have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m")
+          (buffers.map fun b => (locN s b.1, b.2)) := by
+        rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs.1
+      exact csrLiveBufsAt_mptSetReady hs_ent (hk_eq ▸ hk) (hv_eq ▸ hv))
+    (fun s vs body callee ret v post hc hs ha hl _ hq => by
+      obtain ⟨v1, _, _, _, _, he1, _, _, _, _, hc1, _, _, _, _⟩ :=
+        callee_param_five_exp_csr s (ofString "mpt_set")
+          (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+          .one .one .one .one .one (sourceFnBody Guest.Software.guestFn_mpt_set) .one
+          (hc ▸ P3MptSet.lookup_mpt_set)
+          (.var .local (ofString mname)) ekey (.const klen) evptr (.const vlen)
+          vs body callee ret ha hl
+      let ent := callEntryStateHOLFinite s callee
+      have hm_eq : locN ent "m" = locN s mname := by
+        unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+        simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+      have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m")
+          (buffers.map fun b => (locN s b.1, b.2)) := by
+        rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs.1
+      have hpost := mptObjStep_csrLiveBufsAt hs_ent (hq (Or.inl ⟨v, rfl⟩))
+        (mptSet_R_z_csr ent) (fun S Nd Nm hW hm _ _ => mptSet_R_ti_csr ent hW hm)
+      rw [hm_eq] at hpost
+      exact ⟨localsFree_csrLiveBufsAt _ _ _ _ post s.locals post.clock hpost, hs.2⟩)
+
+theorem pBounded_mpt_set_bound_csrMptBufs
+    (g_ms : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (mk_ms : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_set"))
+    (wname : String) (wbound : Nat) (mname : String) (buffers : List (String × Nat))
+    (ekey evptr : ExpHOL 64) (klen : BitVec 64)
+    (hk : klen.toNat ≤ 32) (hv : wbound ≤ 110) :
+    PBounded (CsrBound wname wbound (CsrMptBufs mname buffers))
+      (.call (some (none, none)) (ofString "mpt_set")
+        [.var .local (ofString mname), ekey, .const klen, evptr, .var .local (ofString wname)])
+      (K.«mpt_set» + 1) := by
+  refine pBounded_call0_on_csr g_ms mk_ms ?_ ?_
+  · intro F s values body callee ret hc hs ha hl
+    obtain ⟨v1, _, v3, _, v5, he1, _, he3, _, he5, hc1, _, hc3, _, hc5⟩ :=
+      callee_param_five_exp_csr s (ofString "mpt_set")
+        (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+        .one .one .one .one .one (sourceFnBody Guest.Software.guestFn_mpt_set) .one
+        (hc ▸ P3MptSet.lookup_mpt_set)
+        (.var .local (ofString mname)) ekey (.const klen) evptr (.var .local (ofString wname))
+        values body callee ret ha hl
+    let ent := callEntryStateHOLFinite s callee
+    have hm_eq : locN ent "m" = locN s mname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+      simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+    have hk_eq : locN ent "klen" = klen.toNat := by
+      simp only [evalAt, evalHOLExact, Option.some.injEq] at he3; subst v3
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc3]
+    have hv_eq : locN ent "vlen" = locN s wname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc5]
+      simp only [evalAt, evalHOLExact] at he5; rw [← he5]
+    have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m")
+        (buffers.map fun b => (locN s b.1, b.2)) := by
+      rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs.1
+    exact csrLiveBufsAt_mptSetReady hs_ent (hk_eq ▸ hk) (hv_eq ▸ Nat.le_trans hs.2 hv)
+  · intro F s values body callee ret v post hc hs ha hl _ hq
+    obtain ⟨v1, _, _, _, _, he1, _, _, _, _, hc1, _, _, _, _⟩ :=
+      callee_param_five_exp_csr s (ofString "mpt_set")
+        (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+        .one .one .one .one .one (sourceFnBody Guest.Software.guestFn_mpt_set) .one
+        (hc ▸ P3MptSet.lookup_mpt_set)
+        (.var .local (ofString mname)) ekey (.const klen) evptr (.var .local (ofString wname))
+        values body callee ret ha hl
+    let ent := callEntryStateHOLFinite s callee
+    have hm_eq : locN ent "m" = locN s mname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+      simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+    have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m")
+        (buffers.map fun b => (locN s b.1, b.2)) := by
+      rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs.1
+    have hpost := mptObjStep_csrLiveBufsAt hs_ent (hq (Or.inl ⟨v, rfl⟩))
+      (mptSet_R_z_csr ent) (fun S Nd Nm hW hm _ _ => mptSet_R_ti_csr ent hW hm)
+    rw [hm_eq] at hpost
+    exact ⟨localsFree_csrLiveBufsAt _ _ _ _ post s.locals post.clock hpost, hs.2⟩
+
+theorem pBounded_mpt_set_bound_csrNonNeg_csrMptBufs
+    (g_ms : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (mk_ms : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_set"))
+    (wname : String) (wbound : Nat) (pname mname : String) (buffers : List (String × Nat))
+    (ekey evptr : ExpHOL 64) (klen : BitVec 64)
+    (hk : klen.toNat ≤ 32) (hv : wbound ≤ 110) :
+    PBounded (CsrBound wname wbound (CsrNonNeg pname (CsrMptBufs mname buffers)))
+      (.call (some (none, none)) (ofString "mpt_set")
+        [.var .local (ofString mname), ekey, .const klen, evptr, .var .local (ofString wname)])
+      (K.«mpt_set» + 1) := by
+  refine pBounded_call0_on_csr g_ms mk_ms ?_ ?_
+  · intro F s values body callee ret hc hs ha hl
+    obtain ⟨v1, _, v3, _, v5, he1, _, he3, _, he5, hc1, _, hc3, _, hc5⟩ :=
+      callee_param_five_exp_csr s (ofString "mpt_set")
+        (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+        .one .one .one .one .one (sourceFnBody Guest.Software.guestFn_mpt_set) .one
+        (hc ▸ P3MptSet.lookup_mpt_set)
+        (.var .local (ofString mname)) ekey (.const klen) evptr (.var .local (ofString wname))
+        values body callee ret ha hl
+    let ent := callEntryStateHOLFinite s callee
+    have hm_eq : locN ent "m" = locN s mname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+      simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+    have hk_eq : locN ent "klen" = klen.toNat := by
+      simp only [evalAt, evalHOLExact, Option.some.injEq] at he3; subst v3
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc3]
+    have hv_eq : locN ent "vlen" = locN s wname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc5]
+      simp only [evalAt, evalHOLExact] at he5; rw [← he5]
+    have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m")
+        (buffers.map fun b => (locN s b.1, b.2)) := by
+      rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs.1.1
+    exact csrLiveBufsAt_mptSetReady hs_ent (hk_eq ▸ hk) (hv_eq ▸ Nat.le_trans hs.2 hv)
+  · intro F s values body callee ret v post hc hs ha hl _ hq
+    obtain ⟨v1, _, _, _, _, he1, _, _, _, _, hc1, _, _, _, _⟩ :=
+      callee_param_five_exp_csr s (ofString "mpt_set")
+        (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+        .one .one .one .one .one (sourceFnBody Guest.Software.guestFn_mpt_set) .one
+        (hc ▸ P3MptSet.lookup_mpt_set)
+        (.var .local (ofString mname)) ekey (.const klen) evptr (.var .local (ofString wname))
+        values body callee ret ha hl
+    let ent := callEntryStateHOLFinite s callee
+    have hm_eq : locN ent "m" = locN s mname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+      simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+    have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m")
+        (buffers.map fun b => (locN s b.1, b.2)) := by
+      rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs.1.1
+    have hpost := mptObjStep_csrLiveBufsAt hs_ent (hq (Or.inl ⟨v, rfl⟩))
+      (mptSet_R_z_csr ent) (fun S Nd Nm hW hm _ _ => mptSet_R_ti_csr ent hW hm)
+    rw [hm_eq] at hpost
+    exact ⟨⟨localsFree_csrLiveBufsAt _ _ _ _ post s.locals post.clock hpost, hs.1.2⟩, hs.2⟩
+
+theorem pBounded_mpt_root_buf_csr
+    (g_mr : TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root»)
+    (mk_mr : MptKeeps MptObjReady
+      (fun s => [(locN s "out", 32),
+                 (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_root"))
+    (mname rname : String) (buffers : List (String × Nat)) :
+    PBounded (CsrMptBufs mname ((rname, 32) :: buffers))
+      (.call (some (none, none)) (ofString "mpt_root")
+        [.var .local (ofString mname), .var .local (ofString rname)])
+      (K.«mpt_root» + 1) := by
+  refine pBounded_call0_on_csr g_mr mk_mr ?_ ?_
+  · intro F s values body callee ret hc hs ha hl
+    obtain ⟨v1, _, he1, _, hc1, _, _⟩ := callee_param_two_exp_csr s (ofString "mpt_root")
+      (ofString "m") (ofString "out") .one .one
+      (sourceFnBody Guest.Software.guestFn_mpt_root) .one
+      (hc ▸ lookup_mpt_root_csr)
+      (.var .local (ofString mname)) (.var .local (ofString rname)) values body callee ret ha hl
+    let ent := callEntryStateHOLFinite s callee
+    have hm_eq : locN ent "m" = locN s mname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+      simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+    have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m")
+        (((rname, 32) :: buffers).map fun b => (locN s b.1, b.2)) := by
+      rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs
+    exact csrLiveBufsAt_mptObjReady hs_ent
+  · intro F s values body callee ret v post hc hs ha hl _ hq
+    obtain ⟨v1, v2, he1, he2, hc1, hc2, _⟩ := callee_param_two_exp_csr s (ofString "mpt_root")
+      (ofString "m") (ofString "out") .one .one
+      (sourceFnBody Guest.Software.guestFn_mpt_root) .one
+      (hc ▸ lookup_mpt_root_csr)
+      (.var .local (ofString mname)) (.var .local (ofString rname)) values body callee ret ha hl
+    let ent := callEntryStateHOLFinite s callee
+    have hm_eq : locN ent "m" = locN s mname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+      simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+    have hout_eq : locN ent "out" = locN s rname := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc2]
+      simp only [evalAt, evalHOLExact] at he2; rw [← he2]
+    have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m")
+        (((rname, 32) :: buffers).map fun b => (locN s b.1, b.2)) := by
+      rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs
+    have hpost := mptObjStep_csrLiveBufsAt hs_ent (hq (Or.inl ⟨v, rfl⟩))
+      (fun j hj hz => by
+        rcases List.mem_cons.mp hj with rfl | hj1
+        · dsimp only at hz; omega
+        · rcases List.mem_cons.mp hj1 with rfl | hj2
+          · dsimp only at hz ⊢; split at hz <;> omega
+          · obtain rfl := List.mem_singleton.mp hj2
+            dsimp only at hz ⊢; split at hz <;> omega)
+      (fun S Nd Nm hW hm _ hbs => by
+        intro r hr_mem j hj
+        rcases List.mem_cons.mp hr_mem with rfl | hr1
+        · have hb_root : CsrHeapBufAt ent (locN s rname, 32)
+              (worldOwned ent S Nd ++ mptObjIvls ent Nm (locN ent "m")) :=
+            hbs (locN s rname, 32) (by simp)
+          have hj_sub : j ∈ worldOwned ent S Nd ++ mptObjIvls ent Nm (locN ent "m") := by
+            rcases List.mem_append.mp hj with hjw | hjm
+            · exact List.mem_append_left _ (worldTypedIvls_sub_worldOwned ent S Nd j hjw)
+            · exact List.mem_append_right _ hjm
+          rw [hout_eq]
+          exact hb_root.2.2 _ (List.mem_singleton_self _) j hj_sub
+        · let bufs : List (String × Nat) := [("keccak_pad", 136), ("keccak_st", 200)]
+          have hr_buf : r ∈ bufs.map (bufferRegion ent) := hr1
+          obtain ⟨b, hb_mem, rfl⟩ := List.mem_map.mp hr_buf
+          rcases List.mem_append.mp hj with hjw | hjm
+          · exact bufferRegion_disj hW b (csr_mptRootBufs_ok b hb_mem).1
+              (csr_mptRootBufs_ok b hb_mem).2 j hjw
+          · exact mptObjInWith_disj_buffer_csr hm (csr_mptRootBufs_ok b hb_mem).1
+              _ (List.mem_singleton_self _) j hjm)
+    rw [hm_eq] at hpost
+    exact localsFree_csrLiveBufsAt _ _ _ _ post s.locals post.clock hpost
+
+theorem pBounded_encode_account_csr
+    (tf_ea : TerminatingFunBoundedOn GuestInv (ofString "encode_account") K.«encode_account»)
+    (mname ename nname : String)
+    (e1 e2 e3 e4 : ExpHOL 64) {Bc : Nat} {cont : ProgHOL 64}
+    (hne : ∀ n ∈ ["cache", "new_roots", mname, ename], ofString n ≠ ofString nname)
+    (hcont : PBounded (CsrBound nname 110 (CsrMptBufs mname [(ename, 128)])) cont Bc) :
+    PBounded (CsrMptBufs mname [(ename, 128)])
+      (.decCall (ofString nname) .one (ofString "encode_account")
+        [e1, e2, e3, e4, .var .local (ofString ename)] cont)
+      (K.«encode_account» + Bc + 1) := by
+  have hne' : ∀ n ∈ ["cache", "new_roots", mname] ++ ([(ename, 128)] : List (String × Nat)).map Prod.fst,
+      ofString n ≠ ofString nname := by
+    intro n hn
+    simp only [List.map_cons, List.map_nil, List.append_assoc, List.cons_append, List.nil_append] at hn
+    exact hne n hn
+  refine pBounded_specDecCall_csr (localsOnly_csrMptBufs mname [(ename, 128)]) tf_ea rv_encode_account_csr
+    (callEntryOn_guestInv_csr (fun s hs => (csrMptBufs_worldOK mname [(ename, 128)] hs).1.1) _ _)
+    hne' ?_ hcont.1 ⟨fun s hc hR hnt hr => (hcont.2.run s hc hR hnt hr).1⟩
+  intro F s values body callee ret v post hc hs ha hl hb hq
+  obtain ⟨w, rfl, hw_le⟩ := hq v rfl
+  obtain ⟨_, _, _, _, v5, _, _, _, _, he5, _, _, _, _, hc5, hbody_eq⟩ :=
+    callee_param_five_exp_body_csr s (ofString "encode_account")
+      (ofString "nonce") (ofString "balance") (ofString "storage_root") (ofString "code_hash") (ofString "out")
+      .one (.comb [.one, .one, .one, .one]) .one .one .one
+      (sourceFnBody Guest.Software.guestFn_encode_account) .one
+      (hc ▸ R16Rlp.lookup_encode_account)
+      e1 e2 e3 e4 (.var .local (ofString ename)) values body callee ret ha hl
+  subst hbody_eq
+  let ent := callEntryStateHOLFinite s callee
+  have hout_eq : locN ent "out" = locN s ename := by
+    unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc5]
+    simp only [evalAt, evalHOLExact] at he5; rw [← he5]
+  have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN s mname)
+      [(locN s ename, 128)] :=
+    localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs
+  have hwok_ent : WorldOK ent := localsFree_worldOK s callee _ (csrMptBufs_worldOK mname [(ename, 128)] hs)
+  have hbe_ea := byteEff_encode_account_body_csr ent hc hwok_ent
+    (by rw [hb]; simp) (by rw [hb]; exact Or.inl ⟨.val (.word w), rfl⟩)
+  rw [hb] at hbe_ea; dsimp only at hbe_ea
+  have heff_w : R16Shards.WorldEff ent post [(locN s ename, 128)] [("mpt_hash_scratch", 40)] [] :=
+    worldEff_of_p26ByteEff_csr
+      (R16Shards.WorldEff.refl ent [(locN s ename, 128)] [("mpt_hash_scratch", 40)] [] hs_ent.1 hc)
+      hbe_ea
+      (fun iv hiv hpos => by
+        rcases List.mem_cons.mp hiv with rfl | hiv1
+        · left; refine ⟨(locN s ename, 128), by simp, ?_, ?_⟩
+          · dsimp only; rw [hout_eq]
+          · dsimp only; rw [hout_eq]; omega
+        · obtain rfl := List.mem_singleton.mp hiv1
+          right; left
+          refine ⟨("mpt_hash_scratch", 40), by simp, le_rfl, le_rfl⟩)
+  have hpost_live : CsrLiveBufsAt post (locN s "cache") (locN s "new_roots") (locN s mname)
+      [(locN s ename, 128)] :=
+    worldEff_csrLiveBufsAt hs_ent csr_eaBufs_ok csr_empty_core_out heff_w
+      (fun iv hiv _ => ⟨iv, hiv, le_rfl, le_rfl⟩)
+  let mid := setVarHOLFinite (ofString nname) (.val (.word w)) { post with locals := s.locals }
+  refine ⟨?_, ?_⟩
+  · have hc_mid : locN mid "cache" = locN s "cache" := locN_setVar_ne _ "cache" (ofString nname) _ (hne "cache" (by simp))
+    have hr_mid : locN mid "new_roots" = locN s "new_roots" := locN_setVar_ne _ "new_roots" (ofString nname) _ (hne "new_roots" (by simp))
+    have hm_mid : locN mid mname = locN s mname := locN_setVar_ne _ mname (ofString nname) _ (hne mname (by simp))
+    have he_mid : locN mid ename = locN s ename := locN_setVar_ne _ ename (ofString nname) _ (hne ename (by simp))
+    show CsrMptBufs mname [(ename, 128)] mid
+    unfold CsrMptBufs
+    simp only [List.map_cons, List.map_nil, hc_mid, hr_mid, hm_mid, he_mid]
+    exact localsFree_csrLiveBufsAt _ _ _ _ post mid.locals mid.clock hpost_live
+  · show locN mid nname ≤ 110
+    rw [locN_setVar_same]; exact hw_le
+
+theorem pBounded_ws_get_account_optional_csrMptBufs
+    (tf_wgao : TerminatingFunBoundedOn GuestInv (ofString "ws_get_account_optional") K.«ws_get_account_optional»)
+    (mname aname : String) (eaddr : ExpHOL 64) {Bc : Nat} {cont : ProgHOL 64}
+    (hne : ∀ n ∈ ["cache", "new_roots", mname], ofString n ≠ ofString aname)
+    (hcont : PBounded (CsrMptBufs mname []) cont Bc) :
+    PBounded (CsrMptBufs mname [])
+      (.decCall (ofString aname) .one (ofString "ws_get_account_optional") [eaddr] cont)
+      (K.«ws_get_account_optional» + Bc + 1) := by
+  have hne' : ∀ n ∈ ["cache", "new_roots", mname] ++ ([] : List (String × Nat)).map Prod.fst,
+      ofString n ≠ ofString aname := by
+    intro n hn; simp at hn; exact hne n (by simpa using hn)
+  refine PBounded.decCallTrans tf_wgao (localsOnly_csrMptBufs mname []) (ofString aname) hne' .one [eaddr]
+    (callEntryOn_guestInv_csr (fun s hs => (csrMptBufs_worldOK mname [] hs).1.1) _ _)
+    ?_ hcont.1 hcont.2
+  intro F s values body callee ret v post hc hs ha hl hb
+  obtain ⟨_, _, _, hbody_eq⟩ := callee_param_one_exp_csr s (ofString "ws_get_account_optional")
+    (ofString "addr") .one (sourceFnBody Guest.Software.guestFn_ws_get_account_optional) .one
+    (hc ▸ lookup_ws_get_account_optional_csr) eaddr values body callee ret ha hl
+  subst hbody_eq
+  let ent := callEntryStateHOLFinite s callee
+  have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN s mname) [] :=
+    localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs
+  have heff := R16Shards.worldEff_ws_get_account_optional ent ent hs_ent.1.2
+    (R16Shards.WorldEff.refl ent [] R16Shards.wsBufs R16Shards.wsGw hs_ent.1 hc)
+    (by rw [hb]; simp) (by rw [hb]; exact Or.inl ⟨v, rfl⟩)
+  rw [hb] at heff; dsimp only at heff
+  have hpost_live : CsrLiveBufsAt post (locN s "cache") (locN s "new_roots") (locN s mname) [] :=
+    worldEff_csrLiveBufsAt hs_ent csr_wsBufs_ok csr_ws_core_out heff (fun _ h => by cases h)
+  let mid := setVarHOLFinite (ofString aname) v { post with locals := s.locals }
+  have hc_mid : locN mid "cache" = locN s "cache" := locN_setVar_ne _ "cache" (ofString aname) _ (hne "cache" (by simp))
+  have hr_mid : locN mid "new_roots" = locN s "new_roots" := locN_setVar_ne _ "new_roots" (ofString aname) _ (hne "new_roots" (by simp))
+  have hm_mid : locN mid mname = locN s mname := locN_setVar_ne _ mname (ofString aname) _ (hne mname (by simp))
+  show CsrMptBufs mname [] mid
+  unfold CsrMptBufs
+  simp only [List.map_nil, hc_mid, hr_mid, hm_mid]
+  exact localsFree_csrLiveBufsAt _ _ _ _ post mid.locals mid.clock hpost_live
+
+theorem pBounded_cache_get_root_csrMptBufs
+    (tf_cgr : TerminatingFunBoundedOn GuestInv (ofString "cache_get_root") K.«cache_get_root»)
+    (mname sname : String) (ecache eaddr : ExpHOL 64)
+    (hne : ∀ n ∈ ["cache", "new_roots", mname], ofString n ≠ ofString sname) :
+    PBounded (CsrMptBufs mname [])
+      (.call (some (some (.local, ofString sname), none)) (ofString "cache_get_root") [ecache, eaddr])
+      (K.«cache_get_root» + 1) := by
+  refine pBounded_callLocal_csr tf_cgr
+    (callEntryOn_guestInv_csr (fun s hs => (csrMptBufs_worldOK mname [] hs).1.1) _ _)
+    ?_
+  intro F s values body callee ret v post hc hs ha hl hb
+  obtain ⟨_, _, _, _, _, _, hbody_eq⟩ := callee_param_two_exp_csr s (ofString "cache_get_root")
+    (ofString "cache") (ofString "addr") .one .one
+    (sourceFnBody Guest.Software.guestFn_cache_get_root) .one
+    (hc ▸ lookup_cache_get_root_csr) ecache eaddr values body callee ret ha hl
+  subst hbody_eq
+  let ent := callEntryStateHOLFinite s callee
+  have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN s mname) [] :=
+    localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs
+  have heff := R16Shards.worldEff_cache_get_root ent ent hs_ent.1.2
+    (R16Shards.WorldEff.refl ent [] R16Shards.wsBufs R16Shards.wsGw hs_ent.1 hc)
+    (by rw [hb]; simp) (by rw [hb]; exact Or.inl ⟨v, rfl⟩)
+  rw [hb] at heff; dsimp only at heff
+  have hpost_live : CsrLiveBufsAt post (locN s "cache") (locN s "new_roots") (locN s mname) [] :=
+    worldEff_csrLiveBufsAt hs_ent csr_wsBufs_ok csr_ws_core_out heff (fun _ h => by cases h)
+  let mid := setVarHOLFinite (ofString sname) v { post with locals := s.locals }
+  have hc_mid : locN mid "cache" = locN s "cache" := locN_setVar_ne _ "cache" (ofString sname) _ (hne "cache" (by simp))
+  have hr_mid : locN mid "new_roots" = locN s "new_roots" := locN_setVar_ne _ "new_roots" (ofString sname) _ (hne "new_roots" (by simp))
+  have hm_mid : locN mid mname = locN s mname := locN_setVar_ne _ mname (ofString sname) _ (hne mname (by simp))
+  show CsrMptBufs mname [] mid
+  unfold CsrMptBufs
+  simp only [List.map_nil, hc_mid, hr_mid, hm_mid]
+  exact localsFree_csrLiveBufsAt _ _ _ _ post mid.locals mid.clock hpost_live
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
