@@ -11373,6 +11373,33 @@ theorem precompile_sha256_tail_step {F : Type}
     rw [precompile_call0_locals_on_flow s _ _ hflow]
     exact ho
 
+theorem precompile_sha256_allocated_tail {F : Type}
+    {s next : PanSemStateFiniteExact 64 F} (pad stp out len : BitVec 64) (ptr : ExpHOL 64)
+    (hi : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s next)
+    (hm : next.memory = s.memory) (hb : next.be = s.be)
+    (hfresh : Inside (out.toNat,32) (globN s "heap_ptr") (globN next "heap_ptr"))
+    (hc : next.code = originalRuntimeCode)
+    (hp : next.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : next.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hpad : pad.toNat ≠ 0) (hst : stp.toNat ≠ 0)
+    (hn : next.locals.lookup (ofString "n") = some (.val (.word len)))
+    (ho : next.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hbound : len.toNat+64 < 2^64) :
+    let p : ProgHOL 64 := .seq
+      (.call (some (none,none)) (ofString "sha256") [ptr,.var .local (ofString "n"),.var .local (ofString "out")])
+      (.seq (.store (.op .add [.var .global (ofString "ev"),.const 120]) (.var .local (ofString "out")))
+        (.seq (.store (.op .add [.var .global (ofString "ev"),.const 128]) (.const 32)) (.return (.const 0))))
+    (evaluateHOLFiniteState next p).1 ≠ some .timeOut →
+    R13.FlowsOrResumes (evaluateHOLFiniteState next p).1 →
+    EvmStepCC frameStartGw next (evaluateHOLFiniteState next p).2 := by
+  have hav := precompile_sha256_allocated_avoid pad stp out hi hstep hm hb hfresh hp hs hpad hst
+  have hpb := precompile_global_buffer_bound hstep.1.1 ("sha_pad",128) (by decide) pad hp hpad (by decide)
+  have hob : out.toNat+32 < 2^64 := by
+    have hl := hstep.1.1.1.2.2.1
+    have hc64 : heapLimit < 2^64 := by decide
+    exact lt_of_le_of_lt (le_trans hfresh.2 hl) hc64
+  exact precompile_sha256_tail_step next pad stp out len ptr hc hav hp hs hn ho hbound hpb hob
+
 theorem precompile_identity_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (args : List (ExpHOL 64)) (n : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
