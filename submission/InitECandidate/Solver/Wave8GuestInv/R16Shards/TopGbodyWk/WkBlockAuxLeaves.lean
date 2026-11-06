@@ -9937,4 +9937,28 @@ theorem eval_merge_storage_body {F : Type}
         show ofString "s" ≠ ofString "bouter" by decide] using ht
     · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
 
+/-- The storage body never assigns its two outer-table pointers or cached capacity. -/
+theorem merge_storage_body_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hflow : Flowing (evaluateHOLFiniteState s mergeStorageBody).1) :
+    ∀ x ∈ [ofString "outer", ofString "bouter", ofString "cap"],
+      (evaluateHOLFiniteState s mergeStorageBody).2.locals.lookup x = s.locals.lookup x := by
+  intro x hx
+  apply evaluate_avoidsLocal_flowing x mergeStorageBody ?_ s hflow
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+  rcases hx with rfl | rfl | rfl <;> decide
+
+/-- The block outer-table pointer is stable under the withdrawal frame. -/
+theorem merge_withdrawal_bs_outer_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hbs : globN s "bs" ≠ 0)
+    (hs : WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s r post)
+    (hno : ∀ i ∈ bufRegions withdrawalBufs s, ¬ CellHits (globN s "bs" + 32) i) :
+    globN post "bs" = globN s "bs" ∧
+      memW post (globN post "bs" + 32) = memW s (globN s "bs" + 32) := by
+  have hg := globN_eq_of_lookup (hs.1.2.2.1 (ofString "bs") (by decide))
+  refine ⟨hg, ?_⟩
+  rw [hg]
+  exact hs.1.2.2.2.1 ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72])
+    (by decide) hbs 32 (by decide) hno
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
