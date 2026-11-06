@@ -7666,4 +7666,95 @@ theorem codeDbPayloadStrong_entries_of_sk_make {F : Type}
   · exact Or.inr (Or.inr (Or.inl h))
   · exact Or.inr (Or.inr (Or.inr (by omega)))
 
+/-- The actual key-builder write region cannot change a separated table's
+live values; only aligned cells of its well-formed footprint are read. -/
+theorem htabValues_eq_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hw : HtabWF s db)
+    (hd : ∀ i ∈ htabFootprint s db, Disj i (globN s "sk_buf", 52)) :
+    htabValues post db = htabValues s db := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  apply InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.htabValues_eq_of_unhit hw
+  intro i hi
+  right
+  intro a ha hhit
+  apply heff.cell_frame
+  intro j hj _
+  simp only [List.mem_singleton] at hj
+  subst j
+  have hi8 := (hw.1 i hi).2.1
+  have hi28 := (hw.1 i hi).2.2.1
+  intro hh
+  have hs := hd i hi
+  unfold CellHits at hhit hh
+  rcases hs with hs | hs | hs | hs <;> try dsimp only at hs
+  all_goals omega
+
+/-- A table-mutator frame preserves another allocated table's live values.
+The explicit alignment premises cover empty write regions as well. -/
+theorem htabValues_eq_of_mutator_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db t : Nat)
+    (hw : HtabWF s db)
+    (hal : ∀ i ∈ htabFootprint s db, Allocated s i)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hfr : FrameOutside s post (htabFootprint s t)
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
+    (hkal : ∀ j ∈ htabFootprint s t, j.1 % 8 = 0 ∧ j.2 % 8 = 0)
+    (hfal : (globN s "heap_ptr") % 8 = 0 ∧
+      (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0)
+    (hd : ∀ i ∈ htabFootprint s db, ∀ j ∈ htabFootprint s t, Disj i j) :
+    htabValues post db = htabValues s db := by
+  apply InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.htabValues_eq_of_unhit hw
+  intro i hi
+  right
+  exact ivlUnhit_of_frameOutside ⟨(hw.1 i hi).2.1, (hw.1 i hi).2.2.1⟩
+    hfr hkal hfal (hd i hi) (disj_fresh_of_allocated hAs.2 hAp.2 hhp (hal i hi))
+
+/-- The table-exit contract and old-world allocation discharge the frame's
+alignment and fresh-heap premises without additional entry assumptions. -/
+theorem htabValues_eq_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db : Nat)
+    (hw : HtabWF s db) (ht : HtabWF s (locN s "t"))
+    (hal : ∀ i ∈ htabFootprint s db, Allocated s i)
+    (hAs : ArenaReady s) (hx : HtabExit s post)
+    (hd : ∀ i ∈ htabFootprint s db,
+      ∀ j ∈ htabFootprint s (locN s "t"), Disj i j) :
+    htabValues post db = htabValues s db := by
+  obtain ⟨hAp, _, _, _, hhp, _, hfr, _⟩ := hx
+  apply htabValues_eq_of_mutator_frame db (locN s "t") hw hal hAs hAp hhp hfr
+  · intro j hj
+    exact ⟨(ht.1 j hj).2.1, (ht.1 j hj).2.2.1⟩
+  · have hs := hAs.2.2.2.2.2.2.1
+    have hp := hAp.2.2.2.2.2.2.1
+    exact ⟨hs, by omega⟩
+  · exact hd
+
+/-- Both value preservation and payload-word preservation follow from the
+same old-world table separation at the concrete mutator exit. -/
+theorem codeDbPayloadStrong_entries_of_separated_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (h : CodeDbPayloadStrong s S db) (hAs : ArenaReady s)
+    (hW : WorldTyped s S) (hdb : db ∈ S) (ht : locN s "t" ∈ S)
+    (hne : db ≠ locN s "t") (hx : HtabExit s post) :
+    NodeDbEntriesStrong post db := by
+  have hw := (hW.1.2.1 db hdb).1
+  have htw := (hW.1.2.1 (locN s "t") ht).1
+  have hv : htabValues post db = htabValues s db := by
+    apply htabValues_eq_of_htab_exit db hw htw
+    · intro i hi
+      exact ((hW.1.2.1 db hdb).2 i hi).1
+    · exact hAs
+    · exact hx
+    · exact hW.1.2.2.1 db hdb (locN s "t") ht hne
+  exact codeDbPayloadStrong_entries_of_htab_exit db h hAs hx ht htw hv
+
 end HeadStore
