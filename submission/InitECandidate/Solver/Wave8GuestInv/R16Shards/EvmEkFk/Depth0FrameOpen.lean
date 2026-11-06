@@ -8991,4 +8991,31 @@ theorem get_code_entry_of_strong_roots {F : Type} (s : PanSemStateFiniteExact 64
   exact ⟨hA,hWT,hmdb,hmt,hne,hp,hc,hfit,hsk,hs,hws,hts,hh,hwl,htl,
     cache "ts" (Or.inl rfl),cache "bs" (Or.inr rfl)⟩
 
+/-- An in-domain record word yields the concrete successful root-load evaluation. -/
+theorem global_record_load_of_wordAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (g : String) (k : BitVec 64) (hn : globN s g ≠ 0)
+    (hw : WordAt s (globN s g + k.toNat)) :
+    ∃ w : BitVec 64, w.toNat = memW s (globN s g + k.toNat) ∧
+      evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString g), .const k])) = some (.val (.word w)) := by
+  classical
+  obtain ⟨w,hd,hm⟩ := hw
+  refine ⟨w, ?_, ?_⟩
+  · simp [memW, hm]
+  · have hg : ∃ v : BitVec 64, s.globals.lookup (ofString g) = some (.val (.word v)) ∧ v.toNat = globN s g := by
+      unfold globN at hn ⊢
+      cases he : s.globals.lookup (ofString g) with
+      | none => simp [he] at hn
+      | some v =>
+        cases v with
+        | rStruct vs => simp [he] at hn
+        | nStruct n vs => simp [he] at hn
+        | val v => cases v with | word v => exact ⟨v,rfl,rfl⟩
+    obtain ⟨gv,hg,hgn⟩ := hg
+    have ha : gv + k = BitVec.ofNat 64 (globN s g + k.toNat) := by
+      apply BitVec.eq_of_toNat_eq
+      simp [BitVec.toNat_add, hgn]
+    simp [evalHOLFinite, evalHOLExact, evalListHOLExact, hg, wordOpHOL, wordOp,
+      valueIsWord, valueWord, ha, memLoadHOLExact, hd, hm]
+
 end HeadStore
