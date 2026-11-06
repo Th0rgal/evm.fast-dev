@@ -14315,4 +14315,32 @@ theorem log_no_growth_head_frame_owned_g09 {F : Type}
     hA hFW hpw hl hn hm0 hm16 hnonnull hlt hn_bound hl_bound hp_bound hdisj
     hd8 hdslot hec hecHeader hecBuffer hlog hdheader hdbuffer hmsg
 
+/-- Suspended-frame reconstruction also derives message ownership from the
+head-only append, avoiding any post-state frame-validity assumption. -/
+theorem log_tail_frame_owned_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {head ec : Ivl} {tail newObjects : List Ivl}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hWT : WorldTypedWith s S Nd) (hcell : SameTypedCells s post S Nd)
+    (hglobals : post.globals = s.globals) (hdom : post.memaddrs = s.memaddrs)
+    (hchain : evmChain post = evmChain s) (hcons : evmChain s = head :: tail)
+    (hhead : frameObjects post head = frameObjects s head ++ newObjects)
+    (htail : ∀ frame ∈ tail, frameObjects post frame = frameObjects s frame)
+    (hnew : ∀ o ∈ newObjects, Disj (memW s (ec.1 + 112), 176) o)
+    (hFW : FrameWF s S ec)
+    (hfields : ∀ k, k + 8 ≤ 280 → memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hheader : ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hslots : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8 * i))
+    (hrecords : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+        memW post (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k) =
+          memW s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k)) :
+    FrameWF post S ec := by
+  have hmsg := msgOwned_of_log_no_growth_g09 hAs hAp hWT hcell hglobals hdom
+    hchain hcons hhead htail hnew hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+  exact log_tail_frameWF_of_readback_g09 hFW hglobals hdom hfields hheader hslots hrecords hmsg
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
