@@ -8962,4 +8962,33 @@ theorem code_cache_entry_of_world_roots {F : Type} (s : PanSemStateFiniteExact 6
   rw [hdb]
   exact code_cache_root_mem s S owner hW.1 ho hn (by rwa [← hdb])
 
+/-- Assemble the full code entry invariant from strong world typing and concrete roots. -/
+theorem get_code_entry_of_strong_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db hash tw : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S) (hWT : WorldTypedWith s S Nd)
+    (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hsk : globN s "sk_buf" ≠ 0) (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hdb : db.toNat = memW s (globN s "ws" + 16))
+    (ht : tw.toNat = memW s (globN s "ts" + 40)) (hdn : db.toNat ≠ 0) (htn : tw.toNat ≠ 0)
+    (hwl : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (htl : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ts"), .const 40])) = some (.val (.word tw)))
+    (hcache : ∀ owner, owner = "ts" ∨ owner = "bs" →
+      globN s owner ≠ 0 ∧ ∃ root : BitVec 64,
+      root.toNat = memW s (globN s owner + 48) ∧ root.toNat ≠ 0 ∧
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (getCodeCacheArgs owner) = some [.val (.word root), .val (.word hash)]) :
+    GetCodeEntryStrong s S Nd db hash tw := by
+  obtain ⟨hmdb,hmt,hne,hp⟩ := fallback_payload_of_world_strong s S db tw hW hws hts hdb ht hdn htn
+  have cache : ∀ owner, owner = "ts" ∨ owner = "bs" → CodeCacheLookupStrong s owner := by
+    intro owner ho
+    obtain ⟨hn,root,hr,hrn,ha⟩ := hcache owner ho
+    exact code_cache_entry_of_world_roots s S owner root hash hA hW ho hn hr hrn ha
+  exact ⟨hA,hWT,hmdb,hmt,hne,hp,hc,hfit,hsk,hs,hws,hts,hh,hwl,htl,
+    cache "ts" (Or.inl rfl),cache "bs" (Or.inr rfl)⟩
+
 end HeadStore
