@@ -8005,4 +8005,44 @@ theorem fixedObjects_eq_of_sk_make_typed_cells {F : Type}
     balObjects_eq hAs.2 hWT.1 hWT.2.2.1 hcells (hg "bal_accounts"),
     hg "journal", hg "journal_cap"]
 
+/-- The concrete key-builder byte effect gives the typed-cell frame from
+separation of the world-readable intervals. -/
+theorem sameTypedCells_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hd : ∀ i ∈ worldTypedIvls s S Nd, Disj i (globN s "sk_buf", 52)) :
+    EvmBase.SameTypedCells s post S Nd := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  refine ⟨heff.be, heff.memaddrs, hma, ?_, ?_, ?_⟩
+  · intro a ha
+    exact heff.out_dom a (by rwa [hma])
+  · intro a ha hi
+    obtain ⟨i, hi, hlo, hhi⟩ := hi
+    apply heff.cell_frame
+    intro j hj _ hh
+    simp only [List.mem_singleton] at hj
+    subst j
+    have hs := hd i hi
+    unfold CellHits at hh
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha] at hh
+    rcases hs with hs | hs | hs | hs <;> try dsimp only at hs
+    all_goals omega
+  · intro b hb hi
+    obtain ⟨i, hi, hlo, hhi⟩ := hi
+    apply heff.byte_frame b hb
+    intro j hj hh
+    simp only [List.mem_singleton] at hj
+    subst j
+    have hs := hd i hi
+    unfold InIvl at hh
+    rcases hs with hs | hs | hs | hs <;> try dsimp only at hs
+    all_goals omega
+
 end HeadStore
