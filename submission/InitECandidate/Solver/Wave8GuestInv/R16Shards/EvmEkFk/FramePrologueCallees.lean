@@ -12665,6 +12665,61 @@ theorem precompile_sha256_body_input_bound {F : Type}
     · exact False.elim ((precompile_call0_no_loop_control s _ _).2 h)
     · exact False.elim (precompile_sha256_init_call_not_resumes s _ hc h)
 
+theorem precompile_sha256_call_input_bound {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (len : BitVec 64)
+    (ptr count dest : ExpHOL 64) (hc : s.code = originalRuntimeCode)
+    (hlength : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) count =
+      some (.val (.word len)))
+    (hr : R13.FlowsOrResumes (evaluateHOLFiniteState s
+      (.call (some (none,none)) (ofString "sha256") [ptr,count,dest])).1) :
+    len.toNat + 64 < 2^64 := by
+  have hl : originalRuntimeCode.lookup (ofString "sha256") =
+      some ([(ofString "p",.one),(ofString "len",.one),(ofString "out",.one)],
+        sourceFnBody Guest.Software.guestFn_sha256,.one) :=
+    lookup_of_guestAst_getElem 95 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_sha256) rfl
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [ptr,count,dest] with _ | vals
+  · rw [ha] at hr
+    simp [R13.FlowsOrResumes,Resumes] at hr
+  · rw [ha] at hr
+    dsimp only at hr
+    rcases hlook : lookupCodeHOLFinite s.code.lookup (ofString "sha256") vals with _ | ⟨body,callee,ret⟩
+    · simp [hlook,R13.FlowsOrResumes,Resumes] at hr
+    · rw [hlook] at hr
+      dsimp only at hr
+      have heq := lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ body _ ret _ callee
+        (by rw [hc]; exact hl) hlook
+      subst heq
+      have hret := lookupCodeHOLFinite_installed_return s _ _ _ _ .one ret _ callee
+        (by rw [hc]; exact hl) hlook
+      subst hret
+      obtain ⟨p,n,o,hvals,hpl,hnl,hol⟩ := R10Shards.P26_P28.lookupCode_three_words
+        (by decide) (by decide) (by decide) hl (by simpa only [hc] using hlook)
+      have he : n = len := by
+        rw [hvals] at ha
+        change @evalHOLExact 64 F _ s.toExact
+          (fun a => Classical.propDecidable (s.memaddrs a)) count = some (.val (.word len)) at hlength
+        cases hpv : @evalHOLExact 64 F _ s.toExact
+            (fun a => Classical.propDecidable (s.memaddrs a)) ptr <;>
+          cases hov : @evalHOLExact 64 F _ s.toExact
+            (fun a => Classical.propDecidable (s.memaddrs a)) dest <;>
+          simp [evalListHOLFinite,evalListHOLExact,hlength,hpv,hov] at ha
+        exact ha.2.1.symm
+      subst n
+      by_cases hz : s.clock = 0
+      · simp [hz,R13.FlowsOrResumes,Resumes] at hr
+      · rw [if_neg hz] at hr
+        have hbody : R13.FlowsOrResumes (evaluateHOLFiniteState
+            (callEntryStateHOLFinite s callee) (sourceFnBody Guest.Software.guestFn_sha256)).1 := by
+          rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+              (sourceFnBody Guest.Software.guestFn_sha256) with ⟨r,post⟩
+          cases r with
+          | none => exact Or.inl rfl
+          | some r => cases r <;> simp_all [R13.FlowsOrResumes,Resumes]
+        exact precompile_sha256_body_input_bound (callEntryStateHOLFinite s callee) len hc hnl hbody
+
 theorem pre_sha256_body_step_of_input_bound {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hi : EvmInv s)
     (hbound : ∀ msg : ValueHOL 64, @evalHOLExact 64 F _ s.toExact
