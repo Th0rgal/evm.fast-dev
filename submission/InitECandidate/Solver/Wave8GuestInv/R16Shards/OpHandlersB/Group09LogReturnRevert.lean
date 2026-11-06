@@ -14856,4 +14856,67 @@ theorem op_log_mul_cost_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
       (by decide : ofString "dc" ≠ ofString "n")]
   · exact hcont
 
+/-- The bounded topic charge is positive, and adding memory cost yields a
+positive gas operand at least as large as the memory cost. -/
+theorem op_log_base_cost_step_g09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (nt cw ebw : BitVec 64) (P : PanSemStateFiniteExact 64 F → Prop)
+    (cont : ProgHOL 64)
+    (hpres : ∀ t post cost, LocFrame t post → P t →
+      P (setVarHOLFinite (ofString "cost") (.val (.word cost)) {post with locals := t.locals}))
+    (hcont : HandlerRun s0 (fun t => P t ∧ ∃ cost : BitVec 64,
+      t.locals.lookup (ofString "cost") = some (.val (.word cost)) ∧
+      0 < cost.toNat ∧ cw.toNat ≤ cost.toNat) false cont) :
+    HandlerRun s0 (fun t => P t ∧
+      t.locals.lookup (ofString "ntopics") = some (.val (.word nt)) ∧ nt.toNat ≤ 4 ∧
+      t.locals.lookup (ofString "x") = some (.rStruct [.val (.word cw), .val (.word ebw)])) false
+      (.decCall (ofString "cost") .one (ofString "add_sat")
+        [.op .add [.const 375, .panop .mul [.const 375, .var .local (ofString "ntopics")]],
+         .rfield 0 (.var .local (ofString "x"))] cont) := by
+  have hpos (hbound : nt.toNat ≤ 4) : 0 < (375#64 + 375#64 * nt).toNat := by
+    have hm : (375#64 * nt).toNat = 375 * nt.toNat := by
+      rw [BitVec.toNat_mul]
+      change (375 * nt.toNat) % 2^64 = _
+      rw [Nat.mod_eq_of_lt (by omega)]
+    rw [BitVec.toNat_add, hm]
+    change 0 < (375 + 375 * nt.toNat) % 2^64
+    rw [Nat.mod_eq_of_lt (by omega)]
+    omega
+  have hev (t : PanSemStateFiniteExact 64 F)
+      (hnt : t.locals.lookup (ofString "ntopics") = some (.val (.word nt)))
+      (hx : t.locals.lookup (ofString "x") = some (.rStruct [.val (.word cw), .val (.word ebw)])) :
+      evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a))
+        [.op .add [.const 375, .panop .mul [.const 375, .var .local (ofString "ntopics")]],
+         .rfield 0 (.var .local (ofString "x"))] =
+        some [.val (.word (375#64 + 375#64 * nt)), .val (.word cw)] := by
+    rw [evalListHOLFinite_eq_toExact]
+    simp [evalListHOLExact, evalHOLExact, hnt, hx, valueIsWord, valueWord, panOpHOL, wordOpHOL, wordOp]
+  apply HandlerRun.decCall (Q := fun t => P t ∧ ∃ cost : BitVec 64,
+      t.locals.lookup (ofString "cost") = some (.val (.word cost)) ∧
+      0 < cost.toNat ∧ cw.toNat ≤ cost.toNat) eps_add_sat_pos_ge_b_g09
+  · intro t values body callee ret hc hInv hP hargs hl
+    rw [hev t hP.2.1 hP.2.2.2] at hargs
+    injection hargs with hvs
+    subst hvs
+    have hl_orig := hc ▸ hl
+    obtain ⟨_, _, a, b, heq, ha, hb⟩ := two_word_arg_lookup (by decide) lookup_add_sat hl_orig
+    injection heq with hhd htl
+    injection hhd with h1
+    injection h1 with h2
+    subst h2
+    exact ⟨_, b, ha, hb, hpos hP.2.2.1⟩
+  · intro t values body callee ret v post hInv hP hargs hl hPost hchain hQc
+    obtain ⟨hlf, cost, rfl, hpositive, hge⟩ := hQc
+    rw [hev t hP.2.1 hP.2.2.2] at hargs
+    injection hargs with hvs
+    subst hvs
+    obtain ⟨_, _, a, b, heq, ha, hb⟩ := two_word_arg_lookup (by decide) lookup_add_sat hl
+    injection heq with hhd htl
+    injection htl with hhd2 _
+    injection hhd2 with h1
+    injection h1 with h2
+    subst h2
+    refine ⟨hpres t post cost hlf hP.1, cost, ?_, hpositive, hge cw hb⟩
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · exact hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
