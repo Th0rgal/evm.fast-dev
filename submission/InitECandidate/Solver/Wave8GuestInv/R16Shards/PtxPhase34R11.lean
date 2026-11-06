@@ -16368,4 +16368,23 @@ theorem journal_append_allocated_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Block-output backing objects are disjoint from the allocated journal. -/
+theorem blockOut_disj_journal {F : Type} {s : PanSemStateFiniteExact 64 F} {b : Ivl}
+    (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s) (hn : globN s "journal_cap" ≠ 0) :
+    Disj b (globN s "journal", 32 * globN s "journal_cap") := by
+  have hp := hfix.2
+  unfold fixedObjects at hp
+  have hp3 := (List.pairwise_append.mp (List.pairwise_append.mp hp).1).2.2
+  have hj : (globN s "journal", 32 * globN s "journal_cap") ∈
+      globalBuffers.map (fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) ++
+        [(if globN s "journal_cap" = 0 then 0 else globN s "journal", 32 * globN s "journal_cap")] := by
+    apply List.mem_append_right
+    simp [hn]
+  have hd := hp3 _ hj b hb
+  simpa only [Disj, or_comm, or_left_comm, or_assoc] using hd
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
