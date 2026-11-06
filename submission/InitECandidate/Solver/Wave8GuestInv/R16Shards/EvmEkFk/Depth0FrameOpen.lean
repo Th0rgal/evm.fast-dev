@@ -8415,4 +8415,25 @@ theorem global_load_preserved {F : Type}
     · simp [hlookup, valueIsWord] at he
     · simp [hlookup, valueIsWord] at he
 
+/-- The concrete witness-root load survives the access-table call exit. -/
+theorem ws_code_load_after_access_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S) (ht : t ∈ S)
+    (hloc : locN (callEntryStateHOLFinite s callee) "t" = t)
+    (hws : globN s "ws" ≠ 0)
+    (hx : HtabExit (callEntryStateHOLFinite s callee) post)
+    (v : ValueHOL 64)
+    (he : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some v) :
+    evalHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some v := by
+  have hr := ws_code_root_after_access_call_exit t callee hAs hW ht hloc hws hx
+  apply global_load_preserved s post "ws" 16 v
+  · exact (hx.2.2.2.2.2.2.2 (ofString "ws") (by decide)).symm
+  · exact hx.1.1.memaddrs.trans hAs.1.memaddrs.symm
+  · change memW post (globN s "ws" + 16) = memW s (globN s "ws" + 16)
+    simpa only [hr.1] using hr.2
+  · exact he
+
 end HeadStore
