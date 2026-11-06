@@ -6726,4 +6726,30 @@ theorem ws_get_code_resume_bounded (gw : List String) (hp : Nat)
   refine ⟨hD, code, code_n, ?_, hn⟩
   simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hv]
 
+/-- Compose bounded code retrieval with a dispatch continuation, including
+the missing-entry exception branch and the caller restoration epilogue. -/
+theorem hoare_ws_get_code_dispatch_bounded (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (name : MlS) (hne : name ≠ ofString "msg") (args : List (ExpHOL 64))
+    (hentry : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) values body callee ret,
+      s.code = originalRuntimeCode → D0Pre gw hp G ch s →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "ws_get_code") values = some (body, callee, ret) →
+      s.eshapes.lookup (ofString "StateErr") = some .one ∧
+        WsCodeLookupStrong (callEntryStateHOLFinite s callee))
+    (cont : ProgHOL 64)
+    (hcont : Hoare (fun s => D0Pre gw hp G ch s ∧ ∃ code code_n : BitVec 64,
+        s.locals.lookup name = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+        code_n.toNat < 2 ^ 40) cont
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (D0Pre gw hp G ch)
+      (.decCall name (.comb [.one, .one]) (ofString "ws_get_code") args cont)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.decCall_returning_exception_fall
+    (fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩)
+    (ws_get_code_resume_bounded gw hp G ch name hne args hentry) ?_ hcont
+  intro F s values body callee ret hc hP hl e v post hne hr
+  exact ws_get_code_exception_step gw hp G ch s values body callee ret hc hP hl e v post hne hr
+
 end HeadStore

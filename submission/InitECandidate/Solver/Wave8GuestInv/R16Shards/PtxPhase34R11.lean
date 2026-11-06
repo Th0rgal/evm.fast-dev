@@ -14097,4 +14097,87 @@ theorem receipt_gas_alloc_bloom_return_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- A successful fresh-byte store exposes its unchanged local environment to
+the returning receipt continuation. -/
+theorem receipt_storeByte_continuation_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (addr value : ExpHOL 64)
+    (haddr : ∀ a : BitVec 64,
+      @evalHOLExact 64 F _ mid.toExact (fun a => Classical.propDecidable (mid.memaddrs a)) addr =
+        some (.val (.word a)) →
+      globN s "heap_ptr" ≤ a.toNat ∧ a.toNat + 1 ≤ heapLimit)
+    (tail : ProgHOL 64) (v : ValueHOL 64)
+    (hcont : ∀ next : PanSemStateFiniteExact 64 F,
+      HeapByteEff s next R gw → next.locals = mid.locals →
+      evaluateHOLFiniteState next tail = (some (.returned v), post) →
+      HeapByteEff s post R gw)
+    (hr : evaluateHOLFiniteState mid (.seq (.storeByte addr value) tail) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  have hn : (evaluateHOLFiniteState mid (.storeByte addr value)).1 ≠
+      some (.returned v) := by
+    rw [evaluateHOLFiniteState_storeByte]
+    split <;> try simp
+    split <;> try simp
+    split <;> simp
+  obtain ⟨next, hc, ht⟩ := seq_returned_of_not_returned hn hr
+  apply hcont next (heapByteEff_storeByte_fresh he addr value hc haddr) ?_ ht
+  rw [evaluateHOLFiniteState_storeByte] at hc
+  split at hc <;> try simp_all
+  split at hc <;> try simp_all
+  split at hc <;> simp_all
+  exact (congrArg PanSemStateFiniteExact.locals hc).symm
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- The status-byte branch writes one fresh byte and sets its encoded length
+to one, preserving every other local for the gas continuation. -/
+theorem receipt_status_branch_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (p old : BitVec 64) (byte : Nat)
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hfresh : globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + 1 ≤ heapLimit)
+    (tail : ProgHOL 64) (v : ValueHOL 64)
+    (hcont : ∀ next : PanSemStateFiniteExact 64 F,
+      HeapByteEff s next R gw →
+      next.locals = mid.locals.update (ofString "w", .val (.word 1#64)) →
+      evaluateHOLFiniteState next tail = (some (.returned v), post) →
+      HeapByteEff s post R gw)
+    (hr : evaluateHOLFiniteState mid
+      (.seq (.seq (.storeByte (.var .local (ofString "p")) (.const byte))
+        (.assign .local (ofString "w") (.const 1))) tail) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  have hassoc : evaluateHOLFiniteState mid
+      (.seq (.storeByte (.var .local (ofString "p")) (.const byte))
+        (.seq (.assign .local (ofString "w") (.const 1)) tail)) =
+      (some (.returned v), post) := by
+    simp only [evaluateHOLFiniteState_seq_line780] at hr ⊢
+    cases hx : (evaluateHOLFiniteState mid
+      (.storeByte (.var .local (ofString "p")) (.const byte))).1 <;>
+      simpa only [hx] using hr
+  apply receipt_storeByte_continuation_frame he _ _ ?_ _ v ?_ hassoc
+  · intro a ha
+    have ha' : p = a := by simpa [evalHOLExact, hp] using ha
+    subst a
+    exact hfresh
+  · intro next he' hloc ht
+    have hw' : next.locals.lookup (ofString "w") = some (.val (.word old)) := by
+      rw [hloc]; exact hw
+    have hass : evaluateHOLFiniteState next (.assign .local (ofString "w") (.const 1)) =
+        (none, setVarHOLFinite (ofString "w") (.val (.word 1#64)) next) := by
+      rw [evaluateHOLFiniteState_assign]
+      simp [evalHOLExact, PanSemStateFiniteExact.isValidValueHOLFinite,
+        lookupKvarHOLExact, hw', shapeOfHOLExact, shapeEqHOL, setKvarHOLFinite]
+    rw [evaluateHOLFiniteState_seq_line780, hass] at ht
+    exact hcont _ (he'.locals_clock _ _)
+      (by simp [setVarHOLFinite, hloc]) ht
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

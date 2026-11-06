@@ -13094,4 +13094,72 @@ theorem msgOwned_of_head_log_growth_g09 {F : Type}
     · exact Or.inr (hnew o hnew_mem)
   · exact Or.inl (htail ec htail_mem ▸ ho)
 
+/-- Separate the whole post-growth chain from an arbitrary protected region
+using only the old chain and the two classes of newly introduced objects. -/
+theorem log_growth_chain_disj_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {head : Ivl} {log : Nat} {regions : List Ivl}
+    (hchain : evmChain post = evmChain s)
+    (hhead : ∀ ec ∈ evmChain s, ec = head ∨ ec ∈ (evmChain s).tail)
+    (htail : ∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec)
+    (hfields : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (head.1 + k) = memW s (head.1 + k))
+    (hret : frameRet post head = frameRet s head)
+    (hlogs : frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log)
+    (hold : IvlsDisj ((evmChain s).map (frameObjects s)).flatten regions)
+    (hbuffer : ∀ i ∈ regions, Disj (frameLogs post head) i)
+    (hnew : IvlsDisj (logOwnedIvls post log) regions) :
+    IvlsDisj ((evmChain post).map (frameObjects post)).flatten regions := by
+  intro o ho i hi
+  obtain ⟨objects, hobjects, ho⟩ := List.mem_flatten.1 ho
+  obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hobjects
+  rw [hchain] at hec
+  have old_disj : ∀ o ∈ frameObjects s ec, Disj o i := by
+    intro old hmem
+    exact hold old (List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨ec, hec, rfl⟩, hmem⟩) i hi
+  rcases hhead ec hec with rfl | htail_mem
+  · rcases log_growth_frame_object_cases_g09 hfields hret hlogs o ho with hmem | rfl | hmem
+    · exact old_disj o hmem
+    · exact hbuffer i hi
+    · exact hnew o hmem i hi
+  · exact old_disj o (htail ec htail_mem ▸ ho)
+
+/-- Fresh allocation separation passes to the entire replacement backing array,
+whose extent is exactly the doubled capacity after the concrete finishing writes. -/
+theorem log_growth_buffer_disj_g09 {F : Type}
+    (copy : PanSemStateFiniteExact 64 F) (ec : Ivl)
+    (l p n cap q log : BitVec 64) (objects regions : List Ivl)
+    (hheader : (l.toNat, 24) ∈ objects)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] objects)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hprotected : IvlsDisj [(p.toNat, q.toNat - p.toNat)] regions) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    memW post (ec.1 + 88) = l.toNat →
+    ∀ i ∈ regions, Disj (frameLogs post ec) i := by
+  dsimp only
+  intro hec i hi
+  obtain ⟨h0, _, h16, _, _, _⟩ := log_growth_readback_of_fresh_g09
+    copy l p n cap q log objects hheader hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  rw [hl16] at h16
+  obtain ⟨_, _, hsize, _, _, _, _, _, _, _⟩ :=
+    log_growth_word_bounds_g09 hcap_pos hcap_bound hlen hgrow hfit
+  rw [hsize] at hfit
+  unfold frameLogs
+  rw [hec, h0, h16]
+  have hd := hprotected (p.toNat, q.toNat - p.toNat) (by simp) i hi
+  rcases hd with hz | hz | hleft | hright
+  · dsimp only at hz; omega
+  · exact Or.inr (Or.inl hz)
+  · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+  · exact Or.inr (Or.inr (Or.inr hright))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
