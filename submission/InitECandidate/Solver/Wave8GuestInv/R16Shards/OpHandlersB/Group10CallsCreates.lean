@@ -11886,4 +11886,80 @@ theorem memoryExpansionLocal_charge_gas_g10 {F : Type}
   · unfold globN; rw [hg]
   · exact hm
 
+theorem charge_positive_local_call_decreases_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hc : s.code = originalRuntimeCode) (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (name : MlS) (hp : PositiveCostLocal_g10 name s)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "charge_gas")
+      [.var .local name]) = (none, post)) :
+    EvmInv post ∧ Group10.HeadMemChainWF post ∧ evmChain post = evmChain s ∧ OpDispatchSpec.evmR post < OpDispatchSpec.evmR s := by
+  obtain ⟨values, body, callee, rs, v, cp, ha, hl, hrun, rfl⟩ := call0_returned_inv_g10 hr
+  obtain ⟨w, hlw, hpos⟩ := hp
+  have ha' : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.var .local name] = some [.val (.word w)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hlw]
+  rw [ha'] at ha
+  have hv := Option.some.inj ha
+  subst values
+  rw [hc] at hl
+  obtain ⟨rfl, rfl, w', heq, hcal⟩ := one_word_arg_lookup M21.lookup_charge_gas hl
+  cases heq
+  have h := charge_gas_body_exactA (callEntryStateHOLFinite s callee)
+    (localsFree_evmInv s callee (s.clock - 1) hi)
+    (Group10.headMemChainWF_locals s callee (s.clock - 1) hw) hcal
+  dsimp only at h
+  rw [hrun] at h
+  obtain ⟨⟨hip, hwp⟩, hg, hch, hR⟩ := h.1 v rfl
+  refine ⟨localsFree_evmInv cp s.locals cp.clock hip,
+    Group10.headMemChainWF_locals cp s.locals cp.clock hwp, ?_, ?_⟩
+  · have h1 : evmChain {cp with locals := s.locals} = evmChain cp := evmChain_congr rfl rfl
+    have h2 : evmChain (callEntryStateHOLFinite s callee) = evmChain s := evmChain_congr rfl rfl
+    exact h1.trans (hch.trans h2)
+  · rw [(evm_congr (s := cp) (t := {cp with locals := s.locals}) rfl rfl).2.1]
+    have hce : OpDispatchSpec.evmR (callEntryStateHOLFinite s callee) = OpDispatchSpec.evmR s :=
+      (evm_congr (s := s) (t := callEntryStateHOLFinite s callee) rfl rfl).2.1
+    dsimp only at hR
+    rw [hce] at hR
+    omega
+
+theorem charge_positive_local_memory_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (name : MlS) (charged : Bool) (cont : ProgHOL 64)
+    (hcont : HandlerRunA s0
+      (fun s => PositiveCostLocal_g10 name s ∧ MemoryExpansionLocal_g10 s) true cont) :
+    HandlerRunA s0 (fun s => PositiveCostLocal_g10 name s ∧ MemoryExpansionLocal_g10 s) charged
+      (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local name]) cont) := by
+  intro t hc hi hw hlen hR hp hnt
+  let call : ProgHOL 64 := .call (some (none, none)) (ofString "charge_gas") [.var .local name]
+  have hfallback : HandlerRunA s0 (PositiveCostLocal_g10 name) charged
+      (.seq call (.return (.const 0))) := by
+    apply HandlerRunA.seq_charge_gas (Q := fun _ => True)
+    · intro u w he hui huw hup
+      obtain ⟨w', hl, hpos⟩ := hup
+      change u.locals.lookup name = some (.val (.word w)) at he
+      rw [hl] at he
+      cases he
+      exact hpos
+    · intros; trivial
+    · exact HandlerRunA.ret _
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  rcases hr : evaluateHOLFiniteState t call with ⟨r, post⟩
+  simp only [call] at hr
+  rw [hr] at hnt
+  cases r with
+  | none =>
+    obtain ⟨hip, hwp, hch, hlt⟩ := charge_positive_local_call_decreases_g10 hc hi hw name hp.1 hr
+    have hmem := memoryExpansionLocal_charge_gas_g10 hc hi hw hp.2 (.var .local name) hr
+    obtain ⟨hl, _, _⟩ := charge_gas_call_keep32_g10 hc hi hw (.var .local name) hr
+    have hpos : PositiveCostLocal_g10 name post := by
+      obtain ⟨w, hlookup, hpos⟩ := hp.1
+      exact ⟨w, by rwa [hl], hpos⟩
+    have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata t call).1
+    rw [hr] at hmeta
+    apply hcont post (hmeta.trans hc) hip hwp (by rw [hch]; exact hlen) ?_ ⟨hpos, hmem⟩ hnt
+    cases charged <;> simp only [Bool.false_eq_true, ↓reduceIte] at hR ⊢ <;> omega
+  | some r =>
+    have hf := hfallback t hc hi hw hlen hR hp.1
+    rw [evaluateHOLFiniteState_seq_line780, hr] at hf
+    exact hf hnt
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
