@@ -14887,4 +14887,105 @@ theorem fresh_account_balance_store_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- A concrete effect preserves old aligned allocations separated from its
+explicit writes, including scratch-resident list headers. -/
+theorem worldEff_separated_allocated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    {B : List (String × Nat)} {gw : List String} (b : Ivl)
+    (hA : ArenaOK s) (he : WorldEff s post R B gw)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hR : ∀ j ∈ R, Disj b j)
+    (hB : ∀ g ∈ B, Disj b (bufferRegion s g)) :
+    Allocated post b ∧ IvlUnhit s post b := by
+  refine ⟨(show AllocatorGrows s post from ⟨he.hp_lo, he.sp_hi⟩).allocated hb, ?_⟩
+  intro a ha8 hhit
+  have hai : b.1 ≤ a.toNat ∧ a.toNat + 8 ≤ b.1 + b.2 := by
+    unfold CellHits at hhit
+    omega
+  by_contra hn
+  rcases he.cell_frame a hn with ⟨j, hj, hpos, hhit⟩ | ⟨g, hg, hpos, hhit⟩ | hgap | hheap
+  · have hd := hR j hj
+    unfold Disj at hd
+    unfold CellHits at hhit
+    rcases hd with hd | hd | hd | hd <;> omega
+  · have hd := hB g hg
+    unfold Disj at hd
+    unfold CellHits at hhit
+    rcases hd with hd | hd | hd | hd <;> omega
+  · rcases hb with hb | hb
+    · have hh := hA.2.2.1
+      have hp := hA.2.1
+      have hsep : heapLimit ≤ scratchStart := by decide
+      unfold Inside at hb
+      change 0 < (freeGap s).2 ∧ CellHits a.toNat (freeGap s) at hgap
+      unfold CellHits freeGap at hgap
+      dsimp only at hgap
+      omega
+    · unfold Inside at hb
+      change 0 < (freeGap s).2 ∧ CellHits a.toNat (freeGap s) at hgap
+      unfold CellHits freeGap at hgap
+      dsimp only at hgap
+      omega
+  · rcases hb with hb | hb
+    · unfold Inside at hb
+      change 0 < (heapFree s).2 ∧ CellHits a.toNat (heapFree s) at hheap
+      unfold CellHits heapFree at hheap
+      dsimp only at hheap
+      omega
+    · have hs := hA.2.2.2.1
+      have hf := hA.2.2.1
+      have hp := hA.2.1
+      have hsep : heapLimit ≤ scratchStart := by decide
+      unfold Inside at hb
+      change 0 < (heapFree s).2 ∧ CellHits a.toNat (heapFree s) at hheap
+      unfold CellHits heapFree at hheap
+      dsimp only at hheap
+      omega
+
+open InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03
+
+/-- The trie/decode path of account lookup frames existing separated headers. -/
+theorem ws_get_account_optional_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (b : Ivl) (v : ValueHOL 64)
+    (hA : ArenaReady s)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hB : ∀ g ∈ wsBufs, Disj b (bufferRegion s g))
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_ws_get_account_optional) =
+      (some (.returned v), post)) :
+    Allocated post b ∧ IvlUnhit s post b := by
+  have he := worldEff_ws_get_account_optional s s hA.2
+    (WorldEff.refl s [] wsBufs wsGw hA hA.1.code)
+    (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at he
+  exact worldEff_separated_allocated_frame b hA.2 he hb hb1 hb2
+    (by intro j hj; cases hj) hB
+
+/-- A typed table mutation frames every nonempty fixed object, including the
+two block-output list headers. -/
+theorem htab_mutation_fixed_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat} {b : Ivl}
+    (hA : ArenaOK s) (hAp : ArenaOK post) (hT : WorldTypedWith s S Nd)
+    (ht : t ∈ S) (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hfr : FrameOutside s post (htabFootprint s t)
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    IvlUnhit s post b := by
+  have halloc := ((hT.2.2.1.1 b hb).resolve_left hbpos).1
+  apply R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hbpos hfr
+  · intro j hj
+    have hw := ((hT.1.2.1 t ht).1.1 j hj).2
+    exact ⟨hw.1, hw.2.1⟩
+  · have hs := hA.2.2.2.2.2.1
+    have hp := hAp.2.2.2.2.2.1
+    exact ⟨hs, by omega⟩
+  · intro j hj
+    exact (((hT.1.2.1 t ht).2 j hj).2 b hb).flip
+  · exact InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs.disj_fresh_of_zero_or_allocated
+      hA hAp hhp (Or.inr halloc)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
