@@ -16868,4 +16868,93 @@ theorem journal_record_address_eval {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The record-address declaration retains the narrow effect and exposes its continuation. -/
+theorem journal_address_dec_effect {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} (j n : BitVec 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [(j.toNat + 32 * n.toNat, 32)] [] ["heap_ptr"])
+    (hj : cur.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : cur.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hbound : j.toNat + 32 * n.toNat + 32 < 2 ^ 64)
+    (hr : evaluateHOLFiniteState cur
+      (.dec (ofString "r") .one (.op .add [.var .global (ofString "journal"),
+        .panop .mul [.var .global (ofString "journal_n"), .const 32#64]]) tail) = (some (.returned rv), out)) :
+    ∃ mid u, WorldEff s mid [((j + n * 32#64).toNat, 32)] [] ["heap_ptr"] ∧
+      mid.locals = cur.locals.update (ofString "r", .val (.word (j + n * 32#64))) ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨w, hw, u, ht, hout⟩ := dec_ret_inv hr
+  obtain ⟨hev, hnat⟩ := journal_record_address_eval cur j n hj hn hbound
+  rw [hev] at hw
+  have heq : w = j + n * 32#64 := by injection hw with h; injection h with h; injection h with h; exact h.symm
+  subst w
+  refine ⟨_, u, ?_, rfl, ht, ?_⟩
+  · rw [hnat]
+    exact heff.locals_clock _ _
+  · rw [hout]
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Allocation and key-copy effects retain the globals used to calculate the journal record. -/
+theorem journal_address_after_effect {F : Type}
+    {s cur : PanSemStateFiniteExact 64 F} {jrec : Ivl} (j n : BitVec 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hbound : j.toNat + 32 * n.toNat + 32 < 2 ^ 64) :
+    @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a))
+      (.op .add [.var .global (ofString "journal"),
+        .panop .mul [.var .global (ofString "journal_n"), .const 32#64]]) =
+      some (.val (.word (j + n * 32#64))) ∧
+      (j + n * 32#64).toNat = j.toNat + 32 * n.toNat := by
+  apply journal_record_address_eval cur j n
+  · rw [← heff.gw_kept (ofString "journal") (by decide)]; exact hj
+  · rw [← heff.gw_kept (ofString "journal_n") (by decide)]; exact hn
+  · exact hbound
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Compose the journal address declaration, record stores and counter into a backing frame. -/
+theorem journal_address_stores_backing_resume {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {b : Ivl}
+    (j n t kc f0 f1 : BitVec 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hncap : n.toNat < globN s "journal_cap") (hjbase : j.toNat = globN s "journal")
+    (heff : WorldEff s cur [(j.toNat + 32 * n.toNat, 32)] [] ["heap_ptr"])
+    (hj : cur.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : cur.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hk : cur.locals.lookup (ofString "kc") = some (.val (.word kc)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hbound : j.toNat + 32 * n.toNat + 32 < 2 ^ 64)
+    (hr : evaluateHOLFiniteState cur
+      (.dec (ofString "r") .one (.op .add [.var .global (ofString "journal"),
+        .panop .mul [.var .global (ofString "journal_n"), .const 32#64]])
+      (.seq (.store (.var .local (ofString "r")) (.var .local (ofString "t")))
+        (.seq (.store (.op .add [.var .local (ofString "r"), .const 8#64]) (.var .local (ofString "kc")))
+          (.seq (.store (.op .add [.var .local (ofString "r"), .const 16#64]) (.rfield 0 (.var .local (ofString "old"))))
+            (.seq (.store (.op .add [.var .local (ofString "r"), .const 24#64]) (.rfield 1 (.var .local (ofString "old"))))
+              (.seq (.assign .global (ofString "journal_n") (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail)))))) =
+      (some (.returned rv), out)) :
+    ∃ mid u, IvlUnhit s mid b ∧ evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨entry, u, he, hl, hrun, hm⟩ := journal_address_dec_effect j n _ rv heff hj hn hbound hr
+  have hnat := (journal_record_address_eval cur j n hj hn hbound).2
+  obtain ⟨mid, hf, _, htail⟩ := journal_stores_counter_backing_resume n.toNat (j + n * 32#64) t kc f0 f1 tail rv
+    hA hfix hb hal hb1 hb2 hncap (by rw [hnat, hjbase]) he
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, ht, show ofString "r" ≠ ofString "t" by decide])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, hk, show ofString "r" ≠ ofString "kc" by decide])
+    (by simp [hl, HolFiniteMapExact.lookup_update, FUPDATE, hold, show ofString "r" ≠ ofString "old" by decide])
+    (by rw [hnat]; exact hbound) hrun
+  exact ⟨mid, u, hf, htail, hm⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
