@@ -18,6 +18,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkSysTxLeaves
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PayloadWorldHelpers
 
 set_option autoImplicit false
+set_option Elab.async false
 set_option maxRecDepth 200000
 set_option maxHeartbeats 4000000
 set_option exponentiation.threshold 2000
@@ -8938,5 +8939,543 @@ theorem merge_set_call_worldStepSc {F : Type}
     ht hk hi hW.1 htab
       (fun i him => ((hw.1.2.1 tw.toNat (howned S Nd hw).1).2 i him).1) hfr
   exact merge_set_worldStepSc hW he hbe hbs ht0 htbs howned hkey hf hv
+
+/-- Installing the fresh inner table establishes the entry frame for its union. -/
+theorem merge_set_call_union_entry {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek : ExpHOL 64)
+    (tw kw iw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "binner") = some (.val (.word iw)))
+    (hW : WorldOK s) (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (howned : ∀ S Nd, WorldTypedWith s S Nd → tw.toNat ∈ S ∧ iw.toNat ∈ S)
+    (hkey : hdr s iw.toNat 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ iw.toNat)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).2
+    WorldOK post ∧ globN post "bs" ≠ 0 ∧
+      memW post (globN post "bs" + 32) ≠ 0 ∧
+      locN post "binner" ∈ htabValues post (memW post (globN post "bs" + 32)) := by
+  have hiv : evalAt s (.var .local (ofString "binner")) = some (.val (.word iw)) := by
+    simpa [evalAt, evalHOLExact] using hi
+  have hs := merge_set_call_worldStepSc s et ek _ tw kw iw ht hk hiv
+    hW hbs ht0 htbs howned hkey hf hfr
+  obtain ⟨S, hw⟩ := hW.2
+  obtain ⟨Nd, hw⟩ := (WkBal.worldTyped_iff_with s S).1 hw
+  have htS := (howned S Nd hw).1
+  have hwf := (hw.1.2.1 tw.toNat htS).1
+  have hal : ∀ i ∈ htabFootprint s tw.toNat, Allocated s i :=
+    fun i him => ((hw.1.2.1 tw.toNat htS).2 i him).1
+  have hp := merge_set_call_flow_props s et ek _ tw kw iw ht hk hiv hW.1 hwf hal hfr
+  have hm := merge_set_call_bound_member s et ek tw kw iw ht hk hi hW.1 hwf hal hfr
+  have hg := globN_eq_of_lookup (hp.1.2.2.2.2.2.2.2 (ofString "bs") (by decide))
+  have hb := merge_set_bs_outer_kept hW.1 hw htS hp.1 hbs
+  dsimp only
+  refine ⟨hs.worldOK_bufs (by intro p hp; simp at hp) hW, ?_, ?_, ?_⟩
+  · rwa [hg]
+  · rwa [hb.2, ← htbs]
+  · rw [hb.2, ← htbs]
+    exact hm.2
+
+/-- Standard heap-only effects fit the storage merge's withdrawal mask. -/
+theorem merge_heap_step_withdrawal {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (h : WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s r post := by
+  apply worldStepSc_mono_mask (B1 := []) (B2 := withdrawalBufs)
+    (gw1 := ["heap_ptr"]) (gw2 := withdrawalGlobals) (by simp) (by decide) _ h
+  intro rec hrec k hk
+  simp only [withdrawalKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+  rcases hrec with rfl | rfl | rfl | rfl
+  · exact ⟨_, by simp [stdKeep], hk⟩
+  · exact ⟨_, by simp [stdKeep], hk⟩
+  · cases hk
+  · exact ⟨_, by simp [stdKeep], hk⟩
+
+/-- The insertion and subsequent inner union compose on every flowing merge exit. -/
+theorem eval_merge_set_then_union {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek src : ExpHOL 64)
+    (tw kw iw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "binner") = some (.val (.word iw)))
+    (hc : s.code = originalRuntimeCode)
+    (hW : WorldOK s) (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (howned : ∀ S Nd, WorldTypedWith s S Nd → tw.toNat ∈ S ∧ iw.toNat ∈ S)
+    (hkey : hdr s iw.toNat 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ iw.toNat)
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])
+      (.call (some (none, none)) (ofString "htab_union_into")
+        [.var .local (ofString "binner"), src]))).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])
+      (.call (some (none, none)) (ofString "htab_union_into")
+        [.var .local (ofString "binner"), src]))).1) :
+    let out := evaluateHOLFiniteState s (.seq
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])
+      (.call (some (none, none)) (ofString "htab_union_into")
+        [.var .local (ofString "binner"), src]))
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s out.1 out.2 := by
+  have hiv : evalAt s (.var .local (ofString "binner")) = some (.val (.word iw)) := by
+    simpa [evalAt, evalHOLExact] using hi
+  dsimp only
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases he : evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")]) with ⟨r, mid⟩
+  simp only [he] at hnt hfr ⊢
+  cases r with
+  | none =>
+    have hflow : FlowingOrResumes (evaluateHOLFiniteState s
+        (.call (some (none, none)) (ofString "htab_set")
+          [et, ek, .var .local (ofString "binner")])).1 := by
+      rw [he]; exact Or.inl rfl
+    have hs := merge_set_call_worldStepSc s et ek _ tw kw iw ht hk hiv
+      hW hbs ht0 htbs howned hkey hf hflow
+    have hp := merge_set_call_union_entry s et ek tw kw iw ht hk hi
+      hW hbs ht0 htbs howned hkey hf hflow
+    rw [he] at hs hp
+    have hcm := (PanRunBounded.evaluateHOLFiniteState_metadata s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).1
+    rw [he] at hcm
+    exact withdrawalStep_trans (merge_heap_step_withdrawal hs)
+      (merge_heap_step_withdrawal (eval_call_union_bs_inner mid src (hcm.trans hc)
+        hp.1 hp.2.1 hp.2.2.1 hp.2.2.2 hnt hfr))
+  | some r =>
+    have hflow : FlowingOrResumes (evaluateHOLFiniteState s
+        (.call (some (none, none)) (ofString "htab_set")
+          [et, ek, .var .local (ofString "binner")])).1 := by
+      rwa [he]
+    have hn := merge_set_call_flow_none s et ek _ tw kw iw ht hk hiv hc hflow
+    rw [he] at hn
+    contradiction
+
+/-- Exact transaction-initialization export for the frozen C08 contract. -/
+theorem wk_state_fresh_tx :
+    WorldKeeps WorldOK (fun _ => [])
+      ["heap_ptr", "journal_n", "ts"]
+      [("ws", [0, 8, 16, 24, 32]),
+       ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "state_fresh_tx") := by
+  obtain ⟨params, body, ret, hl, hb⟩ := wkSc_state_fresh_tx
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hW hex hnt hres
+  exact (hb s hc hW hex hnt hres).1
+
+/-- Allocation exposes its actual fresh binding to the storage continuation. -/
+theorem eval_merge_new_continuation {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (cont : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hcont : ∀ (post : PanSemStateFiniteExact 64 F) (iw : BitVec 64),
+      post.code = originalRuntimeCode → WorldOK post →
+      post.locals.lookup (ofString "binner") = some (.val (.word iw)) →
+      (∀ y, y ≠ ofString "binner" → post.locals.lookup y = s.locals.lookup y) →
+      hdr post iw.toNat 0 = 32 →
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ iw.toNat) →
+      (evaluateHOLFiniteState post cont).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState post cont).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        post (evaluateHOLFiniteState post cont).1 (evaluateHOLFiniteState post cont).2)
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) cont)).1) :
+    let out := evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) cont)
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s out.1 out.2 := by
+  dsimp only
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases he : evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) with ⟨r, post⟩
+  simp only [he] at hnt hfr ⊢
+  have hflow : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])).1 := by
+    rw [he]
+    cases r with
+    | none => exact Or.inl rfl
+    | some r => exact hfr
+  have hn := merge_new_call_flow_none s (ofString "binner") 32#64 8#64 hc hflow
+  rw [he] at hn
+  cases hn
+  have hs := merge_new_call_worldStep s (ofString "binner") 32#64 8#64
+    hW (by decide) (by decide) hflow
+  rw [he] at hs
+  obtain ⟨S, hw⟩ := hW.2
+  obtain ⟨Nd, hw⟩ := (WkBal.worldTyped_iff_with s S).1 hw
+  have ho := merge_new_call_bound_owned s (ofString "binner") 32#64 8#64 S Nd
+    hW.1 hw (by decide) (by decide) hflow
+  rw [he] at ho
+  obtain ⟨iw, hi, hl, _, _, hk, _, hf, _⟩ := ho
+  have hm := (PanRunBounded.evaluateHOLFiniteState_metadata s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])).1
+  rw [he] at hm
+  exact withdrawalStep_trans (merge_heap_step_withdrawal hs)
+    (hcont post iw (hm.trans hc) (hs.worldOK_bufs (by intro p hp; simp at hp) hW)
+      hi hl hk hf hnt hfr)
+
+/-- Insertion needs the fresh inner table only in the caller-selected typings. -/
+theorem merge_set_worldStepIn {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {t inner : Nat} {S Nd : List Nat}
+    (hA : ArenaReady s) (hw : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbe : post.be = s.be)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32))
+    (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    WorldStepIn (fun _ => [t, inner]) (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post ∧
+      globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by
+  have hsp : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "scratch_ptr") (by decide))
+  refine ⟨⟨he.1, he.2.2.2.2.1, he.2.2.2.2.2.2.2, ?_, ?_⟩, by rw [hsp]⟩
+  · intro rec hrec hn k hks _
+    have hrec_sz : ∃ sz, (rec.1, sz) ∈ typedRecords ∧
+        ofString rec.1 ≠ ofString "heap_ptr" ∧ k % 8 = 0 ∧ k + 8 ≤ sz := by
+      simp only [stdKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+      rcases hrec with rfl | rfl | rfl | rfl
+      · refine ⟨40, by decide, by decide, ?_⟩; simp at hks; omega
+      · refine ⟨80, by decide, by decide, ?_⟩; simp at hks; omega
+      · refine ⟨72, by decide, by decide, ?_⟩; simp at hks; omega
+      · refine ⟨88, by decide, by decide, ?_⟩; simp at hks; omega
+    obtain ⟨sz, hrec, hg, hk8, hbound⟩ := hrec_sz
+    have hh := merge_set_record_word_kept hA hw ht he rec.1 sz k hrec hg hn hk8 hbound
+    rwa [globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString rec.1)
+      (by simpa using hg))] at hh
+  · intro S' Nd' hw' howned _
+    have ht' : t ∈ S' := howned t (by simp)
+    have hi' : inner ∈ S' := howned inner (by simp)
+    refine ⟨S', Nd', fun _ h => h,
+      merge_set_world_typed hA hw' ht' he hbe hbs ht0 htbs hi' hk hf hv,
+      merge_set_owned_grows hA hw' ht' he hbe hbs ht0 htbs, ?_, trivial⟩
+    intro a hkeep hfree
+    apply he.2.2.2.2.2.2.1 a
+    · intro j hj hh
+      apply hkeep j _ hh
+      apply List.mem_append_left
+      apply List.mem_append_left
+      exact List.mem_append_left _ (List.mem_append_left _
+        (List.mem_flatMap.2 ⟨t, ht', hj⟩))
+    · intro hh
+      apply hfree
+      have hpmax := he.1.2.2.1
+      obtain ⟨h1, h2⟩ := hh
+      unfold heapFree CellHits at *
+      dsimp at h1 h2 ⊢
+      omega
+
+/-- The evaluator insertion respects the caller's selected ownership witnesses. -/
+theorem merge_set_call_worldStepIn {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek ev : ExpHOL 64)
+    (tw kw iw : BitVec 64) (S Nd : List Nat)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : evalAt s ev = some (.val (.word iw)))
+    (hA : ArenaReady s) (hw : WorldTypedWith s S Nd) (htS : tw.toNat ∈ S)
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hkey : hdr s iw.toNat 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ iw.toNat)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).1) :
+    let out := evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])
+    WorldStepIn (fun _ => [tw.toNat, iw.toNat]) (bufRegions []) ["heap_ptr"]
+      stdKeep NoExtra s out.1 out.2 ∧
+      globN out.2 "scratch_ptr" ≤ globN s "scratch_ptr" := by
+  obtain ⟨he, hv, hbe, _, _⟩ := merge_set_call_flow_props s et ek ev tw kw iw
+    ht hk hi hA (hw.1.2.1 tw.toNat htS).1
+      (fun i him => ((hw.1.2.1 tw.toNat htS).2 i him).1) hfr
+  exact merge_set_worldStepIn hA hw htS he hbe hbs ht0 htbs hkey hf hv
+
+/-- A selected ownership witness suffices to enter the union after insertion. -/
+theorem merge_set_call_union_entry_with {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek : ExpHOL 64)
+    (tw kw iw : BitVec 64) (S Nd : List Nat)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "binner") = some (.val (.word iw)))
+    (hA : ArenaReady s) (hw : WorldTypedWith s S Nd)
+    (htS : tw.toNat ∈ S) (hiS : iw.toNat ∈ S)
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hkey : hdr s iw.toNat 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ iw.toNat)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).2
+    WorldOK post ∧ WorldTypedWith post S Nd ∧ globN post "bs" ≠ 0 ∧
+      memW post (globN post "bs" + 32) ≠ 0 ∧
+      locN post "binner" ∈ htabValues post (memW post (globN post "bs" + 32)) := by
+  have hiv : evalAt s (.var .local (ofString "binner")) = some (.val (.word iw)) := by
+    simpa [evalAt, evalHOLExact] using hi
+  have hwf := (hw.1.2.1 tw.toNat htS).1
+  have hal : ∀ i ∈ htabFootprint s tw.toNat, Allocated s i :=
+    fun i him => ((hw.1.2.1 tw.toNat htS).2 i him).1
+  have hp := merge_set_call_flow_props s et ek _ tw kw iw ht hk hiv hA hwf hal hfr
+  have hm := merge_set_call_bound_member s et ek tw kw iw ht hk hi hA hwf hal hfr
+  have hb := merge_set_bs_outer_kept hA hw htS hp.1 hbs
+  have hwp := merge_set_world_typed hA hw htS hp.1 hp.2.2.1 hbs ht0 htbs
+    hiS hkey hf hp.2.1
+  dsimp only
+  refine ⟨⟨hp.1.1, S, (WkBal.worldTyped_iff_with _ S).2 ⟨Nd, hwp⟩⟩,
+    hwp, ?_, ?_, ?_⟩
+  · rwa [hb.1]
+  · rwa [hb.2, ← htbs]
+  · rw [hb.2, ← htbs]
+    exact hm.2
+
+/-- Caller-selected heap effects fit the withdrawal frame without losing ownership guards. -/
+theorem merge_heap_stepIn_withdrawal
+    {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {r : Option (PanSemResultExact 64)}
+    (h : WorldStepIn T (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post) :
+    WorldStepIn T (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s r post := by
+  obtain ⟨hA, hhp, hG, hK, hW⟩ := h
+  refine ⟨hA, hhp, ?_, ?_, ?_⟩
+  · intro k hk
+    apply hG k
+    intro hm
+    apply hk
+    have he : k = ofString "heap_ptr" := by simpa using hm
+    simp [withdrawalGlobals, he]
+  · intro rec hrec hn k hk hno
+    have hkeep : ∃ ks, (rec.1, ks) ∈ stdKeep ∧ k ∈ ks := by
+      simp only [withdrawalKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+      rcases hrec with rfl | rfl | rfl | rfl
+      · exact ⟨_, by simp [stdKeep], hk⟩
+      · exact ⟨_, by simp [stdKeep], hk⟩
+      · cases hk
+      · exact ⟨_, by simp [stdKeep], hk⟩
+    obtain ⟨ks, hks, hk'⟩ := hkeep
+    exact hK (rec.1, ks) hks hn k hk' (by simp [bufRegions])
+  · intro S Nd hw ht _
+    obtain ⟨S', Nd', hsub, hw', hg, hframe, hq⟩ := hW S Nd hw ht (by simp [bufRegions, IvlsDisj])
+    refine ⟨S', Nd', hsub, hw', hg, ?_, hq⟩
+    intro a ha hfree
+    apply hframe a _ hfree
+    intro i hi hhit
+    simp only [bufRegions, List.map_nil, List.append_nil] at hi
+    rcases List.mem_append.1 hi with hi | hi
+    · exact ha i (List.mem_append_left _ (List.mem_append_left _ hi)) hhit
+    · exact ha i (List.mem_append_right _ hi) hhit
+
+/-- Allocation and insertion share the extended table witness used by the inner union. -/
+theorem merge_new_set_union_entry {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hA : ArenaReady s) (hw : WorldTypedWith s S Nd)
+    (hnew : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])).1) :
+    let mid := (evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])).2
+    ∃ iw : BitVec 64, mid.locals.lookup (ofString "binner") = some (.val (.word iw)) ∧
+      ∀ (et ek : ExpHOL 64) (tw kw : BitVec 64),
+      evalAt mid et = some (.val (.word tw)) →
+      evalAt mid ek = some (.val (.word kw)) →
+      tw.toNat ∈ S → globN mid "bs" ≠ 0 → tw.toNat ≠ 0 →
+      tw.toNat = memW mid (globN mid "bs" + 32) →
+      FlowingOrResumes (evaluateHOLFiniteState mid
+        (.call (some (none, none)) (ofString "htab_set")
+          [et, ek, .var .local (ofString "binner")])).1 →
+      let post := (evaluateHOLFiniteState mid
+        (.call (some (none, none)) (ofString "htab_set")
+          [et, ek, .var .local (ofString "binner")])).2
+      WorldOK post ∧ WorldTypedWith post (S ++ [iw.toNat]) Nd ∧
+        globN post "bs" ≠ 0 ∧ memW post (globN post "bs" + 32) ≠ 0 ∧
+        locN post "binner" ∈ htabValues post (memW post (globN post "bs" + 32)) := by
+  dsimp only
+  obtain ⟨iw, hi, _, _, _, hk, _, hf, hw', _⟩ :=
+    merge_new_call_bound_owned s (ofString "binner") 32#64 8#64 S Nd
+      hA hw (by decide) (by decide) hnew
+  obtain ⟨_, _, _, hAm, _⟩ := merge_new_call_flow_props s (ofString "binner")
+    32#64 8#64 hA (by decide) (by decide) hnew
+  refine ⟨iw, hi, ?_⟩
+  intro et ek tw kw ht hkey htS hbs ht0 htbs hset
+  exact merge_set_call_union_entry_with _ et ek tw kw iw (S ++ [iw.toNat]) Nd
+    ht hkey hi hAm hw' (List.mem_append_left _ htS) (by simp) hbs ht0 htbs
+    (by rw [show roleKeyLen "bs.inner" = 32 by decide]; exact hk) hf hset
+
+/-- A guarded insertion composes with an ordinary withdrawal-framed suffix. -/
+theorem withdrawalStepIn_trans
+    {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {F : Type} {s1 s2 s3 : PanSemStateFiniteExact 64 F}
+    {r1 r2 : Option (PanSemResultExact 64)}
+    (h12 : WorldStepIn T (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s1 r1 s2)
+    (hsc12 : globN s2 "scratch_ptr" ≤ globN s1 "scratch_ptr")
+    (h23 : WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s2 r2 s3) :
+    WorldStepIn T (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s1 r2 s3 ∧
+      globN s3 "scratch_ptr" ≤ globN s1 "scratch_ptr" := by
+  have hbuf : bufRegions withdrawalBufs s2 = bufRegions withdrawalBufs s1 := by
+    unfold bufRegions
+    apply List.map_congr_left
+    intro p hp
+    have hn : ofString p.1 ∉ withdrawalGlobals.map ofString := by
+      simp only [withdrawalBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
+      rcases hp with rfl | rfl | rfl | rfl | rfl <;> decide
+    have hg := globN_eq_of_lookup (h12.2.2.1 (ofString p.1) hn)
+    simp only [bufferRegion, hg]
+  have hframe : globN s2 "frame_mem_ptr" = globN s1 "frame_mem_ptr" :=
+    globN_eq_of_lookup (h12.2.2.1 (ofString "frame_mem_ptr") (by decide))
+  have hroots : ∀ rec ∈ withdrawalKeep, ∀ k ∈ rec.2,
+      globN s2 rec.1 = globN s1 rec.1 := by
+    intro rec hrec k hk
+    apply globN_eq_of_lookup (h12.2.2.1 (ofString rec.1) ?_)
+    simp only [withdrawalKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+    rcases hrec with rfl | rfl | rfl | rfl
+    · decide
+    · decide
+    · cases hk
+    · decide
+  obtain ⟨hA2, hhp12, hG12, hK12, hW12⟩ := h12
+  obtain ⟨⟨hA3, hhp23, hG23, hK23, hW23⟩, hsc23⟩ := h23
+  refine ⟨⟨hA3, le_trans hhp12 hhp23,
+    fun k hk => (hG12 k hk).trans (hG23 k hk), ?_, ?_⟩, le_trans hsc23 hsc12⟩
+  · intro rec hrec hnz k hk hno
+    have hg := hroots rec hrec k hk
+    have h2 := hK23 rec hrec (by rw [hg]; exact hnz) k hk
+      (by change ∀ i ∈ bufRegions withdrawalBufs s2, ¬ CellHits (globN s2 rec.1 + k) i
+          rw [hbuf, hg]; exact hno)
+    rw [hg] at h2
+    exact h2.trans (hK12 rec hrec hnz k hk hno)
+  · intro S Nd hWT1 hT hD1
+    obtain ⟨S2, Nd2, hsub12, hWT2, hOG12, hFO12, _⟩ := hW12 S Nd hWT1 hT hD1
+    obtain ⟨S3, Nd3, hsub23, hWT3, hOG23, hFO23, _⟩ :=
+      hW23 S2 Nd2 hWT2 (validBufList_disj validBufList_withdrawal hWT2)
+    refine ⟨S3, Nd3, fun t ht => hsub23 t (hsub12 t ht), hWT3, ?_, ?_, trivial⟩
+    · intro o ho
+      rcases hOG23 o ho with rfl | ⟨j, hj, hin_oj⟩ | hin_o23
+      · exact Or.inl rfl
+      · rcases hOG12 j hj with rfl | ⟨k, hk, hin_jk⟩ | hin_j12
+        · left
+          rcases o with ⟨o1, o2⟩
+          dsimp only [Inside] at hin_oj
+          have ho1 : o1 = 0 := by omega
+          have ho2 : o2 = 0 := by omega
+          rw [ho1, ho2]
+        · exact Or.inr (Or.inl ⟨k, hk, le_trans hin_jk.1 hin_oj.1, le_trans hin_oj.2 hin_jk.2⟩)
+        · exact Or.inr (Or.inr ⟨le_trans hin_j12.1 hin_oj.1,
+            le_trans hin_oj.2 (le_trans hin_j12.2 hhp23)⟩)
+      · exact Or.inr (Or.inr ⟨le_trans hhp12 hin_o23.1, hin_o23.2⟩)
+    · intro a ha hhf
+      have hm12 : s2.memory a = s1.memory a := hFO12 a ha hhf
+      have hm23 : s3.memory a = s2.memory a := by
+        apply hFO23 a
+        · intro i hi hch
+          obtain ⟨hc1, hc2⟩ := hch
+          rcases List.mem_append.1 hi with hi1 | hfg2
+          · rcases List.mem_append.1 hi1 with hwo2 | hR2
+            · rcases hOG12 i hwo2 with rfl | ⟨k, hk, hin_ik⟩ | hin_i12
+              · dsimp only at hc2; omega
+              · exact ha k (List.mem_append_left _ (List.mem_append_left _ hk))
+                  ⟨by dsimp only [Inside] at hin_ik; omega,
+                   by dsimp only [Inside] at hin_ik; omega⟩
+              · have hp2_lim : globN s2 "heap_ptr" ≤ heapLimit := hA2.2.2.1
+                exact hhf ⟨by unfold heapFree; dsimp only [Inside] at hin_i12 ⊢; omega,
+                           by unfold heapFree; dsimp only [Inside] at hin_i12 ⊢; omega⟩
+            · change i ∈ bufRegions withdrawalBufs s2 at hR2
+              rw [hbuf] at hR2
+              exact ha i (List.mem_append_left _ (List.mem_append_right _ hR2)) ⟨hc1, hc2⟩
+          · simp only [List.mem_singleton] at hfg2
+            subst hfg2
+            exact ha (freeGap s1) (List.mem_append_right _ (List.mem_singleton.2 rfl))
+              ⟨by unfold freeGap at hc1 ⊢; dsimp only at hc1 ⊢; omega,
+               by unfold freeGap at hc2 ⊢; dsimp only at hc2 ⊢; omega⟩
+        · intro ⟨hc1, hc2⟩
+          have hp2_lim : globN s2 "heap_ptr" ≤ heapLimit := hA2.2.2.1
+          exact hhf ⟨by unfold heapFree at hc1 hc2 ⊢; dsimp only at hc1 hc2 ⊢; omega,
+                     by unfold heapFree at hc1 hc2 ⊢; dsimp only at hc1 hc2 ⊢; omega⟩
+      exact hm23.trans hm12
+
+/-- Insertion followed by union preserves the caller-selected ownership frame. -/
+theorem eval_merge_set_then_union_with {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek src : ExpHOL 64)
+    (tw kw iw : BitVec 64) (S Nd : List Nat)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "binner") = some (.val (.word iw)))
+    (hc : s.code = originalRuntimeCode)
+    (hA : ArenaReady s) (hw : WorldTypedWith s S Nd)
+    (htS : tw.toNat ∈ S) (hiS : iw.toNat ∈ S)
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hkey : hdr s iw.toNat 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ iw.toNat)
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])
+      (.call (some (none, none)) (ofString "htab_union_into")
+        [.var .local (ofString "binner"), src]))).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])
+      (.call (some (none, none)) (ofString "htab_union_into")
+        [.var .local (ofString "binner"), src]))).1) :
+    let out := evaluateHOLFiniteState s (.seq
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])
+      (.call (some (none, none)) (ofString "htab_union_into")
+        [.var .local (ofString "binner"), src]))
+    WorldStepIn (fun _ => [tw.toNat, iw.toNat]) (bufRegions withdrawalBufs)
+      withdrawalGlobals withdrawalKeep NoExtra s out.1 out.2 ∧
+      globN out.2 "scratch_ptr" ≤ globN s "scratch_ptr" := by
+  have hiv : evalAt s (.var .local (ofString "binner")) = some (.val (.word iw)) := by
+    simpa [evalAt, evalHOLExact] using hi
+  dsimp only
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases he : evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")]) with ⟨r, mid⟩
+  simp only [he] at hnt hfr ⊢
+  cases r with
+  | none =>
+    have hflow : FlowingOrResumes (evaluateHOLFiniteState s
+        (.call (some (none, none)) (ofString "htab_set")
+          [et, ek, .var .local (ofString "binner")])).1 := by
+      rw [he]; exact Or.inl rfl
+    have hs := merge_set_call_worldStepIn s et ek _ tw kw iw S Nd ht hk hiv
+      hA hw htS hbs ht0 htbs hkey hf hflow
+    have hp := merge_set_call_union_entry_with s et ek tw kw iw S Nd ht hk hi
+      hA hw htS hiS hbs ht0 htbs hkey hf hflow
+    rw [he] at hs hp
+    have hcm := (PanRunBounded.evaluateHOLFiniteState_metadata s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).1
+    rw [he] at hcm
+    exact withdrawalStepIn_trans (merge_heap_stepIn_withdrawal hs.1) hs.2
+      (merge_heap_step_withdrawal (eval_call_union_bs_inner mid src (hcm.trans hc)
+        hp.1 hp.2.2.1 hp.2.2.2.1 hp.2.2.2.2 hnt hfr))
+  | some r =>
+    have hflow : FlowingOrResumes (evaluateHOLFiniteState s
+        (.call (some (none, none)) (ofString "htab_set")
+          [et, ek, .var .local (ofString "binner")])).1 := by
+      rwa [he]
+    have hn := merge_set_call_flow_none s et ek _ tw kw iw ht hk hiv hc hflow
+    rw [he] at hn
+    contradiction
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

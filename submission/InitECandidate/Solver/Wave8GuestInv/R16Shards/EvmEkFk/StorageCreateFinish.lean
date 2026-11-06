@@ -4921,6 +4921,112 @@ theorem DecoderNodeStep.refl {F : Type} {s : PanSemStateFiniteExact 64 F} {Nd : 
     (ha : ArenaReady s) (hn : NodeHeap s Nd) : DecoderNodeStep s s Nd Nd :=
   ⟨R14Shards.NodeStep.refl ha hn, fun _ _ => rfl, fun _ hx hnx => absurd hx hnx⟩
 
+theorem nodePath_branch_update_so {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {Nd : List Nat} {br : Nat} (hNd : NodeHeap s Nd) (hbr : br ∈ Nd)
+    (hk : memW s br = 3) (a : Nat) (w : BitVec 64)
+    (ha : br ≤ a) (haend : a + 8 ≤ br + 176)
+    {post : PanSemStateFiniteExact 64 F}
+    (hm : post.memory = Wave8Contracts.M26.updW s.memory (BitVec.ofNat 64 a) w)
+    (hkinds : ∀ n ∈ Nd, memW post n = memW s n) :
+    ∀ n ∈ Nd, nodePath post n = nodePath s n := by
+  intro n hn
+  unfold nodePath
+  rw [hkinds n hn]
+  by_cases hkind : memW s n = 1 ∨ memW s n = 2
+  · have hne : n ≠ br := by intro heq; subst n; rcases hkind with h | h <;> omega
+    have hd := hNd.2 n hn br hbr hne
+    have hnsize : 48 ≤ nodeSize (memW s n) := by
+      rcases hkind with h | h <;> simp [nodeSize, h]
+    have hbrsize : nodeSize (memW s br) = 176 := by simp [nodeSize, hk]
+    have hhi := (hNd.1 br hbr).2.2.1.2
+    have hnhi := (hNd.1 n hn).2.2.1.2
+    have hlimit : heapLimit < 2 ^ 64 := by decide
+    dsimp [Disj, nodeIvl] at hd hhi hnhi
+    rw [hbrsize] at hd hhi
+    have hword : ∀ off, off = 32 ∨ off = 40 → memW post (n + off) = memW s (n + off) := by
+      intro off hoff
+      have ha64 : a < 2 ^ 64 := by omega
+      have hn64 : n + off < 2 ^ 64 := by rcases hoff with rfl | rfl <;> omega
+      have haddr : BitVec.ofNat 64 (n + off) ≠ BitVec.ofNat 64 a := by
+        intro heq
+        have heq' := congrArg BitVec.toNat heq
+        simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hn64, Nat.mod_eq_of_lt ha64] at heq'
+        rcases hd with hd | hd <;> rcases hoff with rfl | rfl <;> omega
+      unfold memW
+      rw [hm]
+      simp [Wave8Contracts.M26.updW, haddr]
+    rw [hword 32 (Or.inl rfl), hword 40 (Or.inr rfl)]
+  · simp [hkind]
+
+theorem branch_store_child_decoder_so {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {Nd : List Nat} {br idx wch : BitVec 64}
+    (ha : ArenaReady s) (hNd : NodeHeap s Nd)
+    (hbr : br.toNat ∈ Nd) (hk : memW s br.toNat = 3)
+    (hi : idx.toNat < 16) (hc : RootIn Nd wch.toNat) :
+    let slot := br + BitVec.ofNat 64 32 + idx * BitVec.ofNat 64 8
+    let post := { s with memory := Wave8Contracts.M26.updW s.memory slot wch }
+    s.memaddrs slot ∧ DecoderNodeStep s post Nd Nd ∧ memW post br.toNat = 3 := by
+  intro slot post
+  obtain ⟨hdom, hstep, hkpost⟩ := R14Shards.branch_store_child_step ha hNd hbr hk hi hc
+  have hhi := (hNd.1 br.toNat hbr).2.2.1.2
+  have hsize : nodeSize (memW s br.toNat) = 176 := by simp [nodeSize, hk]
+  dsimp [nodeIvl] at hhi
+  rw [hsize] at hhi
+  have hlimit : heapLimit < 2 ^ 64 := by decide
+  have hslot : slot = BitVec.ofNat 64 (br.toNat + 32 + 8 * idx.toNat) := by
+    apply BitVec.eq_of_toNat_eq
+    dsimp [slot]
+    simp only [BitVec.toNat_add, BitVec.toNat_mul, BitVec.toNat_ofNat]
+    omega
+  refine ⟨hdom, ⟨hstep, ?_, fun x hx hnx => absurd hx hnx⟩, hkpost⟩
+  apply nodePath_branch_update_so hNd hbr hk (br.toNat + 32 + 8 * idx.toNat) wch
+    (by omega) (by omega)
+  · dsimp [post]; rw [hslot]
+  · exact hstep.kinds
+
+theorem branch_store_value_decoder_so {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {Nd : List Nat} {br vp vn : BitVec 64}
+    (ha : ArenaReady s) (hNd : NodeHeap s Nd)
+    (hbr : br.toNat ∈ Nd) (hk : memW s br.toNat = 3) (hv : vn.toNat < 2 ^ 40) :
+    let m1 := Wave8Contracts.M26.updW s.memory (br + BitVec.ofNat 64 160) vp
+    let post := { s with memory := Wave8Contracts.M26.updW m1 (br + BitVec.ofNat 64 168) vn }
+    s.memaddrs (br + BitVec.ofNat 64 160) ∧ s.memaddrs (br + BitVec.ofNat 64 168) ∧
+      DecoderNodeStep s post Nd Nd ∧ memW post br.toNat = 3 := by
+  intro m1 post
+  obtain ⟨hd1, hd2, hstep, hkpost⟩ := R14Shards.branch_store_value_step ha hNd hbr hk hv
+  refine ⟨hd1, hd2, ⟨hstep, ?_, fun x hx hnx => absurd hx hnx⟩, hkpost⟩
+  intro n hn
+  unfold nodePath
+  rw [hstep.kinds n hn]
+  by_cases hkind : memW s n = 1 ∨ memW s n = 2
+  · have hne : n ≠ br.toNat := by intro heq; subst n; rcases hkind with h | h <;> omega
+    have hd := hNd.2 n hn br.toNat hbr hne
+    have hnsize : 48 ≤ nodeSize (memW s n) := by
+      rcases hkind with h | h <;> simp [nodeSize, h]
+    have hbrsize : nodeSize (memW s br.toNat) = 176 := by simp [nodeSize, hk]
+    have hhi := (hNd.1 br.toNat hbr).2.2.1.2
+    have hnhi := (hNd.1 n hn).2.2.1.2
+    have hlimit : heapLimit < 2 ^ 64 := by decide
+    dsimp [Disj, nodeIvl] at hd hhi hnhi
+    rw [hbrsize] at hd hhi
+    have haddr : ∀ off k : Nat, (off = 32 ∨ off = 40) → (k = 160 ∨ k = 168) →
+        BitVec.ofNat 64 (n + off) ≠ br + BitVec.ofNat 64 k := by
+      intro off k hoff hk'
+      have hn64 : n + off < 2 ^ 64 := by rcases hoff with rfl | rfl <;> omega
+      have hb64 : br.toNat + k < 2 ^ 64 := by rcases hk' with rfl | rfl <;> omega
+      intro heq
+      have heq' := congrArg BitVec.toNat heq
+      simp only [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hn64] at heq'
+      have hk64 : k < 2 ^ 64 := by rcases hk' with rfl | rfl <;> decide
+      rw [Nat.mod_eq_of_lt hk64, Nat.mod_eq_of_lt hb64] at heq'
+      rcases hd with hd | hd <;> rcases hoff with rfl | rfl <;> rcases hk' with rfl | rfl <;> omega
+    have hw : ∀ off, off = 32 ∨ off = 40 → memW post (n + off) = memW s (n + off) := by
+      intro off hoff
+      simp only [memW, post, m1, Wave8Contracts.M26.updW,
+        if_neg (haddr off 168 hoff (Or.inr rfl)), if_neg (haddr off 160 hoff (Or.inl rfl))]
+    rw [hw 32 (Or.inl rfl), hw 40 (Or.inr rfl)]
+  · simp [hkind]
+
 theorem DecoderNodeStep.with_locals_clock {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {Nd Nd' : List Nat} (h : DecoderNodeStep s post Nd Nd')
     (L : HolFiniteMapExact MlS (ValueHOL 64)) (C : Nat) :
@@ -9419,6 +9525,32 @@ theorem nodedb_lookup_ret_evm_witness_so {F : Type}
     exact witnessDbOK_with_locals_clock hW _ _
   · rw [heff]
     exact hb
+
+theorem nodedb_lookup_strong_so :
+    FunSpec (fun s => EvmInv s ∧ WitnessDbOK s ∧ globN s "ws" ≠ 0 ∧
+      ∃ db : BitVec 64, s.locals.lookup (ofString "db") = some (.val (.word db)) ∧
+        db.toNat = memW s (globN s "ws") ∧ db.toNat ≠ 0)
+      (fun s r post => Resumes r → EvmStep [] s post ∧ WitnessDbOK post ∧
+        ∀ rv, r = some (.returned rv) → ∃ found p n : BitVec 64,
+          rv = .rStruct [.val (.word found), .val (.word p), .val (.word n)] ∧
+          (found ≠ 0 → Inside (p.toNat, n.toNat) sourceBase (globN post "heap_ptr") ∧
+            n.toNat < 2 ^ 40)) (ofString "nodedb_lookup") := by
+  refine ⟨_, _, _, lookup_nodedb_lookup_so, ?_⟩
+  intro F s hc hpre hex hnt hr
+  obtain ⟨params, body, rs, hlk, hf⟩ := nodedb_lookup_evm_witness_so
+  have heq := hlk.symm.trans lookup_nodedb_lookup_so
+  obtain ⟨rfl, rfl, rfl⟩ := Option.some.inj heq
+  obtain ⟨hstep, hdbpost⟩ := hf s hc ⟨hpre.1, hpre.2.1⟩ hex hnt hr
+  refine ⟨hstep, hdbpost, ?_⟩
+  intro rv hret
+  obtain ⟨db, hdb, ht, hnz⟩ := hpre.2.2.2
+  obtain ⟨vals, hl⟩ := hex
+  obtain ⟨db', hash, _, hdb', hhash⟩ := lookupCode_two_words_so (by decide) lookup_nodedb_lookup_so hl
+  have hsame : db' = db := by rw [hdb] at hdb'; injection hdb' with h; cases h; rfl
+  subst db'
+  have hres := nodedb_lookup_ret_evm_witness_so s _ db hash rv hc hpre.1 hpre.2.1
+    hpre.2.2.1 ht hnz hdb hhash ⟨vals, hl⟩ (by rw [← hret])
+  exact hres.2.2
 
 end StorageOriginal
 

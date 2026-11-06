@@ -14775,4 +14775,724 @@ theorem hoare_create_ether_backing_of_header_words
 
 end PtxP34
 
+namespace PtxP34
+open private EvmEkFk.acct_copy_step
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- An allocation-only concrete effect frames every old aligned allocation,
+including a nested block-output list header in scratch memory. -/
+theorem worldEff_allocated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {gw : List String} (b : Ivl)
+    (hA : ArenaOK s) (he : WorldEff s post [] [] gw)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0) :
+    Allocated post b ∧ IvlUnhit s post b := by
+  have hfr : FrameOutside s post ([] ++ [] ++ [freeGap s]) (heapFree s) := by
+    intro a hk hf
+    by_contra hn
+    rcases he.cell_frame a hn with ⟨i, hi, _⟩ | ⟨g, hg, _⟩ | hgap | hheap
+    · cases hi
+    · cases hg
+    · exact hk _ (by simp) hgap.2
+    · exact hf hheap.2
+  have hs := allocated_ivl_survives_step (old := []) (new := []) (R := [])
+    hA he.arena.2 ⟨he.hp_lo, he.sp_hi⟩
+    (by simp) (by simp) (by intro o ho; cases ho) hfr hb1 hb2 hb
+    (by simp) (by simp)
+  exact ⟨hs.1, hs.2.2⟩
+
+/-- The concrete account-copy call in `create_ether` preserves old headers. -/
+theorem acct_copy_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (b : Ivl)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hr : evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "a"), none)) (ofString "acct_copy")
+        [.var .local (ofString "a")]) = (none, post)) :
+    Allocated post b ∧ IvlUnhit s post b := by
+  have he := EvmEkFk.acct_copy_step s hc hA (by rw [hr]; simp)
+    (by rw [hr]; exact Or.inl rfl)
+  rw [hr] at he
+  dsimp only at he
+  exact worldEff_allocated_frame b hA.2 he.1 hb hb1 hb2
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Updating a freshly copied account cannot write an older list header.
+The accumulated effect also allows intervening read-only arithmetic calls. -/
+theorem fresh_account_balance_store_effect {F : Type}
+    {s cur : PanSemStateFiniteExact 64 F}
+    (bw : BitVec 64) (value : ValueHOL 64)
+    (he : WorldEff s cur [] [] ["heap_ptr"])
+    (ha : cur.locals.lookup (ofString "a") = some (.val (.word bw)))
+    (hv : cur.locals.lookup (ofString "nb") = some value)
+    (hlo : globN s "heap_ptr" ≤ bw.toNat) (hhi : bw.toNat + 56 ≤ heapLimit)
+    (hflat : (flattenHOL value).length = 4) :
+    WorldEff s (evaluateHOLFiniteState cur
+      (.store (.op .add [.var .local (ofString "a"), .const 8])
+        (.var .local (ofString "nb")))).2 [] [] ["heap_ptr"] := by
+  apply EvmEkFk.worldEff_store_multi he _ _ 4 (by decide)
+  · intro v hev
+    simp [evalHOLExact, hv] at hev
+    subst v
+    exact hflat
+  · intro x hx
+    simp [evalHOLExact, evalListHOLExact, ha, wordOpHOL, wordOp,
+      valueIsWord, valueWord] at hx
+    subst x
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    have hheap : heapLimit ≤ heapEnd := by decide
+    have hx8 : (bw + 8#64).toNat = bw.toNat + 8 := by
+      apply BitVec.toNat_add_of_lt
+      change bw.toNat + 8 < 2 ^ 64
+      omega
+    rw [hx8]
+    exact ⟨by omega, Or.inr (Or.inr (Or.inr ⟨by omega, by omega⟩))⟩
+
+/-- The balance store in `create_ether` frames every old aligned allocation. -/
+theorem fresh_account_balance_store_frame {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} (b : Ivl)
+    (bw : BitVec 64) (value : ValueHOL 64)
+    (hA : ArenaOK s) (he : WorldEff s cur [] [] ["heap_ptr"])
+    (ha : cur.locals.lookup (ofString "a") = some (.val (.word bw)))
+    (hv : cur.locals.lookup (ofString "nb") = some value)
+    (hlo : globN s "heap_ptr" ≤ bw.toNat) (hhi : bw.toNat + 56 ≤ heapLimit)
+    (hflat : (flattenHOL value).length = 4)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hr : evaluateHOLFiniteState cur
+      (.store (.op .add [.var .local (ofString "a"), .const 8])
+        (.var .local (ofString "nb"))) = (none, post)) :
+    Allocated post b ∧ IvlUnhit s post b := by
+  have hm := fresh_account_balance_store_effect bw value he ha hv hlo hhi hflat
+  rw [hr] at hm
+  exact worldEff_allocated_frame b hA hm hb hb1 hb2
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- A concrete effect preserves old aligned allocations separated from its
+explicit writes, including scratch-resident list headers. -/
+theorem worldEff_separated_allocated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    {B : List (String × Nat)} {gw : List String} (b : Ivl)
+    (hA : ArenaOK s) (he : WorldEff s post R B gw)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hR : ∀ j ∈ R, Disj b j)
+    (hB : ∀ g ∈ B, Disj b (bufferRegion s g)) :
+    Allocated post b ∧ IvlUnhit s post b := by
+  refine ⟨(show AllocatorGrows s post from ⟨he.hp_lo, he.sp_hi⟩).allocated hb, ?_⟩
+  intro a ha8 hhit
+  have hai : b.1 ≤ a.toNat ∧ a.toNat + 8 ≤ b.1 + b.2 := by
+    unfold CellHits at hhit
+    omega
+  by_contra hn
+  rcases he.cell_frame a hn with ⟨j, hj, hpos, hhit⟩ | ⟨g, hg, hpos, hhit⟩ | hgap | hheap
+  · have hd := hR j hj
+    unfold Disj at hd
+    unfold CellHits at hhit
+    rcases hd with hd | hd | hd | hd <;> omega
+  · have hd := hB g hg
+    unfold Disj at hd
+    unfold CellHits at hhit
+    rcases hd with hd | hd | hd | hd <;> omega
+  · rcases hb with hb | hb
+    · have hh := hA.2.2.1
+      have hp := hA.2.1
+      have hsep : heapLimit ≤ scratchStart := by decide
+      unfold Inside at hb
+      change 0 < (freeGap s).2 ∧ CellHits a.toNat (freeGap s) at hgap
+      unfold CellHits freeGap at hgap
+      dsimp only at hgap
+      omega
+    · unfold Inside at hb
+      change 0 < (freeGap s).2 ∧ CellHits a.toNat (freeGap s) at hgap
+      unfold CellHits freeGap at hgap
+      dsimp only at hgap
+      omega
+  · rcases hb with hb | hb
+    · unfold Inside at hb
+      change 0 < (heapFree s).2 ∧ CellHits a.toNat (heapFree s) at hheap
+      unfold CellHits heapFree at hheap
+      dsimp only at hheap
+      omega
+    · have hs := hA.2.2.2.1
+      have hf := hA.2.2.1
+      have hp := hA.2.1
+      have hsep : heapLimit ≤ scratchStart := by decide
+      unfold Inside at hb
+      change 0 < (heapFree s).2 ∧ CellHits a.toNat (heapFree s) at hheap
+      unfold CellHits heapFree at hheap
+      dsimp only at hheap
+      omega
+
+open InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03
+
+/-- The trie/decode path of account lookup frames existing separated headers. -/
+theorem ws_get_account_optional_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (b : Ivl) (v : ValueHOL 64)
+    (hA : ArenaReady s)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hB : ∀ g ∈ wsBufs, Disj b (bufferRegion s g))
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_ws_get_account_optional) =
+      (some (.returned v), post)) :
+    Allocated post b ∧ IvlUnhit s post b := by
+  have he := worldEff_ws_get_account_optional s s hA.2
+    (WorldEff.refl s [] wsBufs wsGw hA hA.1.code)
+    (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at he
+  exact worldEff_separated_allocated_frame b hA.2 he hb hb1 hb2
+    (by intro j hj; cases hj) hB
+
+/-- A typed table mutation frames every nonempty fixed object, including the
+two block-output list headers. -/
+theorem htab_mutation_fixed_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat} {b : Ivl}
+    (hA : ArenaOK s) (hAp : ArenaOK post) (hT : WorldTypedWith s S Nd)
+    (ht : t ∈ S) (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hfr : FrameOutside s post (htabFootprint s t)
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    IvlUnhit s post b := by
+  have halloc := ((hT.2.2.1.1 b hb).resolve_left hbpos).1
+  apply R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hbpos hfr
+  · intro j hj
+    have hw := ((hT.1.2.1 t ht).1.1 j hj).2
+    exact ⟨hw.1, hw.2.1⟩
+  · have hs := hA.2.2.2.2.2.1
+    have hp := hAp.2.2.2.2.2.1
+    exact ⟨hs, by omega⟩
+  · intro j hj
+    exact (((hT.1.2.1 t ht).2 j hj).2 b hb).flip
+  · exact InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs.disj_fresh_of_zero_or_allocated
+      hA hAp hhp (Or.inr halloc)
+
+end PtxP34
+
+namespace PtxP34
+
+/-- The concrete table-set contract preserves nonempty fixed objects. -/
+theorem htab_set_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat) (b : Ivl)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (ht : locN (callEntryStateHOLFinite s callee) "t" ∈ S)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : IvlUnhit s post b := by
+  have ha : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).2 hA, ?_, ?_⟩
+    · exact (htabWF_with_locals s callee (s.clock - 1) _).2 (hT.1.2.1 _ ht).1
+    · exact fun i hi => ((hT.1.2.1 _ ht).2 i hi).1
+  have hx := PtxP1.funSpec_at_lookup htab_set_spec s hA.1.code vs body callee ret hl ha
+    (by rw [hr]; simp)
+  rw [hr] at hx
+  obtain ⟨hAp, _, _, _, hhp, _, hframe, _⟩ := hx v rfl
+  exact htab_mutation_fixed_frame hA.2 hAp.2 hT ht hb hbpos hhp hframe
+
+end PtxP34
+
+namespace PtxP34
+
+theorem txWorld_header_fixed {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) (k : Nat) (hk : k ∈ ([40, 72] : List Nat)) :
+    (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+  have hE := hW.2
+  have hk' : k = 40 ∨ k = 72 := by simpa using hk
+  unfold fixedObjects
+  apply List.mem_append_left
+  apply List.mem_append_right
+  rcases hk' with rfl | rfl <;>
+    simp [blockOutObjects, hE.bo_nz, hE.bo40, hE.bo72]
+
+/-- Table updates used by account lookup preserve both nested backing words. -/
+theorem htab_set_tx_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (ht : locN (callEntryStateHOLFinite s callee) "t" ∈ S)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have hb := txWorld_header_fixed hW k hk
+  have hf := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  have hu := htab_set_fixed_frame s post vs body callee ret v S Nd _ hW.1.1 hT ht hb
+    (by simp) hl hr
+  apply memW_eq_of_ivlUnhit hu hf.2.1 (ivl_allocated_bound hW.1.1.2 hf.1).2
+  exact ⟨le_rfl, by dsimp; omega⟩
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open private EvmEkFk.acct_new_params
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
+
+/-- Account construction only writes fresh storage and preserves old headers. -/
+theorem acct_new_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (b : Ivl)
+    (hA : ArenaReady s)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "acct_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : Allocated post b ∧ IvlUnhit s post b := by
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "acct_new")
+    _ _ body _ ret vs callee EvmEkFk.lookup_acct_new (by rwa [← hA.1.code])
+  have hret := lookupCodeHOLFinite_installed_return s (ofString "acct_new")
+    _ _ _ _ ret vs callee (by rw [hA.1.code]; exact EvmEkFk.lookup_acct_new) hl
+  subst body ret
+  have hl' := hl
+  rw [hA.1.code] at hl'
+  obtain ⟨wn, wc, vb, hsh, hn, hbal, hc⟩ := EvmEkFk.acct_new_params hl'
+  have he := EvmEkFk.worldEff_acct_new s (callEntryStateHOLFinite s callee)
+    (Rl := []) (B := []) (gw := ["heap_ptr"]) (by decide)
+    ((WorldEff.refl s [] [] ["heap_ptr"] hA hA.1.code).locals_clock callee (s.clock - 1))
+    hsh hn hbal hc (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at he
+  exact worldEff_allocated_frame b hA.2 he hb hb1 hb2
+
+/-- The missing-account branch of lookup has an allocation-only effect. -/
+theorem acct_empty_body_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hA : ArenaReady s)
+    (hnt : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_acct_empty)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_acct_empty)).1) :
+    WorldEff s (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_acct_empty)).2
+      [] [] ["heap_ptr"] := by
+  have he := WorldEff.refl s [] [] ["heap_ptr"] hA hA.1.code
+  change WorldEff s (evaluateHOLFiniteState s
+    (.decCall (ofString "a") .one (ofString "acct_new")
+      [.const 0, .rstruct [.const 0, .const 0, .const 0, .const 0],
+        .var .global (ofString "empty_code_hash")]
+      (.return (.var .local (ofString "a"))))).2 [] [] ["heap_ptr"]
+  apply worldEff_decCall_eff he (ofString "a") .one (ofString "acct_new") _ _ _ _
+    EvmEkFk.lookup_acct_new
+  · intro callee vals _ hl
+    dsimp only
+    intro hntc hrc
+    have hl' := hl
+    rw [hA.1.code] at hl'
+    obtain ⟨wn, wc, vb, hsh, hn, hb, hc⟩ := EvmEkFk.acct_new_params hl'
+    exact EvmEkFk.worldEff_acct_new s (callEntryStateHOLFinite s callee)
+      (by decide) (he.locals_clock _ _) hsh hn hb hc hntc hrc
+  · intro callee vals rv post _ _ _ _ hepost
+    dsimp only
+    intro _ _
+    exact worldEff_return (hepost.locals_clock _ _) _
+  · exact hnt
+  · exact Or.inr (Or.inr (Or.inr hr))
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Returning from the missing-account constructor preserves old headers. -/
+theorem acct_empty_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (b : Ivl)
+    (hA : ArenaReady s)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "acct_empty") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : Allocated post b ∧ IvlUnhit s post b := by
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "acct_empty")
+    _ _ body _ ret vs callee EvmEkFk.lookup_acct_empty (by rwa [← hA.1.code])
+  subst body
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (sourceFnBody Guest.Software.guestFn_acct_empty) = (some (.returned v), post) at hr
+  have he := acct_empty_body_effect (callEntryStateHOLFinite s callee)
+    ((arenaReady_with_locals s callee (s.clock - 1)).2 hA)
+    (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at he
+  exact worldEff_allocated_frame (s := callEntryStateHOLFinite s callee) b hA.2 he hb hb1 hb2
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- A concrete table-slot update preserves every nonempty fixed object. -/
+theorem htab_set_recSlot_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl)
+    (recName : String) (off : BitVec 64) (key value : ExpHOL 64)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hoff : off.toNat < sourceBase)
+    (ht : globN s recName ≠ 0 → memW s (globN s recName + off.toNat) ≠ 0 →
+      memW s (globN s recName + off.toNat) ∈ S)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString recName), .const off]), key, value]) =
+      (none, post)) : IvlUnhit s post b := by
+  classical
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases ha : evalListHOLFinite s
+      [.load .one (.op .add [.var .global (ofString recName), .const off]), key, value]
+      with _ | values
+  · rw [ha] at hr
+    cases hr
+  · simp only [ha] at hr
+    rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set") values with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr
+      split at hr
+      · cases hr
+      · obtain ⟨v1, _, _, he1, _, _, hc_t, _, _⟩ := R16WkAcctWs.callee_param_three s (ofString "htab_set")
+          (ofString "t") (ofString "key") (ofString "value") .one .one .one _ _
+          (by rw [hA.1.code]; exact EvmFrameSpecs.lookup_htab_set)
+          _ _ _ values body callee ret ha hl
+        obtain ⟨tw, rfl, htw, hnz⟩ := evalAt_loadG_nz s hA.1 recName off hoff v1 he1
+        have hloc : locN (callEntryStateHOLFinite s callee) "t" =
+            memW s (globN s recName + off.toNat) := by
+          simp [locN, callEntryStateHOLFinite, hc_t, htw]
+        rcases hc : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, p⟩
+        rw [hc] at hr
+        cases r with
+        | none => cases hr
+        | some r =>
+          cases r <;> try (simp at hr)
+          rename_i v
+          split at hr
+          · have hzn := PtxP1.funSpec_at_lookup EvmFrameSpecs.nz_htab_set
+              s hA.1.code values body callee ret hl
+              (guestInv_callEntry s callee hA.1) (by rw [hc]; simp)
+            rw [hc] at hzn
+            have hm : locN (callEntryStateHOLFinite s callee) "t" ∈ S := by
+              rw [hloc]
+              apply ht hnz
+              rw [← hloc]
+              exact hzn (Or.inl ⟨v, rfl⟩)
+            have hu := htab_set_fixed_frame s p values body callee ret v S Nd b hA hT hm hb hbpos hl hc
+            have hp := (Prod.mk.inj hr).2
+            rw [← hp]
+            exact hu
+          · cases hr
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Recording a pre-state read preserves the fixed headers used by credit. -/
+theorem record_pre_state_read_body_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl) (v : ValueHOL 64)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hr : evaluateHOLFiniteState s (InitECandidate.Solver.GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read) =
+      (some (.returned v), post)) : IvlUnhit s post b := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+     .var .local (ofString "addr"), .const 1]) (.return (.const 0))) = _ at hr
+  obtain ⟨mid, hc, _, _, ht⟩ := ignored_call_seq_returned hr
+  have hu := htab_set_recSlot_fixed_frame s mid S Nd b "bs" 72 _ _ hA hT hb hbpos
+    (by decide) (fun hn hz => (hT.1.2.2.2.2.1 72 (by simp [bsTableSlots]) hn).resolve_left hz) hc
+  rw [evaluateHOLFiniteState_return] at ht
+  simp only [evalHOLExact] at ht
+  split at ht
+  · have hp := (Prod.mk.inj ht).2
+    subst post
+    exact hu
+  · cases ht
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Lift the concrete pre-state read frame to its installed callee interface. -/
+theorem record_pre_state_read_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat) (b : Ivl)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "record_pre_state_read") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : IvlUnhit s post b := by
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "record_pre_state_read") _ _ body _ ret vs callee
+    R16WkAcctWs.lookup_record_pre_state_read (by rwa [← hA.1.code])
+  subst body
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (sourceFnBody Guest.Software.guestFn_record_pre_state_read) = (some (.returned v), post) at hr
+  exact record_pre_state_read_body_fixed_frame (callEntryStateHOLFinite s callee) post S Nd b v
+    ((arenaReady_with_locals s callee (s.clock - 1)).2 hA)
+    ((R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).2 hT) hb hbpos hr
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Convert a fixed-object frame into the two backing-word equalities. -/
+theorem tx_header_words_of_fixed_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hframe : ∀ b ∈ fixedObjects s, b.2 ≠ 0 → IvlUnhit s post b) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have hb := txWorld_header_fixed hW k hk
+  have hf := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  apply memW_eq_of_ivlUnhit (hframe _ hb (by simp)) hf.2.1
+    (ivl_allocated_bound hW.1.1.2 hf.1).2
+  exact ⟨le_rfl, by dsimp; omega⟩
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03
+
+/-- The installed trie/decode callee preserves separated old allocations. -/
+theorem ws_get_account_optional_call_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (b : Ivl)
+    (hA : ArenaReady s)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hB : ∀ g ∈ wsBufs, Disj b (bufferRegion s g))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_account_optional") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : Allocated post b ∧ IvlUnhit s post b := by
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "ws_get_account_optional") _ _ body _ ret vs callee
+    lookup_ws_get_account_optional_top (by rwa [← hA.1.code])
+  subst body
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (sourceFnBody Guest.Software.guestFn_ws_get_account_optional) = (some (.returned v), post) at hr
+  exact ws_get_account_optional_allocated_frame (callEntryStateHOLFinite s callee) post b v
+    ((arenaReady_with_locals s callee (s.clock - 1)).2 hA) hb hb1 hb2 hB hr
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Block-output objects are separated from the global scratch buffers. -/
+theorem blockOut_disj_global_buffer {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {b : Ivl} {g : String × Nat}
+    (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s) (hg : g ∈ globalBuffers) :
+    Disj b (bufferRegion s g) := by
+  have hp := hfix.2
+  unfold fixedObjects at hp
+  have hpair := (List.pairwise_append.mp hp).1
+  have hbg : bufferRegion s g ∈ globalBuffers.map
+      (fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) := by
+    exact List.mem_map.mpr ⟨g, hg, rfl⟩
+  have hp3 := (List.pairwise_append.mp hpair).2.2
+  have hd := hp3 (bufferRegion s g) (List.mem_append_left _ hbg) b hb
+  simpa only [Disj, or_comm, or_left_comm, or_assoc] using hd
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03
+
+/-- Trie account lookup preserves both transaction backing-pointer words. -/
+theorem ws_get_account_optional_tx_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_account_optional") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have hb := txWorld_header_fixed hW k hk
+  have hf := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  have hbo : (memW s (globN s "bo" + k), 24) ∈ blockOutObjects s := by
+    have hk' : k = 40 ∨ k = 72 := by simpa using hk
+    rcases hk' with rfl | rfl <;> simp [blockOutObjects, hW.2.bo_nz, hW.2.bo40, hW.2.bo72]
+  have hB : ∀ g ∈ wsBufs, Disj (memW s (globN s "bo" + k), 24) (bufferRegion s g) := by
+    intro g hg
+    apply blockOut_disj_global_buffer hT.2.2.1 hbo
+    simp only [wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hg
+    rcases hg with rfl | rfl | rfl <;> decide
+  have hu := ws_get_account_optional_call_allocated_frame s post vs body callee ret v _
+    hW.1.1 hf.1 hf.2.1 (by simp) hB hl hr
+  apply memW_eq_of_ivlUnhit hu.2 hf.2.1 (ivl_allocated_bound hW.1.1.2 hf.1).2
+  exact ⟨le_rfl, by dsimp; omega⟩
+
+end PtxP34
+
+namespace PtxP34
+
+/-- The missing-account allocation branch preserves transaction backing words. -/
+theorem acct_empty_tx_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "acct_empty") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  apply tx_header_words_of_fixed_frame hW hT
+  intro b hb hn
+  have hf := (hT.2.2.1.1 b hb).resolve_left hn
+  exact (acct_empty_allocated_frame s post vs body callee ret v b hW.1.1
+    hf.1 hf.2.1 hf.2.2.1 hl hr).2
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Compose backing-word preservation across a step retaining the header roots. -/
+theorem tx_header_words_trans {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hbo : globN mid "bo" = globN s "bo")
+    (hheaders : ∀ k ∈ ([40, 72] : List Nat),
+      memW mid (globN s "bo" + k) = memW s (globN s "bo" + k))
+    (hfirst : ∀ k ∈ ([40, 72] : List Nat),
+      memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)))
+    (hsecond : ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW mid (globN mid "bo" + k)) = memW mid (memW mid (globN mid "bo" + k))) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have h := hsecond k hk
+  rw [hbo, hheaders k hk] at h
+  exact h.trans (hfirst k hk)
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Extract stable header roots from a world step without scratch writes. -/
+theorem worldStep_empty_tx_header_roots {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {gw : List String}
+    {keep : List (String × List Nat)} {boKeep : List Nat}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hs : WorldStep (fun _ => []) gw keep Q s r post)
+    (hW : TxWorld s) (hg : ofString "bo" ∉ gw.map ofString)
+    (hk : ("bo", boKeep) ∈ keep)
+    (hoff : ∀ k ∈ ([40, 72] : List Nat), k ∈ boKeep) :
+    globN post "bo" = globN s "bo" ∧
+      ∀ k ∈ ([40, 72] : List Nat), memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+  refine ⟨R16Shards.globN_eq_of_lookup (hs.2.2.1 _ hg), ?_⟩
+  intro k hmem
+  exact hs.2.2.2.1 ("bo", boKeep) hk hW.2.bo_nz k (hoff k hmem)
+    (by intro i hi; cases hi)
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- The concrete pre-state lookup's initial table update preserves backing. -/
+theorem get_pre_state_account_optional_prefix_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_get_pre_state_account_optional) =
+      (some (.returned v), post)) :
+    ∃ mid, evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]),
+       .var .local (ofString "addr"), .const 1]) = (none, mid) ∧
+      ∀ k ∈ ([40, 72] : List Nat),
+        memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]),
+     .var .local (ofString "addr"), .const 1]) _) = _ at hr
+  obtain ⟨mid, hc, _, _, _⟩ := ignored_call_seq_returned hr
+  refine ⟨mid, hc, tx_header_words_of_fixed_frame hW hT ?_⟩
+  intro b hb hn
+  exact htab_set_recSlot_fixed_frame s mid S Nd b "ts" 8 _ _ hW.1.1 hT hb hn
+    (by decide) (fun hts hz => (hT.1.2.2.2.2.2.1 8 (by simp [tsTableSlots]) hts).resolve_left hz) hc
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Decompose a returning declared call for concrete continuation framing. -/
+theorem dec_call_return_inv_args {F : Type} {s t : PanSemStateFiniteExact 64 F}
+    {x fname : MlS} {sh : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    {v : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (some (.returned v), t)) :
+    ∃ values body callee retShape rv post u,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values ∧
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, retShape) ∧
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned rv), post) ∧
+      evaluateHOLFiniteState (setVarHOLFinite x rv {post with locals := s.locals}) cont = (some (.returned v), u) ∧
+      t.memory = u.memory := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h
+  split at h
+  · simp at h
+  · split at h
+    · simp at h
+    · rename_i optvalues values hargs optbody body callee retShape hl
+      split at h
+      · simp at h
+      · dsimp only at h
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => simp at h
+        | some r =>
+          cases r with
+          | returned rv =>
+            dsimp only at h
+            split at h
+            · rcases ht : evaluateHOLFiniteState
+                (setVarHOLFinite x rv {post with locals := s.locals}) cont with ⟨rc, u⟩
+              rw [ht] at h
+              cases rc with
+              | none => simp at h
+              | some r =>
+                cases r <;> try simp at h
+                rename_i w
+                obtain ⟨rfl, he⟩ := h
+                exact ⟨_, body, callee, retShape, rv, post, u, hargs, hl, hr, ht,
+                  congrArg (fun st => st.memory) he.symm⟩
+            · simp at h
+          | _ => simp at h
+
+end PtxP34
+
+namespace PtxP34
+
+theorem return_memory_eq {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e : ExpHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.return e) = (some (.returned v), post)) :
+    post.memory = s.memory := by
+  rw [evaluateHOLFiniteState_return] at hr
+  split at hr
+  · cases hr
+  · split at hr
+    · exact congrArg (fun st => st.memory) (Prod.mk.inj hr).2.symm
+    · cases hr
+
+/-- The trie-lookup-and-return suffix preserves both backing words. -/
+theorem ws_get_account_optional_return_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+        [.var .local (ofString "addr")] (.return (.var .local (ofString "a")))) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨vs, body, callee, ret, rv, cp, u, _, hl, hc, ht, hm⟩ := dec_call_return_inv_args hr
+  have hu := return_memory_eq ht
+  have hk := ws_get_account_optional_tx_header_words s cp vs body callee ret rv S Nd hW hT hl hc
+  intro k hmem
+  simpa only [memW, hm, hu, setVarHOLFinite] using hk k hmem
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

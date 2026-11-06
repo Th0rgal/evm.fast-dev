@@ -11992,4 +11992,116 @@ theorem laInvContents_complete {F : Type} {s u post : PanSemStateFiniteExact 64 
   simp only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq, hm]
   rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by omega), hieq]
 
+/-- Protected log records retain their validity throughout the append loop,
+including the heap bounds of their topics and data payloads. -/
+theorem laInv_logEntryOK {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 cap0 n0 nc : BitVec 64} {log : Nat}
+    (h : LAInv s L arr0 cap0 n0 nc u) (hlog : LogEntryOK s log)
+    (hbound : log + 40 ≤ 2 ^ 64)
+    (hun : Wave8Contracts.M08.IvlUnhit s u (log, 40)) :
+    LogEntryOK u log := by
+  obtain ⟨_, hd, _, _, hh, _⟩ := h
+  have hmem (k : Nat) (hk : k < 5) :
+      u.memory (BitVec.ofNat 64 (log + 8 * k)) =
+        s.memory (BitVec.ofNat 64 (log + 8 * k)) := by
+    apply hun _ (by
+      simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)]
+      have ha : log % 8 = 0 := hlog.1.1
+      omega)
+    · simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)]
+      omega
+    · simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)]
+      omega
+  apply logEntryOK_of_record_preserved hlog hh
+  · obtain ⟨ha, hn, hw⟩ := hlog.1
+    refine ⟨ha, hn, fun k hk => ?_⟩
+    have hk5 : k < 5 := by simpa using hk
+    obtain ⟨w, hdom, hm⟩ := hw k hk
+    exact ⟨w, by rw [hd]; exact hdom, (hmem k hk5).trans hm⟩
+  · intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    have hread (j : Nat) (hj : j < 5) : memW u (log + 8 * j) = memW s (log + 8 * j) := by
+      unfold memW
+      rw [hmem j hj]
+    rcases hk with rfl | rfl | rfl | rfl | rfl
+    · exact hread 0 (by decide)
+    · exact hread 1 (by decide)
+    · exact hread 2 (by decide)
+    · exact hread 3 (by decide)
+    · exact hread 4 (by decide)
+
+/-- Reconstruct the parent's valid log list at an executable loop exit.
+Exact segments and the new count come from the completed loop, while the
+capacity bound is recovered from its allocation invariant. -/
+theorem laInvContents_logsListOK {F : Type} {s u post : PanSemStateFiniteExact 64 F}
+    {L arr cap n nc : BitVec 64} {child : Nat} (a2 : ExpHOL 64)
+    (h : LAInvContents s L arr cap n nc
+      (fun k => memW s (memW s child + 8 * k)) post)
+    (hr : evaluateHOLFiniteState u
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n")))
+        (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))) =
+      (none, post))
+    (hma : memW s L.toNat = arr.toNat)
+    (hp : LogsListOK s L.toNat) (hc : LogsListOK s child)
+    (hn : memW s (L.toNat + 8) = n.toNat)
+    (hnc : memW s (child + 8) = nc.toNat)
+    (hpn : L.toNat ≠ 0) (hcn : child ≠ 0)
+    (hLw : L.toNat + 24 ≤ 2 ^ 64)
+    (hwords : WordsOK post (L.toNat, 24)) (halloc : Allocated post (L.toNat, 24))
+    (hbound : n.toNat + nc.toNat < 2 ^ 28)
+    (hslots : ∀ i, i < n.toNat + nc.toNat → WordAt post (memW post L.toNat + 8 * i))
+    (hkeepP : ∀ i, i < n.toNat →
+      LogEntryOK post (memW s (memW s L.toNat + 8 * i)))
+    (hkeepC : ∀ i, i < nc.toNat →
+      LogEntryOK post (memW s (memW s child + 8 * i))) :
+    LogsListOK post L.toNat := by
+  obtain ⟨hcontents, hcount⟩ := laInvContents_complete a2 h (by omega) hr
+  have h8 : (L + 8).toNat = L.toNat + 8 := by
+    rw [BitVec.toNat_add]
+    exact Nat.mod_eq_of_lt (by change L.toNat + 8 < 2 ^ 64; omega)
+  rw [h8] at hcount
+  obtain ⟨_, _, _, _, _, _, i, ar, cp, _, _, _, hm8, hm16, hle, _⟩ := h.1
+  have hcount' : (n + i).toNat = n.toNat + nc.toNat := by
+    have hm : memW post (L + 8).toNat = (n + i).toNat := by
+      simp only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq, hm8]
+    rw [h8, hcount] at hm
+    exact hm.symm
+  have hcapacity : memW post (L.toNat + 16) = cp.toNat := by
+    have h16 : (L + 16).toNat = L.toNat + 16 := by
+      rw [BitVec.toNat_add]
+      exact Nat.mod_eq_of_lt (by change L.toNat + 16 < 2 ^ 64; omega)
+    rw [← h16]
+    simp only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq, hm16]
+  exact laContents_logsListOK hcontents hma hp hc hn hnc hpn hcn
+    hwords halloc hcount hbound (by rw [hcapacity]; rwa [← hcount'])
+    hslots hkeepP hkeepC
+
+/-- The append loop preserves chain-wide head-memory alignment whenever its
+frame protects each frame record and continuation. Heap growth does not alter
+either the selected head or the frame-memory allocation pointer. -/
+theorem laInv_headMemChainWF {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 cap0 n0 nc : BitVec 64}
+    (h : LAInv s L arr0 cap0 n0 nc u) (hE : EvmInv s) (hA : HeadMemChainWF s)
+    (hchain : evmChain u = evmChain s)
+    (hun : ∀ ec ∈ evmChain s,
+      R16Shards.IvlUnhit s u (ec.1, 280) ∧ R16Shards.IvlUnhit s u (ec.2, 104)) :
+    HeadMemChainWF u := by
+  obtain ⟨_, _, _, hg, _⟩ := h
+  apply headMemChainWF_of_unhit hE hA hchain hun
+  · unfold globN
+    rw [hg _ (by decide)]
+  · unfold globN
+    rw [hg _ (by decide)]
+
+/-- Group04's head-memory precondition at every framed child-log loop state. -/
+theorem laInv_headMemAligned_group04 {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 cap0 n0 nc : BitVec 64}
+    (h : LAInv s L arr0 cap0 n0 nc u) (hE : EvmInv s) (hA : HeadMemChainWF s)
+    (hchain : evmChain u = evmChain s)
+    (hun : ∀ ec ∈ evmChain s,
+      R16Shards.IvlUnhit s u (ec.1, 280) ∧ R16Shards.IvlUnhit s u (ec.2, 104)) :
+    R16Shards.OpHandlers.HeadMemAligned u :=
+  headMemChainWF_headMemAligned_group04 (laInv_headMemChainWF h hE hA hchain hun)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
