@@ -11068,10 +11068,117 @@ theorem bs72_call_preserves_g10 {F : Type} {s post : PanSemStateFiniteExact 64 F
   · exact (evm_congr (s := cp) (t := {cp with locals := s.locals}) rfl rfl).2.1.trans
       (heq.trans (evm_congr (s := s) (t := callEntryStateHOLFinite s callee) rfl rfl).2.1)
 
-/-- Recording a pre-state read preserves alignment when its backing table exists. -/
+theorem guestInv_zero_not_mem_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : GuestInv s) : ¬ s.memaddrs 0 := by
+  rw [hi.memaddrs, SoloHtabSet.ordinaryDomain_iff]
+  decide
+
+theorem htab_set_zero_fails_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : GuestInv s)
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word 0#64))) :
+    (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_set)).1 =
+      some .error := by
+  have hz := guestInv_zero_not_mem_g10 s hi
+  change ¬ s.memaddrs 0#64 at hz
+  have hb : ∃ body, sourceFnBody Guest.Software.guestFn_htab_set =
+      .dec (ofString "klen") .one
+        (.load .one (.op .add [.var .local (ofString "t"), .const 0])) body := ⟨_, rfl⟩
+  obtain ⟨body, hb⟩ := hb
+  rw [hb, evaluateHOLFiniteState_dec_total]
+  simp [evalHOLExact, evalListHOLExact, ht, wordOpHOL, wordOp, valueIsWord,
+    valueWord, memLoadHOLExact, hz]
+
+theorem htab_set_returned_word_nonzero_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hi : GuestInv s)
+    (w : BitVec 64)
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word w)))
+    (v : ValueHOL 64)
+    (hr : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_set)).1 =
+      some (.returned v)) : w.toNat ≠ 0 := by
+  intro hz
+  have hw : w = 0#64 := BitVec.eq_of_toNat_eq hz
+  subst w
+  rw [htab_set_zero_fails_g10 s hi ht] at hr
+  cases hr
+
+theorem htab_set_word_return_nonzero_g10 {F : Type}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (hi : GuestInv (callEntryStateHOLFinite s callee))
+    (tw : BitVec 64) (key value v : ValueHOL 64)
+    {body : ProgHOL 64} {rs : ShapeHOL}
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set")
+      [.val (.word tw), key, value] = some (body, callee, rs))
+    (hr : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 = some (.returned v)) :
+    tw.toNat ≠ 0 := by
+  have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some s.code.lookup
+    (ofString "htab_set") [.val (.word tw), key, value] body callee rs hl
+  rw [hc] at hx
+  simp only [Flapjack.lookupCodeHOLExact, SoloHtabSet.lookup_htab_set] at hx
+  split at hx
+  · have hm := congrArg (fun x => x.2.1) (Option.some.inj hx)
+    have ht : callee.lookup (ofString "t") = some (.val (.word tw)) := by
+      have hh := congrFun hm.symm (ofString "t")
+      have h1 : ofString "t" ≠ ofString "value" := by decide
+      have h2 : ofString "t" ≠ ofString "key" := by decide
+      have h3 : ofString "value" ≠ ofString "t" := by decide
+      have h4 : ofString "key" ≠ ofString "t" := by decide
+      simpa [List.map, List.zip, List.foldl, FUPDATE_LIST, FUPDATE, h1, h2, h3, h4] using hh
+    have hb : body = sourceFnBody Guest.Software.guestFn_htab_set :=
+      lookupCodeHOLFinite_installed_body s.code.lookup (ofString "htab_set") _ _ _ _ _ _ _
+        (by rw [hc]; exact SoloHtabSet.lookup_htab_set) hl
+    apply htab_set_returned_word_nonzero_g10 (callEntryStateHOLFinite s callee) hi tw ht v
+    rw [← hb]
+    exact hr
+  · cases hx
+
+theorem loaded_global_return_nonzero_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (g : String) (off : Nat) (w : BitVec 64)
+    (hg : s.globals.lookup (ofString g) = some (.val (.word w)))
+    (keyExp : ExpHOL 64) {values : List (ValueHOL 64)}
+    {body : ProgHOL 64} {callee : HolFiniteMapExact MlS (ValueHOL 64)} {rs : ShapeHOL}
+    (hi : GuestInv (callEntryStateHOLFinite s callee))
+    (hargs : evalListHOLFinite s (h := fun x => Classical.propDecidable (s.memaddrs x))
+      [.load .one (.op .add [.var .global (ofString g), .const (BitVec.ofNat 64 off)]),
+       keyExp, .const 1] = some values)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set") values = some (body, callee, rs))
+    (ret : ValueHOL 64)
+    (hr : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 = some (.returned ret)) :
+    memW s (globN s g + off) ≠ 0 := by
+  rw [evalListHOLFinite_eq_toExact] at hargs
+  unfold evalListHOLExact at hargs
+  rcases hv : @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x))
+      (.load .one (.op .add [.var .global (ofString g), .const (BitVec.ofNat 64 off)])) with _ | v
+  · rw [hv] at hargs; simp at hargs
+  · rw [hv] at hargs
+    unfold evalListHOLExact at hargs
+    rcases hk : @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x)) keyExp with _ | key
+    · rw [hk] at hargs; simp at hargs
+    · rw [hk] at hargs
+      unfold evalListHOLExact at hargs
+      dsimp only [evalHOLExact] at hargs
+      injection hargs with heq
+      subst values
+      obtain ⟨tw, rfl, htw⟩ := loaded_word_nat_g10 s _ _ v (global_offset_eval_g10 s g w off hg) hv
+      rw [← htw]
+      exact htab_set_word_return_nonzero_g10 s hc hi tw key (.val (.word 1)) ret hl hr
+
+theorem bs72_call_nonzero_g10 {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hc : s.code = originalRuntimeCode) (hi : EvmInv s)
+    (hbs : globN s "bs" ≠ 0) (keyExp : ExpHOL 64)
+    (hcall : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]), keyExp, .const 1]) = (none, post)) :
+    memW s (globN s "bs" + 72) ≠ 0 := by
+  obtain ⟨values, body, callee, rs, v, cp, hargs, hl, hr, _⟩ := call0_returned_inv_g10 hcall
+  obtain ⟨w, hg, _⟩ := global_word_of_pos s "bs" (Nat.pos_of_ne_zero hbs)
+  exact loaded_global_return_nonzero_g10 s hc "bs" 72 w hg keyExp
+    (localsFree_evmInv s callee (s.clock - 1) hi).1.1 hargs hl v (congrArg Prod.fst hr)
+
+/-- Recording a pre-state read preserves alignment when the block-state root exists. -/
 theorem epsA_record_pre_state_read_g10 :
     EvmPreservingSpecA
-      (fun s => globN s "bs" ≠ 0 ∧ memW s (globN s "bs" + 72) ≠ 0)
+      (fun s => globN s "bs" ≠ 0)
       (fun s _ post => GlobalsKept ["heap_ptr"] s post ∧ evmR post = evmR s)
       (ofString "record_pre_state_read") := by
   have hl : originalRuntimeCode.lookup (ofString "record_pre_state_read") =
@@ -11095,7 +11202,8 @@ theorem epsA_record_pre_state_read_g10 :
     have hr' := hr
     rw [hb] at hr'
     obtain ⟨mid, hcall, hret⟩ := seq_call0_ret_inv hr'
-    obtain ⟨him, hwm, hch, hR, hg⟩ := bs72_call_preserves_g10 hc hi hw hp.1 hp.2 _ hcall
+    have ht := bs72_call_nonzero_g10 hc hi hp _ hcall
+    obtain ⟨him, hwm, hch, hR, hg⟩ := bs72_call_preserves_g10 hc hi hw hp ht _ hcall
     have hpost := return_zero_preserves_aligned_g10 mid him hwm
     dsimp only at hpost
     rw [hret] at hpost
