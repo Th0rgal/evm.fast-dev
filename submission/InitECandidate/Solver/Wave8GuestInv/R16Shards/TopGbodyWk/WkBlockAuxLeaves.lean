@@ -9207,4 +9207,44 @@ theorem merge_set_call_worldStepIn {F : Type}
       (fun i him => ((hw.1.2.1 tw.toNat htS).2 i him).1) hfr
   exact merge_set_worldStepIn hA hw htS he hbe hbs ht0 htbs hkey hf hv
 
+/-- A selected ownership witness suffices to enter the union after insertion. -/
+theorem merge_set_call_union_entry_with {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek : ExpHOL 64)
+    (tw kw iw : BitVec 64) (S Nd : List Nat)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "binner") = some (.val (.word iw)))
+    (hA : ArenaReady s) (hw : WorldTypedWith s S Nd)
+    (htS : tw.toNat ∈ S) (hiS : iw.toNat ∈ S)
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hkey : hdr s iw.toNat 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ iw.toNat)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).2
+    WorldOK post ∧ WorldTypedWith post S Nd ∧ globN post "bs" ≠ 0 ∧
+      memW post (globN post "bs" + 32) ≠ 0 ∧
+      locN post "binner" ∈ htabValues post (memW post (globN post "bs" + 32)) := by
+  have hiv : evalAt s (.var .local (ofString "binner")) = some (.val (.word iw)) := by
+    simpa [evalAt, evalHOLExact] using hi
+  have hwf := (hw.1.2.1 tw.toNat htS).1
+  have hal : ∀ i ∈ htabFootprint s tw.toNat, Allocated s i :=
+    fun i him => ((hw.1.2.1 tw.toNat htS).2 i him).1
+  have hp := merge_set_call_flow_props s et ek _ tw kw iw ht hk hiv hA hwf hal hfr
+  have hm := merge_set_call_bound_member s et ek tw kw iw ht hk hi hA hwf hal hfr
+  have hb := merge_set_bs_outer_kept hA hw htS hp.1 hbs
+  have hwp := merge_set_world_typed hA hw htS hp.1 hp.2.2.1 hbs ht0 htbs
+    hiS hkey hf hp.2.1
+  dsimp only
+  refine ⟨⟨hp.1.1, S, (WkBal.worldTyped_iff_with _ S).2 ⟨Nd, hwp⟩⟩,
+    hwp, ?_, ?_, ?_⟩
+  · rwa [hb.1]
+  · rwa [hb.2, ← htbs]
+  · rw [hb.2, ← htbs]
+    exact hm.2
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
