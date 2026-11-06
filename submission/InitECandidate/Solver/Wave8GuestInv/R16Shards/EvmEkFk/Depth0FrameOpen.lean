@@ -8629,4 +8629,49 @@ theorem global_load_after_byte_effect {F : Type}
     all_goals omega)
   rw [hmem]
 
+/-- Discharge key-call continuation facts from pre-call root-load evidence. -/
+theorem get_code_access_tail_of_preloads {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (db hash tw : BitVec 64)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hdb : db.toNat ∈ S) (ht : tw.toNat ∈ S) (hne : db.toNat ≠ tw.toNat)
+    (h : CodeDbPayloadStrong s S db.toNat) (hc : s.code = originalRuntimeCode)
+    (hfit : globN s "sk_buf" ≠ 0 → globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hws : globN s "ws" ≠ 0)
+    (hhash : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (hloads : ∀ g k w, (g = "ws" ∧ k = (16 : BitVec 64) ∧ w = db) ∨
+        (g = "ts" ∧ k = (40 : BitVec 64) ∧ w = tw) →
+      globN s g + k.toNat + 8 ≤ 2 ^ 64 ∧
+      Disj (globN s g + k.toNat, 8) (globN s "sk_buf", 52) ∧
+      evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString g), .const k])) = some (.val (.word w))) :
+    Ret s getCodeAccessTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  classical
+  apply get_code_access_tail_of_key_facts s S Nd db hash tw hAs hWT hdb ht hne h hc hfit
+  intro values body callee ret v post hl hb
+  obtain ⟨w, hv, hw, he⟩ := sk_call_effect hc hAs.1.memaddrs hfit values body callee ret v hl hb
+  have hm := evaluateHOLFiniteState_metadata (callEntryStateHOLFinite s callee) body
+  rw [hb] at hm
+  have hwsload := hloads "ws" 16 db (Or.inl ⟨rfl, rfl, rfl⟩)
+  have htsload := hloads "ts" 40 tw (Or.inr ⟨rfl, rfl, rfl⟩)
+  have hwl := global_load_after_byte_effect "ws" 16 (.val (.word db)) he hwsload.1
+    (by intro i hi; simp only [List.mem_singleton] at hi; subst i; exact hwsload.2.1) hwsload.2.2
+  have htl := global_load_after_byte_effect "ts" 40 (.val (.word tw)) he htsload.1
+    (by intro i hi; simp only [List.mem_singleton] at hi; subst i; exact htsload.2.1) htsload.2.2
+  let st := setVarHOLFinite (ofString "k") v {post with locals := s.locals}
+  have hwl' := global_load_preserved post st "ws" 16 (.val (.word db)) rfl rfl rfl hwl
+  have htl' := global_load_preserved post st "ts" 40 (.val (.word tw)) rfl rfl rfl htl
+  refine ⟨he.code.trans hc, ?_, ?_, ?_, ?_, ?_⟩
+  · simpa only [setVarHOLFinite] using hm.2.2.2.2 ▸ hs
+  · simpa only [globN, setVarHOLFinite, he.globals] using hws
+  · exact hwl'
+  · simpa (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hhash
+  · change evalListHOLFinite st _ = _
+    simp only [evalListHOLFinite, evalListHOLExact]
+    have htl'' := htl'
+    unfold evalHOLFinite at htl''
+    rw [htl'']
+    simp [evalHOLExact, st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
 end HeadStore
