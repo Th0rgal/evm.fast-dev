@@ -14792,4 +14792,46 @@ theorem hoare_create_ether_backing_of_header_words
 
 end PtxP34
 
+namespace PtxP34
+open private EvmEkFk.acct_copy_step
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- An allocation-only concrete effect frames every old aligned allocation,
+including a nested block-output list header in scratch memory. -/
+theorem worldEff_allocated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {gw : List String} (b : Ivl)
+    (hA : ArenaOK s) (he : WorldEff s post [] [] gw)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0) :
+    Allocated post b ∧ IvlUnhit s post b := by
+  have hfr : FrameOutside s post ([] ++ [] ++ [freeGap s]) (heapFree s) := by
+    intro a hk hf
+    by_contra hn
+    rcases he.cell_frame a hn with ⟨i, hi, _⟩ | ⟨g, hg, _⟩ | hgap | hheap
+    · cases hi
+    · cases hg
+    · exact hk _ (by simp) hgap.2
+    · exact hf hheap.2
+  have hs := allocated_ivl_survives_step (old := []) (new := []) (R := [])
+    hA he.arena.2 ⟨he.hp_lo, he.sp_hi⟩
+    (by simp) (by simp) (by intro o ho; cases ho) hfr hb1 hb2 hb
+    (by simp) (by simp)
+  exact ⟨hs.1, hs.2.2⟩
+
+/-- The concrete account-copy call in `create_ether` preserves old headers. -/
+theorem acct_copy_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (b : Ivl)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hr : evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "a"), none)) (ofString "acct_copy")
+        [.var .local (ofString "a")]) = (none, post)) :
+    Allocated post b ∧ IvlUnhit s post b := by
+  have he := EvmEkFk.acct_copy_step s hc hA (by rw [hr]; simp)
+    (by rw [hr]; exact Or.inl rfl)
+  rw [hr] at he
+  dsimp only at he
+  exact worldEff_allocated_frame b hA.2 he.1 hb hb1 hb2
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
