@@ -10476,4 +10476,44 @@ theorem eval_merge_get_inner_ts_kept {F : Type}
         show ofString "binner" ≠ ofString "m" by decide])
       hbs ht0 htbs hi hts hnt hfr
 
+/-- The occupancy guard preserves the transaction frame on both paths. -/
+theorem eval_merge_occupied_inner_ts_kept {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32)) (hts : globN s "ts" ≠ 0)
+    (hnt : (evaluateHOLFiniteState s mergeOccupiedInner).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeOccupiedInner).1) :
+    let post := (evaluateHOLFiniteState s mergeOccupiedInner).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  dsimp only
+  unfold mergeOccupiedInner at hnt hfr ⊢
+  rw [evaluateHOLFiniteState_ite] at hnt hfr ⊢
+  by_cases hz : f0 = 0
+  · subst f0
+    simp [evalHOLExact, hk, Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+      evaluateHOLFiniteState_skip]
+  · have he : evalAt s (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0#64)) =
+        some (.val (.word 1#64)) := by
+      simpa [evalAt, evalHOLExact, hk, Flapjack.Compiler.Encoders.Asm.wordCmpHOL] using hz
+    unfold evalAt at he
+    rw [he] at hnt hfr ⊢
+    simp only [show (1#64 : BitVec 64) ≠ 0 by decide, ↓reduceIte] at hnt hfr ⊢
+    exact eval_merge_get_inner_ts_kept s tw f0 kw vw hc hW ht hk hbs ht0 htbs hts hnt hfr
+
+/-- Local assignments preserve transaction fields regardless of their result. -/
+theorem eval_assign_local_ts_kept {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (x : MlS) (e : ExpHOL 64) :
+    let post := (evaluateHOLFiniteState s (.assign .local x e)).2
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  dsimp only
+  rw [evaluateHOLFiniteState_assign]
+  split
+  · exact ⟨rfl, rfl⟩
+  · split <;> exact ⟨rfl, rfl⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
