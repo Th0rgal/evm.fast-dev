@@ -14619,6 +14619,53 @@ theorem fcChild160_ne0_eq {F : Type} (t : PanSemStateFiniteExact 64 F)
       then (1#64 : BitVec 64) else 0#64) ≠ 0 := by simp [hstne]
   rw [if_neg hw1]
 
+theorem fcNac_zero_eq {F : Type} (t : PanSemStateFiniteExact 64 F)
+    {wnac : BitVec 64}
+    (hnac : t.locals.lookup (ofString "new_account_charged") =
+      some (.val (.word wnac)))
+    (hwn0 : wnac = 0#64) :
+    evaluateHOLFiniteState t
+        (.ite (.cmp .notEqual
+                                (.var .local (ofString "new_account_charged")) (.const 0#64))
+                              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                                [.const 183600#64])
+                              .skip) =
+      evaluateHOLFiniteState t
+        .skip := by
+  rw [evaluateHOLFiniteState_ite]
+  have hcmp : @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a))
+      (.cmp .notEqual (.var .local (ofString "new_account_charged")) (.const 0#64)) =
+      some (.val (.word (if wnac ≠ 0#64 then 1#64 else 0#64))) := by
+    simp [evalHOLExact, hnac, Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+  rw [hcmp]
+  dsimp only
+  have hw0 : (if wnac ≠ 0#64 then (1#64 : BitVec 64) else 0#64) = 0 := by simp [hwn0]
+  rw [if_pos hw0]
+
+theorem fcNac_ne0_eq {F : Type} (t : PanSemStateFiniteExact 64 F)
+    {wnac : BitVec 64}
+    (hnac : t.locals.lookup (ofString "new_account_charged") =
+      some (.val (.word wnac)))
+    (hwne : wnac ≠ 0#64) :
+    evaluateHOLFiniteState t
+        (.ite (.cmp .notEqual
+                                (.var .local (ofString "new_account_charged")) (.const 0#64))
+                              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                                [.const 183600#64])
+                              .skip) =
+      evaluateHOLFiniteState t
+        (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                                [.const 183600#64]) := by
+  rw [evaluateHOLFiniteState_ite]
+  have hcmp : @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a))
+      (.cmp .notEqual (.var .local (ofString "new_account_charged")) (.const 0#64)) =
+      some (.val (.word (if wnac ≠ 0#64 then 1#64 else 0#64))) := by
+    simp [evalHOLExact, hnac, Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+  rw [hcmp]
+  dsimp only
+  have hw1 : (if wnac ≠ 0#64 then (1#64 : BitVec 64) else 0#64) ≠ 0 := by simp [hwne]
+  rw [if_neg hw1]
+
 end FcNoEvmErr
 
 
