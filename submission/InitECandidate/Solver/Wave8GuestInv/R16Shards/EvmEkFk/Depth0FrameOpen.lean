@@ -8106,4 +8106,25 @@ theorem world_and_payload_of_sk_make {F : Type}
   exact ⟨hAp, hWp, codeDbPayloadStrong_of_sk_make db h hc hma hfit v hb hAs hAp
     (hp db hdb).1 (fun t ht => (hp t ht).2) hfixed⟩
 
+/-- World buffer separation discharges the last typed-cell frame premise
+for the concrete key-builder execution. -/
+theorem world_and_payload_after_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} (db : Nat)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hW : WorldTyped s S) (hdb : db ∈ S) (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post)) :
+    ArenaReady post ∧ WorldTypedWith post S Nd ∧ CodeDbPayloadStrong post S db := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, hnz, _⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  apply world_and_payload_of_sk_make db hAs hWT hW hdb h hc hma hfit v hb
+  intro i hi
+  have hd := bufferRegion_disj_le hWT ("sk_buf", 64) (by decide) (by decide) 52 (by decide) i hi
+  have hd' := Disj.flip hd
+  simpa [bufferRegion, hnz] using hd'
+
 end HeadStore
