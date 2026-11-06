@@ -7059,4 +7059,48 @@ theorem get_code_cache_assign_return_strong {F : Type} (s : PanSemStateFiniteExa
     subst found
     exact hmiss _ _ _ _ post ptr ha hl hb
 
+/-- Cache-miss access recording followed by the world-state code fallback. -/
+def getCodeAccessTail : ProgHOL 64 :=
+  .decCall (ofString "k") .one (ofString "sk_make")
+    [.var .local (ofString "addr"), .var .local (ofString "code_hash")]
+    (.seq (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 40]),
+        .var .local (ofString "k"), .const 1])
+      (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+        [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c")))))
+
+/-- Access-recording composition exposes the exact strong lookup entry fact
+needed after the mutating table call, without assuming its preservation. -/
+theorem get_code_access_tail_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hentry : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "addr"), .var .local (ofString "code_hash")] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "sk_make") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      ∀ values' body' callee' ret' v' post',
+      let st := setVarHOLFinite (ofString "k") v {post with locals := s.locals}
+      evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 40]),
+          .var .local (ofString "k"), .const 1] = some values' →
+      lookupCodeHOLFinite st.code.lookup (ofString "htab_set") values' = some (body', callee', ret') →
+      evaluateHOLFiniteState (callEntryStateHOLFinite st callee') body' = (some (.returned v'), post') →
+      let resumed := {post' with locals := st.locals}
+      resumed.code = originalRuntimeCode ∧
+      resumed.eshapes.lookup (ofString "StateErr") = some .one ∧
+      ∀ vals b cl r,
+        evalListHOLFinite resumed (h := fun a => Classical.propDecidable (resumed.memaddrs a))
+          [.var .local (ofString "code_hash")] = some vals →
+        lookupCodeHOLFinite resumed.code.lookup (ofString "ws_get_code") vals = some (b, cl, r) →
+        WsCodeLookupStrong (callEntryStateHOLFinite resumed cl)) :
+    Ret s getCodeAccessTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  unfold getCodeAccessTail
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  apply Ret.seq_call00
+  intro values' body' callee' ret' v' post' ha' hl' hb'
+  obtain ⟨hc, hs, he⟩ := hentry values body callee ret v post ha hl hb
+    values' body' callee' ret' v' post' ha' hl' hb'
+  exact get_code_ws_fallback_return_strong _ hc hs he
+
 end HeadStore
