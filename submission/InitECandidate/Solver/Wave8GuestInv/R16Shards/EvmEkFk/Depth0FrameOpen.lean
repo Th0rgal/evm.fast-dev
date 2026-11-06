@@ -8774,4 +8774,33 @@ theorem get_code_cache_tail_of_invariant {F : Type}
   rw [hpost']
   exact htail _ (hbind _ _ _ hp')
 
+/-- Carry the fallback invariant through the initial comparison and both caches. -/
+theorem get_code_return_of_invariant {F : Type}
+    (P : PanSemStateFiniteExact 64 F → Prop)
+    (hbind : ∀ s name v k, name ∈ (["eq", "w"] : List String) → P s →
+      P (setVarHOLFinite (ofString name) v {s with clock := k}))
+    (hentry : ∀ s, P s → s.code = originalRuntimeCode ∧
+      CodeCacheLookupStrong s "ts" ∧ CodeCacheLookupStrong s "bs")
+    (htail : ∀ s, P s → Ret s getCodeAccessTail (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40))
+    (s : PanSemStateFiniteExact 64 F) (hp : P s) :
+    Ret s (sourceFnBody Guest.Software.guestFn_get_code) (fun v _ => ∃ code code_n : BitVec 64,
+      v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply get_code_return_of_cache_tail
+  intro values body callee ret post _ hl hb
+  have hc := (hentry s hp).1
+  have hl' := hl
+  rw [hc] at hl'
+  have hf := R16WkAcctWs.evaluate_roProgR16 R16WkAcctWs.wsGetCodeCallees
+    R16WkAcctWs.wsGetCodeCallees_good body
+    (R16WkAcctWs.wsGetCodeCallees_good _ (by decide) values body callee ret hl')
+    (callEntryStateHOLFinite s callee) hc
+  rw [hb] at hf
+  have hpost : post = {s with locals := post.locals, clock := post.clock} := by
+    simpa [R16WkAcctWs.LocFrameR16, callEntryStateHOLFinite] using hf
+  rw [hpost]
+  exact get_code_cache_tail_of_invariant P
+    (fun st v k h => hbind st "w" v k (by simp) h) hentry htail _
+    (hbind s "eq" (.val (.word 0)) post.clock (by simp) hp)
+
 end HeadStore
