@@ -9661,4 +9661,21 @@ theorem account_records_preserve_code_roots {F : Type}
   · exact hR ("bs",[0,8,16,24,32,40,48,56,64,72]) (by decide) hn 48 (by decide)
       (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "bs" 80 48 (by decide) hn (by decide))
 
+/-- An actual successful account lookup preserves the caller's live code roots. -/
+theorem get_account_execution_code_roots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW post (globN post g+k) = memW s (globN s g+k) := by
+  have hs := get_account_execution_world_step s values body callee ret v post hc hW hl hb
+  have hentry : WorldOK (callEntryStateHOLFinite s callee) := localsFree_worldOK s _ _ hW
+  obtain ⟨_,S,hS⟩ := hentry
+  obtain ⟨Nd,hWT⟩ := (worldTyped_iff_with _ _).1 hS
+  have hr := account_records_preserve_code_roots hWT hs.1.2.2.2.1 hs.1.2.2.1
+  simpa [globN,memW,callEntryStateHOLFinite] using hr
+
 end HeadStore
