@@ -9302,4 +9302,34 @@ theorem typed_record_root_preserved {F : Type}
     · exact allocated_le_2pow64 hA.2 ha
   exact EvmBase.memW_eq_of_cellHits hC (by omega) hi (by dsimp; omega)
 
+/-- A typed-cell frame supplies code-root preservation; unrelated globals may change. -/
+theorem worldTypedCodeStrong_of_typed_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (he : WorldTypedCodeStrong s S) (hW : WorldTyped post S)
+    (hWT : WorldTypedWith s S Nd)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hC : EvmBase.SameTypedCells s post S Nd)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg : ∀ g ∈ (["ws","bs","ts"] : List String), globN post g = globN s g)
+    (hv : ∀ db, htabValues post db = htabValues s db)
+    (hw : ∀ db, ∀ p ∈ htabValues s db,
+      memW post p = memW s p ∧ memW post (p+8) = memW s (p+8))
+    (hf : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hfixed : fixedObjects post = fixedObjects s) :
+    WorldTypedCodeStrong post S := by
+  refine ⟨hW,?_⟩
+  intro g k hm hn
+  have hgg : globN post g = globN s g := hg g (by
+    simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+    rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ <;> simp)
+  have hn' : globN s g ≠ 0 := by rwa [hgg] at hn
+  have hr : memW post (globN s g+k) = memW s (globN s g+k) := by
+    simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+    rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩
+    · exact typed_record_root_preserved hAs hWT hC "ws" 40 16 (by decide) hn' (by decide)
+    · exact typed_record_root_preserved hAs hWT hC "bs" 80 48 (by decide) hn' (by decide)
+    · exact typed_record_root_preserved hAs hWT hC "ts" 72 48 (by decide) hn' (by decide)
+  rw [hgg,hr]
+  exact codeDbPayloadStrong_of_preserved_layout (he.2 g k hm hn') hAs hAp hhp (hv _) (hw _) hf hfixed
+
 end HeadStore
