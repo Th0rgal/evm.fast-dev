@@ -15387,4 +15387,26 @@ theorem tx_header_words_trans {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Extract stable header roots from a world step without scratch writes. -/
+theorem worldStep_empty_tx_header_roots {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {gw : List String}
+    {keep : List (String × List Nat)} {boKeep : List Nat}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hs : WorldStep (fun _ => []) gw keep Q s r post)
+    (hW : TxWorld s) (hg : ofString "bo" ∉ gw.map ofString)
+    (hk : ("bo", boKeep) ∈ keep)
+    (hoff : ∀ k ∈ ([40, 72] : List Nat), k ∈ boKeep) :
+    globN post "bo" = globN s "bo" ∧
+      ∀ k ∈ ([40, 72] : List Nat), memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+  refine ⟨R16Shards.globN_eq_of_lookup (hs.2.2.1 _ hg), ?_⟩
+  intro k hmem
+  exact hs.2.2.2.1 ("bo", boKeep) hk hW.2.bo_nz k (hoff k hmem)
+    (by intro i hi; cases hi)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
