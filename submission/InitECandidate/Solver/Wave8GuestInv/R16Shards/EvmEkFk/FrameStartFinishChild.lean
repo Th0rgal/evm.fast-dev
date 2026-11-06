@@ -9749,6 +9749,63 @@ theorem set_retdata_zero_body_run {F : Type} (X : PanSemStateFiniteExact 64 F)
   rw [if_neg h10]
   rw [hthen]
 
+/-- Call-level wrapper for `set_retdata(p, 0)`: the void call with `n = 0`
+writes exactly `ev+144 := evm_empty`, `ev+152 := 0`, `ev+216 := 0`, keeps the
+caller's locals, and decrements the clock. -/
+theorem set_retdata_zero_call_run {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pExp nExp : ExpHOL 64) (pv e evw : BitVec 64)
+    (hcode : s.code = originalRuntimeCode)
+    (hp : evalAt s pExp = some (.val (.word pv)))
+    (hn : evalAt s nExp = some (.val (.word 0#64)))
+    (hclk : s.clock ≠ 0)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hev : s.globals.lookup (ofString "evm_empty") = some (.val (.word evw)))
+    (hbnd : e.toNat + 232 < 2 ^ 64)
+    (hdom144 : s.memaddrs (e + 144#64))
+    (hdom152 : s.memaddrs (e + 152#64))
+    (hdom216 : s.memaddrs (e + 216#64)) :
+    evaluateHOLFiniteState s
+        (.call (some (none, none)) (ofString "set_retdata") [pExp, nExp]) =
+      (none, { s with clock := s.clock - 1, memory :=
+          (R14W (R14W (R14W s.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+            (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+            (BitVec.ofNat 64 (e.toNat + 216)) 0#64) }) := by
+  have hent_p : (callEntryStateHOLFinite s
+      ((HolFiniteMapExact.empty.update (ofString "p", ValueHOL.val (.word pv))).update
+        (ofString "n", ValueHOL.val (.word 0#64)))).locals.lookup (ofString "p") =
+      some (ValueHOL.val (.word pv)) := by
+    have h1 : ofString "n" ≠ ofString "p" := by decide
+    simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, h1]
+  have hent_n : (callEntryStateHOLFinite s
+      ((HolFiniteMapExact.empty.update (ofString "p", ValueHOL.val (.word pv))).update
+        (ofString "n", ValueHOL.val (.word 0#64)))).locals.lookup (ofString "n") =
+      some (ValueHOL.val (.word 0#64)) := by
+    simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hrun := set_retdata_zero_body_run
+    (X := callEntryStateHOLFinite s
+      ((HolFiniteMapExact.empty.update (ofString "p", ValueHOL.val (.word pv))).update
+        (ofString "n", ValueHOL.val (.word 0#64))))
+    he hev hent_p hent_n hbnd hdom144 hdom152 hdom216
+  rw [evaluateHOLFiniteState_call]
+  have hargs : evalListHOLFinite s
+      (h := fun address => Classical.propDecidable (s.memaddrs address)) [pExp, nExp] =
+      some [ValueHOL.val (.word pv), ValueHOL.val (.word 0#64)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalAt] at hp hn ⊢
+    simp [hp, hn]
+  rw [hargs]; dsimp only
+  have hlook := pan_two_word_lookup s.code.lookup (ofString "set_retdata")
+    (ofString "p") (ofString "n") (sourceFnBody Guest.Software.guestFn_set_retdata) pv 0#64
+    (by decide)
+    (by rw [hcode]; exact lookup_set_retdata_fc)
+  rw [hlook]; dsimp only
+  rw [if_neg hclk]
+  rw [hrun]
+  dsimp only
+  have hsh : shapeEqHOL (shapeOfHOLExact (.val (.word 0#64) : ValueHOL 64)) .one = true := by
+    simp [shapeOfHOLExact, shapeEqHOL]
+  rw [if_pos hsh]
+  rfl
+
 theorem alloc_entry_returned_fc {F : Type}
     (s : PanSemStateFiniteExact 64 F) (nw : BitVec 64)
     (hP : ArenaReady s)
