@@ -17649,4 +17649,91 @@ theorem phase2_message_create_stores_table_ready {ι : Type} [Nonempty ι]
   apply Hoare.seq_fall (phase2_message_table_ready_load_store buffers contents names aa ak 120 (by decide) (by decide) _)
   exact phase2_message_table_ready_const_store buffers contents names aa ak 104 (by decide) (by decide) 0
 
+/-- Allocation frames readiness while the final table pointers are still unwritten. -/
+theorem phase2_alloc_message_table_ready (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (ha : name ≠ ofString "aa") (hk : name ≠ ofString "ak")
+    (hs : ∀ n ∈ names, name ≠ ofString n)
+    (hn : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n) :
+    DecCallResumeOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (PtxMessageTableStoreReady buffers contents names aa ak) name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have ht := phase2_alloc_message_tables_backing_ready h buffers contents aa ak name args hm hi
+    s vs body callee ret v post hc ⟨⟨hp.1.1, hp.2.1⟩, hp.2.2.1⟩ he hl hb
+  have hmem := phase2_alloc_memory s vs body callee ret v post hc hp.1.1.1 hl hb
+  have hloc : locN (setVarHOLFinite name v {post with locals := s.locals}) "m" = locN s "m" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hm]
+  refine ⟨⟨ht.1.1, ?_⟩, ht.1.2, ht.2, ?_, ?_, ?_, ?_⟩
+  · intro n hns
+    obtain ⟨w, hw⟩ := hp.1.2 n hns
+    exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hs n hns] using hw⟩
+  · apply phase2_phase4_shapes_localsOnly s _ post.clock (fun n hns => ?_) hp.2.2.2.1
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hn n hns]
+  · rw [hloc]
+    simpa only [memW, setVarHOLFinite, hmem] using hp.2.2.2.2.1
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ha] using hp.2.2.2.2.2.1
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hk] using hp.2.2.2.2.2.2
+
+theorem phase2_alloc_message_table_word_ready (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : String) (args : List (ExpHOL 64))
+    (hm : ofString name ≠ ofString "m") (hi : ofString name ≠ ofString "index")
+    (ha : ofString name ≠ ofString "aa") (hk : ofString name ≠ ofString "ak")
+    (hs : ∀ n ∈ names, ofString name ≠ ofString n)
+    (hn : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      ofString name ≠ ofString n) :
+    DecCallResumeOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (PtxMessageTableStoreReady buffers contents (name :: names) aa ak)
+      (ofString name) (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have ht := phase2_alloc_message_table_ready h buffers contents names aa ak
+    (ofString name) args hm hi ha hk hs hn s vs body callee ret v post hc hp he hl hb
+  have hrt := PtxP1.funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hrt
+  obtain ⟨w, hv, _⟩ := hrt v rfl
+  refine ⟨⟨ht.1.1, ?_⟩, ht.2⟩
+  intro n hns
+  rcases List.mem_cons.mp hns with rfl | hns
+  · exact ⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hv]⟩
+  · exact ht.1.2 n hns
+
+theorem phase2_alloc_message_table_word_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : String) (args : List (ExpHOL 64))
+    (hm : ofString name ≠ ofString "m") (hi : ofString name ≠ ofString "index")
+    (ha : ofString name ≠ ofString "aa") (hk : ofString name ≠ ofString "ak")
+    (hs : ∀ n ∈ names, ofString name ≠ ofString n)
+    (hn : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      ofString name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents (name :: names) aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.decCall (ofString name) .one (ofString "alloc") args tail) (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := PtxMessageTableStoreReady buffers contents (name :: names) aa ak) h.fb_alloc
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · exact phase2_alloc_message_table_word_ready h buffers contents names aa ak name args hm hi ha hk hs hn
+  · exact ht
+
+theorem phase2_message_call_stores_final_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (he : "empty" ∈ names)
+    (ha : "aa" ∈ names) (hk : "ak" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq phase2_message_call_stores (spinePlug 6 (spineAt 92 ptxCode) tail))
+      (K.htab_set + 1 + b) := by
+  intro F s hc hp
+  simpa only [Nat.zero_add] using seq_bound_trans
+    (PtxP1.bound_of_clock (fun s => phase2_message_call_stores_clock s))
+    (phase2_message_call_stores_table_ready buffers contents names aa ak he)
+    (phase2_final_source_bound h buffers contents names aa ak ha hk ht) s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
