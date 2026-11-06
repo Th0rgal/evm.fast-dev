@@ -10282,4 +10282,28 @@ theorem fixedObjects_eq_of_nonbal_htab_exit {F : Type}
     balObjects_eq_of_nonbal_htab_exit hAs hW ht hx hn,
     hg "journal" (by simp),hg "journal_cap" (by simp)]
 
+/-- A distinct non-BAL cache update preserves the complete strong payload invariant. -/
+theorem codeDbPayloadStrong_of_nonbal_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (hdb : db ∈ S) (ht : locN s "t" ∈ S)
+    (hne : db ≠ locN s "t") (hx : HtabExit s post)
+    (hn : globN s "bal_accounts" ≠ locN s "t" ∧
+      ∀ ad ∈ balRecords s, memW s ad ≠ locN s "t") :
+    CodeDbPayloadStrong post S db := by
+  have hv : htabValues post db = htabValues s db := by
+    apply htabValues_eq_of_htab_exit db (hW.1.2.1 db hdb).1
+      (hW.1.2.1 _ ht).1 (fun i hi => ((hW.1.2.1 db hdb).2 i hi).1) hAs hx
+    exact hW.1.2.2.1 db hdb (locN s "t") ht hne
+  refine ⟨codeDbPayloadStrong_entries_of_separated_htab_exit db he hAs hW hdb ht hne hx,?_⟩
+  intro p hp
+  rw [hv] at hp
+  obtain ⟨hi,hb,_,hf⟩ := he.2 p hp
+  refine ⟨⟨hi.1,le_trans hi.2 hx.2.2.2.2.1⟩,hb,
+    payload_tables_disjoint_of_htab_exit he hAs hW ht hx p hp,?_⟩
+  intro i hm
+  rw [fixedObjects_eq_of_nonbal_htab_exit hAs hW ht hx hn] at hm
+  exact hf i hm
+
 end HeadStore
