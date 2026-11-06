@@ -11962,4 +11962,59 @@ theorem charge_positive_local_memory_sequence_g10 {F : Type}
     rw [evaluateHOLFiniteState_seq_line780, hr] at hf
     exact hf hnt
 
+theorem create_cost_memory_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (isCreate2 charged : Bool)
+    (memoryExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hcont : HandlerRunA s0
+      (fun s => PositiveCostLocal_g10 (ofString "cost") s ∧ MemoryExpansionLocal_g10 s) true cont) :
+    HandlerRunA s0 (fun s => BoundedWordsLocal_g10 s ∧ MemoryExpansionLocal_g10 s) charged
+      (.decCall (ofString "cost") .one (ofString "add_sat")
+        [CreateBaseExp_g10 isCreate2, memoryExp]
+        (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local (ofString "cost")]) cont)) := by
+  apply HandlerRunA.decCall (epsA_create_add_sat_positive_g10 isCreate2)
+    (Q := fun s => PositiveCostLocal_g10 (ofString "cost") s ∧ MemoryExpansionLocal_g10 s)
+  · intro t values body callee rs hc hi hw hp ha hl
+    exact create_cost_callee_args_g10 t hc isCreate2 hp.1 memoryExp ha hl
+  · intro t values body callee rs v post hi hw hp ha hl hpi hpw hch hq
+    obtain ⟨cost, rfl, hpos⟩ := hq.2
+    refine ⟨bound_cost_local_positive_g10 _ _ cost hpos, ?_⟩
+    have hlf : LocFrame t post := by
+      rw [hq.1]
+      rfl
+    exact memoryExpansionLocal_bind_ro_g10 hp.2 hlf _ _ (by decide)
+  · exact charge_positive_local_memory_sequence_g10 s0 (ofString "cost") charged cont hcont
+
+theorem words_of_create_memory_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (isCreate2 charged : Bool)
+    (sizeExp memoryExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hcont : HandlerRunA s0
+      (fun s => PositiveCostLocal_g10 (ofString "cost") s ∧ MemoryExpansionLocal_g10 s) true cont) :
+    HandlerRunA s0 MemoryExpansionLocal_g10 charged
+      (.decCall (ofString "w") .one (ofString "words_of") [sizeExp]
+        (.decCall (ofString "cost") .one (ofString "add_sat")
+          [CreateBaseExp_g10 isCreate2, memoryExp]
+          (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local (ofString "cost")]) cont))) := by
+  apply HandlerRunA.decCall epsA_words_of_bounded_g10
+    (Q := fun s => BoundedWordsLocal_g10 s ∧ MemoryExpansionLocal_g10 s)
+  · intro t values body callee rs hc hi hw hp ha hl
+    rw [hc] at hl
+    rw [evalListHOLFinite_eq_toExact] at ha
+    simp only [evalListHOLExact] at ha
+    cases he : @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) sizeExp with
+    | none => simp [he] at ha
+    | some v =>
+      simp only [he] at ha
+      have hv : values = [v] := (Option.some.inj ha).symm
+      subst values
+      obtain ⟨_, _, n, _, hn⟩ := one_word_arg_lookup lookup_words_of hl
+      exact ⟨n, hn⟩
+  · intro t values body callee rs v post hi hw hp ha hl hpi hpw hch hq
+    obtain ⟨w, rfl, hb⟩ := hq.2
+    refine ⟨⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE], hb⟩, ?_⟩
+    have hlf : LocFrame t post := by
+      rw [hq.1]
+      rfl
+    exact memoryExpansionLocal_bind_ro_g10 hp hlf _ _ (by decide)
+  · exact create_cost_memory_sequence_g10 s0 isCreate2 charged memoryExp cont hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
