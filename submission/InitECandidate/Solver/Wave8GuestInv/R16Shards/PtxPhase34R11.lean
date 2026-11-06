@@ -16183,4 +16183,231 @@ theorem get_account_body_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup InitECandidate.Solver.PanRunBounded
+
+/-- Installed account lookup, including missing-account allocation, preserves backing. -/
+theorem get_account_call_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have hi : callee.lookup (ofString "index") = none := by
+    have hl' := hl
+    rw [hW.1.1.1.code] at hl'
+    unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hl'
+    split at hl'
+    · cases hl'
+    · rename_i eb el es raw
+      simp only [lookupCodeHOLExact, EvmEkFk.lookup_get_account] at raw
+      split at raw
+      · cases raw
+        cases hl'
+        change List.foldl _ (fun _ => none) ([(ofString "addr")].zip vs) (ofString "index") = none
+        cases vs with
+        | nil => rfl
+        | cons a rest => simp [List.zip, List.foldl, ofString]
+      · cases raw
+  have hbdy := lookupCodeHOLFinite_installed_body GuestCodeLookup.originalRuntimeCode.lookup
+    (ofString "get_account") _ _ body _ ret vs callee
+    EvmEkFk.lookup_get_account (by rwa [← hW.1.1.1.code])
+  subst body
+  have he : TxEnv (callEntryStateHOLFinite s callee) := by
+    refine ⟨hW.2.bo_nz, hW.2.bo24, hW.2.bo32, hW.2.bo40, hW.2.bo72, ?_, hW.2.jcap_nz⟩
+    have hi' : locN (callEntryStateHOLFinite s callee) "index" = 0 := by
+      simp [locN, callEntryStateHOLFinite, hi]
+    rw [hi']
+    exact Nat.lt_of_le_of_lt (Nat.zero_le _) hW.2.idx_lt
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (sourceFnBody Guest.Software.guestFn_get_account) = _ at hr
+  exact get_account_body_header_words (callEntryStateHOLFinite s callee) post S Nd v
+    ⟨(WkBal.worldOK_with_locals s callee (s.clock - 1)).2 hW.1, he⟩
+    ((R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).2 hT) hr
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Retain the concrete commit call's world contract after caller-local restoration. -/
+theorem modify_state_commit_call_worldStep {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64)) (hW : WorldOK s)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "modify_state_commit") args) = (none, mid)) :
+    WorldStepSc (bufRegions [("sk_buf", 52)]) ["heap_ptr", "journal_n"]
+      R10Shards.P26_P28.stdKeep NoExtra s none mid := by
+  obtain ⟨vs, body, callee, ret, v, cp, _, hl, hr, hm⟩ := ignored_call_fall_inv_args hc
+  have hwc := (WkBal.worldOK_with_locals s callee (s.clock - 1)).2 hW
+  have hs := PtxP1.funSpec_at_lookup EvmEkFk.wkSc_modify_state_commit s hW.1.1.code
+    vs body callee ret hl hwc (by rw [hr]; simp)
+  rw [hr] at hs
+  have hs' := (hs (Or.inl ⟨v, rfl⟩)).of_pre_locals_clock
+  subst mid
+  exact hs'.with_locals_clock s.locals cp.clock
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- The concrete state commit preserves the transaction environment and world typing. -/
+theorem modify_state_commit_call_txWorld {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (args : List (ExpHOL 64)) (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "modify_state_commit") args) = (none, mid)) :
+    TxWorld mid ∧ ∃ S' Nd', WorldTypedWith mid S' Nd' := by
+  have hs := (modify_state_commit_call_worldStep s mid args hW.1 hc).1
+  have hB : ValidBufList [("sk_buf", 52)] := by
+    intro p hp
+    simp only [List.mem_singleton] at hp
+    subst p
+    exact ⟨64, by decide, by decide, by decide⟩
+  have hd := validBufList_disj hB hT
+  obtain ⟨S', Nd', _, hT', _⟩ := hs.2.2.2.2 S Nd hT hd
+  have hz : ∀ i ∈ bufRegions [("sk_buf", 52)] s, i.2 = 0 → i.1 % 8 = 0 := by
+    intro i hi
+    simp only [bufRegions, List.map_cons, List.map_nil, List.mem_singleton] at hi
+    subst i
+    exact PtxP1.bufferRegion_zero_aligned s "sk_buf" 52 (by decide)
+  have hl := (ignored_call_fall_locals s mid _ _ hc).1
+  have he := txEnv_preserved_by_worldStep hs (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp [R10Shards.P26_P28.stdKeep])
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+    (fun i hi => hd i hi _ (PtxP1.bo_mem_typed hW.2.bo_nz))
+    (bo_words hT.2.2.1 hW.2.bo_nz).2.1 hz hW.2 (locals := mid.locals) (by rw [hl])
+  exact ⟨⟨PtxP1.worldOK_of_parts hs.1 hT', he⟩, S', Nd', hT'⟩
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Concrete state commit leaves the transaction header roots unchanged. -/
+theorem modify_state_commit_call_header_roots {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (args : List (ExpHOL 64)) (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "modify_state_commit") args) = (none, mid)) :
+    globN mid "bo" = globN s "bo" ∧
+      ∀ k ∈ ([40, 72] : List Nat), memW mid (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+  have hs := (modify_state_commit_call_worldStep s mid args hW.1 hc).1
+  refine ⟨globN_eq_of_lookup (hs.2.2.1 _ (by decide)), ?_⟩
+  have hB : ValidBufList [("sk_buf", 52)] := by
+    intro p hp
+    simp only [List.mem_singleton] at hp
+    subst p
+    exact ⟨64, by decide, by decide, by decide⟩
+  have hd := validBufList_disj hB hT
+  intro k hk
+  apply hs.2.2.2.1 ("bo", [0,8,16,24,32,40,48,56,64,72,80]) (by simp [R10Shards.P26_P28.stdKeep]) hW.2.bo_nz k
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+    rcases hk with rfl | rfl <;> simp
+  · intro i hi
+    have hz : i.2 = 0 → i.1 % 8 = 0 := by
+      simp only [bufRegions, List.map_cons, List.map_nil, List.mem_singleton] at hi
+      subst i
+      exact PtxP1.bufferRegion_zero_aligned s "sk_buf" 52 (by decide)
+    have ha := (bo_words hT.2.2.1 hW.2.bo_nz).2.1
+    apply R13Shards.not_cellHits_of_disj (i := (globN s "bo", 88)) _ hz _
+      (R13Shards.disj_symm (hd i hi _ (PtxP1.bo_mem_typed hW.2.bo_nz)))
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl <;> dsimp at * <;> omega
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl <;> dsimp <;> omega
+
+end PtxP34
+
+namespace PtxP34
+
+/-- The commit's emptiness test restores caller state except for its clock. -/
+theorem acct_is_empty_restored_state {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (hG : GuestInv s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "acct_is_empty") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) = {s with clock := post.clock} := by
+  have hs := PtxP1.funSpec_at_lookup EvmEkFk.ro_acct_is_empty s hG.code vs body callee ret hl
+    (guestInv_callEntry s callee hG) (by rw [hr]; simp)
+  rw [hr] at hs
+  have he := hs (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  rw [he]
+  rfl
+
+end PtxP34
+
+namespace PtxP34
+open EvmEkFk R10Shards.P26_P28
+
+/-- Journal append writes preserve aligned allocated objects disjoint from the record. -/
+theorem journal_append_allocated_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (i jrec : Ivl)
+    (hA : ArenaOK s) (hal : Allocated s i) (hi1 : i.1 % 8 = 0) (hi2 : i.2 % 8 = 0)
+    (hdj : Disj i jrec)
+    (hcell : ∀ x : BitVec 64, post.memory x ≠ s.memory x →
+      CellHitsPos x.toNat jrec ∨ CellHitsPos x.toNat (freeGap s) ∨ CellHitsPos x.toNat (heapFree s)) :
+    IvlUnhit s post i := by
+  intro x hx8 hhit
+  by_contra hne
+  have hfg := disj_allocated_freeGap hA hal
+  have hhf := disj_allocated_heapFree hA hal
+  have hin : i.1 ≤ x.toNat ∧ x.toNat + 8 ≤ i.1 + i.2 := by
+    unfold CellHits at hhit
+    omega
+  rcases hcell x hne with hj | hg | hh
+  · exact not_cellHitsPos_of_disj hin hdj hj
+  · exact not_cellHitsPos_of_disj hin hfg hg
+  · exact not_cellHitsPos_of_disj hin hhf hh
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Block-output backing objects are disjoint from the allocated journal. -/
+theorem blockOut_disj_journal {F : Type} {s : PanSemStateFiniteExact 64 F} {b : Ivl}
+    (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s) (hn : globN s "journal_cap" ≠ 0) :
+    Disj b (globN s "journal", 32 * globN s "journal_cap") := by
+  have hp := hfix.2
+  unfold fixedObjects at hp
+  have hp3 := (List.pairwise_append.mp (List.pairwise_append.mp hp).1).2.2
+  have hj : (globN s "journal", 32 * globN s "journal_cap") ∈
+      globalBuffers.map (fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) ++
+        [(if globN s "journal_cap" = 0 then 0 else globN s "journal", 32 * globN s "journal_cap")] := by
+    apply List.mem_append_right
+    simp [hn]
+  have hd := hp3 _ hj b hb
+  simpa only [Disj, or_comm, or_left_comm, or_assoc] using hd
+
+end PtxP34
+
+namespace PtxP34
+open EvmEkFk R10Shards.P26_P28
+
+/-- The narrow append footprint cannot hit a block-output backing object. -/
+theorem journal_append_blockOut_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (b : Ivl) (n : Nat)
+    (hA : ArenaOK s) (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s)
+    (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hn : n < globN s "journal_cap")
+    (hcell : ∀ x : BitVec 64, post.memory x ≠ s.memory x →
+      CellHitsPos x.toNat (globN s "journal" + 32 * n, 32) ∨
+      CellHitsPos x.toNat (freeGap s) ∨ CellHitsPos x.toNat (heapFree s)) :
+    IvlUnhit s post b := by
+  have hd := blockOut_disj_journal hfix hb (by omega)
+  have hi : Inside (globN s "journal" + 32 * n, 32) (globN s "journal")
+      (globN s "journal" + 32 * globN s "journal_cap") := by
+    dsimp [Inside]
+    omega
+  exact journal_append_allocated_frame s post b _ hA hal hb1 hb2
+    (disj_of_inside_left hi hd.flip).flip hcell
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
