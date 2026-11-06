@@ -12222,7 +12222,7 @@ theorem _resolve_step_decoder_spec_so {F : Type}
         (∀ rv, r = some (.returned rv) →
           ∃ o0 o1 o2 o3 : BitVec 64,
             rv = .rStruct [.val (.word o0), .val (.word o1), .val (.word o2), .val (.word o3)] ∧
-            (o0 = 0#64 → RootIn Nd' o1.toNat) ∧
+            (o0 = 0#64 → RootIn Nd' o1.toNat ∧ (o1 = 0#64 ∨ globN s "heap_ptr" ≤ o1.toNat)) ∧
             (o0 ≠ 0#64 → Nd' = Nd ∧
               Inside (o1.toNat, o2.toNat) sourceBase (globN s "heap_ptr") ∧
               o2.toNat < 2 ^ 40)) := by
@@ -12498,7 +12498,7 @@ theorem _resolve_step_decoder_spec_so {F : Type}
           intro rv hrv
           change (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn__resolve_step)).1 = some (.returned rv) at hrv
           rw [hret] at hrv; injection hrv with hrv'; injection hrv' with hrv''; subst hrv''
-          exact ⟨0#64, 0#64, 0#64, 0#64, rfl, fun _ => Or.inl rfl, fun h => absurd rfl h⟩
+          exact ⟨0#64, 0#64, 0#64, 0#64, rfl, fun _ => ⟨Or.inl rfl, Or.inl rfl⟩, fun h => absurd rfl h⟩
         · have hite_it2_0 : evaluateHOLFiniteState s3
               (.ite (.cmp .equal (.rfield 2 (.var .local (ofString "it"))) (.const 0#64))
                 (.return (.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]))
@@ -12752,7 +12752,7 @@ theorem _resolve_step_decoder_spec_so {F : Type}
                                   dsimp only at hdh
                                   have hent_hash : ent_hn.locals.lookup (ofString "hash") = some (.val (.word i1)) := by
                                     simp [ent_hn, callEntryStateHOLFinite, cal_hn, HolFiniteMapExact.lookup_update, FUPDATE]
-                                  obtain ⟨hnw, hrhn_eq, _, _, _, _, _, _, hdec_hn⟩ :=
+                                  obtain ⟨hnw, hrhn_eq, hhnw_eq, _, _, _, _, _, hdec_hn⟩ :=
                                     node_new_hashed_decoder_spec_so ent_hn i1 hs4_AR.1.code
                                       (localsFree_arenaReady s4 cal_hn (s4.clock - 1) hs4_AR)
                                       hent_hash
@@ -12799,8 +12799,12 @@ theorem _resolve_step_decoder_spec_so {F : Type}
                                     have h2 := h1.trans hrdh_eq
                                     injection h2 with h3; exact h3.symm
                                   subst hv_eq
-                                  refine ⟨0#64, hnw, 0#64, 0#64, rfl, fun _ => Or.inr List.mem_cons_self,
+                                  refine ⟨0#64, hnw, 0#64, 0#64, rfl,
+                                    fun _ => ⟨Or.inr List.mem_cons_self, Or.inr ?_⟩,
                                     fun h => absurd rfl h⟩
+                                  rw [hhnw_eq]
+                                  change globN s "heap_ptr" ≤ globN s4 "heap_ptr"
+                                  exact hsf4.2.1
                                 | _ => subst hrdh_eq; simp at hdh
                         · obtain ⟨hin_r, hr2_40⟩ := hr_hit hr0_z
                           have hhp_ent_nd : globN ent_nd "heap_ptr" = globN s "heap_ptr" := by
@@ -12905,6 +12909,7 @@ private def DecodeStepPost {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : Li
       (a.toNat ≠ 0 →
         FreshScratch s post b.toNat 88 ∧
         memW post (b.toNat + 48) + memW post (b.toNat + 56) ≤ globN post "heap_ptr" ∧
+        memW post (b.toNat + 56) < 2 ^ 40 ∧
         ((memW post (b.toNat + 8) = 1 ∧
           (∀ k < 2, WitnessSliceOK post (memW post (b.toNat + 24) + 16 * k)) ∧
           (∀ k < 2, ∀ x ∈ nodeExtents post Nd', Disj (memW post (b.toNat + 24) + 16 * k, 16) x) ∧
@@ -12949,8 +12954,8 @@ private theorem decodeStepPost_with_locals_clock_so {F : Type}
   · obtain ⟨hroot, hb0 | ⟨hfb, hkind⟩⟩ := h0 ha
     · exact ⟨hroot, Or.inl hb0⟩
     · exact ⟨hroot, Or.inr ⟨hFB_lc hfb, hkind⟩⟩
-  · obtain ⟨hfs, hmeta_le, hor⟩ := h1 ha
-    refine ⟨hFS_lc hfs, hmeta_le, ?_⟩
+  · obtain ⟨hfs, hmeta_le, hmeta_40, hor⟩ := h1 ha
+    refine ⟨hFS_lc hfs, hmeta_le, hmeta_40, ?_⟩
     rcases hor with ⟨hk1, hsl, hdisj, hki, hins⟩ | ⟨hk2, h32, h40, hfb, hmem, hkind3, hsl, hdisj⟩
     · exact Or.inl ⟨hk1, fun k hk => hWS_lc (hsl k hk), hdisj, hKI_lc hki, hins⟩
     · exact Or.inr ⟨hk2, h32, h40, hFB_lc hfb, hmem, hkind3, fun k hk => hWS_lc (hsl k hk), hdisj⟩
@@ -14633,7 +14638,7 @@ theorem _decode_step_ret_spec_so {F : Type}
             hki_srec0
         refine ⟨Nd, hdec_s_end, hsf_s_end, hbe_rec, 1#64, wrec, rfl,
           fun h => by simp at h, fun _ => ?_⟩
-        refine ⟨⟨hrec_al, hrec_lo, ?_, ?_⟩, ?_, Or.inl ⟨hmw_rec8, ?_, ?_, ?_, ?_⟩⟩
+        refine ⟨⟨hrec_al, hrec_lo, ?_, ?_⟩, ?_, ?_, Or.inl ⟨hmw_rec8, ?_, ?_, ?_, ?_⟩⟩
         · rw [h88]
           rw [Inside, show globN st_ext_end "scratch_ptr" = globN cpost_sa "scratch_ptr" from rfl]
           exact hrec_in
@@ -14641,6 +14646,7 @@ theorem _decode_step_ret_spec_so {F : Type}
           exact wordsOK_of_same_guest_dso srec0 st_ext_end rfl rfl rfl rfl hsf_rec.1.1 wrec.toNat 88 hrec_al (by decide) hsb_le hhi_le
         · rw [hmw_rec48, hmw_rec56]
           exact le_trans hin.2 hsf_s_end.2.1
+        · rw [hmw_rec56]; exact hwn40
         · intro k hk; rw [hmw_rec24]; exact hsl_end k hk
         · intro k hk x hx; rw [hmw_rec24]
           exact fresh_slice_disj_nodeExtents_dso hAR hNd hdec_s_end (by omega) x hx
@@ -15201,7 +15207,7 @@ theorem _decode_step_ret_spec_so {F : Type}
       exact witnessSliceOK_separated_of_decoderNodeStep hsf6.1 hNd_s6 hdec_s6_br_end hsl_k_s6 hdisj_k_s6
     refine ⟨wbr.toNat :: Nd, hdec_s_br_end, hsf_s_br_end, hbe_rec2, 1#64, wrec2, rfl,
       fun h => by simp at h, fun _ => ?_⟩
-    refine ⟨⟨hrec2_al, hrec2_lo, ?_, ?_⟩, ?_, Or.inr ⟨hmw8_br, hmw32_br, hmw40_br, ?_, ?_, ?_, ?_, ?_⟩⟩
+    refine ⟨⟨hrec2_al, hrec2_lo, ?_, ?_⟩, ?_, ?_, Or.inr ⟨hmw8_br, hmw32_br, hmw40_br, ?_, ?_, ?_, ?_, ?_⟩⟩
     · rw [h88]
       rw [Inside, show globN st_br_end "scratch_ptr" = globN cpost_sa2 "scratch_ptr" from rfl]
       exact hrec2_in
@@ -15209,6 +15215,7 @@ theorem _decode_step_ret_spec_so {F : Type}
       exact wordsOK_of_same_guest_dso srec2 st_br_end rfl rfl rfl rfl hsf_rec2.1.1 wrec2.toNat 88 hrec2_al (by decide) hsb_rec2 hhi_rec2
     · rw [hmw48, hmw56]
       exact le_trans hin.2 hsf_s_br_end.2.1
+    · rw [hmw56]; exact hwn40
     · refine ⟨by rw [hmw16]; exact hbr_fb.1, ?_, ?_⟩
       · rw [h176, Inside, show globN st_br_end "heap_ptr" = globN cpost_sa2 "heap_ptr" from rfl, hhp_sa2_eq, hmw16]
         exact hbr_fb.2
@@ -15245,6 +15252,7 @@ theorem _decode_step_decoder_spec_so {F : Type}
             (a.toNat ≠ 0 →
               FreshScratch s post b.toNat 88 ∧
               memW post (b.toNat + 48) + memW post (b.toNat + 56) ≤ globN post "heap_ptr" ∧
+              memW post (b.toNat + 56) < 2 ^ 40 ∧
               ((memW post (b.toNat + 8) = 1 ∧
                 (∀ k < 2, WitnessSliceOK post (memW post (b.toNat + 24) + 16 * k)) ∧
                 (∀ k < 2, ∀ x ∈ nodeExtents post Nd', Disj (memW post (b.toNat + 24) + 16 * k, 16) x) ∧
@@ -15291,6 +15299,453 @@ theorem _decode_step_decoder_spec_so {F : Type}
     change (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn__decode_step)).1 = some (.returned rv) at hrv
     rw [hex] at hrv; cases hrv
 
+section Batch3Defs
+
+private def DFrameOK {F : Type} (s0 s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (p : Nat) : Prop :=
+  p % 8 = 0 ∧ p + 88 ≤ globN s0 "scratch_ptr" ∧
+  memW s (p + 48) + memW s (p + 56) ≤ globN s "heap_ptr" ∧
+  memW s (p + 56) < 2 ^ 40 ∧
+  ((memW s (p + 8) = 1 ∧
+      (∀ k < 2, WitnessSliceOK s (memW s (p + 24) + 16 * k)) ∧
+      (∀ k < 2, ∀ x ∈ nodeExtents s Nd, Disj (memW s (p + 24) + 16 * k, 16) x) ∧
+      KeyIn s Nd (memW s (p + 64)) (memW s (p + 72)) ∧
+      (memW s (p + 72) = 0 ∨
+        Inside (memW s (p + 64), memW s (p + 72)) (globN s0 "heap_ptr") (globN s "heap_ptr"))) ∨
+   (memW s (p + 8) = 2 ∧
+      memW s (p + 32) < 16 ∧
+      globN s0 "heap_ptr" ≤ memW s (p + 16) ∧
+      memW s (p + 16) + 176 ≤ globN s "heap_ptr" ∧
+      memW s (p + 16) ∈ Nd ∧
+      memW s (memW s (p + 16)) = 3 ∧
+      (∀ k < 17, WitnessSliceOK s (memW s (p + 24) + 16 * k)) ∧
+      (∀ k < 17, ∀ x ∈ nodeExtents s Nd, Disj (memW s (p + 24) + 16 * k, 16) x)))
+
+private def DStack {F : Type} (s0 s : PanSemStateFiniteExact 64 F) (Nd : List Nat)
+    (lo top : Nat) : List Nat → Prop
+  | [] => top = 0
+  | p :: ps => top = p ∧ lo ≤ p ∧ p ≠ 0 ∧ DFrameOK s0 s Nd p ∧
+      DStack s0 s Nd (p + 88) (memW s p) ps
+
+private theorem dFrameOK_preserve {F : Type} {s0 s t : PanSemStateFiniteExact 64 F}
+    {Nd Nd' : List Nat} {p : Nat}
+    (hAR : ArenaReady s) (hNd : NodeHeap s Nd)
+    (hstep : DecoderNodeStep s t Nd Nd')
+    (he : ∀ a, p ≤ a → a < p + 88 → memW t a = memW s a)
+    (hf : DFrameOK s0 s Nd p) : DFrameOK s0 t Nd' p := by
+  have h8 := he (p + 8) (by omega) (by omega)
+  have h16 := he (p + 16) (by omega) (by omega)
+  have h24 := he (p + 24) (by omega) (by omega)
+  have h32 := he (p + 32) (by omega) (by omega)
+  have h48 := he (p + 48) (by omega) (by omega)
+  have h56 := he (p + 56) (by omega) (by omega)
+  have h64 := he (p + 64) (by omega) (by omega)
+  have h72 := he (p + 72) (by omega) (by omega)
+  obtain ⟨hp8, hp_hi, h48_hi, h56_40, hkind⟩ := hf
+  have hhp_le := hstep.step.hp_le
+  refine ⟨hp8, hp_hi, by rw [h48, h56]; omega, by rw [h56]; exact h56_40, ?_⟩
+  rcases hkind with ⟨hk1, hsl, hdj, hkey, hpath⟩ |
+      ⟨hk2, hcnt, hbr_lo, hbr_hi, hbr_in, hbr_k, hsl, hdj⟩
+  · refine Or.inl ⟨by rw [h8]; exact hk1, ?_, ?_, ?_, ?_⟩
+    · intro k hk
+      rw [h24]
+      exact (witnessSliceOK_separated_of_decoderNodeStep hAR hNd hstep (hsl k hk) (hdj k hk)).1
+    · intro k hk x hx
+      rw [h24]
+      exact (witnessSliceOK_separated_of_decoderNodeStep hAR hNd hstep (hsl k hk) (hdj k hk)).2 x hx
+    · rw [h64, h72]
+      exact hstep.step.keyIn hAR hNd hkey
+    · rw [h64, h72]
+      rcases hpath with hz | hin
+      · exact Or.inl hz
+      · exact Or.inr ⟨hin.1, le_trans hin.2 hhp_le⟩
+  · refine Or.inr ⟨by rw [h8]; exact hk2, by rw [h32]; exact hcnt,
+      by rw [h16]; exact hbr_lo, by rw [h16]; omega,
+      by rw [h16]; exact hstep.step.sub _ hbr_in,
+      by rw [h16, hstep.step.kinds _ hbr_in]; exact hbr_k, ?_, ?_⟩
+    · intro k hk
+      rw [h24]
+      exact (witnessSliceOK_separated_of_decoderNodeStep hAR hNd hstep (hsl k hk) (hdj k hk)).1
+    · intro k hk x hx
+      rw [h24]
+      exact (witnessSliceOK_separated_of_decoderNodeStep hAR hNd hstep (hsl k hk) (hdj k hk)).2 x hx
+
+private theorem dStack_preserve {F : Type} {s0 s t : PanSemStateFiniteExact 64 F}
+    {Nd Nd' : List Nat} {lo top : Nat} {ps : List Nat}
+    (hAR : ArenaReady s) (hNd : NodeHeap s Nd)
+    (hstep : DecoderNodeStep s t Nd Nd')
+    (he : ∀ a, lo ≤ a → a < globN s0 "scratch_ptr" → memW t a = memW s a)
+    (hs : DStack s0 s Nd lo top ps) : DStack s0 t Nd' lo top ps := by
+  induction ps generalizing lo top with
+  | nil => exact hs
+  | cons p ps ih =>
+    rcases hs with ⟨htp, hlo, hp0, hfp, htl⟩
+    have hp_hi := hfp.2.1
+    have he_p : ∀ a, p ≤ a → a < p + 88 → memW t a = memW s a :=
+      fun a h1 h2 => he a (le_trans hlo h1) (by omega)
+    have hlink := he_p p (le_refl p) (by omega)
+    refine ⟨htp, hlo, hp0, dFrameOK_preserve hAR hNd hstep he_p hfp, ?_⟩
+    rw [hlink]
+    exact ih (fun a h1 h2 => he a (by omega) h2) htl
+
+private theorem dStack_lower {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
+    {Nd : List Nat} {lo lo' top : Nat} {ps : List Nat}
+    (hle : lo' ≤ lo) (hs : DStack s0 s Nd lo top ps) : DStack s0 s Nd lo' top ps := by
+  cases ps with
+  | nil => exact hs
+  | cons p ps => exact ⟨hs.1, le_trans hle hs.2.1, hs.2.2⟩
+
+private theorem dStack_locals_clock {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
+    {Nd : List Nat} {lo top : Nat} {ps : List Nat}
+    (hAR : ArenaReady s) (hNd : NodeHeap s Nd)
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (C : Nat)
+    (hs : DStack s0 s Nd lo top ps) :
+    DStack s0 { s with locals := L, clock := C } Nd lo top ps :=
+  dStack_preserve hAR hNd ((DecoderNodeStep.refl hAR hNd).with_locals_clock L C)
+    (fun _ _ _ => rfl) hs
+
+private def DWInv {F : Type} (s0 : PanSemStateFiniteExact 64 F) (Nd0 : List Nat) (wdb : BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) : Prop :=
+  s.code = originalRuntimeCode ∧
+  R16Shards.WorldEff s0 s [] [] R16Shards.wsGw ∧
+  s.locals.lookup (ofString "db") = some (.val (.word wdb)) ∧
+  ∃ top result cur_p cur_n mode slot go : BitVec 64,
+    s.locals.lookup (ofString "top") = some (.val (.word top)) ∧
+    s.locals.lookup (ofString "result") = some (.val (.word result)) ∧
+    s.locals.lookup (ofString "cur_p") = some (.val (.word cur_p)) ∧
+    s.locals.lookup (ofString "cur_n") = some (.val (.word cur_n)) ∧
+    s.locals.lookup (ofString "mode") = some (.val (.word mode)) ∧
+    s.locals.lookup (ofString "slot") = some (.val (.word slot)) ∧
+    s.locals.lookup (ofString "go") = some (.val (.word go)) ∧
+    mode.toNat ≤ 2 ∧
+    (mode.toNat = 1 → Inside (cur_p.toNat, cur_n.toNat) sourceBase (globN s "heap_ptr") ∧ cur_n.toNat < 2 ^ 40) ∧
+    (mode.toNat = 2 → top.toNat ≠ 0 ∧
+      ((memW s (top.toNat + 8) = 1 ∧ slot.toNat < 2) ∨
+       (memW s (top.toNat + 8) = 2 ∧ slot.toNat = memW s (top.toNat + 32)))) ∧
+    ∃ Nd, DecoderNodeStep s0 s Nd0 Nd ∧
+      RootIn Nd result.toNat ∧
+      (result.toNat = 0 ∨
+        (globN s0 "heap_ptr" ≤ result.toNat ∧
+         (memW s result.toNat = 1 ∨ memW s result.toNat = 2 ∨ memW s result.toNat = 3))) ∧
+      ∃ ps, DStack s0 s Nd (globN s "scratch_ptr") top.toNat ps
+
+private theorem dwInv_locals_clock {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
+    {Nd0 : List Nat} {wdb : BitVec 64}
+    {L : HolFiniteMapExact MlS (ValueHOL 64)} {C : Nat}
+    (hkeep : ∀ n ∈ ["db", "top", "result", "cur_p", "cur_n", "mode", "slot", "go"],
+      L.lookup (ofString n) = s.locals.lookup (ofString n))
+    (h : DWInv s0 Nd0 wdb s) :
+    DWInv s0 Nd0 wdb { s with locals := L, clock := C } := by
+  obtain ⟨hc, heff, hdb, top, result, cur_p, cur_n, mode, slot, go,
+    htop, hres, hcp, hcn, hmode, hslot, hgo, hm2, hm1_in, hm2_sl,
+    Nd, hdec, hroot, hres_ok, ps, hstk⟩ := h
+  have hNd : NodeHeap s Nd := hdec.step.heap
+  refine ⟨hc, heff.locals_clock L C, (hkeep "db" (by simp)).trans hdb,
+    top, result, cur_p, cur_n, mode, slot, go,
+    (hkeep "top" (by simp)).trans htop,
+    (hkeep "result" (by simp)).trans hres,
+    (hkeep "cur_p" (by simp)).trans hcp,
+    (hkeep "cur_n" (by simp)).trans hcn,
+    (hkeep "mode" (by simp)).trans hmode,
+    (hkeep "slot" (by simp)).trans hslot,
+    (hkeep "go" (by simp)).trans hgo,
+    hm2, hm1_in, hm2_sl,
+    Nd, hdec.with_locals_clock L C, hroot, hres_ok,
+    ps, dStack_locals_clock heff.arena hNd L C hstk⟩
+
+private theorem dwInv_decClock {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
+    {Nd0 : List Nat} {wdb : BitVec 64}
+    (h : DWInv s0 Nd0 wdb s) :
+    DWInv s0 Nd0 wdb (decClockHOLFinite s) :=
+  dwInv_locals_clock (fun _ _ => rfl) h
+
+private def DWRunOK {F : Type} (s0 : PanSemStateFiniteExact 64 F) (Nd0 : List Nat) (wdb : BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) (p : ProgHOL 64) : Prop :=
+  (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+  R16Shards.ContOrRes (evaluateHOLFiniteState s p).1 →
+    R16Shards.WorldEff s0 (evaluateHOLFiniteState s p).2 [] [] R16Shards.wsGw ∧
+    (∃ Nd', DecoderNodeStep s0 (evaluateHOLFiniteState s p).2 Nd0 Nd') ∧
+    ((evaluateHOLFiniteState s p).1 = none → DWInv s0 Nd0 wdb (evaluateHOLFiniteState s p).2) ∧
+    (evaluateHOLFiniteState s p).1 ≠ some .continue ∧
+    (∀ v, (evaluateHOLFiniteState s p).1 = some (.returned v) → False)
+
+private theorem dwRunOK_locals_clock {F : Type} {s0 post : PanSemStateFiniteExact 64 F}
+    {Nd0 : List Nat} {wdb : BitVec 64} {r : Option (PanSemResultExact 64)}
+    {L : HolFiniteMapExact MlS (ValueHOL 64)} {C : Nat}
+    (hkeep : ∀ n ∈ ["db", "top", "result", "cur_p", "cur_n", "mode", "slot", "go"],
+      L.lookup (ofString n) = post.locals.lookup (ofString n))
+    (heff : R16Shards.WorldEff s0 post [] [] R16Shards.wsGw)
+    (hnd : ∃ Nd', DecoderNodeStep s0 post Nd0 Nd')
+    (hinv : r = none → DWInv s0 Nd0 wdb post) :
+    R16Shards.WorldEff s0 { post with locals := L, clock := C } [] [] R16Shards.wsGw ∧
+    (∃ Nd', DecoderNodeStep s0 { post with locals := L, clock := C } Nd0 Nd') ∧
+    (r = none → DWInv s0 Nd0 wdb { post with locals := L, clock := C }) := by
+  refine ⟨heff.locals_clock L C, ?_, fun hr => dwInv_locals_clock hkeep (hinv hr)⟩
+  obtain ⟨Nd', hdec⟩ := hnd
+  exact ⟨Nd', hdec.with_locals_clock L C⟩
+
+private theorem dwRunOK_seq {F : Type} {s0 cur : PanSemStateFiniteExact 64 F}
+    {Nd0 : List Nat} {wdb : BitVec 64} {a b : ProgHOL 64}
+    (ha_eff : (evaluateHOLFiniteState cur a).1 ≠ some .timeOut →
+      R16Shards.ContOrRes (evaluateHOLFiniteState cur a).1 →
+      R16Shards.WorldEff s0 (evaluateHOLFiniteState cur a).2 [] [] R16Shards.wsGw ∧
+      (∃ Nd', DecoderNodeStep s0 (evaluateHOLFiniteState cur a).2 Nd0 Nd') ∧
+      (evaluateHOLFiniteState cur a).1 ≠ some .continue ∧
+      (∀ v, (evaluateHOLFiniteState cur a).1 = some (.returned v) → False))
+    (hb : ∀ mid, evaluateHOLFiniteState cur a = (none, mid) → DWRunOK s0 Nd0 wdb mid b) :
+    DWRunOK s0 Nd0 wdb cur (.seq a b) := by
+  unfold DWRunOK
+  rw [evaluateHOLFiniteState_seq_line780]
+  rcases hra : evaluateHOLFiniteState cur a with ⟨ra, mid⟩
+  cases ra with
+  | none =>
+    dsimp only
+    exact hb mid hra
+  | some r1 =>
+    dsimp only
+    intro hnt hcr
+    have hcr_a : R16Shards.ContOrRes (some r1) := by
+      rcases hcr with h | h | h | hr
+      · cases h
+      · exact Or.inr (Or.inl h)
+      · exact Or.inr (Or.inr (Or.inl h))
+      · exact Or.inr (Or.inr (Or.inr hr))
+    obtain ⟨heff_a, hnd_a, hnc_a, hnr_a⟩ := ha_eff (by rw [hra]; exact hnt) (by rw [hra]; exact hcr_a)
+    rw [hra] at heff_a hnd_a hnc_a hnr_a
+    exact ⟨heff_a, hnd_a, (fun h => nomatch h), hnc_a, hnr_a⟩
+
+private theorem mpt_fail_ne_none_ne_ret_b3 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (cExp : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "mpt_fail") [cExp])).1 ≠ none ∧
+    ∀ u, (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "mpt_fail") [cExp])).1 ≠ some (.returned u) := by
+  refine ⟨?_, ?_⟩
+  · rw [evaluateHOLFiniteState_call]
+    split
+    · simp
+    · split
+      · simp
+      · rename_i b_mf c_mf r_mf hl_mf
+        have hlook_mf : originalRuntimeCode.lookup (ofString "mpt_fail") =
+            some ([(ofString "code", .one)], sourceFnBody Guest.Software.guestFn_mpt_fail, .one) :=
+          lookup_of_guestAst_getElem 246 (by rw [guestAst_len]; decide)
+            (extractFn Guest.Software.guestFn_mpt_fail) rfl
+        have hb_mf := lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ b_mf _ r_mf _ c_mf
+          (by rw [hc]; exact hlook_mf) hl_mf
+        subst hb_mf
+        split
+        · simp
+        · have hbody_mf : sourceFnBody Guest.Software.guestFn_mpt_fail =
+              .seq (.raise (ofString "MptErr") (.var .local (ofString "code"))) (.return (.const 0#64)) := rfl
+          have hmfr : ∀ w, (evaluateHOLFiniteState (callEntryStateHOLFinite s c_mf)
+              (sourceFnBody Guest.Software.guestFn_mpt_fail)).1 ≠ some (.returned w) := by
+            intro w
+            rw [hbody_mf, evaluateHOLFiniteState_seq_line780]
+            rcases hr1 : evaluateHOLFiniteState _ (.raise _ _) with ⟨rm, tm⟩
+            cases rm with
+            | some rm' =>
+              dsimp only
+              intro hret_w
+              rw [evaluateHOLFiniteState_raise] at hr1
+              split at hr1
+              · dsimp only at hr1
+                split at hr1 <;> (injection hr1 with hr1' _; injection hr1' with hr1''; subst hr1''; simp at hret_w)
+              · injection hr1 with hr1' _; injection hr1' with hr1''; subst hr1''; simp at hret_w
+            | none =>
+              exfalso
+              rw [evaluateHOLFiniteState_raise] at hr1
+              split at hr1
+              · dsimp only at hr1; split at hr1 <;> simp at hr1
+              · simp at hr1
+          have hmfn : (evaluateHOLFiniteState (callEntryStateHOLFinite s c_mf)
+              (sourceFnBody Guest.Software.guestFn_mpt_fail)).1 ≠ none := by
+            rw [hbody_mf, evaluateHOLFiniteState_seq_line780]
+            rcases evaluateHOLFiniteState _ (.raise _ _) with ⟨rm, tm⟩
+            cases rm with
+            | some _ => simp
+            | none =>
+              dsimp only; rw [evaluateHOLFiniteState_return]
+              split
+              · simp
+              · split <;> simp
+          rcases hr_mf : evaluateHOLFiniteState (callEntryStateHOLFinite s c_mf)
+              (sourceFnBody Guest.Software.guestFn_mpt_fail) with ⟨rmf, _⟩
+          rw [hr_mf] at hmfn hmfr
+          cases rmf with
+          | none => exact absurd rfl hmfn
+          | some rmf' =>
+            cases rmf' with
+            | returned rv => exact absurd rfl (hmfr rv)
+            | «break» => simp
+            | «continue» => simp
+            | exception _ _ => simp
+            | timeOut => simp
+            | finalFfi _ => simp
+            | error => simp
+  · intro u
+    rw [evaluateHOLFiniteState_call]
+    split
+    · simp
+    · split
+      · simp
+      · split
+        · simp
+        · rcases (evaluateHOLFiniteState _ _ : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F) with ⟨rc, _⟩
+          cases rc with
+          | none => simp
+          | some rc1 =>
+            cases rc1 with
+            | returned _ => dsimp only; split <;> simp
+            | «break» => simp
+            | «continue» => simp
+            | exception _ _ => simp
+            | timeOut => simp
+            | finalFfi _ => simp
+            | error => simp
+
+private theorem call0_ne_continue_b3 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fn : MlS) (args : List (ExpHOL 64)) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) fn args)).1 ≠ some .continue := by
+  intro hcont
+  rw [evaluateHOLFiniteState_call] at hcont
+  split at hcont <;> try simp at hcont
+  split at hcont <;> try simp at hcont
+  split at hcont <;> try simp at hcont
+  rcases hrc : (evaluateHOLFiniteState _ _ : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F) with ⟨rc, st⟩
+  rw [hrc] at hcont
+  cases rc with
+  | none => simp at hcont
+  | some rc1 =>
+    cases rc1 with
+    | returned v =>
+      dsimp only at hcont
+      split at hcont <;> simp at hcont
+    | «break» => simp at hcont
+    | «continue» => simp at hcont
+    | exception _ _ => simp at hcont
+    | timeOut => simp at hcont
+    | finalFfi _ => simp at hcont
+    | error => simp at hcont
+
+private theorem dwRunOK_ite {F : Type} {s0 cur : PanSemStateFiniteExact 64 F}
+    {Nd0 : List Nat} {wdb : BitVec 64}
+    (cond : ExpHOL 64) {yes no : ProgHOL 64}
+    (hy : ∀ cw : BitVec 64,
+      @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) cond = some (.val (.word cw)) →
+      cw ≠ 0 → DWRunOK s0 Nd0 wdb cur yes)
+    (hn : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) cond = some (.val (.word 0)) →
+      DWRunOK s0 Nd0 wdb cur no) :
+    DWRunOK s0 Nd0 wdb cur (.ite cond yes no) := by
+  unfold DWRunOK
+  rw [evaluateHOLFiniteState_ite]
+  rcases hc : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) cond with _ | cv
+  · intro _ hcr; rcases hcr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
+  · cases cv with
+    | val wl =>
+      cases wl with
+      | word cw =>
+        dsimp only
+        by_cases h0 : cw = 0
+        · subst h0; rw [if_pos rfl]; exact hn hc
+        · rw [if_neg h0]; exact hy cw hc h0
+    | _ => intro _ hcr; rcases hcr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
+
+private theorem dwRunOK_dec {F : Type} {s0 cur : PanSemStateFiniteExact 64 F}
+    {Nd0 : List Nat} {wdb : BitVec 64}
+    (name : MlS) (sh : ShapeHOL) (init : ExpHOL 64) {body : ProgHOL 64}
+    (hdisj : ∀ n ∈ ["db", "top", "result", "cur_p", "cur_n", "mode", "slot", "go"], ofString n ≠ name)
+    (hb : ∀ val,
+      @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) init = some val →
+      shapeEqHOL sh (shapeOfHOLExact val) = true →
+      DWRunOK s0 Nd0 wdb (setVarHOLFinite name val cur) body) :
+    DWRunOK s0 Nd0 wdb cur (.dec name sh init body) := by
+  unfold DWRunOK
+  rw [evaluateHOLFiniteState_dec_total]
+  dsimp only
+  rcases hval : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) init with _ | val
+  · intro _ hcr; rcases hcr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
+  · by_cases hsh : shapeEqHOL sh (shapeOfHOLExact val) = true
+    · simp only [hsh, ↓reduceIte]
+      intro hnt hcr
+      obtain ⟨heff_b, hnd_b, hinv_b, hnc_b, hnr_b⟩ := hb val hval hsh hnt hcr
+      obtain ⟨heff', hnd', hinv'⟩ := @dwRunOK_locals_clock F s0
+        (evaluateHOLFiniteState (setVarHOLFinite name val cur) body).2 Nd0 wdb
+        (evaluateHOLFiniteState (setVarHOLFinite name val cur) body).1
+        (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState (setVarHOLFinite name val cur) body).2.locals
+          (name, cur.locals.lookup name))
+        (evaluateHOLFiniteState (setVarHOLFinite name val cur) body).2.clock
+        (fun n hn => by
+          have hne := hdisj n hn
+          rw [R16Shards.resVarEq_lookup_local, if_neg hne])
+        heff_b hnd_b hinv_b
+      exact ⟨heff', hnd', hinv', hnc_b, hnr_b⟩
+    · simp only [hsh, Bool.false_eq_true, ↓reduceIte]
+      intro _ hcr; rcases hcr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
+
+private theorem ite_mpt_fail_step {F : Type} {s0 cur : PanSemStateFiniteExact 64 F}
+    {Nd0 : List Nat}
+    (heff : R16Shards.WorldEff s0 cur [] [] R16Shards.wsGw)
+    (hnd : ∃ Nd', DecoderNodeStep s0 cur Nd0 Nd')
+    (cond : ExpHOL 64) (codeExp : ExpHOL 64) :
+    (∀ mid, evaluateHOLFiniteState cur
+      (ProgHOL.ite cond (.call (some (none, none)) (ofString "mpt_fail") [codeExp]) .skip) = (none, mid) → mid = cur) ∧
+    ((evaluateHOLFiniteState cur
+      (ProgHOL.ite cond (.call (some (none, none)) (ofString "mpt_fail") [codeExp]) .skip)).1 ≠ some .timeOut →
+      R16Shards.ContOrRes (evaluateHOLFiniteState cur
+        (ProgHOL.ite cond (.call (some (none, none)) (ofString "mpt_fail") [codeExp]) .skip)).1 →
+      R16Shards.WorldEff s0 (evaluateHOLFiniteState cur
+        (ProgHOL.ite cond (.call (some (none, none)) (ofString "mpt_fail") [codeExp]) .skip)).2 [] [] R16Shards.wsGw ∧
+      (∃ Nd', DecoderNodeStep s0 (evaluateHOLFiniteState cur
+        (ProgHOL.ite cond (.call (some (none, none)) (ofString "mpt_fail") [codeExp]) .skip)).2 Nd0 Nd') ∧
+      (evaluateHOLFiniteState cur
+        (ProgHOL.ite cond (.call (some (none, none)) (ofString "mpt_fail") [codeExp]) .skip)).1 ≠ some .continue ∧
+      (∀ v, (evaluateHOLFiniteState cur
+        (ProgHOL.ite cond (.call (some (none, none)) (ofString "mpt_fail") [codeExp]) .skip)).1 = some (.returned v) → False)) := by
+  refine ⟨?_, ?_⟩
+  · intro mid hmid
+    rw [evaluateHOLFiniteState_ite] at hmid
+    rcases hc : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) cond with _ | cv
+    · rw [hc] at hmid; simp at hmid
+    · rw [hc] at hmid
+      cases cv with
+      | val wl =>
+        cases wl with
+        | word cw =>
+          dsimp only at hmid
+          by_cases h0 : cw = 0
+          · subst h0; rw [if_pos rfl, evaluateHOLFiniteState_skip] at hmid
+            exact (Prod.mk.inj hmid).2.symm
+          · rw [if_neg h0] at hmid
+            exact absurd (congrArg Prod.fst hmid) (mpt_fail_ne_none_ne_ret_b3 cur heff.code codeExp).1
+      | _ => simp at hmid
+  · rw [evaluateHOLFiniteState_ite]
+    rcases hc : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) cond with _ | cv
+    · intro _ hcr; rcases hcr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
+    · cases cv with
+      | val wl =>
+        cases wl with
+        | word cw =>
+          dsimp only
+          by_cases h0 : cw = 0
+          · subst h0; rw [if_pos rfl, evaluateHOLFiniteState_skip]
+            intro _ _
+            exact ⟨heff, hnd, by simp, fun _ h => nomatch h⟩
+          · rw [if_neg h0]
+            intro hnt hcr
+            have hwe_mf := R16Shards.worldEff_call0_ro heff
+              R11Adapters.ReadOnlyLeaves.«ro_mpt_fail» [codeExp] hnt hcr
+            have hro := InitECandidate.Solver.Wave8GuestInv.R13.ReadOnlyProg.call0
+              R11Adapters.ReadOnlyLeaves.«ro_mpt_fail» [codeExp]
+              cur heff.code heff.arena.1 hnt hcr
+            obtain ⟨Nd', hdec⟩ := hnd
+            have hdec' : DecoderNodeStep s0 (evaluateHOLFiniteState cur (.call (some (none, none)) (ofString "mpt_fail") [codeExp])).2 Nd0 Nd' := by
+              have h1 := hdec.with_locals_clock
+                (evaluateHOLFiniteState cur (.call (some (none, none)) (ofString "mpt_fail") [codeExp])).2.locals
+                (evaluateHOLFiniteState cur (.call (some (none, none)) (ofString "mpt_fail") [codeExp])).2.clock
+              rwa [← hro] at h1
+            have hmf_nr := mpt_fail_ne_none_ne_ret_b3 cur heff.code codeExp
+            exact ⟨hwe_mf, ⟨Nd', hdec'⟩, call0_ne_continue_b3 cur (ofString "mpt_fail") [codeExp], hmf_nr.2⟩
+      | _ => intro _ hcr; rcases hcr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
+
+end Batch3Defs
 
 end StorageOriginal
 
