@@ -17082,4 +17082,49 @@ theorem op_log_append_effect_cells_of_ownership_g09 {F : Type}
     exact Or.inr (hold x (hheaders x hx) i (op_log_typed_interval_owned_g09 hi))
   · exact heff
 
+/-- An append effect selects its typed-world witness directly from the input invariant. -/
+theorem op_log_append_world_witness_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    {fresh headerWrites : List Ivl}
+    (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hfresh : ∀ x ∈ fresh, globN s "heap_ptr" ≤ x.1 ∧
+      x.1 + x.2 ≤ globN s "scratch_ptr")
+    (hheaders : ∀ x ∈ headerWrites, x ∈ ((evmChain s).map (frameObjects s)).flatten)
+    (heff : ByteRegionEffect s post (fresh ++ headerWrites)) :
+    ∃ Nd, WorldTypedWith s S Nd ∧ SameTypedCells s post S Nd ∧
+      (∀ ec ∈ evmChain s, FrameWF s S ec) ∧
+      ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj ∧
+      IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd) := by
+  obtain ⟨Nd, hWT, hFW, hpw, hold⟩ := op_log_old_ownership_g09 hinv
+  exact ⟨Nd, hWT, op_log_append_effect_cells_of_ownership_g09 hA hWT hfresh hheaders
+    hold heff, hFW, hpw, hold⟩
+
+/-- The actual list-header and backing-buffer write set is protected by frame ownership. -/
+theorem op_log_list_writes_owned_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {head : Ivl}
+    (hm : head ∈ evmChain s) :
+    ∀ x ∈ ([(memW s (head.1 + 88), 24), frameLogs s head] : List Ivl),
+      x ∈ ((evmChain s).map (frameObjects s)).flatten := by
+  intro x hx
+  apply List.mem_flatten.2
+  refine ⟨frameObjects s head, List.mem_map.2 ⟨head, hm, rfl⟩, ?_⟩
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+  rcases hx with rfl | rfl <;> simp [frameObjects]
+
+/-- Concrete no-growth append writes obtain their world witness without separation premises. -/
+theorem op_log_no_growth_world_witness_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {head : Ivl}
+    {fresh : List Ivl} (hA : ArenaReady s) (hinv : EvmInvAt s S)
+    (hm : head ∈ evmChain s)
+    (hfresh : ∀ x ∈ fresh, globN s "heap_ptr" ≤ x.1 ∧
+      x.1 + x.2 ≤ globN s "scratch_ptr")
+    (heff : ByteRegionEffect s post
+      (fresh ++ [(memW s (head.1 + 88), 24), frameLogs s head])) :
+    ∃ Nd, WorldTypedWith s S Nd ∧ SameTypedCells s post S Nd ∧
+      (∀ ec ∈ evmChain s, FrameWF s S ec) ∧
+      ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj ∧
+      IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd) := by
+  exact op_log_append_world_witness_g09 hA hinv hfresh
+    (op_log_list_writes_owned_g09 hm) heff
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
