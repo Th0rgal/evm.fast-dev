@@ -19682,4 +19682,32 @@ theorem jdel_journal_delete_tail_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Deletion either returns without writes for an absent key or reaches its tail. -/
+theorem jdel_absent_guard_resume {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (f0 f1 : BitVec 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (ho : s.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hr : evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "old"))) (.const 0#64))
+        (.return (.const 0#64)) .skip) tail) = (some (.returned rv), out)) :
+    (f0 = 0#64 ∧ out.memory = s.memory) ∨
+      (f0 ≠ 0#64 ∧ evaluateHOLFiniteState s tail = (some (.returned rv), out)) := by
+  by_cases hz : f0 = 0#64
+  · left
+    refine ⟨hz, ?_⟩
+    have he : evaluateHOLFiniteState s (.return (.const 0#64)) = (some (.returned rv), out) := by
+      simpa [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite,
+        evaluateHOLFiniteState_return, evalHOLExact, ho, hz,
+        Compiler.Encoders.Asm.wordCmpHOL, shapeOfHOLExact, sizeOfShapeWithContextHOL] using hr
+    exact return_memory_eq he
+  · right
+    refine ⟨hz, ?_⟩
+    simpa [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite,
+      evaluateHOLFiniteState_skip, evalHOLExact, ho,
+      Compiler.Encoders.Asm.wordCmpHOL, hz] using hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
