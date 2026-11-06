@@ -8606,4 +8606,27 @@ theorem sk_call_effect {F : Type} {s post : PanSemStateFiniteExact 64 F}
   exact ⟨he.code, he.memaddrs, he.shMemaddrs, he.baseAddr, he.be, he.globals,
     he.out_dom, he.cell_frame, he.byte_frame⟩
 
+/-- A disjoint byte effect preserves a successful global-record word load. -/
+theorem global_load_after_byte_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {Rl : List Ivl}
+    (g : String) (k : BitVec 64) (v : ValueHOL 64)
+    (heff : EvmStepLemmas.ByteRegionEffect s post Rl)
+    (hfit : globN s g + k.toNat + 8 ≤ 2 ^ 64)
+    (hd : ∀ i ∈ Rl, Disj (globN s g + k.toNat, 8) i)
+    (he : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString g), .const k])) = some v) :
+    evalHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString g), .const k])) = some v := by
+  apply global_load_preserved s post g k v (by rw [heff.globals]) heff.memaddrs ?_ he
+  unfold memW
+  have hm := heff.cell_frame (BitVec.ofNat 64 (globN s g + k.toNat))
+  have hmem := hm (by
+    intro i hi hpos hhit
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)] at hhit
+    have hdis := hd i hi
+    unfold CellHits at hhit
+    rcases hdis with h | h | h | h <;> try dsimp only at h
+    all_goals omega)
+  rw [hmem]
+
 end HeadStore
