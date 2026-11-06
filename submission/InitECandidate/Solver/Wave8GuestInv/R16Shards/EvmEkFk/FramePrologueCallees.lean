@@ -9581,6 +9581,29 @@ theorem precompile_sha256_final_blocks_effect {F : Type}
       (by simp [evalHOLFinite, evalHOLExact, hpm])
   · exact R10Shards.P26_P28.byteEff_skip m _
 
+theorem precompile_sha256_padding_total_choice {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (ht : s.locals.lookup (ofString "total") = some (.val (.word 64)))
+    (hv : isValidValueHOLExact s.toExact .local (ofString "total")
+      (.val (.word 128)) = true) :
+    let post := (evaluateHOLFiniteState s
+      (.ite (.cmp .notLower (.var .local (ofString "rem")) (.const 56))
+        (.assign .local (ofString "total") (.const 128)) .skip)).2
+    ∃ total : BitVec 64, post.locals.lookup (ofString "total") = some (.val (.word total)) ∧
+      (total.toNat = 64 ∨ total.toNat = 128) := by
+  change isValidValueHOLExact s.toExact .local (ofString "total")
+    (.val (.word 128#64)) = true at hv
+  dsimp only
+  rw [evaluateHOLFiniteState_ite]
+  split
+  · split
+    · exact ⟨64, by simpa [evaluateHOLFiniteState, evaluateHOLFiniteStateWithDeciders,
+        evalPanSemRecursiveCallFiniteContext] using ht, Or.inl rfl⟩
+    · refine ⟨128, ?_, Or.inr rfl⟩
+      simp [evaluateHOLFiniteState_assign, evalHOLExact, hv, setVarHOLFinite,
+        setKvarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · exact ⟨64, ht, Or.inl rfl⟩
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
