@@ -18858,4 +18858,41 @@ theorem jset_call_ts16_return_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+
+/-- Allocation-only effects preserve the nested block-output header words. -/
+theorem worldEff_allocation_header_words {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {gw : List String}
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (he : WorldEff s post [] [] gw) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  apply tx_header_words_of_fixed_frame hW hT
+  intro b hb hn
+  have hf := (hT.2.2.1.1 b hb).resolve_left hn
+  exact (worldEff_allocated_frame b hW.1.1.2 he hf.1 hf.2.1 hf.2.2.1).2
+
+/-- The copied-account balance update preserves the original backing words,
+including the preceding allocation and read-only arithmetic effects. -/
+theorem fresh_account_balance_store_header_words {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (bw : BitVec 64) (value : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (he : WorldEff s cur [] [] ["heap_ptr"])
+    (ha : cur.locals.lookup (ofString "a") = some (.val (.word bw)))
+    (hv : cur.locals.lookup (ofString "nb") = some value)
+    (hlo : globN s "heap_ptr" ≤ bw.toNat) (hhi : bw.toNat + 56 ≤ heapLimit)
+    (hflat : (flattenHOL value).length = 4)
+    (hr : evaluateHOLFiniteState cur
+      (.store (.op .add [.var .local (ofString "a"), .const 8])
+        (.var .local (ofString "nb"))) = (none, post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  have he' := fresh_account_balance_store_effect bw value he ha hv hlo hhi hflat
+  rw [hr] at he'
+  exact worldEff_allocation_header_words hW hT he'
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
