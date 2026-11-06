@@ -20230,4 +20230,22 @@ theorem sk_make_call_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+
+theorem htab_set_ts24_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (key value : ExpHOL 64) (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 24]), key, value]) =
+      (none, post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  apply tx_header_words_of_fixed_frame hW hT
+  intro b hb hn
+  exact htab_set_recSlot_fixed_frame s post S Nd b "ts" 24 key value hW.1.1 hT hb hn
+    (by decide) (fun hts ht => (nonValueSlot_ts24 s S hT.1 hts ht).1) hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
