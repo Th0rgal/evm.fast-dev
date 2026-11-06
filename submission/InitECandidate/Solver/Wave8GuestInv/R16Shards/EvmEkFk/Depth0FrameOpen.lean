@@ -10112,4 +10112,38 @@ theorem htabFootprint_eq_of_separated_htab_exit {F : Type}
   · apply disj_fresh_of_allocated hAs.2 hx.1.2 hx.2.2.2.2.1
     exact ((hW.1.2.1 db hdb).2 (db,88) hhead).1
 
+/-- Every post-mutation table interval lies in an old table or fresh heap. -/
+theorem table_coverage_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post) :
+    ∀ t ∈ S, ∀ i ∈ htabFootprint post t,
+      (∃ u ∈ S, ∃ j ∈ htabFootprint s u, Inside i j.1 (j.1+j.2)) ∨
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr") := by
+  intro t hm i hi
+  by_cases he : t = locN s "t"
+  · subst t
+    rcases (hx.2.2.2.2.2.1 i hi).2 with ⟨j,hj,hin⟩ | hf
+    · exact Or.inl ⟨_,ht,j,hj,hin⟩
+    · right
+      have hp := hx.2.2.2.2.1
+      unfold Inside at hf ⊢
+      dsimp only at hf
+      omega
+  · rw [htabFootprint_eq_of_separated_htab_exit t hAs hW hm ht he hx] at hi
+    exact Or.inl ⟨t,hm,i,hi,⟨Nat.le_refl _,Nat.le_refl _⟩⟩
+
+/-- Protected payload records remain separate from all post-mutation tables. -/
+theorem payload_tables_disjoint_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post) :
+    ∀ p ∈ htabValues s db, ∀ t ∈ S, ∀ i ∈ htabFootprint post t, Disj (p,16) i := by
+  intro p hp t hm i hi
+  apply protected_payload_disj_of_growth he hp
+  rcases table_coverage_of_htab_exit hAs hW ht hx t hm i hi with ⟨u,hu,j,hj,hin⟩ | hf
+  · exact Or.inr (Or.inl ⟨j,Or.inl ⟨u,hu,hj⟩,hin⟩)
+  · exact Or.inr (Or.inr hf)
+
 end HeadStore
