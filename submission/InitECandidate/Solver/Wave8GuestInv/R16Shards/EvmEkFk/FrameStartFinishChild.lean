@@ -10576,6 +10576,86 @@ theorem set_retdata_zero_call_run {F : Type}
   rw [if_pos hsh]
   rfl
 
+/-- Reading through the three `set_retdata(p, 0)` writes at an untouched address:
+each `updW` passes the original cell through. -/
+private theorem fc_updW3_read_ne {F : Type} (t : PanSemStateFiniteExact 64 F)
+    {a1 a2 a3 b : Nat} {v1 v2 v3 : BitVec 64}
+    (hb1 : a1 < 2 ^ 64) (hb2 : a2 < 2 ^ 64) (hb3 : a3 < 2 ^ 64) (hbb : b < 2 ^ 64)
+    (hne1 : b ≠ a1) (hne2 : b ≠ a2) (hne3 : b ≠ a3) :
+    memW { t with memory := R14W (R14W (R14W t.memory (BitVec.ofNat 64 a1) v1)
+        (BitVec.ofNat 64 a2) v2) (BitVec.ofNat 64 a3) v3 } b = memW t b := by
+  have hbv1 : BitVec.ofNat 64 b ≠ BitVec.ofNat 64 a1 := by
+    intro heq; apply hne1
+    have h := congrArg BitVec.toNat heq
+    rwa [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hbb,
+      Nat.mod_eq_of_lt hb1] at h
+  have hbv2 : BitVec.ofNat 64 b ≠ BitVec.ofNat 64 a2 := by
+    intro heq; apply hne2
+    have h := congrArg BitVec.toNat heq
+    rwa [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hbb,
+      Nat.mod_eq_of_lt hb2] at h
+  have hbv3 : BitVec.ofNat 64 b ≠ BitVec.ofNat 64 a3 := by
+    intro heq; apply hne3
+    have h := congrArg BitVec.toNat heq
+    rwa [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hbb,
+      Nat.mod_eq_of_lt hb3] at h
+  simp only [memW, R14W,
+    InitECandidate.Solver.Wave8GuestInv.R14Shards.OpHandlersA.updW, hbv3, hbv2, hbv1]
+  rfl
+
+/-- After the three `set_retdata(p, 0)` writes, the first written cell still reads
+back `v1` (the later writes do not touch it). -/
+private theorem fc_updW3_read_first {F : Type} (t : PanSemStateFiniteExact 64 F)
+    {a1 a2 a3 : Nat} {v1 v2 v3 : BitVec 64}
+    (hb1 : a1 < 2 ^ 64) (hb2 : a2 < 2 ^ 64) (hb3 : a3 < 2 ^ 64)
+    (hne2 : a1 ≠ a2) (hne3 : a1 ≠ a3) :
+    memW { t with memory := R14W (R14W (R14W t.memory (BitVec.ofNat 64 a1) v1)
+        (BitVec.ofNat 64 a2) v2) (BitVec.ofNat 64 a3) v3 } a1 = v1.toNat := by
+  have hbv2 : BitVec.ofNat 64 a1 ≠ BitVec.ofNat 64 a2 := by
+    intro heq; apply hne2
+    have h := congrArg BitVec.toNat heq
+    rwa [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb1,
+      Nat.mod_eq_of_lt hb2] at h
+  have hbv3 : BitVec.ofNat 64 a1 ≠ BitVec.ofNat 64 a3 := by
+    intro heq; apply hne3
+    have h := congrArg BitVec.toNat heq
+    rwa [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb1,
+      Nat.mod_eq_of_lt hb3] at h
+  simp only [memW, R14W,
+    InitECandidate.Solver.Wave8GuestInv.R14Shards.OpHandlersA.updW, hbv3, hbv2]
+  rfl
+
+/-- After the three `set_retdata(p, 0)` writes, the last written cell reads back
+`v3` (nothing overwrites it). -/
+private theorem fc_updW3_read_third {F : Type} (t : PanSemStateFiniteExact 64 F)
+    {a1 a2 a3 : Nat} {v1 v2 v3 : BitVec 64} :
+    memW { t with memory := R14W (R14W (R14W t.memory (BitVec.ofNat 64 a1) v1)
+        (BitVec.ofNat 64 a2) v2) (BitVec.ofNat 64 a3) v3 } a3 = v3.toNat := by
+  simp only [memW, R14W,
+    InitECandidate.Solver.Wave8GuestInv.R14Shards.OpHandlersA.updW]
+  simp
+
+/-- After the `set_retdata(p, 0)` call, any head-frame word outside the three written
+cells (`ev+144`, `ev+152`, `ev+216`) reads exactly as before the call. -/
+theorem memW_ret_zero_ne {F : Type} (s : PanSemStateFiniteExact 64 F)
+    {e evw : BitVec 64} {b : Nat}
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hbnd : e.toNat + 232 < 2 ^ 64)
+    (hb : b < 2 ^ 64)
+    (hne1 : b ≠ globN s "ev" + 144) (hne2 : b ≠ globN s "ev" + 152)
+    (hne3 : b ≠ globN s "ev" + 216) :
+    memW { s with clock := s.clock - 1, memory :=
+        (R14W (R14W (R14W s.memory (BitVec.ofNat 64 (e.toNat + 144)) evw)
+          (BitVec.ofNat 64 (e.toNat + 152)) 0#64)
+          (BitVec.ofNat 64 (e.toNat + 216)) 0#64) } b = memW s b := by
+  have hbe : globN s "ev" = e.toNat := by
+    unfold globN; rw [he]
+  rw [hbe] at hne1 hne2 hne3
+  have hb144 : e.toNat + 144 < 2 ^ 64 := by omega
+  have hb152 : e.toNat + 152 < 2 ^ 64 := by omega
+  have hb216 : e.toNat + 216 < 2 ^ 64 := by omega
+  exact fc_updW3_read_ne s hb144 hb152 hb216 hb (by omega) (by omega) (by omega)
+
 theorem alloc_entry_returned_fc {F : Type}
     (s : PanSemStateFiniteExact 64 F) (nw : BitVec 64)
     (hP : ArenaReady s)
