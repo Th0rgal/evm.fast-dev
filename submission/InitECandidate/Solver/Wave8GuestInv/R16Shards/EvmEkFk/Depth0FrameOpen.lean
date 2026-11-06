@@ -8479,4 +8479,52 @@ theorem access_lookup_body_and_table
     (by intro p hp; simp at hp; rcases hp with rfl | rfl <;> decide)
     lookup_htab_set (vpre := []) (by simp) hl
 
+/-- Installed lookup discharges body, return shape, and table-local premises
+for resuming witness retrieval after an access update. -/
+theorem witness_return_after_access_lookup {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db hash tw : BitVec 64)
+    (key value : ValueHOL 64) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (h : CodeDbPayloadStrong s S db.toNat) (hdb : db.toNat ∈ S) (ht : tw.toNat ∈ S)
+    (hne : db.toNat ≠ tw.toNat) (hc : s.code = originalRuntimeCode) (v : ValueHOL 64)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set")
+      [.val (.word tw), key, value] = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post))
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hws : globN s "ws" ≠ 0)
+    (hload : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (hhash : s.locals.lookup (ofString "code_hash") = some (.val (.word hash))) :
+    Ret {post with locals := s.locals}
+      (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+        [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c"))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  rw [hc] at hl
+  obtain ⟨hbody, hlocal⟩ := access_lookup_body_and_table tw key value body callee ret hl
+  subst body
+  have hloc : locN (callEntryStateHOLFinite s callee) "t" = tw.toNat := by
+    simp [locN, callEntryStateHOLFinite, hlocal]
+  have hlone : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "htab_set")
+      [.val (.word tw), key, value] =
+      some (sourceFnBody Guest.Software.guestFn_htab_set, callee, .one) := by
+    have hr : ret = .one := by
+      unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hl
+      split at hl
+      · simp at hl
+      · rename_i b l r raw
+        unfold lookupCodeHOLExact at raw
+        rw [lookup_htab_set] at raw
+        dsimp only at raw
+        split at raw
+        · have hr := (Prod.mk.inj (Option.some.inj raw)).2
+          have hf := (Prod.mk.inj (Option.some.inj hl)).2
+          exact (congrArg Prod.snd hf).symm.trans (congrArg Prod.snd hr).symm
+        · simp at raw
+    subst ret
+    exact hl
+  exact witness_return_after_access_execution_preload db hash tw.toNat callee hAs hW h hdb ht
+    hne hloc hc _ v hlone hb hshape hws hload hhash
+
 end HeadStore
