@@ -19074,4 +19074,1227 @@ theorem phase2_heapByteEff_roles {F : Type}
   · exact ⟨mem_low_eq_of_domain_writes he.out_dom ha.1 (by decide),
       mem_low_eq_of_domain_writes he.out_dom ha.1 (by decide)⟩
 
+
+open InitE
+/-! ## Segment 54..69: te suffix stores, blob/setcode flags, txh alloc, keccak -/
+
+/-- Local names that the suffix invariant depends on. -/
+def phase2_teSufNames : List String :=
+  ["te", "tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used",
+   "price", "enc", "intrinsic", "nal", "nkeys", "al_keys", "al_addrs"]
+
+theorem phase2_teSufNames_eleven {n : String}
+    (hn : n ∈ (["te", "tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used",
+      "price", "enc", "intrinsic"] : List String)) : n ∈ phase2_teSufNames := by
+  simp only [phase2_teSufNames, List.mem_cons] at hn ⊢
+  tauto
+
+theorem phase2_teSufNames_mem {n : String} (hn : n ∈ phase2_teSufNames) :
+    n ∈ (["te", "tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used",
+      "price", "enc", "intrinsic", "nal", "nkeys", "al_keys", "al_addrs"] : List String) := hn
+
+/-- Ownership witness for a caller buffer that must survive the suffix stores. -/
+def PtxTeSufWitness {F : Type} (s : PanSemStateFiniteExact 64 F) (buffer : Ivl) : Prop :=
+  ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+    IvlsDisj [buffer] (worldOwned s S Nd) ∧ IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd)
+
+/-- Invariant across the te-suffix segment (positions 54..69). Carries the
+store-ready frame, the loop leftover scalars, and the ownership witnesses of
+the sender and address-array buffers needed by the message cut. -/
+def PtxTeSufInv {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxAccessCountReady s ∧
+  (∃ w : BitVec 64, s.locals.lookup (ofString "nkeys") = some (.val (.word w))) ∧
+  (∃ w : BitVec 64, s.locals.lookup (ofString "al_keys") = some (.val (.word w))) ∧
+  (∃ w : BitVec 64, s.locals.lookup (ofString "al_addrs") = some (.val (.word w))) ∧
+  PtxTeSufWitness s (locN s "sender", 24) ∧
+  PtxTeSufWitness s (locN s "al_addrs", (locN s "nal" + 1) * 8) ∧
+  Inside (locN s "al_addrs", (locN s "nal" + 1) * 8) InitE.sourceBase (globN s "heap_ptr")
+
+theorem phase2_teSufInv_teStoreReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeSufInv s) : PtxTeStoreReady s := hp.1.1
+
+/-- Buffer ownership is independent of caller-local scope and clock. -/
+theorem phase2_teSufWitness_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat) (buffer : Ivl)
+    (htx : locN { s with locals := locals, clock := clock } "tx" = locN s "tx")
+    (hte : locN { s with locals := locals, clock := clock } "te" = locN s "te")
+    (hw : PtxTeSufWitness s buffer) :
+    PtxTeSufWitness { s with locals := locals, clock := clock } buffer := by
+  obtain ⟨S, Nd, hW, hT, hd, hde⟩ := hw
+  refine ⟨S, Nd, (worldTypedWith_with_locals s locals clock S Nd).mpr hW, ?_, hd, ?_⟩
+  · rw [htx]
+    exact R16Shards.PtxP1.txAccessListAt_with_locals s locals clock hT
+  · rw [hte]
+    exact hde
+
+/-- The suffix invariant only reads the listed caller locals. -/
+theorem phase2_teSufInv_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hl : ∀ name ∈ phase2_teSufNames,
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : PtxTeSufInv s) : PtxTeSufInv { s with locals := locals, clock := clock } := by
+  have h11 : ∀ name ∈ (["te", "tx", "index", "sender", "mgas", "reservoir", "gas",
+      "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name) :=
+    fun name hn => hl name (phase2_teSufNames_eleven hn)
+  have hte := locN_congr s locals clock "te" (hl "te" (by simp [phase2_teSufNames]))
+  have htx := locN_congr s locals clock "tx" (hl "tx" (by simp [phase2_teSufNames]))
+  have hnal := locN_congr s locals clock "nal" (hl "nal" (by simp [phase2_teSufNames]))
+  have hsnd := locN_congr s locals clock "sender" (hl "sender" (by simp [phase2_teSufNames]))
+  have hala := locN_congr s locals clock "al_addrs" (hl "al_addrs" (by simp [phase2_teSufNames]))
+  refine ⟨⟨phase2_teStoreReady_with_locals s locals clock h11 hp.1.1, ?_, ?_⟩,
+    ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · obtain ⟨w, hw⟩ := hp.1.2.1
+    exact ⟨w, by rw [hl "nal" (by simp [phase2_teSufNames])]; exact hw⟩
+  · rcases hp.1.2.2 with h | h
+    · exact Or.inl (by rw [hnal]; exact h)
+    · refine Or.inr ?_
+      rw [hnal, htx]
+      exact h
+  · obtain ⟨w, hw⟩ := hp.2.1
+    exact ⟨w, by rw [hl "nkeys" (by simp [phase2_teSufNames])]; exact hw⟩
+  · obtain ⟨w, hw⟩ := hp.2.2.1
+    exact ⟨w, by rw [hl "al_keys" (by simp [phase2_teSufNames])]; exact hw⟩
+  · obtain ⟨w, hw⟩ := hp.2.2.2.1
+    exact ⟨w, by rw [hl "al_addrs" (by simp [phase2_teSufNames])]; exact hw⟩
+  · have hbuf := phase2_teSufWitness_with_locals s locals clock (locN s "sender", 24) htx hte
+      hp.2.2.2.2.1
+    rw [hsnd]
+    exact hbuf
+  · have hbuf := phase2_teSufWitness_with_locals s locals clock
+      (locN s "al_addrs", (locN s "nal" + 1) * 8) htx hte hp.2.2.2.2.2.1
+    rw [hala, hnal]
+    exact hbuf
+  · rw [hala, hnal]
+    exact hp.2.2.2.2.2.2
+
+/-- Assigning an unrelated local keeps the suffix invariant. -/
+theorem phase2_teSufInv_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxTeSufInv s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ phase2_teSufNames, ofString n ≠ name) :
+    PtxTeSufInv (setVarHOLFinite name v s) := by
+  apply phase2_teSufInv_with_locals s _ s.clock _ hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
+/-- A single-word store inside the environment preserves an arbitrary buffer's
+ownership witness, provided the witness also separates the environment. -/
+theorem phase2_teSufWitness_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {buffer : Ivl}
+    (hp : PtxTeStoreReady s) (hw : WorldTypedWith s S Nd)
+    (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hbuf : IvlsDisj [buffer] (worldOwned s S Nd))
+    (hte : IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd))
+    {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "te") (locN s "te" + 200))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    WorldTypedWith { s with memory := mem } S Nd ∧
+    TxAccessListAt { s with memory := mem } S Nd (locN s "tx") ∧
+    IvlsDisj [buffer] (worldOwned { s with memory := mem } S Nd) ∧
+    IvlsDisj [(locN s "te", 200)] (worldOwned { s with memory := mem } S Nd) := by
+  obtain ⟨hl, S₀, Nd₀, hW₀, hT₀, hd₀, htx₀, hrec₀⟩ := hp
+  obtain ⟨hv, hW', how⟩ := phase2_store_validated_outside hl.1 hw ht
+    (blk := (locN s "te", 200)) (fun o ho => hte _ (by simp) o ho) hx hin htx₀ hrec₀ hm
+  have hA := hl.1.1.1.1.1.1
+  have hAp := hv.1.1.1.1.1
+  have hu : IvlUnhit s { s with memory := mem } (locN s "tx", 384) :=
+    ivlUnhit_single hm (by simp) (disj_of_inside_right hin htx₀)
+  have hur : 0 < memW s (locN s "tx" + 216) →
+      IvlUnhit s { s with memory := mem }
+        (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) := by
+    intro hn
+    exact ivlUnhit_single hm (by dsimp; omega) (disj_of_inside_right hin (hrec₀ hn))
+  have hT' := R16Shards.PtxP1.txAccessListAt_congr_unhit
+    (post := { s with memory := mem }) hA.2 hA.1 hAp.1 le_rfl ht
+    (by rw [how]; exact ht.2.1) (fun hn => by rw [how]; exact (ht.2.2 hn).2) hu hur
+  exact ⟨hW', hT', by rw [how]; exact hbuf, by rw [how]; exact hte⟩
+
+/-- Word-valued evaluation of a word local. -/
+theorem phase2_teSuf_eval_var {F : Type} {s : PanSemStateFiniteExact 64 F} {name : String}
+    {w : BitVec 64} (hw : s.locals.lookup (ofString name) = some (.val (.word w))) :
+    evalAt s (.var .local (ofString name)) = some (.val (.word w)) := by
+  simp [evalAt, evalHOLExact, hw]
+
+/-- Word-valued evaluation of a constant. -/
+theorem phase2_teSuf_eval_const {F : Type} (s : PanSemStateFiniteExact 64 F) (c : Nat) :
+    evalAt s (.const c) = some (.val (.word (BitVec.ofNat 64 c))) := by
+  simp [evalAt, evalHOLExact]
+
+/-- Word-valued evaluation of a word local plus a constant. -/
+theorem phase2_teSuf_eval_add_const {F : Type} {s : PanSemStateFiniteExact 64 F} {name : String}
+    {w : BitVec 64} (hw : s.locals.lookup (ofString name) = some (.val (.word w))) (c : Nat) :
+    evalAt s (.op .add [.var .local (ofString name), .const c]) =
+      some (.val (.word (w + BitVec.ofNat 64 c))) := by
+  simp [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord, valueWord,
+    wordOpHOL, wordOp, List.foldr]
+
+/-- A one-word load either faults or produces a word value. -/
+theorem phase2_teSuf_load_one_cases {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (addr : ExpHOL 64) :
+    evalAt s (.load .one addr) = none ∨ ∃ w : BitVec 64,
+      evalAt s (.load .one addr) = some (.val (.word w)) := by
+  rcases he : evalAt s (.load .one addr) with _ | v
+  · exact Or.inl rfl
+  · right
+    cases v with
+    | val w => cases w; exact ⟨_, rfl⟩
+    | rStruct _ =>
+      simp only [evalAt, evalHOLExact] at he
+      split at he
+      · split at he
+        · simp only [memLoadHOLExact] at he
+          split at he
+          · simp at he
+          · simp at he
+        · simp at he
+      · simp at he
+    | nStruct _ =>
+      simp only [evalAt, evalHOLExact] at he
+      split at he
+      · split at he
+        · simp only [memLoadHOLExact] at he
+          split at he
+          · simp at he
+          · simp at he
+        · simp at he
+      · simp at he
+
+/-- Program-level store rule for the te-suffix: any word-valued source stored
+inside the environment preserves the suffix invariant. -/
+theorem phase2_teSufInv_store_mem {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeSufInv s) {x : BitVec 64} (hdom : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "te") (locN s "te" + 200))
+    {mem : BitVec 64 → HolWordLab 64} (hmem : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxTeSufInv { s with memory := mem } := by
+  obtain ⟨hl, S₀, Nd₀, hW₀, hT₀, hd₀, htx₀, hrec₀⟩ := hp.1.1
+  have hps : PtxTeStoreReady s := hp.1.1
+  have hsr : PtxTeStoreReady { s with memory := mem } :=
+    phase2_teStoreReady_store hps hdom hin hmem
+  have hu : IvlUnhit s { s with memory := mem } (locN s "tx", 384) :=
+    ivlUnhit_single hmem (by simp) (disj_of_inside_right hin htx₀)
+  have hA := hl.1.1.1.1.1.1
+  have htwords := hT₀.1.1
+  have hthi := (ivl_allocated_bound hA.2 (Or.inl hT₀.1.2.1)).2
+  have hmemW216 : memW { s with memory := mem } (locN s "tx" + 216) =
+      memW s (locN s "tx" + 216) :=
+    memW_eq_of_ivlUnhit hu (by have := htwords.1; omega) hthi
+      ⟨by dsimp; omega, by dsimp; omega⟩
+  obtain ⟨S₁, Nd₁, hW₁, hT₁, hd₁, hte₁⟩ := hp.2.2.2.2.1
+  obtain ⟨S₂, Nd₂, hW₂, hT₂, hd₂, hte₂⟩ := hp.2.2.2.2.2.1
+  refine ⟨⟨hsr, hp.1.2.1, ?_⟩, hp.2.1, hp.2.2.1, hp.2.2.2.1, ?_, ?_, ?_⟩
+  · rcases hp.1.2.2 with h | h
+    · exact Or.inl h
+    · refine Or.inr ?_
+      show locN s "nal" = memW { s with memory := mem } (locN s "tx" + 216)
+      rw [hmemW216]
+      exact h
+  · exact ⟨S₁, Nd₁, phase2_teSufWitness_store hps hW₁ hT₁ hd₁ hte₁ hdom hin hmem⟩
+  · exact ⟨S₂, Nd₂, phase2_teSufWitness_store hps hW₂ hT₂ hd₂ hte₂ hdom hin hmem⟩
+  · exact hp.2.2.2.2.2.2
+
+/-- Program-level store rule for the te-suffix: any word-valued source stored
+inside the environment preserves the suffix invariant. -/
+theorem phase2_teSufInv_offset_hoare (off : Nat) (hoff : off + 8 ≤ 200) (src : ExpHOL 64)
+    (hv : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), PtxTeSufInv s →
+      evalAt s src = none ∨ ∃ w, evalAt s src = some (.val (.word w))) :
+    Hoare PtxTeSufInv
+      (.store (.op .add [.var .local (ofString "te"), .const off]) src)
+      (fun r s => r = none → PtxTeSufInv s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv' hst
+  rcases hv s hp with hnone | ⟨w, hw⟩
+  · rw [hnone] at hv'; exact absurd hv' (by simp)
+  · have hvv : v = .val (.word w) := Option.some.inj (hv'.symm.trans hw)
+    subst v
+    obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec
+      (by simpa only [flattenHOL] using hst)
+    exact phase2_teSufInv_store_mem hp hdom
+      (phase2_te_offset_inside hp.1.1.1 off hoff hx) hmem
+
+/-- Word-valued evaluation of the first struct field of a word triple. -/
+theorem phase2_teSuf_eval_rfield_zero {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {name : String} {a b c : BitVec 64}
+    (hw : s.locals.lookup (ofString name) =
+      some (.rStruct [.val (.word a), .val (.word b), .val (.word c)])) :
+    evalAt s (.rfield 0 (.var .local (ofString name))) = some (.val (.word a)) := by
+  simp [evalAt, evalHOLExact, hw]
+
+/-- Word-valued evaluation of the second struct field of a word triple. -/
+theorem phase2_teSuf_eval_rfield_one {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {name : String} {a b c : BitVec 64}
+    (hw : s.locals.lookup (ofString name) =
+      some (.rStruct [.val (.word a), .val (.word b), .val (.word c)])) :
+    evalAt s (.rfield 1 (.var .local (ofString name))) = some (.val (.word b)) := by
+  simp [evalAt, evalHOLExact, hw]
+
+/-- The te-suffix stores, as concrete instances of the generic rule. -/
+theorem phase2_teSuf_store_al_addrs : Hoare PtxTeSufInv
+    (.store (.op .add [.var .local (ofString "te"), .const 96])
+      (.var .local (ofString "al_addrs")))
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply phase2_teSufInv_offset_hoare 96 (by dsimp; omega)
+  intro F s hp
+  obtain ⟨w, hw⟩ := hp.2.2.2.1
+  exact Or.inr ⟨w, phase2_teSuf_eval_var hw⟩
+
+theorem phase2_teSuf_store_nal_succ : Hoare PtxTeSufInv
+    (.store (.op .add [.var .local (ofString "te"), .const 104])
+      (.op .add [.var .local (ofString "nal"), .const 1]))
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply phase2_teSufInv_offset_hoare 104 (by dsimp; omega)
+  intro F s hp
+  obtain ⟨w, hw⟩ := hp.1.2.1
+  exact Or.inr ⟨_, phase2_teSuf_eval_add_const hw 1⟩
+
+theorem phase2_teSuf_store_al_keys : Hoare PtxTeSufInv
+    (.store (.op .add [.var .local (ofString "te"), .const 112])
+      (.var .local (ofString "al_keys")))
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply phase2_teSufInv_offset_hoare 112 (by dsimp; omega)
+  intro F s hp
+  obtain ⟨w, hw⟩ := hp.2.2.1
+  exact Or.inr ⟨w, phase2_teSuf_eval_var hw⟩
+
+theorem phase2_teSuf_store_nkeys : Hoare PtxTeSufInv
+    (.store (.op .add [.var .local (ofString "te"), .const 120])
+      (.var .local (ofString "nkeys")))
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply phase2_teSufInv_offset_hoare 120 (by dsimp; omega)
+  intro F s hp
+  obtain ⟨w, hw⟩ := hp.2.1
+  exact Or.inr ⟨w, phase2_teSuf_eval_var hw⟩
+
+theorem phase2_teSuf_store_load_one (off off' : Nat) (hoff : off + 8 ≤ 200) :
+    Hoare PtxTeSufInv
+    (.store (.op .add [.var .local (ofString "te"), .const off])
+      (.load .one (.op .add [.var .local (ofString "tx"), .const off'])))
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply phase2_teSufInv_offset_hoare off hoff
+  intro F s hp
+  exact phase2_teSuf_load_one_cases s _
+
+theorem phase2_teSuf_store_const_one : Hoare PtxTeSufInv
+    (.store (.op .add [.var .local (ofString "te"), .const 160]) (.const 1))
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply phase2_teSufInv_offset_hoare 160 (by dsimp; omega)
+  intro F s hp
+  exact Or.inr ⟨_, phase2_teSuf_eval_const s 1⟩
+
+theorem phase2_teSuf_store_index : Hoare PtxTeSufInv
+    (.store (.op .add [.var .local (ofString "te"), .const 168])
+      (.var .local (ofString "index")))
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply phase2_teSufInv_offset_hoare 168 (by dsimp; omega)
+  intro F s hp
+  obtain ⟨w, hw⟩ := hp.1.1.1.1.2.scalar "index" (by simp)
+  exact Or.inr ⟨w, phase2_teSuf_eval_var hw⟩
+
+theorem phase2_teSuf_store_txh : Hoare (fun s => PtxTeSufInv s ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "txh") = some (.val (.word w)))
+    (.store (.op .add [.var .local (ofString "te"), .const 176])
+      (.var .local (ofString "txh")))
+    (fun r s => r = none → PtxTeSufInv s ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "txh") = some (.val (.word w))) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv' hst
+  obtain ⟨w, hw⟩ := hp.2
+  have hvv : v = .val (.word w) :=
+    Option.some.inj (hv'.symm.trans (phase2_teSuf_eval_var hw))
+  subst v
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  exact ⟨phase2_teSufInv_store_mem hp.1 hdom
+    (phase2_te_offset_inside hp.1.1.1.1 176 (by dsimp; omega) hx) hmem, hp.2⟩
+
+theorem phase2_teSuf_store_intrinsic_zero : Hoare PtxTeSufInv
+    (.store (.op .add [.var .local (ofString "te"), .const 184])
+      (.rfield 0 (.var .local (ofString "intrinsic"))))
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply phase2_teSufInv_offset_hoare 184 (by dsimp; omega)
+  intro F s hp
+  obtain ⟨a, b, c, hw⟩ := hp.1.1.1.1.2.intrinsic
+  exact Or.inr ⟨a, phase2_teSuf_eval_rfield_zero hw⟩
+
+theorem phase2_teSuf_store_intrinsic_one : Hoare PtxTeSufInv
+    (.store (.op .add [.var .local (ofString "te"), .const 192])
+      (.rfield 1 (.var .local (ofString "intrinsic"))))
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply phase2_teSufInv_offset_hoare 192 (by dsimp; omega)
+  intro F s hp
+  obtain ⟨a, b, c, hw⟩ := hp.1.1.1.1.2.intrinsic
+  exact Or.inr ⟨b, phase2_teSuf_eval_rfield_one hw⟩
+
+/-- Read-only calls preserve the te-suffix invariant. -/
+theorem phase2_resume_ro_teSufInv {fname name : MlS}
+    (hro : ReadOnlyFn fname)
+    (hne : ∀ n ∈ phase2_teSufNames, ofString n ≠ name)
+    (args : List (ExpHOL 64)) :
+    DecCallResumeOn PtxTeSufInv PtxTeSufInv name fname args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  have he := hr (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  have hrestore : ({ post with locals := s.locals } : PanSemStateFiniteExact 64 F) =
+      { s with locals := s.locals, clock := post.clock } := by rw [he]; rfl
+  apply phase2_teSufInv_set_other _ _ name v hne
+  rw [hrestore]
+  exact phase2_teSufInv_with_locals s s.locals post.clock (fun _ _ => rfl) hp
+
+theorem phase2_teSuf_isb_resume (h : PtxCallees) :
+    DecCallResumeOn PtxTeSufInv PtxTeSufInv (ofString "isb")
+      (ofString "tx_is_blob") [.var .local (ofString "tx")] :=
+  phase2_resume_ro_teSufInv h.ro_tx_is_blob (by decide) _
+
+theorem phase2_teSuf_issc_resume (h : PtxCallees) :
+    DecCallResumeOn PtxTeSufInv PtxTeSufInv (ofString "issc")
+      (ofString "tx_is_setcode") [.var .local (ofString "tx")] :=
+  phase2_resume_ro_teSufInv h.ro_tx_is_setcode (by decide) _
+
+/-- The blob-branch conditional stores. -/
+theorem phase2_teSuf_blob_ite : Hoare PtxTeSufInv
+    (.ite (.cmp .notEqual (.var .local (ofString "isb")) (.const 0))
+      (.seq
+        (.store (.op .add [.var .local (ofString "te"), .const 128])
+          (.load .one (.op .add [.var .local (ofString "tx"), .const 256])))
+        (.store (.op .add [.var .local (ofString "te"), .const 136])
+          (.load .one (.op .add [.var .local (ofString "tx"), .const 264]))))
+      .skip)
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply Hoare.ite
+  · apply Hoare.seq_fall
+    · refine ⟨fun s hc hp hn hr => ?_⟩
+      exact (phase2_teSuf_store_load_one 128 256 (by dsimp; omega)).run s hc hp.1 hn hr
+    · exact phase2_teSuf_store_load_one 136 264 (by dsimp; omega)
+  · exact Hoare.skip (fun s hp _ => hp.1)
+  · intro F s hp hr
+    exact absurd hr (by simp)
+
+/-- The setcode-branch conditional stores. -/
+theorem phase2_teSuf_setcode_ite : Hoare PtxTeSufInv
+    (.ite (.cmp .notEqual (.var .local (ofString "issc")) (.const 0))
+      (.seq
+        (.store (.op .add [.var .local (ofString "te"), .const 144])
+          (.load .one (.op .add [.var .local (ofString "tx"), .const 272])))
+        (.store (.op .add [.var .local (ofString "te"), .const 152])
+          (.load .one (.op .add [.var .local (ofString "tx"), .const 280]))))
+      .skip)
+    (fun r s => r = none → PtxTeSufInv s) := by
+  apply Hoare.ite
+  · apply Hoare.seq_fall
+    · refine ⟨fun s hc hp hn hr => ?_⟩
+      exact (phase2_teSuf_store_load_one 144 272 (by dsimp; omega)).run s hc hp.1 hn hr
+    · exact phase2_teSuf_store_load_one 152 280 (by dsimp; omega)
+  · exact Hoare.skip (fun s hp _ => hp.1)
+  · intro F s hp hr
+    exact absurd hr (by simp)
+
+
+/-! ### Part 3a: the hash-buffer allocation (position 64) -/
+
+/-- Ownership bundle for the sender and address buffers across the hash-buffer
+allocation and the keccak256 call: the suffix witness, extended with the fresh
+32-byte hash buffer's separation at the same world witness. -/
+def PtxTeSufHashWitness {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (buffer : Ivl) (p : Nat) : Prop :=
+  ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+    IvlsDisj [buffer] (worldOwned s S Nd) ∧ IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd) ∧
+    IvlsDisj [(p, 32)] (worldOwned s S Nd) ∧
+    Inside buffer InitE.sourceBase (globN s "heap_ptr")
+
+/-- State after the hash-buffer allocation: the suffix invariant, the fresh
+buffer's word, alignment and separation, and the extended ownership bundles. -/
+def PtxTeHashReady {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxTeSufInv s ∧
+  (∃ w : BitVec 64, s.locals.lookup (ofString "txh") = some (.val (.word w)) ∧
+    w.toNat % 8 = 0 ∧
+    Disj (locN s "te", 200) (w.toNat, 32) ∧ Disj (locN s "tx", 384) (w.toNat, 32) ∧
+    (0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (w.toNat, 32)) ∧
+    PtxTeSufHashWitness s (locN s "sender", 24) (locN s "txh") ∧
+    PtxTeSufHashWitness s (locN s "al_addrs", (locN s "nal" + 1) * 8) (locN s "txh"))
+
+/-- The validated transaction frame survives the hash-buffer allocation. -/
+theorem phase2_teSuf_alloc_validated (h : PtxCallees) :
+    DecCallResumeOn PtxValidatedStrong PtxValidatedStrong
+      (ofString "txh") (ofString "alloc") [.const 0x20] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hstage : R16Shards.PtxP1.StageP 0 s := R16Shards.PtxP1.stage0 hp.1.1
+  have hworld := R16Shards.PtxP1.resume_scratch_stage h.wk_alloc
+    (gs := []) (by simp [R16Shards.PtxP1.ScratchSpec]) (fun _ => rfl)
+    (by decide) (by decide) (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by simp) (by decide) (n := 0) (name := ofString "txh") (by decide) [.const 0x20]
+    s vs body callee ret v post hc hstage ha hl hb
+  have hspec := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hspec
+  have hh := (hspec (Or.inl ⟨v, rfl⟩)).2.1
+  change globN s "heap_ptr" ≤ globN post "heap_ptr" at hh
+  have hs := ptxPhase2LocalShapes_set_other _ (ptxPhase2LocalShapes_restore s post hp.2)
+    (ofString "txh") v (by decide)
+  have hlu : ∀ n ∈ (["sender", "mgas"] : List String),
+      locN (setVarHOLFinite (ofString "txh") v { post with locals := s.locals }) n = locN s n := by
+    intro n hn
+    have hne : ofString "txh" ≠ ofString n := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl <;> decide
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+  refine ⟨⟨hworld.1, ?_, ?_, ?_⟩, hs⟩
+  · rw [hlu "sender" (by simp)]
+    exact ⟨hp.1.2.1.1, hp.1.2.1.2.trans hh⟩
+  · rw [hlu "sender" (by simp)]
+    exact wordsOK_transfer hp.1.1.1.1.1.1 hworld.1.1.1.1.1 hp.1.2.2.1
+  · rw [hlu "mgas" (by simp)]
+    exact hp.1.2.2.2
+
+/-- The hash-buffer allocation (position 64): the suffix invariant survives and
+the fresh 32-byte buffer is exported with its separation geometry. -/
+theorem phase2_teSuf_alloc_txh (h : PtxCallees) :
+    DecCallResumeOn PtxTeSufInv PtxTeHashReady
+      (ofString "txh") (ofString "alloc") [.const 0x20] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hAR : ArenaReady s := hp.1.1.1.1.1.1.1.1.1
+  have hGI : GuestInv s := hp.1.1.1.1.1.1.1.1.1.1
+  -- the alloc argument is the constant 32
+  obtain ⟨v₀, he₀, hn₀⟩ := R16Shards.PtxP1.params_one_value s (ofString "alloc")
+    (ofString "n") .one _ .one (by rw [hc]; exact R16Shards.PtxP1.lookup_alloc)
+    (.const 0x20) vs body callee ret ha hl
+  have h3 : evalAt s (.const 0x20) = some (.val (.word (BitVec.ofNat 64 32))) :=
+    phase2_teSuf_eval_const s 32
+  have hv₀ : v₀ = .val (.word (BitVec.ofNat 64 32)) :=
+    Option.some.inj (he₀.symm.trans h3)
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = 32 := by
+    simp [locN, callEntryStateHOLFinite, hn₀, hv₀]
+  have hround : (32 + 7) / 8 * 8 = 32 := by decide
+  -- fresh block from the returns spec
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hAR) (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, hvw, _, _, hf⟩ := hr v rfl
+  rw [hcn] at hf
+  have hfs := phase2_fresh_separation s post callee w.toNat 32 hp.1 hf
+  have hf' : w.toNat % 8 = 0 ∧
+      Inside (w.toNat, 32) (globN (callEntryStateHOLFinite s callee) "heap_ptr")
+        (globN post "heap_ptr") ∧ WordsOK post (w.toNat, 32) := by
+    simpa only [FreshBlock, hround] using hf
+  -- master world step
+  have hWORLD : WorldOK s := hp.1.1.1.1.1.1.1.1
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hWORLD callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have hs := hw (Or.inl ⟨_, rfl⟩)
+  have hhp : globN s "heap_ptr" ≤ globN post "heap_ptr" := hs.2.1
+  -- run B: the sender-bundle witness
+  obtain ⟨S₂, Nd₂, hW₂, hT₂, hbuf₂, hde₂⟩ := hp.2.2.2.2.1
+  have hWe₂ := (worldTypedWith_with_locals s callee (s.clock - 1) S₂ Nd₂).mpr hW₂
+  obtain ⟨S₂', Nd₂', -, hW₂', hgrow₂, hframe₂, hQ₂⟩ :=
+    hs.2.2.2.2 S₂ Nd₂ hWe₂ (by simp [IvlsDisj])
+  obtain ⟨w₂, hw₂, hRA₂⟩ := hQ₂ v rfl
+  rw [hvw, ValueHOL.val.injEq, HolWordLab.word.injEq] at hw₂
+  rw [← hw₂] at hRA₂
+  simp only [hcn, hround] at hRA₂
+  have hbufout₂ : IvlsDisj [(locN s "sender", 24)] (worldOwned post S₂' Nd₂') :=
+    phase2_packed_owned_growth s post _ _ _ hp.1.1.1.1.1.2.1 hgrow₂ hbuf₂
+  -- run C: the al_addrs-bundle witness
+  obtain ⟨S₃, Nd₃, hW₃, hT₃, hbuf₃, hde₃⟩ := hp.2.2.2.2.2.1
+  have hWe₃ := (worldTypedWith_with_locals s callee (s.clock - 1) S₃ Nd₃).mpr hW₃
+  obtain ⟨S₃', Nd₃', -, hW₃', hgrow₃, hframe₃, hQ₃⟩ :=
+    hs.2.2.2.2 S₃ Nd₃ hWe₃ (by simp [IvlsDisj])
+  obtain ⟨w₃, hw₃, hRA₃⟩ := hQ₃ v rfl
+  rw [hvw, ValueHOL.val.injEq, HolWordLab.word.injEq] at hw₃
+  rw [← hw₃] at hRA₃
+  simp only [hcn, hround] at hRA₃
+  have hbufout₃ : IvlsDisj [(locN s "al_addrs", (locN s "nal" + 1) * 8)]
+      (worldOwned post S₃' Nd₃') :=
+    phase2_packed_owned_growth s post _ _ _ hp.2.2.2.2.2.2 hgrow₃ hbuf₃
+  -- the transaction header words survive (no writes outside the world)
+  have htx8 : (locN s "tx") % 8 = 0 := hT₂.1.1.1
+  have htxin : Inside (locN s "tx", 384) InitE.sourceBase (globN s "heap_ptr") := hT₂.1.2.1
+  have htxow : ∀ j ∈ worldOwned s S₂ Nd₂, Disj (locN s "tx", 384) j :=
+    fun j hj => hT₂.2.1 _ (by simp) j hj
+  have htxu := heap_ivl_survives_step hAR.2 hhp
+    (worldOwned_zero_aligned hW₂) (R := []) (by simp) hgrow₂ hframe₂
+    htx8 (by norm_num) htxin htxow (by simp)
+  obtain ⟨_, _, hu₂⟩ := htxu
+  have hhi : locN s "tx" + 384 ≤ 2 ^ 64 :=
+    (ivl_allocated_bound hAR.2 (Or.inl htxin)).2
+  have hmem216 : memW post (locN s "tx" + 216) = memW s (locN s "tx" + 216) :=
+    memW_eq_of_ivlUnhit hu₂ (by have := htx8; omega) hhi (by omega)
+  have hmem208 : memW post (locN s "tx" + 208) = memW s (locN s "tx" + 208) :=
+    memW_eq_of_ivlUnhit hu₂ (by have := htx8; omega) hhi (by omega)
+  -- the out state
+  let out := setVarHOLFinite (ofString "txh") v { post with locals := s.locals }
+  show PtxTeHashReady out
+  have hPVS : PtxValidatedStrong out := by
+    exact phase2_teSuf_alloc_validated h s vs body callee ret v post hc
+      hp.1.1.1.1 ha hl hb
+  have hGIout : GuestInv out := hPVS.1.1.1.1.1.1
+  have hptxh : locN out "txh" = w.toNat := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hvw]
+  have hloc {name : String} (hne : ofString "txh" ≠ ofString name) :
+      locN out name = locN s name := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+  have hluk {name : String} (hne : ofString "txh" ≠ ofString name) :
+      out.locals.lookup (ofString name) = s.locals.lookup (ofString name) := by
+    simp [out, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+  have hT₂' := R16Shards.PtxP1.txAccessListOK_survives_step hAR hs.1.1 hhp hW₂
+    (R := []) (by simp) hgrow₂ hframe₂ hT₂ (by simp) (by simp)
+    (locals := out.locals)
+    (by simp [out, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "txh" ≠ ofString "tx" by decide])
+  have hT₃' := R16Shards.PtxP1.txAccessListOK_survives_step hAR hs.1.1 hhp hW₃
+    (R := []) (by simp) hgrow₃ hframe₃ hT₃ (by simp) (by simp)
+    (locals := out.locals)
+    (by simp [out, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "txh" ≠ ofString "tx" by decide])
+  have hWT₂ : WorldTypedWith out S₂' Nd₂' :=
+    (worldTypedWith_with_locals post out.locals post.clock S₂' Nd₂').mpr hW₂'
+  have hWT₃ : WorldTypedWith out S₃' Nd₃' :=
+    (worldTypedWith_with_locals post out.locals post.clock S₃' Nd₃').mpr hW₃'
+  have hTAL₂ : TxAccessListAt out S₂' Nd₂' (locN out "tx") := hT₂'
+  have hTAL₃ : TxAccessListAt out S₃' Nd₃' (locN out "tx") := hT₃'
+  have hte₂' := heap_ivl_survives_step hAR.2 hhp
+    (worldOwned_zero_aligned hW₂) (R := []) (by simp) hgrow₂ hframe₂
+    hp.1.1.1.2.2.2.1 (by norm_num) hp.1.1.1.2.2.1
+    (fun j hj => hde₂ _ (by simp) j hj) (by simp)
+  have hte₃' := heap_ivl_survives_step hAR.2 hhp
+    (worldOwned_zero_aligned hW₃) (R := []) (by simp) hgrow₃ hframe₃
+    hp.1.1.1.2.2.2.1 (by norm_num) hp.1.1.1.2.2.1
+    (fun j hj => hde₃ _ (by simp) j hj) (by simp)
+  obtain ⟨S₁, Nd₁, hW₁, hT₁, hd₁, htxte₁, hrec₁⟩ := hp.1.1.2
+  obtain ⟨wte, hwtew⟩ := hp.1.1.1.2.1
+  obtain ⟨wnal, hwnalw⟩ := hp.1.2.1
+  obtain ⟨wnkeys, hwnkeysw⟩ := hp.2.1
+  obtain ⟨walkeys, hwalkeysw⟩ := hp.2.2.1
+  obtain ⟨waladdrs, hwaladdrsw⟩ := hp.2.2.2.1
+  refine ⟨⟨⟨⟨⟨hPVS, ⟨wte, ?_⟩, ?_, ?_, ?_, S₂', Nd₂', hWT₂, ?_⟩,
+    S₂', Nd₂', hWT₂, hTAL₂, ?_, ?_, ?_⟩, ⟨wnal, ?_⟩, ?_⟩,
+    ⟨wnkeys, ?_⟩, ⟨walkeys, ?_⟩, ⟨waladdrs, ?_⟩,
+    ⟨S₂', Nd₂', hWT₂, hTAL₂, ?_, ?_⟩, ⟨S₃', Nd₃', hWT₃, hTAL₃, ?_, ?_⟩, ?_⟩,
+    ⟨w, ?_, hf'.1, ?_, ?_, ?_, ⟨S₂', Nd₂', hWT₂, hTAL₂, ?_, ?_, ?_, ?_⟩,
+      ⟨S₃', Nd₃', hWT₃, hTAL₃, ?_, ?_, ?_, ?_⟩⟩⟩
+  · rw [hluk (show ofString "txh" ≠ ofString "te" by decide)]
+    exact hwtew
+  · rw [hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    exact ⟨hp.1.1.1.2.2.1.1, hp.1.1.1.2.2.1.2.trans hhp⟩
+  · rw [hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    exact hp.1.1.1.2.2.2.1
+  · rw [hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    exact wordsOK_transfer hGI hGIout hp.1.1.1.2.2.2.2.1
+  · rw [hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte₂'.2.1 j hj
+  · rw [hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte₂'.2.1 j hj
+  · rw [hloc (show ofString "txh" ≠ ofString "tx" by decide),
+      hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    exact htxte₁
+  · rw [hloc (show ofString "txh" ≠ ofString "tx" by decide),
+      hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    intro hn
+    change Disj (memW post (locN s "tx" + 208), 24 * memW post (locN s "tx" + 216))
+      (locN s "te", 200)
+    change 0 < memW post (locN s "tx" + 216) at hn
+    rw [hmem216] at hn
+    rw [hmem208, hmem216]
+    exact hrec₁ hn
+  · rw [hluk (show ofString "txh" ≠ ofString "nal" by decide)]
+    exact hwnalw
+  · rw [hloc (show ofString "txh" ≠ ofString "nal" by decide),
+      hloc (show ofString "txh" ≠ ofString "tx" by decide)]
+    rcases hp.1.2.2 with h0 | hn
+    · exact Or.inl h0
+    · refine Or.inr ?_
+      change locN s "nal" = memW post (locN s "tx" + 216)
+      rw [hn]
+      exact hmem216.symm
+  · rw [hluk (show ofString "txh" ≠ ofString "nkeys" by decide)]
+    exact hwnkeysw
+  · rw [hluk (show ofString "txh" ≠ ofString "al_keys" by decide)]
+    exact hwalkeysw
+  · rw [hluk (show ofString "txh" ≠ ofString "al_addrs" by decide)]
+    exact hwaladdrsw
+  · rw [hloc (show ofString "txh" ≠ ofString "sender" by decide)]
+    exact hbufout₂
+  · rw [hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte₂'.2.1 j hj
+  · rw [hloc (show ofString "txh" ≠ ofString "al_addrs" by decide),
+      hloc (show ofString "txh" ≠ ofString "nal" by decide)]
+    exact hbufout₃
+  · rw [hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte₃'.2.1 j hj
+  · rw [hloc (show ofString "txh" ≠ ofString "al_addrs" by decide),
+      hloc (show ofString "txh" ≠ ofString "nal" by decide)]
+    exact ⟨hp.2.2.2.2.2.2.1, hp.2.2.2.2.2.2.2.trans hhp⟩
+  · simp [out, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hvw]
+  · rw [hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    exact hfs.1
+  · rw [hloc (show ofString "txh" ≠ ofString "tx" by decide)]
+    exact hfs.2.1
+  · intro hpos
+    change 0 < memW post (locN s "tx" + 216) at hpos
+    rw [hmem216] at hpos
+    obtain ⟨-, hrb⟩ := (hT₁.2.2 hpos).1
+    refine Or.inr (Or.inr (Or.inl ?_))
+    change memW post (locN s "tx" + 208) + 24 * memW post (locN s "tx" + 216) ≤ w.toNat
+    rw [hmem208, hmem216]
+    have hwge : globN s "heap_ptr" ≤ w.toNat := hf'.2.1.1
+    omega
+  · rw [hloc (show ofString "txh" ≠ ofString "sender" by decide)]
+    exact hbufout₂
+  · rw [hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte₂'.2.1 j hj
+  · rw [hptxh]
+    exact hRA₂
+  · rw [hloc (show ofString "txh" ≠ ofString "sender" by decide)]
+    exact ⟨hp.1.1.1.1.1.2.1.1, hp.1.1.1.1.1.2.1.2.trans hhp⟩
+  · rw [hloc (show ofString "txh" ≠ ofString "al_addrs" by decide),
+      hloc (show ofString "txh" ≠ ofString "nal" by decide)]
+    exact hbufout₃
+  · rw [hloc (show ofString "txh" ≠ ofString "te" by decide)]
+    intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte₃'.2.1 j hj
+  · rw [hptxh]
+    exact hRA₃
+  · rw [hloc (show ofString "txh" ≠ ofString "al_addrs" by decide),
+      hloc (show ofString "txh" ≠ ofString "nal" by decide)]
+    exact ⟨hp.2.2.2.2.2.2.1, hp.2.2.2.2.2.2.2.trans hhp⟩
+
+
+/-! ### Part 3b: the keccak256 hash call (position 65) -/
+
+/-- The keccak256 hash call (position 65): the suffix invariant survives with the
+caller's locals restored. The fresh hash buffer is consumed as the callee's
+output parameter; its region plus the two scratch buffers are the only writes. -/
+theorem phase2_teSuf_keccak_txh (h : PtxCallees) :
+    Hoare PtxTeHashReady
+      (.call (some (none, none)) (ofString "keccak256")
+        [.rfield 0 (.var .local (ofString "enc")),
+         .rfield 1 (.var .local (ofString "enc")),
+         .var .local (ofString "txh")])
+      (fun r t => r = none →
+        (PtxTeSufInv t ∧
+          ∃ w : BitVec 64, t.locals.lookup (ofString "txh") = some (.val (.word w)))) := by
+  apply R13Shards.Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hAR : ArenaReady s := hp.1.1.1.1.1.1.1.1.1.1
+  have hGI : GuestInv s := hp.1.1.1.1.1.1.1.1.1.1.1
+  have hWORLD : WorldOK s := hp.1.1.1.1.1.1.1.1.1
+  -- the third parameter carries the fresh hash buffer's word
+  have hlook : originalRuntimeCode.lookup (ofString "keccak256") =
+      some ([(ofString "p", .one), (ofString "n", .one), (ofString "out", .one)],
+        (sourceFunctionEntry Guest.Software.guestFn_keccak256).2.2.1,
+        (sourceFunctionEntry Guest.Software.guestFn_keccak256).2.2.2) :=
+    InitECandidate.Solver.GuestTrapAndLookup.lookup_of_guestAst_getElem 103
+      (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_keccak256) rfl
+  obtain ⟨v₁, v₂, v₃, he₁, he₂, he₃, hp₁, hp₂, hr⟩ :=
+    R16Shards.PtxP1.params_three_values s (ofString "keccak256")
+    (ofString "p") (ofString "n") (ofString "out") .one .one .one _ .one
+    (by rw [hc]; exact hlook)
+    (.rfield 0 (.var .local (ofString "enc")))
+    (.rfield 1 (.var .local (ofString "enc")))
+    (.var .local (ofString "txh"))
+    vs body callee ret ha hl
+  obtain ⟨w, hwl, hw8, hte, htx, hrecw, hwit₂, hwit₃⟩ := hp.2
+  have hv₃ : v₃ = .val (.word w) := Option.some.inj (he₃.symm.trans hwl)
+  have hout : locN (callEntryStateHOLFinite s callee) "out" = w.toNat := by
+    simp only [locN, callEntryStateHOLFinite, hr, hv₃]
+  -- master world step, re-anchored at the caller
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_keccak256 s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hWORLD callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have hstep := hw (Or.inl ⟨v, rfl⟩)
+  have hs := R13Shards.worldStep_with_locals hstep s.locals s.clock
+  change WorldStep (fun _ => [(locN (callEntryStateHOLFinite s callee) "out", 32),
+    bufferRegion s ("keccak_pad", 136), bufferRegion s ("keccak_st", 200)]) _ _ _ s _ post at hs
+  rw [hout] at hs
+  have hhp : globN s "heap_ptr" ≤ globN post "heap_ptr" := hs.2.1
+  -- the bundle witnesses at the pre state
+  obtain ⟨S₂, Nd₂, hW₂, hT₂, hbuf₂, hde₂, hp32₂, hin₂⟩ := hwit₂
+  obtain ⟨S₃, Nd₃, hW₃, hT₃, hbuf₃, hde₃, hp32₃, hin₃⟩ := hwit₃
+  have hltxh : locN s "txh" = w.toNat := by simp [locN, hwl]
+  have hp32₂' : IvlsDisj [(w.toNat, 32)] (worldOwned s S₂ Nd₂) := by
+    rw [← hltxh]; exact hp32₂
+  have hp32₃' : IvlsDisj [(w.toNat, 32)] (worldOwned s S₃ Nd₃) := by
+    rw [← hltxh]; exact hp32₃
+  -- safety of the written regions against the typed world
+  have hRT₂ : IvlsDisj [(w.toNat, 32), bufferRegion s ("keccak_pad", 136),
+      bufferRegion s ("keccak_st", 200)] (worldTypedIvls s S₂ Nd₂) := by
+    intro i hi j hj
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl
+    · exact phase2_packed_typed_of_owned s S₂ Nd₂ [(w.toNat, 32)] hp32₂'
+        (w.toNat, 32) (by simp) j hj
+    · exact InitECandidate.Solver.Wave8GuestInv.bufferRegion_disj_le hW₂
+        ("keccak_pad", 136) (by decide) (by decide) 136 le_rfl j hj
+    · exact InitECandidate.Solver.Wave8GuestInv.bufferRegion_disj_le hW₂
+        ("keccak_st", 200) (by decide) (by decide) 200 le_rfl j hj
+  have hRT₃ : IvlsDisj [(w.toNat, 32), bufferRegion s ("keccak_pad", 136),
+      bufferRegion s ("keccak_st", 200)] (worldTypedIvls s S₃ Nd₃) := by
+    intro i hi j hj
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl
+    · exact phase2_packed_typed_of_owned s S₃ Nd₃ [(w.toNat, 32)] hp32₃'
+        (w.toNat, 32) (by simp) j hj
+    · exact InitECandidate.Solver.Wave8GuestInv.bufferRegion_disj_le hW₃
+        ("keccak_pad", 136) (by decide) (by decide) 136 le_rfl j hj
+    · exact InitECandidate.Solver.Wave8GuestInv.bufferRegion_disj_le hW₃
+        ("keccak_st", 200) (by decide) (by decide) 200 le_rfl j hj
+  have hR0 : ∀ i ∈ [(w.toNat, 32), bufferRegion s ("keccak_pad", 136),
+      bufferRegion s ("keccak_st", 200)], i.2 = 0 → i.1 % 8 = 0 := by
+    intro i hi
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl
+    · simp
+    · exact R16Shards.PtxP1.bufferRegion_zero_aligned s "keccak_pad" 136 (by decide)
+    · exact R16Shards.PtxP1.bufferRegion_zero_aligned s "keccak_st" 200 (by decide)
+  -- transaction header separation from the written regions
+  have htxow : ∀ j ∈ worldOwned s S₂ Nd₂, Disj (locN s "tx", 384) j :=
+    fun j hj => hT₂.2.1 _ (by simp) j hj
+  have htx_R : ∀ i ∈ [(w.toNat, 32), bufferRegion s ("keccak_pad", 136),
+      bufferRegion s ("keccak_st", 200)], Disj (locN s "tx", 384) i := by
+    intro i hi
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl
+    · exact htx
+    · exact R16Shards.PtxP1.heap_ivl_disj_bufferRegion_le htxow
+        ("keccak_pad", 136) (by decide) 136 le_rfl
+    · exact R16Shards.PtxP1.heap_ivl_disj_bufferRegion_le htxow
+        ("keccak_st", 200) (by decide) 200 le_rfl
+  have hrecs_R : 0 < memW s (locN s "tx" + 216) →
+      ∀ i ∈ [(w.toNat, 32), bufferRegion s ("keccak_pad", 136),
+        bufferRegion s ("keccak_st", 200)],
+        Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) i := by
+    intro hpos i hi
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl
+    · exact hrecw hpos
+    · exact R16Shards.PtxP1.heap_ivl_disj_bufferRegion_le
+        (fun j hj => (hT₂.2.2 hpos).2 _ (by simp) j hj)
+        ("keccak_pad", 136) (by decide) 136 le_rfl
+    · exact R16Shards.PtxP1.heap_ivl_disj_bufferRegion_le
+        (fun j hj => (hT₂.2.2 hpos).2 _ (by simp) j hj)
+        ("keccak_st", 200) (by decide) 200 le_rfl
+  -- the validated frame survives via the packaged world step
+  have hTRS : TxReadyStrong { post with locals := s.locals } :=
+    R16Shards.PtxP1.txReadyStrong_worldStep hs hAR
+      (R16Shards.PtxP1.txEnv_of_ready hp.1.1.1.1.1.1.1) hW₂ hT₂
+      (by decide) (by decide) (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) (by decide) hR0 hRT₂ htx_R hrecs_R
+  have hGIpost : GuestInv post := hs.1.1
+  have hARout : ArenaReady { post with locals := s.locals } :=
+    (arenaReady_with_locals post s.locals post.clock).mpr hs.1
+  have hGIout : GuestInv { post with locals := s.locals } := hARout.1
+  have hPVS : PtxValidatedStrong { post with locals := s.locals } :=
+    ⟨⟨hTRS, ⟨hp.1.1.1.1.1.1.2.1.1, hp.1.1.1.1.1.1.2.1.2.trans hhp⟩,
+      wordsOK_transfer hGI hGIout hp.1.1.1.1.1.1.2.2.1, hp.1.1.1.1.1.1.2.2.2⟩,
+    ptxPhase2LocalShapes_restore s post hp.1.1.1.1.1.2⟩
+  -- run the master at both bundle witnesses
+  obtain ⟨S₂', Nd₂', -, hW₂', hgrow₂, hframe₂, -⟩ := hs.2.2.2.2 S₂ Nd₂ hW₂ hRT₂
+  obtain ⟨S₃', Nd₃', -, hW₃', hgrow₃, hframe₃, -⟩ := hs.2.2.2.2 S₃ Nd₃ hW₃ hRT₃
+  have hWT₂ : WorldTypedWith { post with locals := s.locals } S₂' Nd₂' :=
+    (worldTypedWith_with_locals post s.locals post.clock S₂' Nd₂').mpr hW₂'
+  have hWT₃ : WorldTypedWith { post with locals := s.locals } S₃' Nd₃' :=
+    (worldTypedWith_with_locals post s.locals post.clock S₃' Nd₃').mpr hW₃'
+  have hT₂' := R16Shards.PtxP1.txAccessListOK_survives_step hAR hGIpost hhp hW₂
+    hR0 hgrow₂ hframe₂ hT₂ htx_R hrecs_R (locals := s.locals) rfl
+  have hT₃' := R16Shards.PtxP1.txAccessListOK_survives_step hAR hGIpost hhp hW₃
+    hR0 hgrow₃ hframe₃ hT₃ htx_R hrecs_R (locals := s.locals) rfl
+  have hTAL₂ : TxAccessListAt { post with locals := s.locals } S₂' Nd₂'
+      (locN { post with locals := s.locals } "tx") := hT₂'
+  have hTAL₃ : TxAccessListAt { post with locals := s.locals } S₃' Nd₃'
+      (locN { post with locals := s.locals } "tx") := hT₃'
+  -- transaction header words survive
+  have htx8 : (locN s "tx") % 8 = 0 := hT₂.1.1.1
+  have htxin : Inside (locN s "tx", 384) InitE.sourceBase (globN s "heap_ptr") := hT₂.1.2.1
+  have htxu := heap_ivl_survives_step hAR.2 hhp (worldOwned_zero_aligned hW₂) hR0
+    hgrow₂ hframe₂ htx8 (by norm_num) htxin htxow htx_R
+  obtain ⟨_, _, hu₂⟩ := htxu
+  have hhi : locN s "tx" + 384 ≤ 2 ^ 64 :=
+    (ivl_allocated_bound hAR.2 (Or.inl htxin)).2
+  have hmem216 : memW post (locN s "tx" + 216) = memW s (locN s "tx" + 216) :=
+    memW_eq_of_ivlUnhit hu₂ (by have := htx8; omega) hhi (by omega)
+  have hmem208 : memW post (locN s "tx" + 208) = memW s (locN s "tx" + 208) :=
+    memW_eq_of_ivlUnhit hu₂ (by have := htx8; omega) hhi (by omega)
+  -- the hash buffer's separation from the te region
+  have hteR : ∀ i ∈ [(w.toNat, 32), bufferRegion s ("keccak_pad", 136),
+      bufferRegion s ("keccak_st", 200)], Disj (locN s "te", 200) i := by
+    intro i hi
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl
+    · exact hte
+    · exact R16Shards.PtxP1.heap_ivl_disj_bufferRegion_le (fun j hj => hde₂ _ (by simp) j hj)
+        ("keccak_pad", 136) (by decide) 136 le_rfl
+    · exact R16Shards.PtxP1.heap_ivl_disj_bufferRegion_le (fun j hj => hde₂ _ (by simp) j hj)
+        ("keccak_st", 200) (by decide) 200 le_rfl
+  have hte₂' := heap_ivl_survives_step hAR.2 hhp (worldOwned_zero_aligned hW₂) hR0
+    hgrow₂ hframe₂ hp.1.1.1.1.2.2.2.1 (by norm_num) hp.1.1.1.1.2.2.1
+    (fun j hj => hde₂ _ (by simp) j hj) hteR
+  have hte₃' := heap_ivl_survives_step hAR.2 hhp (worldOwned_zero_aligned hW₃) hR0
+    hgrow₃ hframe₃ hp.1.1.1.1.2.2.2.1 (by norm_num) hp.1.1.1.1.2.2.1
+    (fun j hj => hde₃ _ (by simp) j hj) hteR
+  -- bundle buffers stay owned at the new witnesses
+  have hbufout₂ : IvlsDisj [(locN s "sender", 24)] (worldOwned post S₂' Nd₂') :=
+    phase2_packed_owned_growth s post _ _ _ hin₂ hgrow₂ hbuf₂
+  have hbufout₃ : IvlsDisj [(locN s "al_addrs", (locN s "nal" + 1) * 8)]
+      (worldOwned post S₃' Nd₃') :=
+    phase2_packed_owned_growth s post _ _ _ hin₃ hgrow₃ hbuf₃
+  -- reassemble the suffix invariant at the restored-locals state
+  obtain ⟨S₁, Nd₁, hW₁, hT₁, hd₁, htxte₁, hrec₁⟩ := hp.1.1.1.2
+  obtain ⟨wte, hwtew⟩ := hp.1.1.1.1.2.1
+  obtain ⟨wnal, hwnalw⟩ := hp.1.1.2.1
+  obtain ⟨wnkeys, hwnkeysw⟩ := hp.1.2.1
+  obtain ⟨walkeys, hwalkeysw⟩ := hp.1.2.2.1
+  obtain ⟨waladdrs, hwaladdrsw⟩ := hp.1.2.2.2.1
+  refine ⟨⟨⟨⟨⟨hPVS, ⟨wte, ?_⟩, ?_, ?_, ?_, S₂', Nd₂', hWT₂, ?_⟩,
+    S₂', Nd₂', hWT₂, hTAL₂, ?_, ?_, ?_⟩, ⟨wnal, ?_⟩, ?_⟩,
+    ⟨wnkeys, ?_⟩, ⟨walkeys, ?_⟩, ⟨waladdrs, ?_⟩,
+    ⟨S₂', Nd₂', hWT₂, hTAL₂, ?_, ?_⟩, ⟨S₃', Nd₃', hWT₃, hTAL₃, ?_, ?_⟩, ?_⟩, w, hwl⟩
+  · exact hwtew
+  · exact ⟨hp.1.1.1.1.2.2.1.1, hp.1.1.1.1.2.2.1.2.trans hhp⟩
+  · exact hp.1.1.1.1.2.2.2.1
+  · exact wordsOK_transfer hGI hGIout hp.1.1.1.1.2.2.2.2.1
+  · intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte₂'.2.1 j hj
+  · intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte₂'.2.1 j hj
+  · exact htxte₁
+  · intro hn
+    change Disj (memW post (locN s "tx" + 208), 24 * memW post (locN s "tx" + 216))
+      (locN s "te", 200)
+    change 0 < memW post (locN s "tx" + 216) at hn
+    rw [hmem216] at hn
+    rw [hmem208, hmem216]
+    exact hrec₁ hn
+  · exact hwnalw
+  · rcases hp.1.1.2.2 with h0 | hn
+    · exact Or.inl h0
+    · refine Or.inr ?_
+      change locN s "nal" = memW post (locN s "tx" + 216)
+      rw [hn]
+      exact hmem216.symm
+  · exact hwnkeysw
+  · exact hwalkeysw
+  · exact hwaladdrsw
+  · exact hbufout₂
+  · intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte₂'.2.1 j hj
+  · exact hbufout₃
+  · intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte₃'.2.1 j hj
+  · exact ⟨hp.1.2.2.2.2.2.2.1, hp.1.2.2.2.2.2.2.2.trans hhp⟩
+
+/-! ### Part 4: the whole segment as a bounded program -/
+
+/-- The suffix invariant together with the fresh hash-buffer word. -/
+def PtxTeSufTxh {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxTeSufInv s ∧ ∃ w : BitVec 64, s.locals.lookup (ofString "txh") = some (.val (.word w))
+
+/-- Call-entry guard for any callee reached from a suffix-invariant state. -/
+theorem phase2_teSuf_callEntry {fname : MlS} (arguments : List (ExpHOL 64)) :
+    CallEntryOn PtxTeSufInv GuestInv fname arguments := by
+  intro F state values body callee ret hcode hP hargs hl
+  exact guestInv_callEntry state callee hP.1.1.1.1.1.1.1.1.1.1
+
+/-- Call-entry guard for any callee reached from a hash-ready state. -/
+theorem phase2_teHash_callEntry {fname : MlS} (arguments : List (ExpHOL 64)) :
+    CallEntryOn PtxTeHashReady GuestInv fname arguments := by
+  intro F state values body callee ret hcode hP hargs hl
+  exact guestInv_callEntry state callee hP.1.1.1.1.1.1.1.1.1.1.1
+
+/-- The te-suffix segment (positions 54..69) as a bounded program: the access-list
+stores, the blob/setcode flag probes with their conditional stores, the one and
+index stores, the hash-buffer allocation, the keccak256 hash call, and the final
+te stores. -/
+theorem phase2_teSuf_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxTeSufInv tail b) :
+    TerminatingProgBoundedOn PtxTeSufInv (spinePlug 16 (spineAt 53 ptxCode) tail)
+      ((K.«tx_is_blob» + 1) + (K.«tx_is_setcode» + 1) + (K.«alloc» + 1) +
+        (K.«keccak256» + 1) + b) := by
+  have he : spinePlug 16 (spineAt 53 ptxCode) tail =
+      .seq (.store (.op .add [.var .local (ofString "te"), .const 96])
+        (.var .local (ofString "al_addrs")))
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 104])
+        (.op .add [.var .local (ofString "nal"), .const 1]))
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 112])
+        (.var .local (ofString "al_keys")))
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 120])
+        (.var .local (ofString "nkeys")))
+      (.decCall (ofString "isb") .one (ofString "tx_is_blob") [.var .local (ofString "tx")]
+      (.seq (.ite (.cmp .notEqual (.var .local (ofString "isb")) (.const 0))
+        (.seq (.store (.op .add [.var .local (ofString "te"), .const 128])
+          (.load .one (.op .add [.var .local (ofString "tx"), .const 256])))
+          (.store (.op .add [.var .local (ofString "te"), .const 136])
+            (.load .one (.op .add [.var .local (ofString "tx"), .const 264]))))
+        .skip)
+      (.decCall (ofString "issc") .one (ofString "tx_is_setcode") [.var .local (ofString "tx")]
+      (.seq (.ite (.cmp .notEqual (.var .local (ofString "issc")) (.const 0))
+        (.seq (.store (.op .add [.var .local (ofString "te"), .const 144])
+          (.load .one (.op .add [.var .local (ofString "tx"), .const 272])))
+          (.store (.op .add [.var .local (ofString "te"), .const 152])
+            (.load .one (.op .add [.var .local (ofString "tx"), .const 280]))))
+        .skip)
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 160]) (.const 1))
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 168])
+        (.var .local (ofString "index")))
+      (.decCall (ofString "txh") .one (ofString "alloc") [.const 0x20]
+      (.seq (.call (some (none, none)) (ofString "keccak256")
+        [.rfield 0 (.var .local (ofString "enc")),
+         .rfield 1 (.var .local (ofString "enc")),
+         .var .local (ofString "txh")])
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 176])
+        (.var .local (ofString "txh")))
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 184])
+        (.rfield 0 (.var .local (ofString "intrinsic"))))
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 192])
+        (.rfield 1 (.var .local (ofString "intrinsic"))))
+      (.seq .skip tail))))))))))))))) := by
+    simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction, spineAt,
+      spinePlug]
+    rfl
+  -- stores are clock-neutral under any invariant
+  have hs {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} (addr src : ExpHOL 64) :
+      TerminatingProgBoundedOn P (.store addr src) 0 := by
+    intro F s hc hp hn
+    rw [clock_store]
+    exact ⟨by omega, le_rfl⟩
+  have hskip : TerminatingProgBoundedOn PtxTeSufInv .skip 0 := by
+    intro F s hc hp hn
+    rw [clock_skip]
+    exact ⟨by omega, le_rfl⟩
+  -- the padding skip before the tail
+  have hsk : TerminatingProgBoundedOn PtxTeSufInv (.seq .skip tail) (0 + b) :=
+    seq_bound_trans hskip (Hoare.skip (fun _ hp _ => hp)) ht
+  -- the last three te stores
+  have h67 : TerminatingProgBoundedOn PtxTeSufInv
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 192])
+          (.rfield 1 (.var .local (ofString "intrinsic"))))
+        (.seq .skip tail))
+      (0 + (0 + b)) :=
+    seq_bound_trans (hs _ _) phase2_teSuf_store_intrinsic_one hsk
+  have h66 : TerminatingProgBoundedOn PtxTeSufTxh
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 184])
+          (.rfield 0 (.var .local (ofString "intrinsic"))))
+        (.seq (.store (.op .add [.var .local (ofString "te"), .const 192])
+            (.rfield 1 (.var .local (ofString "intrinsic"))))
+          (.seq .skip tail)))
+      (0 + (0 + (0 + b))) :=
+    seq_bound_trans (hs _ _)
+      (Hoare.mono (P := PtxTeSufTxh) phase2_teSuf_store_intrinsic_zero
+        (fun _ hp => And.left hp)) h67
+  have h65 : TerminatingProgBoundedOn PtxTeSufTxh
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 176])
+          (.var .local (ofString "txh")))
+        (.seq (.store (.op .add [.var .local (ofString "te"), .const 184])
+            (.rfield 0 (.var .local (ofString "intrinsic"))))
+          (.seq (.store (.op .add [.var .local (ofString "te"), .const 192])
+              (.rfield 1 (.var .local (ofString "intrinsic"))))
+            (.seq .skip tail))))
+      (0 + (0 + (0 + (0 + b)))) :=
+    seq_bound_trans (hs _ _) phase2_teSuf_store_txh h66
+  -- the keccak256 hash call
+  have hcall : TerminatingProgBoundedOn PtxTeHashReady
+      (.seq (.call (some (none, none)) (ofString "keccak256")
+          [.rfield 0 (.var .local (ofString "enc")),
+           .rfield 1 (.var .local (ofString "enc")),
+           .var .local (ofString "txh")])
+        (.seq (.store (.op .add [.var .local (ofString "te"), .const 176])
+            (.var .local (ofString "txh")))
+          (.seq (.store (.op .add [.var .local (ofString "te"), .const 184])
+              (.rfield 0 (.var .local (ofString "intrinsic"))))
+            (.seq (.store (.op .add [.var .local (ofString "te"), .const 192])
+                (.rfield 1 (.var .local (ofString "intrinsic"))))
+              (.seq .skip tail)))))
+      ((K.«keccak256» + 1) + (0 + (0 + (0 + (0 + b))))) :=
+    seq_bound_trans
+      (TerminatingProgBoundedOn.call_on h.fb_keccak256 none
+        [.rfield 0 (.var .local (ofString "enc")),
+         .rfield 1 (.var .local (ofString "enc")),
+         .var .local (ofString "txh")]
+        (phase2_teHash_callEntry
+          [.rfield 0 (.var .local (ofString "enc")),
+           .rfield 1 (.var .local (ofString "enc")),
+           .var .local (ofString "txh")]))
+      (phase2_teSuf_keccak_txh h) h65
+  -- the hash-buffer allocation
+  have htxh : TerminatingProgBoundedOn PtxTeSufInv
+      (.decCall (ofString "txh") .one (ofString "alloc") [.const 0x20]
+        (.seq (.call (some (none, none)) (ofString "keccak256")
+            [.rfield 0 (.var .local (ofString "enc")),
+             .rfield 1 (.var .local (ofString "enc")),
+             .var .local (ofString "txh")])
+          (.seq (.store (.op .add [.var .local (ofString "te"), .const 176])
+              (.var .local (ofString "txh")))
+            (.seq (.store (.op .add [.var .local (ofString "te"), .const 184])
+                (.rfield 0 (.var .local (ofString "intrinsic"))))
+              (.seq (.store (.op .add [.var .local (ofString "te"), .const 192])
+                  (.rfield 1 (.var .local (ofString "intrinsic"))))
+                (.seq .skip tail))))))
+      (K.«alloc» + ((K.«keccak256» + 1) + (0 + (0 + (0 + (0 + b))))) + 1) :=
+    TerminatingProgBoundedOn.decCall_on h.fb_alloc (ofString "txh") .one [.const 0x20]
+      (phase2_teSuf_callEntry [.const 0x20]) (phase2_teSuf_alloc_txh h) hcall
+  -- the index and one stores
+  have hsa : TerminatingProgBoundedOn PtxTeSufInv
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 168])
+          (.var .local (ofString "index")))
+        (.decCall (ofString "txh") .one (ofString "alloc") [.const 0x20]
+          (.seq (.call (some (none, none)) (ofString "keccak256")
+              [.rfield 0 (.var .local (ofString "enc")),
+               .rfield 1 (.var .local (ofString "enc")),
+               .var .local (ofString "txh")])
+            (.seq (.store (.op .add [.var .local (ofString "te"), .const 176])
+                (.var .local (ofString "txh")))
+              (.seq (.store (.op .add [.var .local (ofString "te"), .const 184])
+                  (.rfield 0 (.var .local (ofString "intrinsic"))))
+                (.seq (.store (.op .add [.var .local (ofString "te"), .const 192])
+                    (.rfield 1 (.var .local (ofString "intrinsic"))))
+                  (.seq .skip tail)))))))
+      (0 + (K.«alloc» + ((K.«keccak256» + 1) + (0 + (0 + (0 + (0 + b))))) + 1)) :=
+    seq_bound_trans (hs _ _) phase2_teSuf_store_index htxh
+  have hsb : TerminatingProgBoundedOn PtxTeSufInv
+      (.seq (.store (.op .add [.var .local (ofString "te"), .const 160]) (.const 1))
+        (.seq (.store (.op .add [.var .local (ofString "te"), .const 168])
+            (.var .local (ofString "index")))
+          (.decCall (ofString "txh") .one (ofString "alloc") [.const 0x20]
+            (.seq (.call (some (none, none)) (ofString "keccak256")
+                [.rfield 0 (.var .local (ofString "enc")),
+                 .rfield 1 (.var .local (ofString "enc")),
+                 .var .local (ofString "txh")])
+              (.seq (.store (.op .add [.var .local (ofString "te"), .const 176])
+                  (.var .local (ofString "txh")))
+                (.seq (.store (.op .add [.var .local (ofString "te"), .const 184])
+                    (.rfield 0 (.var .local (ofString "intrinsic"))))
+                  (.seq (.store (.op .add [.var .local (ofString "te"), .const 192])
+                      (.rfield 1 (.var .local (ofString "intrinsic"))))
+                    (.seq .skip tail))))))))
+      (0 + (0 + (K.«alloc» + ((K.«keccak256» + 1) + (0 + (0 + (0 + (0 + b))))) + 1))) :=
+    seq_bound_trans (hs _ _) phase2_teSuf_store_const_one hsa
+  -- the setcode conditional stores
+  have hite2 : TerminatingProgBoundedOn PtxTeSufInv
+      (.ite (.cmp .notEqual (.var .local (ofString "issc")) (.const 0))
+        (.seq (.store (.op .add [.var .local (ofString "te"), .const 144])
+            (.load .one (.op .add [.var .local (ofString "tx"), .const 272])))
+          (.store (.op .add [.var .local (ofString "te"), .const 152])
+            (.load .one (.op .add [.var .local (ofString "tx"), .const 280]))))
+        .skip) _ :=
+    TerminatingProgBoundedOn.ite_on
+      (seq_bound_trans (hs _ _) (phase2_teSuf_store_load_one 144 272 (by dsimp; omega))
+        (hs _ _)) hskip
+  -- the setcode flag probe
+  have hissc : TerminatingProgBoundedOn PtxTeSufInv
+      (.decCall (ofString "issc") .one (ofString "tx_is_setcode") [.var .local (ofString "tx")]
+        (.seq (.ite (.cmp .notEqual (.var .local (ofString "issc")) (.const 0))
+            (.seq (.store (.op .add [.var .local (ofString "te"), .const 144])
+                (.load .one (.op .add [.var .local (ofString "tx"), .const 272])))
+              (.store (.op .add [.var .local (ofString "te"), .const 152])
+                (.load .one (.op .add [.var .local (ofString "tx"), .const 280]))))
+            .skip)
+          (.seq (.store (.op .add [.var .local (ofString "te"), .const 160]) (.const 1))
+            (.seq (.store (.op .add [.var .local (ofString "te"), .const 168])
+                (.var .local (ofString "index")))
+              (.decCall (ofString "txh") .one (ofString "alloc") [.const 0x20]
+                (.seq (.call (some (none, none)) (ofString "keccak256")
+                    [.rfield 0 (.var .local (ofString "enc")),
+                     .rfield 1 (.var .local (ofString "enc")),
+                     .var .local (ofString "txh")])
+                  (.seq (.store (.op .add [.var .local (ofString "te"), .const 176])
+                      (.var .local (ofString "txh")))
+                    (.seq (.store (.op .add [.var .local (ofString "te"), .const 184])
+                        (.rfield 0 (.var .local (ofString "intrinsic"))))
+                      (.seq (.store (.op .add [.var .local (ofString "te"), .const 192])
+                          (.rfield 1 (.var .local (ofString "intrinsic"))))
+                        (.seq .skip tail)))))))))) _ :=
+    TerminatingProgBoundedOn.decCall_on h.fb_tx_is_setcode (ofString "issc") .one
+      [.var .local (ofString "tx")] (phase2_teSuf_callEntry [.var .local (ofString "tx")])
+      (phase2_teSuf_issc_resume h)
+      (seq_bound_trans hite2 phase2_teSuf_setcode_ite hsb)
+  -- the blob conditional stores
+  have hite1 : TerminatingProgBoundedOn PtxTeSufInv
+      (.ite (.cmp .notEqual (.var .local (ofString "isb")) (.const 0))
+        (.seq (.store (.op .add [.var .local (ofString "te"), .const 128])
+            (.load .one (.op .add [.var .local (ofString "tx"), .const 256])))
+          (.store (.op .add [.var .local (ofString "te"), .const 136])
+            (.load .one (.op .add [.var .local (ofString "tx"), .const 264]))))
+        .skip) _ :=
+    TerminatingProgBoundedOn.ite_on
+      (seq_bound_trans (hs _ _) (phase2_teSuf_store_load_one 128 256 (by dsimp; omega))
+        (hs _ _)) hskip
+  -- the blob flag probe
+  have hisb : TerminatingProgBoundedOn PtxTeSufInv
+      (.decCall (ofString "isb") .one (ofString "tx_is_blob") [.var .local (ofString "tx")]
+        (.seq (.ite (.cmp .notEqual (.var .local (ofString "isb")) (.const 0))
+            (.seq (.store (.op .add [.var .local (ofString "te"), .const 128])
+                (.load .one (.op .add [.var .local (ofString "tx"), .const 256])))
+              (.store (.op .add [.var .local (ofString "te"), .const 136])
+                (.load .one (.op .add [.var .local (ofString "tx"), .const 264]))))
+            .skip)
+          (.decCall (ofString "issc") .one (ofString "tx_is_setcode")
+              [.var .local (ofString "tx")]
+            (.seq (.ite (.cmp .notEqual (.var .local (ofString "issc")) (.const 0))
+                (.seq (.store (.op .add [.var .local (ofString "te"), .const 144])
+                    (.load .one (.op .add [.var .local (ofString "tx"), .const 272])))
+                  (.store (.op .add [.var .local (ofString "te"), .const 152])
+                    (.load .one (.op .add [.var .local (ofString "tx"), .const 280]))))
+                .skip)
+              (.seq (.store (.op .add [.var .local (ofString "te"), .const 160]) (.const 1))
+                (.seq (.store (.op .add [.var .local (ofString "te"), .const 168])
+                    (.var .local (ofString "index")))
+                  (.decCall (ofString "txh") .one (ofString "alloc") [.const 0x20]
+                    (.seq (.call (some (none, none)) (ofString "keccak256")
+                        [.rfield 0 (.var .local (ofString "enc")),
+                         .rfield 1 (.var .local (ofString "enc")),
+                         .var .local (ofString "txh")])
+                      (.seq (.store (.op .add [.var .local (ofString "te"), .const 176])
+                          (.var .local (ofString "txh")))
+                        (.seq (.store (.op .add [.var .local (ofString "te"), .const 184])
+                            (.rfield 0 (.var .local (ofString "intrinsic"))))
+                          (.seq (.store (.op .add [.var .local (ofString "te"), .const 192])
+                              (.rfield 1 (.var .local (ofString "intrinsic"))))
+                            (.seq .skip tail)))))))))))) _ :=
+    TerminatingProgBoundedOn.decCall_on h.fb_tx_is_blob (ofString "isb") .one
+      [.var .local (ofString "tx")] (phase2_teSuf_callEntry [.var .local (ofString "tx")])
+      (phase2_teSuf_isb_resume h)
+      (seq_bound_trans hite1 phase2_teSuf_blob_ite hissc)
+  -- the four access-list stores
+  have hmain : TerminatingProgBoundedOn PtxTeSufInv (spinePlug 16 (spineAt 53 ptxCode) tail)
+      (0 + (0 + (0 + (0 +
+        (K.«tx_is_blob» + (Nat.max (0 + 0) 0 +
+          (K.«tx_is_setcode» + (Nat.max (0 + 0) 0 +
+            (0 + (0 + (K.«alloc» + ((K.«keccak256» + 1) +
+              (0 + (0 + (0 + (0 + b))))) + 1)))) + 1)) + 1))))) := by
+    rw [he]
+    exact seq_bound_trans (hs _ _) phase2_teSuf_store_al_addrs
+      (seq_bound_trans (hs _ _) phase2_teSuf_store_nal_succ
+      (seq_bound_trans (hs _ _) phase2_teSuf_store_al_keys
+      (seq_bound_trans (hs _ _) phase2_teSuf_store_nkeys hisb)))
+  intro F s hc hp hnt
+  obtain ⟨h1, h2⟩ := hmain s hc hp hnt
+  have hd : Nat.max (0 + 0) 0 = 0 := by rfl
+  rw [hd] at h1
+  exact ⟨by omega, h2⟩
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
