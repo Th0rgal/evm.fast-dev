@@ -1,6 +1,7 @@
 import InitE.Challenge
 import InitECandidate.Solver.ConcreteOracleWitness
 import InitECandidate.Solver.Wave8GuestInv.Certificate
+import InitECandidate.Solver.Wave8Stage.StageTransfer
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -29,7 +30,8 @@ private noncomputable def pendingCompilationWitness :
     compiled := w.compiled
     depthBound := w.depthBound }
 
-private theorem pendingStageTransfer : StageTransfer := sorry
+private theorem pendingStageTransfer : StageTransfer :=
+  InitECandidate.Solver.Wave8Stage.StageTransfer.stageTransfer pendingCompilationWitness rfl
 
 theorem certificate : InitE.Certificate submission claimedScore := by
   rw [claimedScore_eq_K_target]

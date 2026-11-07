@@ -31,7 +31,7 @@ wave8_certified_reduce crepK := crep.arg2
 wave8_certified_reduce crepM := crep.arg3
 wave8_certified_reduce crepParams := crep.arg4
 
-wave8_kernel_reduce crepProgram :=
+wave8_certified_reduce crepProgram :=
   InitECandidate.Solver.CrepKernelComputation.compFuncExactHOLW (width := 64) crepK crepM crepParams panProgram
 
 theorem crepCompileEq : crep = crepProgram :=

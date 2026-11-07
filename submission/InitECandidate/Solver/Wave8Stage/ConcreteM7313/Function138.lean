@@ -1,29 +1,45 @@
 import InitECandidate.Solver.Wave8Stage.PrefixChecks.Shard74
 import InitECandidate.Solver.Wave8Stage.ConcreteM7313.Oracle138
 import InitECandidate.Solver.Wave8Stage.ConcreteM7313.Function137
+import InitECandidate.Solver.Wave8Stage.CertifiedKernelPasses
+import InitECandidate.Solver.Wave8Stage.CertifiedOracleAlloc
 
 set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 200000
-set_option maxHeartbeats 8000000
-set_option cbv.maxSteps 10000000
+set_option maxHeartbeats 128000000
 
 namespace InitECandidate.Solver.Wave8Stage.ConcreteM7313.Function138
 open InitE Flapjack Flapjack.Compiler.Backend
 open Flapjack.Compiler.Encoders.RiscV.Target
+open InitECandidate.Solver.Wave8Stage
 open BackendDecomposition PrefixChecks.Shard74
 
-wave8_certified_reduce allocated := WordToWord.wordAllocWith RegAlloc.regAllocExecutable
-  name riscvConfig (oracleCompilerConfig []).wordToWordConf.regAlg registers
-  prefixProgram oracle138
-wave8_certified_reduce program := WordRemove.removeMustTerminate allocated
+private def col138 : Spt Nat := oracle138.getD .ln
+private theorem oracle138_eq_some : oracle138 = some col138 := rfl
+private abbrev tcol138 : Nat → Nat := WordAlloc.totalColour col138
+
+wave8_kernel_reduce clashTree := getClashTreeS prefixProgram []
+wave8_kernel_reduce forced := getForcedS riscvConfig prefixProgram []
+wave8_kernel_reduce evenOk := everyEvenColourFast col138
+wave8_certify_clash clashOk := tcol138 on clashTree
+wave8_kernel_reduce allocated := applyColourFast tcol138 prefixProgram
+wave8_kernel_reduce stackOk := everyStackVarFast (fun x => decide (2 * registers ≤ x)) allocated
+wave8_kernel_reduce forcedOk := forced.all (fun (x, y) => tcol138 x != tcol138 y)
+wave8_kernel_reduce program := WordRemove.removeMustTerminate allocated
+
+theorem allocated_eq_full :
+    WordToWord.wordAllocWith RegAlloc.regAllocExecutable name riscvConfig
+      (oracleCompilerConfig []).wordToWordConf.regAlg registers prefixProgram oracle138 = allocated :=
+  wordAllocWith_oracle_fast _ _ _ _ _ _ _ _ col138 clashTree forced
+    oracle138_eq_some clashTree_eq forced_eq evenOk_eq clashOk_eq allocated_eq stackOk_eq forcedOk_eq
 
 theorem wordFunction_eq : wordFunction oracle138 entry = (name, arity, program) := by
   unfold wordFunction
   rw [word_eq.trans wordCompileEq, arity_eq, name_eq, prefixCompileEq,
-    allocated_eq, program_eq]
+    allocated_eq_full, program_eq]
 
-wave8_certified_reduce stackResult := WordToStack.Native.compileProgNative
+wave8_kernel_reduce stackResult := WordToStack.Native.compileProgNative
   riscvConfig false program arity registers Function137.stackResult.2.2
 
 end InitECandidate.Solver.Wave8Stage.ConcreteM7313.Function138

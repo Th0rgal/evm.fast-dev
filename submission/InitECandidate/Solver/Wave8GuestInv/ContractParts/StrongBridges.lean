@@ -9,6 +9,8 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FramePrologueExcept
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FramePrologueCallees
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodySysTxExecBlock
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.NodeRlpFill
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.BuildMptIndexed
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkHostPayloadHeaders
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.Depth0FrameOpen
@@ -262,5 +264,34 @@ theorem frame_open_headMemChainWF_B' :
     KeepsOn R16Shards.OpHandlersB.HeadMemBridge.FrameOpenReadyB
       R16Shards.OpHandlersB.HeadMemBridge.HeadMemChainWF (ofString "frame_open") :=
   R16Shards.OpHandlersB.HeadMemBridge.frame_open_headMemChainWF_B'
+
+theorem gbody_node_rlp_strong
+    (hf : TerminatingFunBoundedOn R16Shards.MptC10C12.NodeRlpReadyStrong
+      (ofString "_node_rlp_fill") K.«_node_rlp_fill»)
+    (hm : TerminatingFunBoundedOn GuestInv (ofString "mpt_fail") K.«mpt_fail»)
+    (hr : ReadOnlyFn (ofString "mpt_fail")) :
+    TerminatingFunBoundedOn R16Shards.MptC10C12.NodeRlpReadyNonNull
+      (ofString "node_rlp") K.«node_rlp» :=
+  R16Shards.MptC10C12.gbody_node_rlp_strong hf hm hr
+
+theorem gbody_node_hash_strong
+    (ha : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
+    (hk : TerminatingFunBoundedOn GuestInv (ofString "keccak256") K.«keccak256»)
+    (hn : TerminatingFunBoundedOn R16Shards.MptC10C12.NodeRlpReadyNonNull
+      (ofString "node_rlp") K.«node_rlp») :
+    TerminatingFunBoundedOn R16Shards.MptC10C12.NodeRlpReadyNonNull
+      (ofString "node_hash") K.«node_hash» :=
+  R16Shards.MptC10C12.gbody_node_hash_strong ha hk hn
+
+theorem gbody_mpt_root_strong
+    (hm : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»)
+    (hn : TerminatingFunBoundedOn R16Shards.MptC10C12.NodeRlpReadyNonNull
+      (ofString "node_hash") K.«node_hash») :
+    TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root» :=
+  R16Shards.MptC10C12.gbody_mpt_root_strong hm hn
+
+theorem gbody_build_mpt_indexed_strong :
+    type_of% @R16Shards.MptC10C12.gbody_build_mpt_indexed :=
+  R16Shards.MptC10C12.gbody_build_mpt_indexed
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges

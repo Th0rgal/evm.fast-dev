@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8Stage.ConcreteBackendBound
+import InitECandidate.Solver.GuestPrefixChecks
 
 /-!
 # Proofs-free Stage 5 top-level transfer & certificate assembly (`StageTransfer`)
@@ -116,5 +117,25 @@ theorem certificate_of_missing_segments
     InitE.Certificate Wave8GuestInv.submission (.finite K_target) :=
   LeanBridge.finite_certificate_of_witness w K_target
     (targetClockBound_of_missing_segments w same checked seg00To27 seg34To49 source)
+
+theorem stageTransfer
+    (w : LeanBridge.ConcreteOracleCompilationWitness)
+    (same : w.oracles = oracles) :
+    Wave8GuestInv.StageTransfer :=
+  DirectBackendBound.concreteStageTransfer w same
+    GuestPrefixChecks.word_all_checked ConcreteBackendBound.concreteBackendBound
+
+theorem targetClockBound
+    (w : LeanBridge.ConcreteOracleCompilationWitness)
+    (same : w.oracles = oracles)
+    (source : UniformSourceClock.CoveredSourceUniformNotTimeOut K_pan) :
+    Wave8GuestInv.TargetClockBound :=
+  stageTransfer w same source
+
+theorem certificate_of_witness
+    (w : LeanBridge.ConcreteOracleCompilationWitness)
+    (same : w.oracles = oracles) :
+    InitE.Certificate Wave8GuestInv.submission (.finite K_target) :=
+  Wave8GuestInv.certificate_of_stage_transfer w (stageTransfer w same)
 
 end InitECandidate.Solver.Wave8Stage.StageTransfer

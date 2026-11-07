@@ -1,5 +1,10 @@
 import InitECandidate.Solver.Wave8Stage.ConcreteM7313.AllTables
 import InitECandidate.Solver.Wave8Stage.ConcreteM7313.AllBounded
+import InitECandidate.Solver.Wave8Stage.ConcreteM7313.Table04
+import InitECandidate.Solver.Wave8Stage.ConcreteM7313.Table05_27
+import InitECandidate.Solver.Wave8Stage.ConcreteM7313.Bounded00_27
+import InitECandidate.Solver.Wave8Stage.ConcreteM7313.Table28_50
+import InitECandidate.Solver.Wave8Stage.ConcreteM7313.Bounded28_50
 import InitECandidate.Solver.Wave8Stage.DirectBackendBound
 
 /-!
@@ -179,5 +184,107 @@ theorem backendBound_of_missing_segments
     ConcreteStageTransferBridge.BackendBound w :=
   DirectBackendBound.backendBound_of_concrete w same
     (concreteBackendBound_of_missing_segments seg00To27 seg34To49)
+
+theorem oracles_drop_48_take_16 :
+    (oracles.drop 48).take 16 = [oracle112, oracle113, oracle114, oracle115, oracle116, oracle117, oracle118, oracle119,
+      oracle120, oracle121, oracle122, oracle123, oracle124, oracle125, oracle126, oracle127] := rfl
+
+theorem oracles_drop_64_take_16 :
+    (oracles.drop 64).take 16 = [oracle128, oracle129, oracle130, oracle131, oracle132, oracle133, oracle134, oracle135,
+      oracle136, oracle137, oracle138, oracle139, oracle140, oracle141, oracle142, oracle143] := rfl
+
+theorem words03_eq :
+    ((ConcreteCompilerWord.source.take 64).zip (oracles.take 64)).map
+      (fun p => wordFunction p.2 p.1) = Table03.words := by
+  have hs : ConcreteCompilerWord.source.length = 814 := rfl
+  have ho : oracles.length = 814 := oracles_length
+  have ht1 : (ConcreteCompilerWord.source.take 64).take 48 = ConcreteCompilerWord.source.take 48 := by
+    simp [List.take_take]
+  have ho1 : (oracles.take 64).take 48 = oracles.take 48 := by
+    simp [List.take_take]
+  have ht2 : (ConcreteCompilerWord.source.take 64).drop 48 = (ConcreteCompilerWord.source.drop 48).take 16 := by
+    simp [List.drop_take]
+  have ho2 : (oracles.take 64).drop 48 = (oracles.drop 48).take 16 := by
+    simp [List.drop_take]
+  rw [AllTables.zip_map_split (fun p => wordFunction p.2 p.1) 48
+      (ConcreteCompilerWord.source.take 64) (oracles.take 64) (by simp [hs, ho]),
+      ht1, ho1, ht2, ho2, AllTables.words02_eq, oracles_drop_48_take_16, Chunk03.words_eq]
+  rfl
+
+theorem words04_eq :
+    ((ConcreteCompilerWord.source.take 80).zip (oracles.take 80)).map
+      (fun p => wordFunction p.2 p.1) = Table04.words := by
+  have hs : ConcreteCompilerWord.source.length = 814 := rfl
+  have ho : oracles.length = 814 := oracles_length
+  have ht1 : (ConcreteCompilerWord.source.take 80).take 64 = ConcreteCompilerWord.source.take 64 := by
+    simp [List.take_take]
+  have ho1 : (oracles.take 80).take 64 = oracles.take 64 := by
+    simp [List.take_take]
+  have ht2 : (ConcreteCompilerWord.source.take 80).drop 64 = (ConcreteCompilerWord.source.drop 64).take 16 := by
+    simp [List.drop_take]
+  have ho2 : (oracles.take 80).drop 64 = (oracles.drop 64).take 16 := by
+    simp [List.drop_take]
+  rw [AllTables.zip_map_split (fun p => wordFunction p.2 p.1) 64
+      (ConcreteCompilerWord.source.take 80) (oracles.take 80) (by simp [hs, ho]),
+      ht1, ho1, ht2, ho2, words03_eq, oracles_drop_64_take_16, Chunk04.words_eq]
+  rfl
+
+theorem oracles_05_27_eq : (oracles.drop 80).take 368 = Table05_27.oracles := rfl
+
+theorem oracles_28_50_eq : oracles.drop 448 = Table28_50.oracles := rfl
+
+theorem words05_27_eq :
+    (((ConcreteCompilerWord.source.drop 80).take 368).zip
+      ((oracles.drop 80).take 368)).map (fun p => wordFunction p.2 p.1) = Table05_27.words := by
+  rw [oracles_05_27_eq]
+  exact Table05_27.words_eq
+
+theorem stackResult143_offset : Function143.stackResult.2.2 = (Function143.stackResult.2.2.1, 107) := by
+  apply Prod.ext rfl
+  decide
+
+theorem segment00To27_proved : Segment00To27 := by
+  refine segment00To27_of_streamB_and_streamC
+    Table04.words Table05_27.words Table04.bodies Table05_27.bodies
+    Table04.frames Table05_27.frames Function143.stackResult.2.2
+    (BitmapPrepend.prependAppList Function143.stackResult.2.2.1 Table05_27.bitmapDelta)
+    Frames04.info
+    words04_eq words05_27_eq Table04.compiled ?_ Table04.collected Table05_27.collected
+    Bounded00_27.bounded04 Bounded00_27.bounded05_27
+  rw [stackResult143_offset]
+  exact Table05_27.compiled Function143.stackResult.2.2.1
+
+theorem concreteBackendBound : DirectBackendBound.concreteBackendBound := by
+  rcases segment00To27_proved.exists_segment with
+    ⟨words00To27, bodies00To27, frames00To27, bitmap27, hw00, hc00, hcol00, hb00⟩
+  have hs : ConcreteCompilerWord.source.length = 814 := rfl
+  have ho : oracles.length = 814 := oracles_length
+  have hwords :
+      (ConcreteCompilerWord.source.zip oracles).map (fun p => wordFunction p.2 p.1) =
+        words00To27 ++ Table28_50.words := by
+    rw [AllTables.zip_map_split (fun p => wordFunction p.2 p.1) 448
+        ConcreteCompilerWord.source oracles (by simp [hs, ho]),
+        hw00, oracles_28_50_eq, Table28_50.words_eq]
+  have hcompiled :=
+    TableComposition.compile_append _ _ _ _ _ _ _ _ _ hc00 (Table28_50.compiled bitmap27)
+  have hcollected :
+      StackRawCall.collectInfo (nativeStubs ++ (bodies00To27 ++ Table28_50.bodies)) .ln =
+        GlobalFrameInfo.info := by
+    rw [← List.append_assoc, TableComposition.collectInfo_append, hcol00, Table28_50.collected]
+  have hbounded :=
+    bounded_append GlobalFrameInfo.info _ _ hb00 Bounded28_50.bounded
+  exact concreteBackendBound_of_table
+    (words00To27 ++ Table28_50.words)
+    (bodies00To27 ++ Table28_50.bodies)
+    (frames00To27 ++ Table28_50.frames)
+    (BitmapPrepend.prependAppList bitmap27 Table28_50.bitmapDelta, 4603)
+    GlobalFrameInfo.info
+    hwords hcompiled hcollected rfl hbounded
+
+theorem backendBound
+    (w : LeanBridge.ConcreteOracleCompilationWitness)
+    (same : w.oracles = oracles) :
+    ConcreteStageTransferBridge.BackendBound w :=
+  DirectBackendBound.backendBound_of_concrete w same concreteBackendBound
 
 end InitECandidate.Solver.Wave8Stage.ConcreteBackendBound
