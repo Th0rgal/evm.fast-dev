@@ -12003,4 +12003,1902 @@ theorem wk_process_transaction_strong_of
   unfold PtxRelRunStrong PtxLogsAndSlices R13Shards.ptxCode ptxRegions ptxGlobals ptxKeep at hb
   exact hb
 
+
+open private eval_sk_make_body
+  from InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmFrameSpecs
+open private journalAppendTailProg callee_param_two_r16 seq_call0_ret_inv
+  acct_copy_step worldStepSc_preserves_ts32
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+open private acct_new_params
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
+
+/-! # Phase 5: block-output unhit carried alongside WorldStepSc -/
+
+def NonExResult (r : Option (PanSemResultExact 64)) : Prop :=
+  r = none ∨ r = some .continue ∨ r = some .break ∨ ∃ v, r = some (.returned v)
+
+def WorldStepScBo (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl)
+    (gw : List String) (keep : List (String × List Nat))
+    (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop)
+    {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (r : Option (PanSemResultExact 64)) (post : PanSemStateFiniteExact 64 F) : Prop :=
+  WorldStepSc R gw keep Q s r post ∧ (NonExResult r → PtxBlockOutUnhit s post)
+
+def WorldKeepsScBo (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl)
+    (gw : List String) (keep : List (String × List Nat))
+    (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop)
+    (fname : MlS) : Prop :=
+  FunSpec P (fun s r post => Resumes r → WorldStepScBo R gw keep Q s r post) fname
+
+theorem worldKeepsScBo_of_worldKeepsSc
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {fname : MlS}
+    (h : WorldKeepsSc P R gw keep Q fname)
+    (hbo : ∀ {F : Type} {s post : PanSemStateFiniteExact 64 F}
+        {r : Option (PanSemResultExact 64)},
+      P s → Resumes r → WorldStepSc R gw keep Q s r post → PtxBlockOutUnhit s post) :
+    WorldKeepsScBo P R gw keep Q fname := by
+  rcases h with ⟨ps, body, ret, hl, hrun⟩
+  refine ⟨ps, body, ret, hl, fun s hc hP hex hnt hres => ?_⟩
+  have hs := hrun s hc hP hex hnt hres
+  exact ⟨hs, fun _ => hbo hP hres hs⟩
+
+theorem blockOut_allocated_words {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {b : Ivl}
+    (hWT : WorldTypedWith s S Nd) (hb : b ∈ blockOutObjects s) (hbpos : b.2 ≠ 0) :
+    b ∈ fixedObjects s ∧ Allocated s b ∧ b.1 % 8 = 0 ∧ b.2 % 8 = 0 := by
+  have hfix : b ∈ fixedObjects s := by
+    unfold fixedObjects
+    exact List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr hb)))
+  rcases hWT.2.2.1.1 b hfix with hz | ⟨hal, hw⟩
+  · exact absurd hz hbpos
+  · exact ⟨hfix, hal, hw.1, hw.2.1⟩
+
+theorem ptxBlockOutUnhit_of_nonempty {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (h : ∀ i, i ∈ blockOutObjects s → i.2 ≠ 0 → IvlUnhit s post i) :
+    PtxBlockOutUnhit s post := by
+  intro i hi a ha hh
+  by_cases hz : i.2 = 0
+  · rw [blockOut_len_zero hi hz] at hh
+    exact absurd hh (R10Shards.Fast_GbodyC17ToC21.not_cellHits_zero a.toNat)
+  · exact h i hi hz a ha hh
+
+theorem globN_bo_eq_of_safeGlobals {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hgw : SafeStepGlobals gw) (h : WorldStep R gw keep Q s r post) :
+    globN post "bo" = globN s "bo" :=
+  globN_eq_of_lookup (h.2.2.1 (ofString "bo") (hgw.not_mem_map (by decide)))
+
+theorem ptx_bo_fields_eq_of_step {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {B : BufList} {gw : List String}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hB : ValidBufList B) (_hgw : SafeStepGlobals gw) (hW : WorldOK s)
+    (h : WorldStep (bufRegions B) gw stdKeep Q s r post) :
+    ∀ off ∈ ([24, 32, 40, 56, 72, 80] : List Nat),
+      globN s "bo" ≠ 0 → memW post (globN s "bo" + off) = memW s (globN s "bo" + off) := by
+  intro off hoff hnz
+  obtain ⟨_, S', hWT'⟩ := hW
+  obtain ⟨Nd', hWT⟩ := (worldTyped_iff_with s S').1 hWT'
+  exact ptx_bo_field_eq_of_step hB hWT h.2.2.2.1
+    (offs := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp [stdKeep]) hnz
+    (by simp at hoff ⊢; omega)
+    (by simp at hoff; rcases hoff with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+    (by simp at hoff; rcases hoff with rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+
+theorem blockOutObjects_stable_of_step {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {B : BufList} {gw : List String}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw) (hW : WorldOK s)
+    (h : WorldStep (bufRegions B) gw stdKeep Q s r post)
+    (hu : PtxBlockOutUnhit s post) :
+    blockOutObjects post = blockOutObjects s := by
+  have ⟨hA, S', hWT'⟩ := hW
+  obtain ⟨Nd', hWT⟩ := (worldTyped_iff_with s S').1 hWT'
+  exact blockOutObjects_eq_of_ptxBlockOutUnhit hA hWT
+    (globN_bo_eq_of_safeGlobals hgw h)
+    (ptx_bo_fields_eq_of_step hB hgw hW h) hu
+
+theorem ptxBlockOutUnhit_trans_step {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    {B : BufList} {gw : List String}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw) (hW : WorldOK s)
+    (hstep : WorldStep (bufRegions B) gw stdKeep Q s r mid)
+    (hsm : PtxBlockOutUnhit s mid) (hmp : PtxBlockOutUnhit mid post) :
+    PtxBlockOutUnhit s post :=
+  ptxBlockOutUnhit_trans hsm hmp (blockOutObjects_stable_of_step hB hgw hW hstep hsm)
+
+theorem ptxBlockOutUnhit_sk_make_eval {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hW : WorldOK s) (hT : WorldTypedWith s S Nd)
+    (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1) :
+    PtxBlockOutUnhit s (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).2 := by
+  have hfit : globN s "sk_buf" + 52 ≤ 2 ^ 64 := by
+    by_cases hz : globN s "sk_buf" = 0
+    · rw [hz]; decide
+    · have hmem : (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 64) ∈ fixedObjects s := by
+        unfold fixedObjects
+        apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+        exact List.mem_map.2 ⟨("sk_buf", 64), by decide, rfl⟩
+      rw [if_neg hz] at hmem
+      rcases EvmBase.fixedObject_le_2pow64 hW.1.2 hT.2.2.1 hmem with h0 | hbnd
+      · dsimp only at h0; omega
+      · dsimp only at hbnd; omega
+  obtain ⟨_, _, hnz, he⟩ := eval_sk_make_body s hW.1.1.code hW.1.1.memaddrs hfit hres
+  apply ptxBlockOutUnhit_of_nonempty
+  intro b hb hbpos a ha hit
+  apply he.cell_frame a
+  intro i hi _ hhit
+  simp only [List.mem_singleton] at hi
+  subst i
+  have ⟨_, _, hb1, hb2⟩ := blockOut_allocated_words hT hb hbpos
+  have hsk8 : globN s "sk_buf" % 8 = 0 := by
+    have hmem : (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 64) ∈ fixedObjects s := by
+      unfold fixedObjects
+      apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+      exact List.mem_map.2 ⟨("sk_buf", 64), by decide, rfl⟩
+    rw [if_neg hnz] at hmem
+    rcases hT.2.2.1.1 _ hmem with h0 | ⟨_, hw⟩
+    · dsimp only at h0; omega
+    · exact hw.1
+  have hd := PtxP34.blockOut_disj_global_buffer hT.2.2.1 hb (g := ("sk_buf", 64)) (by decide)
+  simp only [bufferRegion, if_neg hnz] at hd
+  unfold Disj at hd
+  unfold CellHits at hit hhit
+  dsimp only at hd hit hhit
+  rcases hd with h0 | h0 | hl' | hr' <;> omega
+
+theorem worldKeepsScBo_sk_make :
+    WorldKeepsScBo WorldOK (bufRegions [("sk_buf", 52)]) [] stdKeep NoExtra (ofString "sk_make") := by
+  obtain ⟨ps, body, ret, hl, hb⟩ := worldKeepsSc_sk_make
+  have hbody : body = sourceFnBody Guest.Software.guestFn_sk_make := by
+    have h1 := EvmFrameSpecs.lookup_sk_make
+    rw [hl] at h1
+    exact (Prod.mk.inj (Prod.mk.inj (Option.some.inj h1)).2).1
+  subst hbody
+  refine ⟨ps, _, ret, hl, fun s hc hW hex hnt hres => ⟨hb s hc hW hex hnt hres, fun _ => ?_⟩⟩
+  have ⟨_, S', hWT'⟩ := hW
+  obtain ⟨Nd', hWT⟩ := (worldTyped_iff_with s S').1 hWT'
+  exact ptxBlockOutUnhit_sk_make_eval s S' Nd' hW hWT hres
+
+/-! ## `WorldStepScBo` and `ProgWStepBo` Combinators -/
+
+theorem ptxBlockOutUnhit_with_locals_clock {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (h : PtxBlockOutUnhit s post) :
+    PtxBlockOutUnhit s { post with locals := L, clock := k } :=
+  h
+
+theorem ptxBlockOutUnhit_of_pre_locals_clock {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {L : HolFiniteMapExact MlS (ValueHOL 64)} {k : Nat}
+    (h : PtxBlockOutUnhit { s with locals := L, clock := k } post) :
+    PtxBlockOutUnhit s post :=
+  h
+
+theorem WorldStepScBo.refl {F : Type}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String}
+    (s : PanSemStateFiniteExact 64 F) (r : Option (PanSemResultExact 64))
+    (hA : ArenaReady s) :
+    WorldStepScBo R gw stdKeep NoExtra s r s :=
+  ⟨WorldStepSc.refl s r hA, fun _ => ptxBlockOutUnhit_refl s⟩
+
+theorem WorldStepScBo.with_locals_clock {F : Type}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {s post : PanSemStateFiniteExact 64 F} {r r' : Option (PanSemResultExact 64)}
+    (h : WorldStepScBo R gw keep NoExtra s r post)
+    (himp : NonExResult r' → NonExResult r)
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    WorldStepScBo R gw keep NoExtra s r' { post with locals := L, clock := k } :=
+  ⟨h.1.with_locals_clock L k, fun hn => h.2 (himp hn)⟩
+
+theorem WorldStepScBo.of_pre_locals_clock {F : Type}
+    {B : BufList} {gw : List String} {keep : List (String × List Nat)}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {L : HolFiniteMapExact MlS (ValueHOL 64)} {k : Nat}
+    (h : WorldStepScBo (bufRegions B) gw keep NoExtra { s with locals := L, clock := k } r post) :
+    WorldStepScBo (bufRegions B) gw keep NoExtra s r post :=
+  ⟨WorldStepSc.of_pre_locals_clock h.1, h.2⟩
+
+theorem WorldStepScBo.from_entry {F : Type}
+    {B : BufList} {gw : List String} {keep : List (String × List Nat)}
+    {s post : PanSemStateFiniteExact 64 F} {r r' : Option (PanSemResultExact 64)}
+    {callee L : HolFiniteMapExact MlS (ValueHOL 64)} {k : Nat}
+    (h : WorldStepScBo (bufRegions B) gw keep NoExtra (callEntryStateHOLFinite s callee) r post)
+    (himp : NonExResult r' → NonExResult r) :
+    WorldStepScBo (bufRegions B) gw keep NoExtra s r' { post with locals := L, clock := k } :=
+  (WorldStepScBo.of_pre_locals_clock h).with_locals_clock himp L k
+
+theorem WorldStepScBo.mono_bufs {F : Type}
+    {B1 B2 : BufList} {gw1 gw2 : List String}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hB : ∀ p ∈ B1, p ∈ B2) (hgw : ∀ g ∈ gw1, g ∈ gw2)
+    (h : WorldStepScBo (bufRegions B1) gw1 stdKeep NoExtra s r post) :
+    WorldStepScBo (bufRegions B2) gw2 stdKeep NoExtra s r post :=
+  ⟨h.1.mono_bufs hB hgw, h.2⟩
+
+theorem WorldStepScBo.trans_flow {F : Type}
+    {B : BufList} {gw : List String}
+    {s1 s2 s3 : PanSemStateFiniteExact 64 F}
+    {r1 r2 : Option (PanSemResultExact 64)}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw) (hW1 : WorldOK s1)
+    (h12 : WorldStepScBo (bufRegions B) gw stdKeep NoExtra s1 r1 s2)
+    (hr1 : NonExResult r1)
+    (h23 : WorldStepScBo (bufRegions B) gw stdKeep NoExtra s2 r2 s3) :
+    WorldStepScBo (bufRegions B) gw stdKeep NoExtra s1 r2 s3 :=
+  ⟨WorldStepSc.trans hB hgw h12.1 h23.1, fun hr2 =>
+    ptxBlockOutUnhit_trans_step hB hgw hW1 h12.1.1 (h12.2 hr1) (h23.2 hr2)⟩
+
+def ProgWStepBo (B : BufList) (gw : List String) (prog : ProgHOL 64) : Prop :=
+  ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+    s.code = originalRuntimeCode → WorldOK s →
+    (evaluateHOLFiniteState s prog).1 ≠ some .timeOut →
+    FlowingOrResumes (evaluateHOLFiniteState s prog).1 →
+    WorldStepScBo (bufRegions B) gw stdKeep NoExtra
+      s (evaluateHOLFiniteState s prog).1 (evaluateHOLFiniteState s prog).2
+
+theorem progWStepBo_mono {B1 B2 : BufList} {gw1 gw2 : List String} {prog : ProgHOL 64}
+    (hB : ∀ p ∈ B1, p ∈ B2) (hgw : ∀ g ∈ gw1, g ∈ gw2)
+    (h : ProgWStepBo B1 gw1 prog) : ProgWStepBo B2 gw2 prog :=
+  fun s hc hW hnt hfr => (h s hc hW hnt hfr).mono_bufs hB hgw
+
+theorem progWStepBo_skip (B : BufList) (gw : List String) : ProgWStepBo B gw .skip := by
+  intro F s _ hW _ _
+  rw [evaluateHOLFiniteState_skip]
+  exact WorldStepScBo.refl s none hW.1
+
+theorem progWStepBo_return (B : BufList) (gw : List String) (e : ExpHOL 64) :
+    ProgWStepBo B gw (.return e) := by
+  intro F s _ hW _ hfr
+  rw [evaluateHOLFiniteState_return] at hfr ⊢
+  rcases hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e with _ | v
+  · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [hev] at hfr ⊢
+    split
+    · exact (WorldStepScBo.refl s none hW.1).with_locals_clock (fun _ => Or.inl rfl) _ s.clock
+    · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+theorem progWStepBo_assign_local (B : BufList) (gw : List String) (x : MlS) (e : ExpHOL 64) :
+    ProgWStepBo B gw (.assign .local x e) := by
+  intro F s _ hW _ hfr
+  rw [evaluateHOLFiniteState_assign] at hfr ⊢
+  rcases hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e with _ | v
+  · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [hev] at hfr ⊢
+    by_cases hv : s.isValidValueHOLFinite .local x v = true
+    · rw [if_pos hv]
+      exact (WorldStepScBo.refl s none hW.1).with_locals_clock (fun _ => Or.inl rfl) _ s.clock
+    · rw [if_neg hv] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+theorem progWStepBo_dec {B : BufList} {gw : List String} {x : MlS} {sh : ShapeHOL} {e : ExpHOL 64}
+    {body : ProgHOL 64} (hb : ProgWStepBo B gw body) :
+    ProgWStepBo B gw (.dec x sh e body) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  rcases hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e with _ | val
+  · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [hev] at hnt hfr ⊢
+    by_cases hok : shapeEqHOL sh (shapeOfHOLExact val) = true
+    · simp only [hok, ↓reduceIte] at hnt hfr ⊢
+      set s1 := setVarHOLFinite x val s
+      have hW1 : WorldOK s1 := localsFree_worldOK s _ s.clock hW
+      have hstep := hb s1 hc hW1 hnt hfr
+      exact (WorldStepScBo.of_pre_locals_clock hstep).with_locals_clock id _ (evaluateHOLFiniteState s1 body).2.clock
+    · simp [hok] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+theorem progWStepBo_ite {B : BufList} {gw : List String} {cond : ExpHOL 64} {yes no : ProgHOL 64}
+    (hy : ProgWStepBo B gw yes) (hn : ProgWStepBo B gw no) :
+    ProgWStepBo B gw (.ite cond yes no) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_ite] at hnt hfr ⊢
+  rcases hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) cond with _ | cv
+  · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · rcases cv with ⟨⟨w⟩⟩ | _ | _
+    · simp only [hev] at hnt hfr ⊢
+      by_cases hw : w = 0
+      · simp only [hw, ↓reduceIte] at hnt hfr ⊢; exact hn s hc hW hnt hfr
+      · simp only [hw, ↓reduceIte] at hnt hfr ⊢; exact hy s hc hW hnt hfr
+    · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+theorem progWStepBo_seq {B : BufList} {gw : List String} {p1 p2 : ProgHOL 64}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (h1 : ProgWStepBo B gw p1) (h2 : ProgWStepBo B gw p2) :
+    ProgWStepBo B gw (.seq p1 p2) := by
+  intro F s hc hW hnt hfr
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s p1).1
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases hr1 : evaluateHOLFiniteState s p1 with ⟨r1, mid⟩
+  simp only [hr1] at hmeta hnt hfr ⊢
+  cases r1 with
+  | none =>
+    have hs1 := h1 s hc hW (by rw [hr1]; simp) (by rw [hr1]; exact Or.inl rfl)
+    rw [hr1] at hs1; dsimp only at hs1
+    have hW_mid : WorldOK mid := hs1.1.worldOK_bufs hB hW
+    have hs2 := h2 mid (hmeta.trans hc) hW_mid hnt hfr
+    exact WorldStepScBo.trans_flow hB hgw hW hs1 (Or.inl rfl) hs2
+  | some r =>
+    have hs1 := h1 s hc hW (by rw [hr1]; exact hnt) (by rw [hr1]; exact hfr)
+    rw [hr1] at hs1
+    exact hs1
+
+theorem progWStepBo_while {B : BufList} {gw : List String} {cond : ExpHOL 64} {body : ProgHOL 64}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hb : ProgWStepBo B gw body) :
+    ProgWStepBo B gw (.while cond body) := by
+  intro F s0 hc0 hW0 hnt0 hfr0
+  suffices ∀ (k : Nat) (s : PanSemStateFiniteExact 64 F),
+      s.clock = k → s.code = originalRuntimeCode → WorldOK s →
+      (evaluateHOLFiniteState s (.while cond body)).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState s (.while cond body)).1 →
+      WorldStepScBo (bufRegions B) gw stdKeep NoExtra
+        s (evaluateHOLFiniteState s (.while cond body)).1
+        (evaluateHOLFiniteState s (.while cond body)).2 from
+    this s0.clock s0 rfl hc0 hW0 hnt0 hfr0
+  intro k
+  induction k using Nat.strong_induction_on with
+  | h k ih =>
+    intro s hclk hc hW hnt hfr
+    rw [evaluateHOLFiniteState_while_fixClockRewrite] at hnt hfr ⊢
+    rcases hev : @evalHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) cond with
+      _ | cv
+    · simp only [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hev] at hnt hfr ⊢
+      rcases cv with ⟨⟨w⟩⟩ | _ | _
+      · dsimp only at hnt hfr ⊢
+        by_cases hw : w = 0
+        · subst hw; exact WorldStepScBo.refl s none hW.1
+        · rw [if_pos hw] at hnt hfr ⊢
+          by_cases hk0 : s.clock = 0
+          · simp [hk0] at hnt
+          · rw [if_neg hk0] at hnt hfr ⊢
+            set sd := decClockHOLFinite s
+            have hWd : WorldOK sd := localsFree_worldOK s s.locals (s.clock - 1) hW
+            have hclk_le := evaluateHOLFiniteState_clock_le sd body
+            have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata sd body).1
+            rcases hbo : evaluateHOLFiniteState sd body with ⟨rb, mid⟩
+            have hbo' : evaluateHOLFiniteState (decClockHOLFinite s) body = (rb, mid) := hbo
+            simp only [sd, hbo'] at hnt hfr hclk_le hmeta ⊢
+            have hmid_lt : mid.clock < k := by
+              change mid.clock ≤ s.clock - 1 at hclk_le; omega
+            have hnt_b : (evaluateHOLFiniteState sd body).1 ≠ some .timeOut := by
+              rw [hbo]; rintro rfl; exact hnt rfl
+            cases rb with
+            | none =>
+              have hsb := hb sd hc hWd hnt_b (by rw [hbo]; exact Or.inl rfl)
+              rw [hbo] at hsb
+              have hW_mid : WorldOK mid := hsb.1.worldOK_bufs hB hWd
+              have hsb' : WorldStepScBo (bufRegions B) gw stdKeep NoExtra s none mid :=
+                (WorldStepScBo.of_pre_locals_clock hsb).with_locals_clock id mid.locals mid.clock
+              have htail := ih mid.clock hmid_lt mid rfl (hmeta.trans hc) hW_mid hnt hfr
+              exact WorldStepScBo.trans_flow hB hgw hW hsb' (Or.inl rfl) htail
+            | some r =>
+              cases r with
+              | «continue» =>
+                have hsb := hb sd hc hWd hnt_b (by rw [hbo]; exact Or.inr (Or.inl rfl))
+                rw [hbo] at hsb
+                have hW_mid : WorldOK mid := hsb.1.worldOK_bufs hB hWd
+                have hsb' : WorldStepScBo (bufRegions B) gw stdKeep NoExtra s (some .continue) mid :=
+                  (WorldStepScBo.of_pre_locals_clock hsb).with_locals_clock id mid.locals mid.clock
+                have htail := ih mid.clock hmid_lt mid rfl (hmeta.trans hc) hW_mid hnt hfr
+                exact WorldStepScBo.trans_flow hB hgw hW hsb' (Or.inr (Or.inl rfl)) htail
+              | «break» =>
+                have hsb := hb sd hc hWd hnt_b (by rw [hbo]; exact Or.inr (Or.inr (Or.inl rfl)))
+                rw [hbo] at hsb
+                exact (WorldStepScBo.of_pre_locals_clock hsb).with_locals_clock
+                  (fun _ => Or.inr (Or.inr (Or.inl rfl))) mid.locals mid.clock
+              | timeOut => exact absurd rfl hnt
+              | error => exact absurd hfr not_flowingOrResumes_error
+              | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+              | returned v =>
+                have hsb := hb sd hc hWd hnt_b (by rw [hbo]; exact Or.inr (Or.inr (Or.inr (Or.inl ⟨v, rfl⟩))))
+                rw [hbo] at hsb
+                exact (WorldStepScBo.of_pre_locals_clock hsb).with_locals_clock id mid.locals mid.clock
+              | exception eid ev =>
+                have hres_ex : Resumes (some (.exception eid ev)) := by
+                  rcases hfr with h | h | h | hr <;> try simp at h
+                  exact hr
+                have hsb := hb sd hc hWd hnt_b (by rw [hbo]; exact Or.inr (Or.inr (Or.inr hres_ex)))
+                rw [hbo] at hsb
+                exact (WorldStepScBo.of_pre_locals_clock hsb).with_locals_clock id mid.locals mid.clock
+      · exact absurd hfr not_flowingOrResumes_error
+      · exact absurd hfr not_flowingOrResumes_error
+
+theorem progWStepBo_call0 {B Bf : BufList} {gw gwf : List String} {fname : MlS}
+    {args : List (ExpHOL 64)}
+    (hB : ∀ p ∈ Bf, p ∈ B) (hgw : ∀ g ∈ gwf, g ∈ gw)
+    (hf : WorldKeepsScBo WorldOK (bufRegions Bf) gwf stdKeep NoExtra fname) :
+    ProgWStepBo B gw (.call (some (none, none)) fname args) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, hargs] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        let ent := callEntryStateHOLFinite s callee
+        have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hW
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent] at hrun
+        simp only [hrun] at hnt hfr ⊢
+        have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+          simp only [ent, hrun]; rintro rfl; simp at hnt
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hfr ⊢
+            split
+            · have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+              simp only [ent, hrun] at hspec
+              have hstep := (hspec (Or.inl ⟨v, rfl⟩)).mono_bufs hB hgw
+              exact hstep.from_entry (fun _ => Or.inr (Or.inr (Or.inr ⟨v, rfl⟩)))
+            · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres_ex : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | hr <;> try simp at h
+              exact hr
+            have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+            simp only [ent, hrun] at hspec
+            have hstep := (hspec hres_ex).mono_bufs hB hgw
+            exact hstep.from_entry id
+
+theorem progWStepBo_call_local {B Bf : BufList} {gw gwf : List String} {x fname : MlS}
+    {args : List (ExpHOL 64)}
+    (hB : ∀ p ∈ Bf, p ∈ B) (hgw : ∀ g ∈ gwf, g ∈ gw)
+    (hf : WorldKeepsScBo WorldOK (bufRegions Bf) gwf stdKeep NoExtra fname) :
+    ProgWStepBo B gw (.call (some (some (.local, x), none)) fname args) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, hargs] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        let ent := callEntryStateHOLFinite s callee
+        have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hW
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent] at hrun
+        simp only [hrun] at hnt hfr ⊢
+        have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+          simp only [ent, hrun]; rintro rfl; simp at hnt
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hfr ⊢
+            split
+            · split
+              · have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+                simp only [ent, hrun] at hspec
+                have hstep := (hspec (Or.inl ⟨v, rfl⟩)).mono_bufs hB hgw
+                exact hstep.from_entry (fun _ => Or.inr (Or.inr (Or.inr ⟨v, rfl⟩)))
+              · rename_i hb2; simp [‹shapeEqHOL _ _ = true›, hb2] at hfr; exact absurd hfr not_flowingOrResumes_error
+            · rename_i hb1; simp [hb1] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres_ex : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | hr <;> try simp at h
+              exact hr
+            have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+            simp only [ent, hrun] at hspec
+            have hstep := (hspec hres_ex).mono_bufs hB hgw
+            exact hstep.from_entry id
+
+theorem progWStepBo_decCall {B Bf : BufList} {gw gwf : List String}
+    {x : MlS} {sh : ShapeHOL} {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hBvalid : ValidBufList B) (hgwSafe : SafeStepGlobals gw)
+    (hB : ∀ p ∈ Bf, p ∈ B) (hgw : ∀ g ∈ gwf, g ∈ gw)
+    (hf : WorldKeepsScBo WorldOK (bufRegions Bf) gwf stdKeep NoExtra fname)
+    (hcont : ProgWStepBo B gw cont) :
+    ProgWStepBo B gw (.decCall x sh fname args cont) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hfr ⊢
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, hargs] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        let ent := callEntryStateHOLFinite s callee
+        have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hW
+        have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata ent body').1
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent] at hrun hmeta
+        simp only [hrun] at hmeta hnt hfr ⊢
+        have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+          simp only [ent, hrun]; rintro rfl; simp at hnt
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hnt hfr ⊢
+            by_cases hsh : (shapeEqHOL (shapeOfHOLExact v) sh && shapeEqHOL (shapeOfHOLExact v) ret') = true
+            · simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+              have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+              simp only [ent, hrun] at hspec
+              have hstep1 := (hspec (Or.inl ⟨v, rfl⟩)).mono_bufs hB hgw
+              set s1 := setVarHOLFinite x v { cpost with locals := s.locals }
+              have hs1_step : WorldStepScBo (bufRegions B) gw stdKeep NoExtra s none s1 :=
+                hstep1.from_entry (fun _ => Or.inr (Or.inr (Or.inr ⟨v, rfl⟩)))
+              have hWs1 : WorldOK s1 := hs1_step.1.worldOK_bufs hBvalid hW
+              have hs1_code : s1.code = originalRuntimeCode := hmeta.trans hc
+              have hstep2 := hcont s1 hs1_code hWs1 hnt hfr
+              have hstep2' := hstep2.with_locals_clock (r' := (evaluateHOLFiniteState s1 cont).1) id
+                (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState s1 cont).2.locals (x, s.locals.lookup x))
+                (evaluateHOLFiniteState s1 cont).2.clock
+              exact WorldStepScBo.trans_flow hBvalid hgwSafe hW hs1_step (Or.inl rfl) hstep2'
+            · simp [hsh] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres_ex : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | hr <;> try simp at h
+              exact hr
+            have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+            simp only [ent, hrun] at hspec
+            have hstep := (hspec hres_ex).mono_bufs hB hgw
+            exact hstep.from_entry id
+
+theorem worldKeepsScBo_of_progWStepBo {B : BufList} {gw : List String}
+    {fname : MlS} {params : List (MlS × ShapeHOL)} {body : ProgHOL 64} {ret : ShapeHOL}
+    (hlook : originalRuntimeCode.lookup fname = some (params, body, ret))
+    (hp : ProgWStepBo B gw body) :
+    WorldKeepsScBo WorldOK (bufRegions B) gw stdKeep NoExtra fname :=
+  ⟨params, body, ret, hlook, fun s hc hW _ hnt hres =>
+    hp s hc hW hnt (Or.inr (Or.inr (Or.inr hres)))⟩
+
+theorem worldKeepsScBo_of_readOnly {fname : MlS} (hro : ReadOnlyFn fname) :
+    WorldKeepsScBo WorldOK (bufRegions []) [] stdKeep NoExtra fname := by
+  obtain ⟨ps, body, ret, hl, hb⟩ := hro
+  refine ⟨ps, body, ret, hl, fun s hc hW hex hnt hres => ?_⟩
+  have heq := hb s hc hW.1.1 hex hnt hres
+  set post := (evaluateHOLFiniteState s body).2
+  have h0 : WorldStepScBo (bufRegions []) [] stdKeep NoExtra s (evaluateHOLFiniteState s body).1
+      { s with locals := post.locals, clock := post.clock } :=
+    (WorldStepScBo.refl s none hW.1).with_locals_clock (fun _ => Or.inl rfl) post.locals post.clock
+  rwa [← heq] at h0
+
+/-! ## Leaf `WorldKeepsScBo` & `ProgWStepBo` Proofs -/
+
+theorem ptxBlockOutUnhit_of_worldEff_bufs {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {B : List (String × Nat)} {gw : List String}
+    (hB : ValidBufList B)
+    (h : WorldEff s post [] B gw)
+    (hW : WorldOK s) :
+    PtxBlockOutUnhit s post := by
+  obtain ⟨hA, S', hWT'⟩ := hW
+  obtain ⟨Nd', hWT⟩ := (worldTyped_iff_with s S').1 hWT'
+  refine ptxBlockOutUnhit_of_worldEff h hA hWT (by intro _ hj; cases hj) ?_
+  intro p hp i hi
+  obtain ⟨sz, hgb, _, hle⟩ := hB p hp
+  have hsz_pos : 0 < sz := (by decide : ∀ gp ∈ globalBuffers, 0 < gp.2) (p.1, sz) hgb
+  have hd := PtxP34.blockOut_disj_global_buffer hWT.2.2.1 hi (g := (p.1, sz)) hgb
+  by_cases hz : globN s p.1 = 0
+  · simp [bufferRegion, hz, Disj]
+  · simp only [bufferRegion, if_neg hz] at hd ⊢
+    rcases hd with h0 | h0 | hl | hr
+    · exact Or.inl h0
+    · dsimp only at h0; omega
+    · exact Or.inr (Or.inr (Or.inl hl))
+    · dsimp only at hr ⊢; exact Or.inr (Or.inr (Or.inr (by omega)))
+
+theorem wkScBo_acct_new :
+    WorldKeepsScBo WorldOK (bufRegions []) ["heap_ptr"] stdKeep NoExtra (ofString "acct_new") := by
+  refine ⟨_, _, _, lookup_acct_new, fun s hc hWOK ⟨vals, hl⟩ hnt hres => ?_⟩
+  obtain ⟨wn, wc, vb, hsh_b, hlk_n, hlk_b, hlk_c⟩ := acct_new_params hl
+  have heff := worldEff_acct_new s s (Rl := []) (B := []) (gw := ["heap_ptr"])
+    (by decide) (WorldEff.refl s [] [] ["heap_ptr"] hWOK.1 hc)
+    hsh_b hlk_n hlk_b hlk_c hnt hres
+  have hws : WorldStep (bufRegions []) ["heap_ptr"] stdKeep NoExtra s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_acct_new)).1
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_acct_new)).2 :=
+    heff.to_worldStep_Q hWOK (by decide) (by decide) (fun _ _ _ _ _ _ _ _ => trivial)
+  exact ⟨⟨hws, heff.sp_hi⟩, fun _ =>
+    ptxBlockOutUnhit_of_worldEff_bufs (by intro p hp; cases hp) heff hWOK⟩
+
+theorem wkScBo_acct_empty :
+    WorldKeepsScBo WorldOK (bufRegions []) ["heap_ptr"] stdKeep NoExtra (ofString "acct_empty") := by
+  have hB : ValidBufList [] := by intro p hp; cases hp
+  have hgw : SafeStepGlobals ["heap_ptr"] := by intro g hg; simp at hg; subst hg; simp
+  refine worldKeepsScBo_of_progWStepBo lookup_acct_empty ?_
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_acct_empty,
+    FrontendCodecComputation.declToHOLStructural,
+    FrontendCodecComputation.funDeclToHOLStructural,
+    FrontendCodecComputation.progToHOLStructural,
+    FrontendCodecComputation.expToHOLStructural,
+    FrontendCodecComputation.expListToHOLStructural,
+    FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine progWStepBo_decCall hB hgw (by intro p hp; cases hp) (by intro g hg; exact hg)
+    wkScBo_acct_new ?_
+  exact progWStepBo_return _ _ _
+
+theorem validBufList_wsBufs : ValidBufList wsBufs := validBufList_wsAcctBufs
+
+theorem wkScBo_ws_get_account_optional :
+    WorldKeepsScBo WorldOK (bufRegions wsAcctBufs) ["heap_ptr", "scratch_ptr"] stdKeep NoExtra
+      (ofString "ws_get_account_optional") := by
+  refine ⟨_, _, _, lookup_ws_get_account_optional_top, fun s hc hWOK _ hnt hres => ?_⟩
+  have heff := worldEff_ws_get_account_optional s s hWOK.1.2
+    (WorldEff.refl s [] wsBufs wsGw hWOK.1 hc) hnt hres
+  have heff' : WorldEff s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2
+      (bufRegions wsAcctBufs s) wsBufs wsGw :=
+    heff.mono (fun _ hiv => by cases hiv) (fun _ h => h) (fun _ h => h)
+  have hws : WorldStep (bufRegions wsAcctBufs) ["heap_ptr", "scratch_ptr"] stdKeep NoExtra s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2 :=
+    heff'.to_worldStep_Q hWOK (by decide) (by decide) (fun _ _ _ _ _ _ _ _ => trivial)
+  exact ⟨⟨hws, heff.sp_hi⟩, fun _ =>
+    ptxBlockOutUnhit_of_worldEff_bufs validBufList_wsAcctBufs heff hWOK⟩
+
+theorem call0_nonExResult_eq_none {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {fname : MlS} {args : List (ExpHOL 64)}
+    {r : Option (PanSemResultExact 64)}
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) fname args) = (r, post))
+    (hne : NonExResult r) : r = none := by
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · simp only [evalListHOLFinite, hargs] at hr
+    injection hr with hr' _
+    subst hr'; rcases hne with h | h | h | ⟨v, h⟩ <;> cases h
+  · simp only [evalListHOLFinite, hargs] at hr
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vals with _ | ⟨b', c', r'⟩
+    · simp only [hl] at hr
+      injection hr with hr' _
+      subst hr'; rcases hne with h | h | h | ⟨v, h⟩ <;> cases h
+    · simp only [hl] at hr
+      split at hr
+      · injection hr with hr' _
+        subst hr'; rcases hne with h | h | h | ⟨v, h⟩ <;> cases h
+      · rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite s c') b' with ⟨res, cp⟩
+        simp only [hrun] at hr
+        cases res with
+        | none =>
+          injection hr with hr' _
+          subst hr'; rcases hne with h | h | h | ⟨v, h⟩ <;> cases h
+        | some cr =>
+          cases cr with
+          | returned rv =>
+            dsimp only at hr
+            split at hr
+            · injection hr with hr' _; exact hr'.symm
+            · injection hr with hr' _
+              subst hr'; rcases hne with h | h | h | ⟨v, h⟩ <;> cases h
+          | exception eid ev =>
+            dsimp only at hr
+            injection hr with hr' _
+            subst hr'; rcases hne with h | h | h | ⟨v, h⟩ <;> cases h
+          | timeOut | error | «break» | «continue» | finalFfi _ =>
+            dsimp only at hr
+            injection hr with hr' _
+            subst hr'; rcases hne with h | h | h | ⟨v, h⟩ <;> cases h
+
+theorem progWStepBo_call0_htab_set_recSlot {B : BufList} {gw : List String}
+    (recName roleName : String) (off : BitVec 64)
+    (kExp vExp : ExpHOL 64)
+    (hhp_in : "heap_ptr" ∈ gw)
+    (hoff_lt : off.toNat < sourceBase)
+    (hslot_nonVal : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat),
+      TablesTyped s S → globN s recName ≠ 0 → memW s (globN s recName + off.toNat) ≠ 0 →
+      memW s (globN s recName + off.toNat) ∈ S ∧
+      (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ memW s (globN s recName + off.toNat)) ∧
+      (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ memW s (globN s recName + off.toNat)) ∧
+      globN s "bal_accounts" ≠ memW s (globN s recName + off.toNat) ∧
+      (∀ ad ∈ balRecords s, memW s ad ≠ memW s (globN s recName + off.toNat)) ∧
+      (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ memW s (globN s recName + off.toNat))) :
+    ProgWStepBo B gw
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString recName), .const off]), kExp, vExp]) := by
+  intro F s hcode hW hnt hfr
+  refine ⟨progWStep_call0_htab_set_recSlot recName roleName off kExp vExp hhp_in hoff_lt hslot_nonVal
+    s hcode hW hnt hfr, ?_⟩
+  intro hne
+  let p := ProgHOL.call (some (none, none)) (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString recName), .const off]), kExp, vExp]
+  rcases hr : evaluateHOLFiniteState s p with ⟨r, post⟩
+  have hne' : NonExResult r := by simpa only [p, hr] using hne
+  change PtxBlockOutUnhit s (r, post).2
+  dsimp only
+  have hr_none : r = none := call0_nonExResult_eq_none hr hne'
+  subst hr_none
+  have hA : ArenaReady s := ⟨{ hW.1.1 with code := hcode }, hW.1.2⟩
+  obtain ⟨_, S', hWT'⟩ := hW
+  obtain ⟨Nd', hWT⟩ := (worldTyped_iff_with s S').1 hWT'
+  apply ptxBlockOutUnhit_of_nonempty
+  intro b hb hbpos
+  have ⟨hfix, _, _, _⟩ := blockOut_allocated_words hWT hb hbpos
+  exact PtxP34.htab_set_recSlot_fixed_frame s post S' Nd' b recName off kExp vExp hA hWT hfix hbpos hoff_lt
+    (fun hnz ht0 => (hslot_nonVal s S' hWT.1 hnz ht0).1) hr
+
+theorem wkScBo_record_pre_state_read :
+    WorldKeepsScBo WorldOK (bufRegions []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "record_pre_state_read") := by
+  have hB : ValidBufList [] := by intro p hp; cases hp
+  have hgw : SafeStepGlobals ["heap_ptr"] := by intro g hg; simp at hg; subst hg; simp
+  refine worldKeepsScBo_of_progWStepBo lookup_record_pre_state_read ?_
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_record_pre_state_read,
+    FrontendCodecComputation.declToHOLStructural, FrontendCodecComputation.funDeclToHOLStructural,
+    FrontendCodecComputation.progToHOLStructural, FrontendCodecComputation.expToHOLStructural,
+    FrontendCodecComputation.expListToHOLStructural, FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine progWStepBo_seq hB hgw ?_ (progWStepBo_return _ _ _)
+  exact progWStepBo_call0_htab_set_recSlot "bs" "bs+72" 72 _ _ (by simp) (by decide)
+    (fun s S hT hbs ht0 => nonValueSlot_bs72 s S hT hbs ht0)
+
+theorem wkScBo_get_pre_state_account_optional :
+    WorldKeepsScBo WorldOK (bufRegions wsAcctBufs) ["heap_ptr", "scratch_ptr"] stdKeep NoExtra
+      (ofString "get_pre_state_account_optional") := by
+  have hB := validBufList_wsAcctBufs
+  have hgw := safeStepGlobals_hp_sp
+  refine worldKeepsScBo_of_progWStepBo lookup_get_pre_state_account_optional ?_
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_get_pre_state_account_optional,
+    FrontendCodecComputation.declToHOLStructural,
+    FrontendCodecComputation.funDeclToHOLStructural,
+    FrontendCodecComputation.progToHOLStructural,
+    FrontendCodecComputation.expToHOLStructural,
+    FrontendCodecComputation.expListToHOLStructural,
+    FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine progWStepBo_seq hB hgw
+    (progWStepBo_call0_htab_set_recSlot "ts" "ts+8" 8 _ _ (by simp) (by decide)
+      (fun s S hT hts ht0 => nonValueSlot_ts8 s S hT hts ht0)) ?_
+  refine progWStepBo_decCall hB hgw (by intro p hp; cases hp) (by intro g hg; cases hg)
+    (worldKeepsScBo_of_readOnly EvmFrameSpecs.ro_htab_get) ?_
+  refine progWStepBo_seq hB hgw (progWStepBo_ite (progWStepBo_return _ _ _) (progWStepBo_skip _ _)) ?_
+  refine progWStepBo_seq hB hgw
+    (progWStepBo_call0 (by intro p hp; cases hp) (by intro g hg; simp at hg; subst hg; simp)
+      wkScBo_record_pre_state_read) ?_
+  refine progWStepBo_decCall hB hgw (fun _ h => h) (fun _ h => h)
+    wkScBo_ws_get_account_optional ?_
+  exact progWStepBo_return _ _ _
+
+theorem wkScBo_get_account_optional :
+    WorldKeepsScBo WorldOK (bufRegions wsAcctBufs) ["heap_ptr", "scratch_ptr"] stdKeep NoExtra
+      (ofString "get_account_optional") := by
+  have hB := validBufList_wsAcctBufs
+  have hgw := safeStepGlobals_hp_sp
+  refine worldKeepsScBo_of_progWStepBo lookup_get_account_optional ?_
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_get_account_optional,
+    FrontendCodecComputation.declToHOLStructural,
+    FrontendCodecComputation.funDeclToHOLStructural,
+    FrontendCodecComputation.progToHOLStructural,
+    FrontendCodecComputation.expToHOLStructural,
+    FrontendCodecComputation.expListToHOLStructural,
+    FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine progWStepBo_seq hB hgw
+    (progWStepBo_call0_htab_set_recSlot "ts" "ts+8" 8 _ _ (by simp) (by decide)
+      (fun s S hT hts ht0 => nonValueSlot_ts8 s S hT hts ht0)) ?_
+  refine progWStepBo_decCall hB hgw (by intro p hp; cases hp) (by intro g hg; cases hg)
+    (worldKeepsScBo_of_readOnly EvmFrameSpecs.ro_htab_get) ?_
+  refine progWStepBo_seq hB hgw (progWStepBo_ite (progWStepBo_return _ _ _) (progWStepBo_skip _ _)) ?_
+  refine progWStepBo_decCall hB hgw (fun _ h => h) (fun _ h => h)
+    wkScBo_get_pre_state_account_optional ?_
+  exact progWStepBo_return _ _ _
+
+theorem wkScBo_get_account :
+    WorldKeepsScBo WorldOK (bufRegions wsAcctBufs) ["heap_ptr", "scratch_ptr"] stdKeep NoExtra
+      (ofString "get_account") := by
+  have hB := validBufList_wsAcctBufs
+  have hgw := safeStepGlobals_hp_sp
+  refine worldKeepsScBo_of_progWStepBo lookup_get_account ?_
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_get_account,
+    FrontendCodecComputation.declToHOLStructural,
+    FrontendCodecComputation.funDeclToHOLStructural,
+    FrontendCodecComputation.progToHOLStructural,
+    FrontendCodecComputation.expToHOLStructural,
+    FrontendCodecComputation.expListToHOLStructural,
+    FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine progWStepBo_decCall hB hgw (fun _ h => h) (fun _ h => h)
+    wkScBo_get_account_optional ?_
+  refine progWStepBo_seq hB hgw
+    (progWStepBo_ite
+      (progWStepBo_call_local (by intro p hp; cases hp) (by intro g hg; simp at hg; subst hg; simp)
+        wkScBo_acct_empty)
+      (progWStepBo_skip _ _)) ?_
+  exact progWStepBo_return _ _ _
+
+/-! ## `jset` (`ts+16`), `jdel` (`ts+32`), `ProgWStepOuterBo`, and Account Mutation `wkScBo` -/
+
+theorem jset_body_ts16_blockOutUnhit {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (j n cap p tw kw : BitVec 64) (rv : ValueHOL 64)
+    (hcode : s.code = originalRuntimeCode)
+    (hW : WorldOK s) (hT : WorldTypedWith s S Nd)
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (hts : globN s "ts" ≠ 0) (htw : tw.toNat = memW s (globN s "ts" + 16))
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_jset) =
+      (some (.returned rv), out)) :
+    PtxBlockOutUnhit s out := by
+  have htn : tw.toNat ≠ 0 :=
+    PtxP34.jset_body_table_nonzero s out tw kw rv ⟨⟨{ hW.1.1 with code := hcode }, hW.1.2⟩, hW.2⟩ ht hk hr
+  have hnz16 : memW s (globN s "ts" + 16) ≠ 0 := by rwa [← htw]
+  have hrole : journalRole s tw.toNat = "ts+16" := by
+    unfold journalRole; rw [if_pos ⟨hts, htw⟩]
+  have htw_role : ∀ S', TablesTyped s S' → tw.toNat ∈ S' ∧
+      (tw.toNat, journalRole s tw.toNat) ∈ worldRoleSlots s := by
+    intro S' hTS'
+    have hslot := nonValueSlot_ts16 s S' hTS' hts hnz16
+    refine ⟨by rw [htw]; exact hslot.1, ?_⟩
+    rw [hrole, htw]
+    apply mem_worldRoleSlots_recRole s "ts" 16 "ts+16" hts hnz16
+    apply List.mem_append.2; right; unfold recRoles; simp [hts]
+  change evaluateHOLFiniteState s
+    (.decCall (ofString "old") (.comb [.one, .one]) (ofString "htab_get")
+      [.var .local (ofString "t"), .var .local (ofString "key")]
+      (journalAppendTailProg 4#64 (.rfield 0 (.var .local (ofString "old")))
+        (.seq (.call (some (none, none)) (ofString "htab_set")
+          [.var .local (ofString "t"), .var .local (ofString "key"), .var .local (ofString "value")])
+          (.return (.const 0#64))))) = _ at hr
+  obtain ⟨vs, body, callee, ret, old, cp, u, ha, hl, hb, htail, hm⟩ := PtxP34.dec_call_return_inv_args hr
+  have hargs : vs = [.val (.word tw), .val (.word kw)] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, ht, hk] using ha.symm
+  subst vs
+  have hl' := hl; rw [hcode] at hl'
+  have hbody := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "htab_get")
+    _ _ body _ ret _ callee EvmFrameSpecs.lookup_htab_get hl'
+  obtain ⟨v1, v2, he1, he2, hct, hck⟩ := callee_param_two_r16 s (ofString "htab_get")
+    (ofString "t") (ofString "key") .one .one _ _
+    (by rw [hcode]; exact EvmFrameSpecs.lookup_htab_get)
+    (.var .local (ofString "t")) (.var .local (ofString "key")) _ _ callee ret ha hl
+  have hct' : callee.lookup (ofString "t") = some (.val (.word tw)) := by
+    have hv : v1 = .val (.word tw) := by simpa [evalHOLExact, ht] using he1.symm
+    simpa only [hv] using hct
+  have hck' : callee.lookup (ofString "key") = some (.val (.word kw)) := by
+    have hv : v2 = .val (.word kw) := by simpa [evalHOLExact, hk] using he2.symm
+    simpa only [hv] using hck
+  have hwf : HtabWF (callEntryStateHOLFinite s callee) tw.toNat :=
+    (htabWF_with_locals s callee (s.clock - 1) tw.toNat).2 (hT.1.2.1 _ (htw_role S hT.1).1).1
+  obtain ⟨f0, f1, rfl, _⟩ := WkBal.htab_get_ret_in_values (callEntryStateHOLFinite s callee) tw kw
+    hcode hct' hck' hwf old (by rw [← hbody, hb])
+  have he := PtxP34.htab_get_restored_state s cp _ body callee ret _ { hW.1.1 with code := hcode } hl hb
+  rw [he] at htail
+  let cur := setVarHOLFinite (ofString "old") (.rStruct [.val (.word f0), .val (.word f1)])
+    {s with clock := cp.clock}
+  have heff : WorldEff s cur [] [] ["heap_ptr"] :=
+    (WorldEff.refl s [] [] ["heap_ptr"] ⟨{ hW.1.1 with code := hcode }, hW.1.2⟩ hcode).locals_clock _ _
+  have hcur_t : cur.locals.lookup (ofString "t") = some (.val (.word tw)) := by
+    simp [cur, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, ht,
+      show ofString "old" ≠ ofString "t" by decide]
+  have hcur_k : cur.locals.lookup (ofString "key") = some (.val (.word kw)) := by
+    simp [cur, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hk,
+      show ofString "old" ≠ ofString "key" by decide]
+  have hcur_o : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]) := by
+    simp [cur, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  obtain ⟨cut, hcut⟩ := PtxP34.journal_append_cut_return cur u n cap 4#64
+    (.rfield 0 (.var .local (ofString "old"))) _ rv heff.arena.1.code hn hc htail
+  obtain ⟨mid, hw, _, _, hm_cut⟩ := PtxP34.journal_cut_world_entry s cur cut 4#64
+    (.rfield 0 (.var .local (ofString "old"))) tw kw f0 f1 f0 hW heff (fun _ => rfl)
+    hcur_t hcur_k hcur_o (fun st hs => by simp [evalHOLExact, hs])
+    (fun S' hTS' => ⟨(htw_role S' hTS').1, by
+      have hne_role : journalRole s tw.toNat ≠ "ts+32" := by rw [hrole]; decide
+      simpa [hne_role] using (htw_role S' hTS').2⟩)
+    hcut
+  let bs := (blockOutObjects s).filter (fun b => decide (b.2 ≠ 0))
+  have hf_cut : ∀ b ∈ bs, IvlUnhit s cut b := by
+    intro b hb_mem
+    have ⟨hb_bo, hb_pos⟩ : b ∈ blockOutObjects s ∧ b.2 ≠ 0 := by
+      simpa [bs, List.mem_filter] using hb_mem
+    obtain ⟨_, hal, hb1, hb2⟩ := blockOut_allocated_words hT hb_bo hb_pos
+    exact PtxP34.jset_journal_cut_backing_frame j n cap p tw f0 f1 hW.1.2 hT.2.1 hT.2.2.1
+      hb_bo hal hb1 hb2 heff hj hn hc hp hcur_t hcur_o hcut
+  obtain ⟨entry, u_end, hw', hf', ht', hr', ho_end⟩ :=
+    PtxP34.journal_cut_world_frames_table_tail_output s cur u cut mid n cap 4#64 tw
+      (.rfield 0 (.var .local (ofString "old"))) _ rv bs heff.arena.1.code hn hc hcur_t
+      htail hcut hw hm_cut hf_cut
+  have hbo_entry : PtxBlockOutUnhit s entry := by
+    apply ptxBlockOutUnhit_of_nonempty
+    intro b hb_bo hb_pos
+    exact hf' b (by simp [bs, List.mem_filter, hb_bo, hb_pos])
+  have hB_emp : ValidBufList [] := by intro x hx; cases hx
+  have hgw_emp : SafeStepGlobals ["heap_ptr", "journal_n"] := by
+    intro g hg; simp at hg; rcases hg with rfl | rfl <;> simp
+  have hbo_eq : blockOutObjects entry = blockOutObjects s :=
+    blockOutObjects_stable_of_step hB_emp hgw_emp hW hw'.1 hbo_entry
+  apply ptxBlockOutUnhit_of_nonempty
+  intro b hb_bo hb_pos
+  have hb_fix_entry : b ∈ fixedObjects entry := by
+    unfold fixedObjects; apply List.mem_append_left; apply List.mem_append_right
+    rwa [hbo_eq]
+  have hu_end : IvlUnhit s u_end b :=
+    PtxP34.journal_worldStep_table_tail_frame s entry u_end S Nd b tw
+      (.var .local (ofString "key")) (.var .local (ofString "value")) (.const 0#64) rv
+      hT hw' hb_fix_entry hb_pos (htw_role S hT.1).1 ht'
+      (hf' b (by simp [bs, List.mem_filter, hb_bo, hb_pos])) hr'
+  intro a ha hhit
+  rw [hm, ho_end]
+  exact hu_end a ha hhit
+
+theorem progWStepBo_call0_jset_ts16 (B : BufList) (gw : List String)
+    (hhp_in : "heap_ptr" ∈ gw) (hjn_in : "journal_n" ∈ gw)
+    (kExp vExp : ExpHOL 64) :
+    ProgWStepBo B gw
+      (.call (some (none, none)) (ofString "jset")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 16#64]), kExp, vExp]) := by
+  intro F s hcode hW hnt hfr
+  refine ⟨progWStep_call0_jset_ts16 B gw hhp_in hjn_in kExp vExp s hcode hW hnt hfr, ?_⟩
+  intro hne
+  set argsL : List (ExpHOL 64) :=
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 16#64]), kExp, vExp]
+  let p := ProgHOL.call (some (none, none)) (ofString "jset") argsL
+  rcases hr : evaluateHOLFiniteState s p with ⟨r, post⟩
+  have hne' : NonExResult r := by simpa only [p, hr] using hne
+  change PtxBlockOutUnhit s (r, post).2; dsimp only
+  have hr_none : r = none := call0_nonExResult_eq_none hr hne'
+  subst hr_none
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) argsL with _ | values
+  · simp [evalListHOLFinite, hargs] at hr
+  · simp only [evalListHOLFinite, hargs] at hr
+    have hargs_fin : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) argsL = some values := by
+      rwa [evalListHOLFinite_eq_toExact]
+    rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "jset") values with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr
+      split at hr
+      · simp at hr
+      · have hbody_eq := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "jset")
+          _ _ body' _ ret' values callee lookup_jset (by rwa [← hcode])
+        obtain ⟨v1, v2, _, he1, _, _, hc_t, hc_k, _⟩ := R16WkAcctWs.callee_param_three s (ofString "jset")
+          (ofString "t") (ofString "key") (ofString "value") .one .one .one _ _
+          (by rw [hcode]; exact lookup_jset) _ _ _ values body' callee ret' hargs_fin hl
+        obtain ⟨tw, rfl, htw_nat, hts_nz⟩ := evalAt_loadG_nz s hW.1.1 "ts" 16#64 (by decide) v1 he1
+        obtain ⟨_, kw, _, _, _, hc_k', _⟩ := Fast_C08WkShard03.lookupCode_three_words
+          (by decide) (by decide) (by decide) lookup_jset
+          (by
+            have hret_eq := lookupCodeHOLFinite_installed_return s (ofString "jset")
+              _ _ _ _ ret' values callee (by rw [hcode]; exact lookup_jset) hl
+            subst hbody_eq hret_eq; rwa [← hcode])
+        have hv2 : v2 = .val (.word kw) := by rw [hc_k] at hc_k'; exact Option.some.inj hc_k'
+        subst hv2
+        let ent := callEntryStateHOLFinite s callee
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent, hrun] at hr
+        cases res with
+        | none => simp at hr
+        | some cr =>
+          cases cr with
+          | timeOut | error | «break» | «continue» | finalFfi _ | exception _ _ => simp at hr
+          | returned rv =>
+            dsimp only at hr
+            split at hr
+            · injection hr with _ hpost_eq
+              have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hW
+              obtain ⟨hA_s, S, hWT⟩ := hW
+              obtain ⟨Nd, hWTn⟩ := (worldTyped_iff_with s S).1 hWT
+              have hT_ent : WorldTypedWith ent S Nd :=
+                (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).2 hWTn
+              obtain ⟨wj, hj⟩ := hA_s.2.2.2.2.2.2.2.2.2 "journal" (by decide)
+              obtain ⟨wn, hn⟩ := hA_s.2.2.2.2.2.2.2.2.2 "journal_n" (by decide)
+              obtain ⟨wcap, hc_cap⟩ := hA_s.2.2.2.2.2.2.2.2.2 "journal_cap" (by decide)
+              obtain ⟨wp, hp_ptr⟩ := hA_s.2.2.2.2.2.2.2.2.2 "heap_ptr" (by decide)
+              subst hbody_eq
+              have hbo_ent := jset_body_ts16_blockOutUnhit ent cpost S Nd wj wn wcap wp tw kw rv
+                hcode hWent hT_ent hj hn hc_cap hp_ptr hc_t hc_k hts_nz htw_nat hrun
+              intro b hb a ha hhit
+              rw [← hpost_eq]
+              exact hbo_ent b hb a ha hhit
+            · simp at hr
+
+theorem wkScBo_set_account :
+    WorldKeepsScBo WorldOK (bufRegions []) ["heap_ptr", "journal_n"] stdKeep NoExtra
+      (ofString "set_account") := by
+  have hB : ValidBufList [] := by intro p hp; cases hp
+  have hgw : SafeStepGlobals ["heap_ptr", "journal_n"] := by
+    intro g hg; simp at hg; rcases hg with rfl | rfl <;> simp
+  refine worldKeepsScBo_of_progWStepBo lookup_set_account ?_
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_set_account,
+    FrontendCodecComputation.declToHOLStructural, FrontendCodecComputation.funDeclToHOLStructural,
+    FrontendCodecComputation.progToHOLStructural, FrontendCodecComputation.expToHOLStructural,
+    FrontendCodecComputation.expListToHOLStructural, FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine progWStepBo_seq hB hgw ?_ (progWStepBo_return _ _ _)
+  exact progWStepBo_call0_jset_ts16 [] ["heap_ptr", "journal_n"] (by simp) (by simp) _ _
+
+theorem jdel_body_ts32_blockOutUnhit {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (j n cap p tw kw : BitVec 64) (rv : ValueHOL 64)
+    (hcode : s.code = originalRuntimeCode)
+    (hW : WorldOK s) (hT : WorldTypedWith s S Nd)
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (hts : globN s "ts" ≠ 0) (htw : tw.toNat = memW s (globN s "ts" + 32))
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_jdel) =
+      (some (.returned rv), out)) :
+    PtxBlockOutUnhit s out := by
+  have htn : tw.toNat ≠ 0 :=
+    PtxP34.jdel_body_table_nonzero s out tw kw rv ⟨⟨{ hW.1.1 with code := hcode }, hW.1.2⟩, hW.2⟩ ht hk hr
+  have hnz32 : memW s (globN s "ts" + 32) ≠ 0 := by rwa [← htw]
+  have htw_role : ∀ S', TablesTyped s S' → tw.toNat ∈ S' ∧
+      (tw.toNat, journalRole s tw.toNat) ∈ worldRoleSlots s := by
+    intro S' hTS'
+    obtain ⟨htS, _, _, _, _, hne⟩ := ts32Slot_disj s S' hTS' hts hnz32
+    have hrole : journalRole s tw.toNat = "ts+32" := by
+      unfold journalRole
+      rw [if_neg (fun ⟨_, h16⟩ => hne (by rw [← htw]; exact h16.symm))]
+      rw [if_pos ⟨hts, htw⟩]
+    refine ⟨by rwa [htw], ?_⟩
+    rw [hrole, htw]
+    apply mem_worldRoleSlots_recRole s "ts" 32 "ts+32" hts hnz32
+    apply List.mem_append.2; right; unfold recRoles; simp [hts]
+  have hval_role : ∀ v ∈ htabValues s tw.toNat, (v, "ts.inner") ∈ worldRoleSlots s :=
+    fun v hv => PtxP34.ts32_value_worldRole s S tw.toNat v hT.1 hts htw htn hv
+  change evaluateHOLFiniteState s
+    (.decCall (ofString "old") (.comb [.one, .one]) (ofString "htab_get")
+      [.var .local (ofString "t"), .var .local (ofString "key")]
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "old"))) (.const 0#64))
+        (.return (.const 0#64)) .skip)
+        (journalAppendTailProg 5#64 (.const 1#64)
+          (.seq (.call (some (none, none)) (ofString "htab_del")
+            [.var .local (ofString "t"), .var .local (ofString "key")])
+            (.return (.const 0#64)))))) = _ at hr
+  obtain ⟨vs, body, callee, ret, old, cp, u, ha, hl, hb, htail, hm⟩ := PtxP34.dec_call_return_inv_args hr
+  have hargs : vs = [.val (.word tw), .val (.word kw)] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, ht, hk] using ha.symm
+  subst vs
+  have hl' := hl; rw [hcode] at hl'
+  have hbody := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "htab_get")
+    _ _ body _ ret _ callee EvmFrameSpecs.lookup_htab_get hl'
+  obtain ⟨v1, v2, he1, he2, hct, hck⟩ := callee_param_two_r16 s (ofString "htab_get")
+    (ofString "t") (ofString "key") .one .one _ _
+    (by rw [hcode]; exact EvmFrameSpecs.lookup_htab_get)
+    (.var .local (ofString "t")) (.var .local (ofString "key")) _ _ callee ret ha hl
+  have hct' : callee.lookup (ofString "t") = some (.val (.word tw)) := by
+    have hv : v1 = .val (.word tw) := by simpa [evalHOLExact, ht] using he1.symm
+    simpa only [hv] using hct
+  have hck' : callee.lookup (ofString "key") = some (.val (.word kw)) := by
+    have hv : v2 = .val (.word kw) := by simpa [evalHOLExact, hk] using he2.symm
+    simpa only [hv] using hck
+  have hwf : HtabWF (callEntryStateHOLFinite s callee) tw.toNat :=
+    (htabWF_with_locals s callee (s.clock - 1) tw.toNat).2 (hT.1.2.1 _ (htw_role S hT.1).1).1
+  obtain ⟨f0, f1, rfl, hvalues⟩ := WkBal.htab_get_ret_in_values (callEntryStateHOLFinite s callee) tw kw
+    hcode hct' hck' hwf old (by rw [← hbody, hb])
+  have he := PtxP34.htab_get_restored_state s cp _ body callee ret _ { hW.1.1 with code := hcode } hl hb
+  rw [he] at htail
+  let cur := setVarHOLFinite (ofString "old") (.rStruct [.val (.word f0), .val (.word f1)])
+    {s with clock := cp.clock}
+  have hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]) := by
+    simp [cur, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  rcases PtxP34.jdel_absent_guard_resume cur u f0 f1 _ rv hold htail with ⟨_, hmem⟩ | ⟨hz, hrun⟩
+  · intro b hb_bo a ha hhit
+    rw [hm, hmem]; rfl
+  · have heff : WorldEff s cur [] [] ["heap_ptr"] :=
+      (WorldEff.refl s [] [] ["heap_ptr"] ⟨{ hW.1.1 with code := hcode }, hW.1.2⟩ hcode).locals_clock _ _
+    have hcur_t : cur.locals.lookup (ofString "t") = some (.val (.word tw)) := by
+      simp [cur, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, ht,
+        show ofString "old" ≠ ofString "t" by decide]
+    have hcur_k : cur.locals.lookup (ofString "key") = some (.val (.word kw)) := by
+      simp [cur, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hk,
+        show ofString "old" ≠ ofString "key" by decide]
+    obtain ⟨cut, hcut⟩ := PtxP34.journal_append_cut_return cur u n cap 5#64
+      (.const 1#64) _ rv heff.arena.1.code hn hc hrun
+    obtain ⟨mid, hw, _, _, hm_cut⟩ := PtxP34.journal_cut_world_entry s cur cut 5#64
+      (.const 1#64) tw kw f0 f1 1#64 hW heff (fun _ => rfl)
+      hcur_t hcur_k hold (fun _ _ => rfl)
+      (fun S' hTS' => ⟨(htw_role S' hTS').1, by
+        intro q hq
+        simp only [List.mem_cons] at hq
+        rcases hq with rfl | hq
+        · exact (htw_role S' hTS').2
+        · split at hq
+          · simp only [List.mem_singleton] at hq
+            subst q
+            exact hval_role _ (hvalues hz)
+          · cases hq⟩)
+      hcut
+    let bs := (blockOutObjects s).filter (fun b => decide (b.2 ≠ 0))
+    have hf_cut : ∀ b ∈ bs, IvlUnhit s cut b := by
+      intro b hb_mem
+      have ⟨hb_bo, hb_pos⟩ : b ∈ blockOutObjects s ∧ b.2 ≠ 0 := by
+        simpa [bs, List.mem_filter] using hb_mem
+      obtain ⟨_, hal, hb1, hb2⟩ := blockOut_allocated_words hT hb_bo hb_pos
+      obtain ⟨mid_j, u_j, hf_j, ht_j, hm_j⟩ :=
+        PtxP34.jdel_journal_append_backing_resume j n cap p tw f0 f1 _ _
+          hW.1.2 hT.2.1 hT.2.2.1 hb_bo hal hb1 hb2 heff hj hn hc hp hcur_t hold hcut
+      have he_mem := hm_j.trans (PtxP34.return_memory_eq ht_j)
+      intro a ha hhit
+      rw [he_mem]
+      exact hf_j a ha hhit
+    obtain ⟨entry, u_end, hw', hf', ht', hr', ho_end⟩ :=
+      PtxP34.journal_cut_world_frames_table_tail_output s cur u cut mid n cap 5#64 tw
+        (.const 1#64) _ rv bs heff.arena.1.code hn hc hcur_t
+        hrun hcut hw hm_cut hf_cut
+    have hbo_entry : PtxBlockOutUnhit s entry := by
+      apply ptxBlockOutUnhit_of_nonempty
+      intro b hb_bo hb_pos
+      exact hf' b (by simp [bs, List.mem_filter, hb_bo, hb_pos])
+    have hB_emp : ValidBufList [] := by intro x hx; cases hx
+    have hgw_emp : SafeStepGlobals ["heap_ptr", "journal_n"] := by
+      intro g hg; simp at hg; rcases hg with rfl | rfl <;> simp
+    have hbo_eq : blockOutObjects entry = blockOutObjects s :=
+      blockOutObjects_stable_of_step hB_emp hgw_emp hW hw'.1 hbo_entry
+    obtain ⟨S_e, Nd_e, hsub_e, hT_e, _⟩ := hw'.1.2.2.2.2 S Nd hT (by intro i hi; simp [bufRegions] at hi)
+    obtain ⟨out_del, hc_del, hr_ret⟩ := seq_call0_ret_inv hr'
+    have hm_ret := PtxP34.return_memory_eq hr_ret
+    apply ptxBlockOutUnhit_of_nonempty
+    intro b hb_bo hb_pos
+    have hb_fix_entry : b ∈ fixedObjects entry := by
+      unfold fixedObjects; apply List.mem_append_left; apply List.mem_append_right
+      rwa [hbo_eq]
+    have hf_del := PtxP34.htab_del_local_fixed_frame entry out_del S_e Nd_e b tw
+      (.var .local (ofString "key")) hw'.1.1 hT_e hb_fix_entry hb_pos
+      (hsub_e _ (htw_role S hT.1).1) ht' hc_del
+    have hf_s_entry := hf' b (by simp [bs, List.mem_filter, hb_bo, hb_pos])
+    intro a ha hhit
+    rw [hm, ho_end, hm_ret]
+    exact (hf_del a ha hhit).trans (hf_s_entry a ha hhit)
+
+theorem jdel_ts32_step_bo {F : Type} (B : BufList) (gw : List String)
+    (hhp_in : "heap_ptr" ∈ gw) (hjn_in : "journal_n" ∈ gw)
+    (tExp kExp : ExpHOL 64)
+    (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (tw : BitVec 64)
+    (ht_ev : evalAt s tExp = some (.val (.word tw)))
+    (htw_nat : tw.toNat = memW s (globN s "ts" + 32))
+    (hts_nz : globN s "ts" ≠ 0)
+    (hnt : (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "jdel") [tExp, kExp])).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "jdel") [tExp, kExp])).1) :
+    WorldStepScBo (bufRegions B) gw stdKeep NoExtra
+      s (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "jdel") [tExp, kExp])).1
+      (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "jdel") [tExp, kExp])).2 := by
+  refine ⟨jdel_ts32_step B gw hhp_in hjn_in tExp kExp s hcode hW tw ht_ev htw_nat hts_nz hnt hfr, ?_⟩
+  intro hne
+  set argsL : List (ExpHOL 64) := [tExp, kExp]
+  let p := ProgHOL.call (some (none, none)) (ofString "jdel") argsL
+  rcases hr : evaluateHOLFiniteState s p with ⟨r, post⟩
+  have hne' : NonExResult r := by simpa only [p, hr] using hne
+  change PtxBlockOutUnhit s (r, post).2; dsimp only
+  have hr_none : r = none := call0_nonExResult_eq_none hr hne'
+  subst hr_none
+  rw [evaluateHOLFiniteState_call] at hr
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) argsL with _ | values
+  · simp [evalListHOLFinite, hargs] at hr
+  · simp only [evalListHOLFinite, hargs] at hr
+    have hargs_fin : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) argsL = some values := by
+      rwa [evalListHOLFinite_eq_toExact]
+    rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "jdel") values with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr
+      split at hr
+      · simp at hr
+      · have hbody_eq := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "jdel")
+          _ _ body' _ ret' values callee lookup_jdel (by rwa [← hcode])
+        obtain ⟨v1, v2, he1, _, hc_t, hc_k⟩ := callee_param_two_r16 s (ofString "jdel")
+          (ofString "t") (ofString "key") .one .one _ _
+          (by rw [hcode]; exact lookup_jdel) _ _ values body' callee ret' hargs_fin hl
+        have hv1_eq : v1 = .val (.word tw) := by rw [ht_ev] at he1; exact (Option.some.inj he1).symm
+        subst hv1_eq
+        obtain ⟨_, kw, _, _, hc_k'⟩ := Fast_C08WkShard03.lookupCode_two_words
+          (by decide) lookup_jdel
+          (by
+            have hret_eq := lookupCodeHOLFinite_installed_return s (ofString "jdel")
+              _ _ _ _ ret' values callee (by rw [hcode]; exact lookup_jdel) hl
+            subst hbody_eq hret_eq; rwa [← hcode])
+        have hv2_eq : v2 = .val (.word kw) := by rw [hc_k] at hc_k'; exact Option.some.inj hc_k'
+        subst hv2_eq
+        let ent := callEntryStateHOLFinite s callee
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent, hrun] at hr
+        cases res with
+        | none => simp at hr
+        | some cr =>
+          cases cr with
+          | timeOut | error | «break» | «continue» | finalFfi _ | exception _ _ => simp at hr
+          | returned rv =>
+            dsimp only at hr
+            split at hr
+            · injection hr with _ hpost_eq
+              have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hW
+              obtain ⟨hA_s, S, hWT⟩ := hW
+              obtain ⟨Nd, hWTn⟩ := (worldTyped_iff_with s S).1 hWT
+              have hT_ent : WorldTypedWith ent S Nd :=
+                (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).2 hWTn
+              obtain ⟨wj, hj⟩ := hA_s.2.2.2.2.2.2.2.2.2 "journal" (by decide)
+              obtain ⟨wn, hn⟩ := hA_s.2.2.2.2.2.2.2.2.2 "journal_n" (by decide)
+              obtain ⟨wcap, hc_cap⟩ := hA_s.2.2.2.2.2.2.2.2.2 "journal_cap" (by decide)
+              obtain ⟨wp, hp_ptr⟩ := hA_s.2.2.2.2.2.2.2.2.2 "heap_ptr" (by decide)
+              subst hbody_eq
+              have hbo_ent := jdel_body_ts32_blockOutUnhit ent cpost S Nd wj wn wcap wp tw kw rv
+                hcode hWent hT_ent hj hn hc_cap hp_ptr hc_t hc_k hts_nz htw_nat hrun
+              intro b hb a ha hhit
+              rw [← hpost_eq]
+              exact hbo_ent b hb a ha hhit
+            · simp at hr
+
+def ProgWStepOuterBo (tw : BitVec 64) (B : BufList) (gw : List String) (prog : ProgHOL 64) : Prop :=
+  ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+    s.code = originalRuntimeCode → WorldOK s →
+    s.locals.lookup (ofString "outer") = some (.val (.word tw)) →
+    tw.toNat = memW s (globN s "ts" + 32) → globN s "ts" ≠ 0 →
+    (evaluateHOLFiniteState s prog).1 ≠ some .timeOut →
+    FlowingOrResumes (evaluateHOLFiniteState s prog).1 →
+    WorldStepScBo (bufRegions B) gw stdKeep NoExtra
+      s (evaluateHOLFiniteState s prog).1 (evaluateHOLFiniteState s prog).2
+
+theorem progWStepOuterBo_dec {tw : BitVec 64} {B : BufList} {gw : List String}
+    {x : MlS} {sh : ShapeHOL} {e : ExpHOL 64} {body : ProgHOL 64}
+    (hne : x ≠ ofString "outer") (hb : ProgWStepOuterBo tw B gw body) :
+    ProgWStepOuterBo tw B gw (.dec x sh e body) := by
+  intro F s hc hW hout htw hts hnt hfr
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  rcases hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e with _ | val
+  · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [hev] at hnt hfr ⊢
+    by_cases hok : shapeEqHOL sh (shapeOfHOLExact val) = true
+    · simp only [hok, ↓reduceIte] at hnt hfr ⊢
+      set s1 := setVarHOLFinite x val s
+      have hW1 : WorldOK s1 := localsFree_worldOK s _ s.clock hW
+      have hout1 : s1.locals.lookup (ofString "outer") = some (.val (.word tw)) := by
+        simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne, Ne.symm hne, hout]
+      have hstep := hb s1 hc hW1 hout1 htw hts hnt hfr
+      exact (WorldStepScBo.of_pre_locals_clock hstep).with_locals_clock id _ (evaluateHOLFiniteState s1 body).2.clock
+    · simp [hok] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+theorem progWStepOuterBo_decCall {tw : BitVec 64} {B Bf : BufList} {gw gwf : List String}
+    {x : MlS} {sh : ShapeHOL} {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hne : x ≠ ofString "outer")
+    (hBvalid : ValidBufList B) (hgwSafe : SafeStepGlobals gw)
+    (hB : ∀ p ∈ Bf, p ∈ B) (hgw : ∀ g ∈ gwf, g ∈ gw)
+    (hf : WorldKeepsScBo WorldOK (bufRegions Bf) gwf stdKeep NoExtra fname)
+    (hcont : ProgWStepOuterBo tw B gw cont) :
+    ProgWStepOuterBo tw B gw (.decCall x sh fname args cont) := by
+  intro F s hc hW hout htw hts hnt hfr
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hfr ⊢
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, hargs] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        let ent := callEntryStateHOLFinite s callee
+        have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hW
+        have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata ent body').1
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent] at hrun hmeta
+        simp only [hrun] at hmeta hnt hfr ⊢
+        have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+          simp only [ent, hrun]; rintro rfl; exact hnt (by simp)
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hnt hfr ⊢
+            by_cases hsh : (shapeEqHOL (shapeOfHOLExact v) sh && shapeEqHOL (shapeOfHOLExact v) ret') = true
+            · simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+              have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+              simp only [ent, hrun] at hspec
+              have hstep1 := (hspec (Or.inl ⟨v, rfl⟩)).mono_bufs hB hgw
+              set s1 := setVarHOLFinite x v { cpost with locals := s.locals }
+              have hs1_step : WorldStepScBo (bufRegions B) gw stdKeep NoExtra s none s1 :=
+                hstep1.from_entry (fun _ => Or.inr (Or.inr (Or.inr ⟨v, rfl⟩)))
+              have hWs1 : WorldOK s1 := hs1_step.1.worldOK_bufs hBvalid hW
+              have hs1_code : s1.code = originalRuntimeCode := hmeta.trans hc
+              have hout1 : s1.locals.lookup (ofString "outer") = some (.val (.word tw)) := by
+                simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne, Ne.symm hne, hout]
+              obtain ⟨htw1, hts1⟩ := worldStepSc_preserves_ts32 hBvalid hgwSafe hW hs1_step.1 htw hts
+              have hstep2 := hcont s1 hs1_code hWs1 hout1 htw1 hts1 hnt hfr
+              have hstep2' := hstep2.with_locals_clock (r' := (evaluateHOLFiniteState s1 cont).1) id
+                (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState s1 cont).2.locals (x, s.locals.lookup x))
+                (evaluateHOLFiniteState s1 cont).2.clock
+              exact WorldStepScBo.trans_flow hBvalid hgwSafe hW hs1_step (Or.inl rfl) hstep2'
+            · simp [hsh] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres_ex : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | hr <;> try simp at h
+              exact hr
+            have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+            simp only [ent, hrun] at hspec
+            exact ((hspec hres_ex).mono_bufs hB hgw).from_entry id
+
+theorem progWStepOuterBo_seq {tw : BitVec 64} {B : BufList} {gw : List String} {p1 p2 : ProgHOL 64}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw) (hp1_no : avoidsLocal (ofString "outer") p1 = true)
+    (h1 : ProgWStepBo B gw p1) (h2 : ProgWStepOuterBo tw B gw p2) :
+    ProgWStepOuterBo tw B gw (.seq p1 p2) := by
+  intro F s hc hW hout htw hts hnt hfr
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s p1).1
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases hr1 : evaluateHOLFiniteState s p1 with ⟨r1, mid⟩
+  simp only [hr1] at hmeta hnt hfr ⊢
+  cases r1 with
+  | none =>
+    have hs1 := h1 s hc hW (by rw [hr1]; simp) (by rw [hr1]; exact Or.inl rfl)
+    rw [hr1] at hs1; dsimp only at hs1
+    have hW_mid : WorldOK mid := hs1.1.worldOK_bufs hB hW
+    have hout_mid : mid.locals.lookup (ofString "outer") = some (.val (.word tw)) := by
+      have hp := evaluate_avoidsLocal_flowing (ofString "outer") p1 hp1_no s (by rw [hr1]; exact Or.inl rfl)
+      rw [hr1] at hp; exact hp.trans hout
+    obtain ⟨htw_m, hts_m⟩ := worldStepSc_preserves_ts32 hB hgw hW hs1.1 htw hts
+    have hs2 := h2 mid (hmeta.trans hc) hW_mid hout_mid htw_m hts_m hnt hfr
+    exact WorldStepScBo.trans_flow hB hgw hW hs1 (Or.inl rfl) hs2
+  | some r =>
+    have hs1 := h1 s hc hW (by rw [hr1]; exact hnt) (by rw [hr1]; exact hfr)
+    rw [hr1] at hs1
+    exact hs1
+
+theorem progWStepOuterBo_of_dec_ts32 {B : BufList} {gw : List String} {body : ProgHOL 64}
+    (hb : ∀ tw : BitVec 64, ProgWStepOuterBo tw B gw body) :
+    ProgWStepBo B gw (.dec (ofString "outer") .one
+      (.load .one (.op .add [.var .global (ofString "ts"), .const 32#64])) body) := by
+  intro F s0 hc0 hW0 hnt0 hfr0
+  rw [evaluateHOLFiniteState_dec_total] at hnt0 hfr0 ⊢
+  rcases hev_o : @evalHOLExact 64 F _ s0.toExact (fun a => Classical.propDecidable (s0.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ts"), .const 32#64])) with _ | vo
+  · simp [hev_o] at hfr0; exact absurd hfr0 not_flowingOrResumes_error
+  · simp only [hev_o] at hnt0 hfr0 ⊢
+    obtain ⟨tw, rfl, htw_nat, hts_nz⟩ := evalAt_loadG_nz s0 hW0.1.1 "ts" 32#64 (by decide) vo hev_o
+    have hsh_ok : shapeEqHOL .one (shapeOfHOLExact (.val (.word tw) : ValueHOL 64)) = true := by
+      simp [shapeOfHOLExact, shapeEqHOL]
+    simp only [hsh_ok, ↓reduceIte] at hnt0 hfr0 ⊢
+    set s1 := setVarHOLFinite (ofString "outer") (.val (.word tw)) s0
+    have hW1 : WorldOK s1 := localsFree_worldOK s0 _ s0.clock hW0
+    have hs1_outer : s1.locals.lookup (ofString "outer") = some (.val (.word tw)) := by
+      simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    have hstep := hb tw s1 hc0 hW1 hs1_outer htw_nat hts_nz hnt0 hfr0
+    exact (WorldStepScBo.of_pre_locals_clock hstep).with_locals_clock id
+      (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState s1 body).2.locals
+        (ofString "outer", s0.locals.lookup (ofString "outer")))
+      (evaluateHOLFiniteState s1 body).2.clock
+
+theorem wkScBo_destroy_storage :
+    WorldKeepsScBo WorldOK (bufRegions [("sk_buf", 52)]) ["heap_ptr", "journal_n"] stdKeep NoExtra
+      (ofString "destroy_storage") := by
+  have hB : ValidBufList [("sk_buf", 52)] := by
+    intro p hp; simp at hp; subst hp
+    exact ⟨64, by decide, by decide, by decide⟩
+  have hgw : SafeStepGlobals ["heap_ptr", "journal_n"] := by
+    intro g hg; simp at hg; rcases hg with rfl | rfl <;> simp
+  refine worldKeepsScBo_of_progWStepBo lookup_destroy_storage ?_
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_destroy_storage,
+    FrontendCodecComputation.declToHOLStructural, FrontendCodecComputation.funDeclToHOLStructural,
+    FrontendCodecComputation.progToHOLStructural, FrontendCodecComputation.expToHOLStructural,
+    FrontendCodecComputation.expListToHOLStructural, FrontendCodecComputation.shapeToHOLStructural,
+    FrontendCodecComputation.shapeListToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine progWStepOuterBo_of_dec_ts32 (fun tw => ?_)
+  refine progWStepOuterBo_decCall (by decide) hB hgw (by intro p hp; cases hp) (by intro g hg; cases hg)
+    (worldKeepsScBo_of_readOnly EvmFrameSpecs.ro_htab_get) ?_
+  refine progWStepOuterBo_seq hB hgw (by decide)
+    (progWStepBo_ite (progWStepBo_return _ _ _) (progWStepBo_skip _ _)) ?_
+  refine progWStepOuterBo_dec (by decide) ?_
+  refine progWStepOuterBo_dec (by decide) ?_
+  refine progWStepOuterBo_dec (by decide) ?_
+  refine progWStepOuterBo_seq hB hgw (by decide) ?_ ?_
+  · refine progWStepBo_while hB hgw ?_
+    refine progWStepBo_decCall hB hgw (by intro p hp; cases hp) (by intro g hg; cases hg)
+      (worldKeepsScBo_of_readOnly ro_htab_item) ?_
+    refine progWStepBo_seq hB hgw ?_ (progWStepBo_assign_local _ _ _ _)
+    refine progWStepBo_ite ?_ (progWStepBo_skip _ _)
+    refine progWStepBo_decCall hB hgw (by intro p hp; exact hp) (by intro g hg; cases hg)
+      worldKeepsScBo_sk_make ?_
+    exact progWStepBo_call0_htab_set_recSlot "ts" "ts+24" 24 _ _ (by simp) (by decide)
+      (fun s S hT hts ht0 => nonValueSlot_ts24 s S hT hts ht0)
+  · intro F' s' hc' hW' hout' htw' hts' hnt' hfr'
+    have hmeta' := (PanRunBounded.evaluateHOLFiniteState_metadata s'
+      (.call (some (none, none)) (ofString "jdel") [.var .local (ofString "outer"), .var .local (ofString "addr")])).1
+    rw [evaluateHOLFiniteState_seq_line780] at hnt' hfr' ⊢
+    rcases hr1 : evaluateHOLFiniteState s'
+      (.call (some (none, none)) (ofString "jdel") [.var .local (ofString "outer"), .var .local (ofString "addr")]) with ⟨r1, mid⟩
+    simp only [hr1] at hmeta' hnt' hfr' ⊢
+    have ht_ev : evalAt s' (.var .local (ofString "outer")) = some (.val (.word tw)) := by
+      simp [evalAt, evalHOLExact, toExact, hout']
+    cases r1 with
+    | none =>
+      have hs1 := jdel_ts32_step_bo [("sk_buf", 52)] ["heap_ptr", "journal_n"] (by simp) (by simp)
+        (.var .local (ofString "outer")) (.var .local (ofString "addr"))
+        s' hc' hW' tw ht_ev htw' hts' (by rw [hr1]; simp) (by rw [hr1]; exact Or.inl rfl)
+      rw [hr1] at hs1; dsimp only at hs1
+      have hW_mid : WorldOK mid := hs1.1.worldOK_bufs hB hW'
+      have hs2 := progWStepBo_return [("sk_buf", 52)] ["heap_ptr", "journal_n"] (.const 0#64)
+        mid (hmeta'.trans hc') hW_mid hnt' hfr'
+      exact WorldStepScBo.trans_flow hB hgw hW' hs1 (Or.inl rfl) hs2
+    | some r =>
+      have hs1 := jdel_ts32_step_bo [("sk_buf", 52)] ["heap_ptr", "journal_n"] (by simp) (by simp)
+        (.var .local (ofString "outer")) (.var .local (ofString "addr"))
+        s' hc' hW' tw ht_ev htw' hts' (by rw [hr1]; exact hnt') (by rw [hr1]; exact hfr')
+      rw [hr1] at hs1
+      exact hs1
+
+theorem wkScBo_destroy_account :
+    WorldKeepsScBo WorldOK (bufRegions [("sk_buf", 52)]) ["heap_ptr", "journal_n"] stdKeep NoExtra
+      (ofString "destroy_account") := by
+  have hB : ValidBufList [("sk_buf", 52)] := by
+    intro p hp; simp at hp; subst hp
+    exact ⟨64, by decide, by decide, by decide⟩
+  have hgw : SafeStepGlobals ["heap_ptr", "journal_n"] := by
+    intro g hg; simp at hg; rcases hg with rfl | rfl <;> simp
+  refine worldKeepsScBo_of_progWStepBo lookup_destroy_account ?_
+  simp only [sourceFunctionEntry,
+    Guest.Software.guestFn_set_account,
+    Guest.Software.guestFn_destroy_account,
+    Guest.Software.guestFn_modify_state_commit,
+    Guest.Software.guestFn_clear_account_preserving_balance,
+    Guest.Software.guestFn_create_ether,
+    Guest.Software.guestFn_increment_nonce,
+    FrontendCodecComputation.declToHOLStructural, FrontendCodecComputation.funDeclToHOLStructural,
+    FrontendCodecComputation.progToHOLStructural, FrontendCodecComputation.expToHOLStructural,
+    FrontendCodecComputation.expListToHOLStructural, FrontendCodecComputation.shapeToHOLStructural,
+    FrontendCodecComputation.shapeListToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine progWStepBo_seq hB hgw
+    (progWStepBo_call0 (by intro p hp; exact hp) (by intro g hg; exact hg) wkScBo_destroy_storage) ?_
+  refine progWStepBo_seq hB hgw
+    (progWStepBo_call0 (by intro p hp; cases hp) (by intro g hg; exact hg) wkScBo_set_account) ?_
+  exact progWStepBo_return _ _ _
+
+theorem wkScBo_modify_state_commit :
+    WorldKeepsScBo WorldOK (bufRegions [("sk_buf", 52)]) ["heap_ptr", "journal_n"] stdKeep NoExtra
+      (ofString "modify_state_commit") := by
+  have hB : ValidBufList [("sk_buf", 52)] := by
+    intro p hp; simp at hp; subst hp
+    exact ⟨64, by decide, by decide, by decide⟩
+  have hgw : SafeStepGlobals ["heap_ptr", "journal_n"] := by
+    intro g hg; simp at hg; rcases hg with rfl | rfl <;> simp
+  refine worldKeepsScBo_of_progWStepBo lookup_modify_state_commit ?_
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_modify_state_commit,
+    FrontendCodecComputation.declToHOLStructural, FrontendCodecComputation.funDeclToHOLStructural,
+    FrontendCodecComputation.progToHOLStructural, FrontendCodecComputation.expToHOLStructural,
+    FrontendCodecComputation.expListToHOLStructural, FrontendCodecComputation.shapeToHOLStructural,
+    FrontendCodecComputation.shapeListToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine progWStepBo_seq hB hgw
+    (progWStepBo_call0 (by intro p hp; cases hp) (by intro g hg; exact hg) wkScBo_set_account) ?_
+  refine progWStepBo_decCall hB hgw (by intro p hp; cases hp) (by intro g hg; cases hg)
+    (worldKeepsScBo_of_readOnly ro_acct_is_empty) ?_
+  refine progWStepBo_seq hB hgw ?_ (progWStepBo_return _ _ _)
+  exact progWStepBo_ite
+    (progWStepBo_call0 (by intro p hp; exact hp) (by intro g hg; exact hg) wkScBo_destroy_account)
+    (progWStepBo_skip _ _)
+
+theorem progWStepBo_acctCopy_mut {B : BufList} {gw : List String}
+    (hhp_in : "heap_ptr" ∈ gw) (mutProg : ProgHOL 64)
+    (hmut : ∀ {F : Type} (s s1 : PanSemStateFiniteExact 64 F) (bw : BitVec 64),
+      WorldEff s s1 [] [] ["heap_ptr"] →
+      s1.locals = s.locals.update (ofString "a", .val (.word bw)) →
+      s1.locals.lookup (ofString "a") = some (.val (.word bw)) →
+      globN s "heap_ptr" ≤ bw.toNat → bw.toNat + 56 ≤ heapLimit →
+      (evaluateHOLFiniteState s1 mutProg).1 ≠ some .timeOut →
+      ContOrRes (evaluateHOLFiniteState s1 mutProg).1 →
+      WorldEff s (evaluateHOLFiniteState s1 mutProg).2 [] [] ["heap_ptr"]) :
+    ProgWStepBo B gw
+      (.seq
+        (.call (some (some (.local, ofString "a"), none)) (ofString "acct_copy")
+          [.var .local (ofString "a")])
+        mutProg) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases h1 : evaluateHOLFiniteState s
+      (.call (some (some (.local, ofString "a"), none)) (ofString "acct_copy")
+        [.var .local (ofString "a")]) with ⟨r1, s1⟩
+  simp only [h1] at hnt hfr ⊢
+  cases r1 with
+  | some cr1 =>
+    have hac := acct_copy_step s hc hW.1 (by rw [h1]; exact hnt) (by rw [h1]; exact hfr)
+    rw [h1] at hac
+    have hws0 : WorldStep (bufRegions []) ["heap_ptr"] stdKeep NoExtra s (some cr1) s1 :=
+      hac.1.to_worldStep_Q hW (by decide) (by decide) (fun _ _ _ _ _ _ _ _ => trivial)
+    refine ⟨WorldStepSc.mono_bufs (fun _ h => by cases h) (by simp [hhp_in]) ⟨hws0, hac.1.sp_hi⟩, ?_⟩
+    intro _
+    exact ptxBlockOutUnhit_of_worldEff_bufs (by intro p hp; cases hp) hac.1 hW
+  | none =>
+    dsimp only at hnt hfr ⊢
+    have hac := acct_copy_step s hc hW.1 (by rw [h1]; simp) (by rw [h1]; exact Or.inl rfl)
+    rw [h1] at hac; dsimp only at hac
+    obtain ⟨bw, hs1_loc, hbw_lo, hbw_hi⟩ := hac.2 rfl
+    have hs1_a : s1.locals.lookup (ofString "a") = some (.val (.word bw)) := by
+      rw [hs1_loc]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+    have hcr : ContOrRes (evaluateHOLFiniteState s1 mutProg).1 := by
+      rcases hfr with h | h | h | hr
+      · exact Or.inl h
+      · exact Or.inr (Or.inr (Or.inl h))
+      · exact Or.inr (Or.inl h)
+      · exact Or.inr (Or.inr (Or.inr hr))
+    have heff2 := hmut s s1 bw hac.1 hs1_loc hs1_a hbw_lo hbw_hi hnt hcr
+    have hws0 : WorldStep (bufRegions []) ["heap_ptr"] stdKeep NoExtra s
+        (evaluateHOLFiniteState s1 mutProg).1 (evaluateHOLFiniteState s1 mutProg).2 :=
+      heff2.to_worldStep_Q hW (by decide) (by decide) (fun _ _ _ _ _ _ _ _ => trivial)
+    refine ⟨WorldStepSc.mono_bufs (fun _ h => by cases h) (by simp [hhp_in]) ⟨hws0, heff2.sp_hi⟩, ?_⟩
+    intro _
+    exact ptxBlockOutUnhit_of_worldEff_bufs (by intro p hp; cases hp) heff2 hW
+
+theorem progWStepBo_acctCopy_mut_tail {B : BufList} {gw : List String}
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hhp_in : "heap_ptr" ∈ gw) (mutProg tailProg : ProgHOL 64)
+    (hmut : ∀ {F : Type} (s s1 : PanSemStateFiniteExact 64 F) (bw : BitVec 64),
+      WorldEff s s1 [] [] ["heap_ptr"] →
+      s1.locals = s.locals.update (ofString "a", .val (.word bw)) →
+      s1.locals.lookup (ofString "a") = some (.val (.word bw)) →
+      globN s "heap_ptr" ≤ bw.toNat → bw.toNat + 56 ≤ heapLimit →
+      (evaluateHOLFiniteState s1 mutProg).1 ≠ some .timeOut →
+      ContOrRes (evaluateHOLFiniteState s1 mutProg).1 →
+      WorldEff s (evaluateHOLFiniteState s1 mutProg).2 [] [] ["heap_ptr"])
+    (htail : ProgWStepBo B gw tailProg) :
+    ProgWStepBo B gw
+      (.seq
+        (.call (some (some (.local, ofString "a"), none)) (ofString "acct_copy")
+          [.var .local (ofString "a")])
+        (.seq mutProg tailProg)) := by
+  intro F s hc hW hnt hfr
+  have hassoc : evaluateHOLFiniteState s
+      (.seq (.call (some (some (.local, ofString "a"), none)) (ofString "acct_copy") [.var .local (ofString "a")])
+        (.seq mutProg tailProg)) =
+      evaluateHOLFiniteState s
+      (.seq (.seq (.call (some (some (.local, ofString "a"), none)) (ofString "acct_copy") [.var .local (ofString "a")])
+        mutProg) tailProg) := by
+    simp only [evaluateHOLFiniteState_seq_line780]
+    rcases evaluateHOLFiniteState s _ with ⟨r1, s1⟩
+    cases r1 <;> rfl
+  rw [hassoc] at hnt hfr ⊢
+  exact progWStepBo_seq hB hgw (progWStepBo_acctCopy_mut hhp_in mutProg hmut) htail s hc hW hnt hfr
+
+theorem wkScBo_clear_account_preserving_balance :
+    WorldKeepsScBo WorldOK (bufRegions acctMutBufs) ["heap_ptr", "journal_n", "scratch_ptr"] stdKeep NoExtra
+      (ofString "clear_account_preserving_balance") := by
+  have hB := validBufList_acctMutBufs
+  have hgw : SafeStepGlobals ["heap_ptr", "journal_n", "scratch_ptr"] := by
+    intro g hg; simp at hg; rcases hg with rfl | rfl | rfl <;> simp
+  have hhl_264 : heapLimit < 2 ^ 64 := by decide
+  refine worldKeepsScBo_of_progWStepBo lookup_clear_account_preserving_balance ?_
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_clear_account_preserving_balance,
+    FrontendCodecComputation.declToHOLStructural, FrontendCodecComputation.funDeclToHOLStructural,
+    FrontendCodecComputation.progToHOLStructural, FrontendCodecComputation.expToHOLStructural,
+    FrontendCodecComputation.expListToHOLStructural, FrontendCodecComputation.shapeToHOLStructural,
+    FrontendCodecComputation.shapeListToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine progWStepBo_seq hB hgw
+    (progWStepBo_call0 (by intro p hp; simp at hp; subst hp; simp [acctMutBufs])
+      (by intro g hg; simp at hg; rcases hg with rfl | rfl <;> simp) wkScBo_destroy_storage) ?_
+  refine progWStepBo_decCall hB hgw
+    (by intro p hp; simp [wsAcctBufs] at hp; rcases hp with rfl | rfl | rfl <;> simp [acctMutBufs])
+    (by intro g hg; simp at hg; rcases hg with rfl | rfl <;> simp)
+    wkScBo_get_account ?_
+  intro F s0 hc0 hW0 hnt0 hfr0
+  have hassoc : evaluateHOLFiniteState s0
+      (.seq (.call (some (some (.local, ofString "a"), none)) (ofString "acct_copy") [.var .local (ofString "a")])
+        (.seq (.store (.op .add [.var .local (ofString "a"), .const 0#64]) (.const 0#64))
+          (.seq (.store (.op .add [.var .local (ofString "a"), .const 48#64]) (.var .global (ofString "empty_code_hash")))
+            (.seq (.call (some (none, none)) (ofString "modify_state_commit") [.var .local (ofString "addr"), .var .local (ofString "a")])
+              (.return (.const 0#64)))))) =
+      evaluateHOLFiniteState s0
+      (.seq (.call (some (some (.local, ofString "a"), none)) (ofString "acct_copy") [.var .local (ofString "a")])
+        (.seq
+          (.seq (.store (.op .add [.var .local (ofString "a"), .const 0#64]) (.const 0#64))
+            (.store (.op .add [.var .local (ofString "a"), .const 48#64]) (.var .global (ofString "empty_code_hash"))))
+          (.seq (.call (some (none, none)) (ofString "modify_state_commit") [.var .local (ofString "addr"), .var .local (ofString "a")])
+            (.return (.const 0#64))))) := by
+    simp only [evaluateHOLFiniteState_seq_line780]
+    rcases evaluateHOLFiniteState s0 _ with ⟨r1, s1⟩
+    cases r1 with
+    | some _ => rfl
+    | none =>
+      dsimp only
+      rcases evaluateHOLFiniteState s1 _ with ⟨r2, _⟩
+      cases r2 <;> rfl
+  rw [hassoc] at hnt0 hfr0 ⊢
+  refine progWStepBo_acctCopy_mut_tail hB hgw (by simp) _ _
+    (fun s s1 bw heff1 _ hs1_a hbw_lo hbw_hi hnt1 hcr1 => ?_)
+    (progWStepBo_seq hB hgw
+      (progWStepBo_call0 (by intro p hp; simp at hp; subst hp; simp [acctMutBufs])
+        (by intro g hg; simp at hg; rcases hg with rfl | rfl <;> simp) wkScBo_modify_state_commit)
+      (progWStepBo_return _ _ _))
+    s0 hc0 hW0 hnt0 hfr0
+  refine worldEff_seq hnt1 hcr1
+    (fun _ _ => worldEff_store_word heff1 _ _
+      (fun v hv => by simp [evalHOLExact] at hv; exact ⟨0#64, hv.symm⟩)
+      (fun x hx _ => by
+        simp [evalHOLExact, evalListHOLExact, toExact, hs1_a, panOpHOL, wordOpHOL, wordOp,
+          valueIsWord, valueWord] at hx
+        subst hx
+        have hx0 : (bw + 0#64).toNat = bw.toNat := by simp
+        exact Or.inr (Or.inr (Or.inr ⟨by omega, by omega⟩))))
+    (fun m2 hm2 heff_m2 _ _ => ?_)
+  have hm2_loc : m2.locals = s1.locals := by
+    have hk := fun k => evaluate_avoidsLocal_flowing k
+      (.store (.op .add [.var .local (ofString "a"), .const 0#64]) (.const 0#64))
+      rfl s1 (by rw [hm2]; exact Or.inl rfl)
+    apply HolFiniteMapExact.ext; funext k; simpa [hm2] using hk k
+  exact worldEff_store_word heff_m2 _ _
+    (fun v hv => by
+      simp only [evalHOLExact, toExact] at hv
+      obtain ⟨wech, hwech⟩ := heff_m2.arena.2.2.2.2.2.2.2.2.2 "empty_code_hash" (by decide)
+      unfold GlobalWord at hwech
+      rw [hwech] at hv; injection hv with hv'; exact ⟨wech, hv'.symm⟩)
+    (fun x hx _ => by
+      simp [evalHOLExact, evalListHOLExact, toExact, hm2_loc, hs1_a, panOpHOL, wordOpHOL, wordOp,
+        valueIsWord, valueWord] at hx
+      subst hx
+      have hx48 : (bw + 48#64).toNat = bw.toNat + 48 := by
+        apply BitVec.toNat_add_of_lt; change bw.toNat + 48 < 2 ^ 64; omega
+      exact Or.inr (Or.inr (Or.inr ⟨by omega, by omega⟩)))
+
+/-! ## Unconditional `ptxPhase5Cleanup` Cuts & Phase 5 Runners -/
+
+theorem ptxCleanupBody_step_bo {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hnt : (evaluateHOLFiniteState s ptxCleanupBody).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s ptxCleanupBody).1) :
+    WorldStepScBo (bufRegions acctMutBufs) ["heap_ptr", "journal_n", "scratch_ptr"] stdKeep NoExtra
+      s (evaluateHOLFiniteState s ptxCleanupBody).1 (evaluateHOLFiniteState s ptxCleanupBody).2 := by
+  revert hnt hfr
+  unfold ptxCleanupBody
+  have hB := validBufList_acctMutBufs
+  have hgw : SafeStepGlobals ["heap_ptr", "journal_n", "scratch_ptr"] := by
+    intro g hg; simp at hg; rcases hg with rfl | rfl | rfl <;> simp
+  have hloop : ProgWStepBo acctMutBufs ["heap_ptr", "journal_n", "scratch_ptr"]
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "dcap")))
+        (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item")
+          [.var .local (ofString "del"), .var .local (ofString "i")]
+          (.seq
+            (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0#64))
+              (.call (some (none, none)) (ofString "clear_account_preserving_balance")
+                [.rfield 1 (.var .local (ofString "s"))])
+              .skip)
+            (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1#64]))))) := by
+    refine progWStepBo_while hB hgw ?_
+    refine progWStepBo_decCall hB hgw (by intro p hp; cases hp) (by intro g hg; cases hg)
+      (worldKeepsScBo_of_readOnly ro_htab_item) ?_
+    refine progWStepBo_seq hB hgw ?_ (progWStepBo_assign_local _ _ _ _)
+    refine progWStepBo_ite ?_ (progWStepBo_skip _ _)
+    exact progWStepBo_call0 (by intro p hp; exact hp) (by intro g hg; exact hg)
+      wkScBo_clear_account_preserving_balance
+  have hyes : ProgWStepBo acctMutBufs ["heap_ptr", "journal_n", "scratch_ptr"]
+      (.dec (ofString "dcap") .one
+        (.load .one (.op .add [.var .local (ofString "del"), .const 24#64]))
+        (.seq (.assign .local (ofString "i") (.const 0#64))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "dcap")))
+            (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item")
+              [.var .local (ofString "del"), .var .local (ofString "i")]
+              (.seq
+                (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0#64))
+                  (.call (some (none, none)) (ofString "clear_account_preserving_balance")
+                    [.rfield 1 (.var .local (ofString "s"))])
+                  .skip)
+                (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1#64]))))))) := by
+    refine progWStepBo_dec ?_
+    exact progWStepBo_seq hB hgw (progWStepBo_assign_local _ _ _ _) hloop
+  exact progWStepBo_ite hyes (progWStepBo_skip _ _) s hc hW
+
+theorem ptxPhase5Cleanup_cut_strong_uncond :
+    PtxRelCutStrong ptxPhase5Cleanup PtxAfterPhase4 PtxAfterPhase4 := by
+  intro F entry tail htail s hc hA hres
+  obtain ⟨hready, s_pmc, w_out, hd⟩ := hA
+  rw [ptxPhase5Cleanup_eq] at hres ⊢
+  obtain ⟨vdel, hev, hres1, heqr, heqp⟩ := dec_word_resumes_step hres
+  set s1 := setVarHOLFinite (ofString "del") vdel s
+  have hd1 : PtxAfterPhase4Data entry s1 s_pmc w_out :=
+    ptxAfterPhase4Data_setVar hd _ _ (by decide) (by decide)
+  have hA1 : PtxAfterPhase4 entry s1 := ⟨hready, s_pmc, w_out, hd1⟩
+  have hB := validBufList_acctMutBufs
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s1 ptxCleanupBody).1
+  have hno_ret := evaluate_noReturnProg ptxCleanupBody (by unfold ptxCleanupBody; decide) s1
+  rw [evaluateHOLFiniteState_seq_line780] at hres1
+  rcases hr1 : evaluateHOLFiniteState s1 ptxCleanupBody with ⟨r1, mid⟩
+  simp only [hr1] at hmeta hno_ret
+  rw [hr1] at hres1
+  have hW1 : WorldOK s1 := localsFree_worldOK s _ s.clock hd.world
+  have hi1 : WordLocal (ofString "i") s1 := hd1.index_word
+  cases r1 with
+  | none =>
+    dsimp only at hres1
+    have hs1 := ptxCleanupBody_step_bo s1 hc hW1 (by rw [hr1]; simp) (by rw [hr1]; exact Or.inl rfl)
+    rw [hr1] at hs1; dsimp only at hs1
+    have houtm : mid.locals.lookup (ofString "out") = some (.val (.word w_out)) := by
+      have h := evaluate_avoidsLocal_flowing (ofString "out") ptxCleanupBody ptxCleanupBody_avoids_out s1
+        (by rw [hr1]; exact Or.inl rfl)
+      rw [hr1] at h
+      simpa only [hd1.out_local] using h
+    have him : ∃ w : BitVec 64, mid.locals.lookup (ofString "i") = some (.val (.word w)) := by
+      have h := evaluate_wordLocal (ofString "i") ptxCleanupBody (by unfold ptxCleanupBody; decide) s1 hi1
+        (by rw [hr1]; exact Or.inl rfl)
+      unfold WordLocal at h
+      simpa only [hr1] using h
+    have hdata_mid : PtxAfterPhase4Data entry mid s_pmc w_out :=
+      ptxAfterPhase4Data_step_of_blockOutUnhit hd1 hready hB acctMut_sub_ptx acctMut_globals_sub
+        (by decide) (by decide) (by decide) (by simp [stdKeep]) ptxKeepSub_stdKeep
+        hs1.1 (hs1.2 (Or.inl rfl)) houtm him
+    have hmid := htail mid (hmeta.trans hc) ⟨hready, s_pmc, w_out, hdata_mid⟩ hres1
+    have hseq : evaluateHOLFiniteState s1 (.seq ptxCleanupBody tail) = evaluateHOLFiniteState mid tail := by
+      rw [evaluateHOLFiniteState_seq_line780, hr1]
+    rw [heqr, heqp, hseq]
+    exact ptxWorldStep_strong_with_locals_right
+      (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid tail).2.locals
+        (ofString "del", s.locals.lookup (ofString "del")))
+      (evaluateHOLFiniteState mid tail).2.clock hmid
+  | some r =>
+    dsimp only at hres1
+    have hseq : evaluateHOLFiniteState s1 (.seq ptxCleanupBody tail) = (some r, mid) := by
+      rw [evaluateHOLFiniteState_seq_line780, hr1]
+    have hnt : (some r : Option (PanSemResultExact 64)) ≠ some .timeOut := by
+      intro ht; cases ht; rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+    have hfr : FlowingOrResumes (some r) := Or.inr (Or.inr (Or.inr hres1))
+    have hs1 := (ptxCleanupBody_step_bo s1 hc hW1 (by rw [hr1]; exact hnt) (by rw [hr1]; exact hfr)).1
+    rw [hr1] at hs1
+    have hex : WorldStep ptxRegions ptxGlobals ptxKeep PtxLogsAndSlices entry (some r) mid := by
+      cases r with
+      | exception eid ev =>
+        exact ptxAfterPhase4_exception_worldStep hA1 hB acctMut_sub_ptx acctMut_globals_sub
+          (by decide) ptxKeepSub_stdKeep ptxKeep_not_acctMut_global hs1
+      | returned v => exact False.elim (hno_ret v rfl)
+      | timeOut => exact False.elim (hnt rfl)
+      | error => rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+      | «break» => rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+      | «continue» => rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+      | finalFfi ev => rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+    rw [heqr, heqp, hseq]
+    exact ptxWorldStep_strong_with_locals_right
+      (HolFiniteMapExact.resVarEq mid.locals (ofString "del", s.locals.lookup (ofString "del")))
+      mid.clock hex
+
+theorem ptxPhase5Cleanup_cut_uncond :
+    PtxRelCut ptxPhase5Cleanup PtxAfterPhase4 PtxAfterPhase4 := by
+  intro F entry tail htail s hc hA hres
+  obtain ⟨hready, s_pmc, w_out, hd⟩ := hA
+  rw [ptxPhase5Cleanup_eq] at hres ⊢
+  obtain ⟨vdel, hev, hres1, heqr, heqp⟩ := dec_word_resumes_step hres
+  set s1 := setVarHOLFinite (ofString "del") vdel s
+  have hd1 : PtxAfterPhase4Data entry s1 s_pmc w_out :=
+    ptxAfterPhase4Data_setVar hd _ _ (by decide) (by decide)
+  have hA1 : PtxAfterPhase4 entry s1 := ⟨hready, s_pmc, w_out, hd1⟩
+  have hB := validBufList_acctMutBufs
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s1 ptxCleanupBody).1
+  have hno_ret := evaluate_noReturnProg ptxCleanupBody (by unfold ptxCleanupBody; decide) s1
+  rw [evaluateHOLFiniteState_seq_line780] at hres1
+  rcases hr1 : evaluateHOLFiniteState s1 ptxCleanupBody with ⟨r1, mid⟩
+  simp only [hr1] at hmeta hno_ret
+  rw [hr1] at hres1
+  have hW1 : WorldOK s1 := localsFree_worldOK s _ s.clock hd.world
+  have hi1 : WordLocal (ofString "i") s1 := hd1.index_word
+  cases r1 with
+  | none =>
+    dsimp only at hres1
+    have hs1 := ptxCleanupBody_step_bo s1 hc hW1 (by rw [hr1]; simp) (by rw [hr1]; exact Or.inl rfl)
+    rw [hr1] at hs1; dsimp only at hs1
+    have houtm : mid.locals.lookup (ofString "out") = some (.val (.word w_out)) := by
+      have h := evaluate_avoidsLocal_flowing (ofString "out") ptxCleanupBody ptxCleanupBody_avoids_out s1
+        (by rw [hr1]; exact Or.inl rfl)
+      rw [hr1] at h
+      simpa only [hd1.out_local] using h
+    have him : ∃ w : BitVec 64, mid.locals.lookup (ofString "i") = some (.val (.word w)) := by
+      have h := evaluate_wordLocal (ofString "i") ptxCleanupBody (by unfold ptxCleanupBody; decide) s1 hi1
+        (by rw [hr1]; exact Or.inl rfl)
+      unfold WordLocal at h
+      simpa only [hr1] using h
+    have hdata_mid : PtxAfterPhase4Data entry mid s_pmc w_out :=
+      ptxAfterPhase4Data_step_of_blockOutUnhit hd1 hready hB acctMut_sub_ptx acctMut_globals_sub
+        (by decide) (by decide) (by decide) (by simp [stdKeep]) ptxKeepSub_stdKeep
+        hs1.1 (hs1.2 (Or.inl rfl)) houtm him
+    have hmid := htail mid (hmeta.trans hc) ⟨hready, s_pmc, w_out, hdata_mid⟩ hres1
+    have hseq : evaluateHOLFiniteState s1 (.seq ptxCleanupBody tail) = evaluateHOLFiniteState mid tail := by
+      rw [evaluateHOLFiniteState_seq_line780, hr1]
+    rw [heqr, heqp, hseq]
+    exact WkBal.worldStep_with_locals_right
+      (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid tail).2.locals
+        (ofString "del", s.locals.lookup (ofString "del")))
+      (evaluateHOLFiniteState mid tail).2.clock
+      (fun _ _ hQ => retTransactionLogs_congr_memory_heap_bo_ptx rfl rfl rfl rfl hQ) hmid
+  | some r =>
+    dsimp only at hres1
+    have hseq : evaluateHOLFiniteState s1 (.seq ptxCleanupBody tail) = (some r, mid) := by
+      rw [evaluateHOLFiniteState_seq_line780, hr1]
+    have hnt : (some r : Option (PanSemResultExact 64)) ≠ some .timeOut := by
+      intro ht; cases ht; rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+    have hfr : FlowingOrResumes (some r) := Or.inr (Or.inr (Or.inr hres1))
+    have hs1 := (ptxCleanupBody_step_bo s1 hc hW1 (by rw [hr1]; exact hnt) (by rw [hr1]; exact hfr)).1
+    rw [hr1] at hs1
+    have hex : WorldStep ptxRegions ptxGlobals ptxKeep PtxLogsAndSlices entry (some r) mid := by
+      cases r with
+      | exception eid ev =>
+        exact ptxAfterPhase4_exception_worldStep hA1 hB acctMut_sub_ptx acctMut_globals_sub
+          (by decide) ptxKeepSub_stdKeep ptxKeep_not_acctMut_global hs1
+      | returned v => exact False.elim (hno_ret v rfl)
+      | timeOut => exact False.elim (hnt rfl)
+      | error => rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+      | «break» => rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+      | «continue» => rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+      | finalFfi ev => rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+    rw [heqr, heqp, hseq]
+    have hex1 : WorldStep ptxRegions ptxGlobals ptxKeep RetTransactionLogs entry (some r) mid :=
+      ⟨hex.1, hex.2.1, hex.2.2.1, hex.2.2.2.1, fun S Nd hW hD => by
+        obtain ⟨S', Nd', hsub, hWT, hOG, hFO, hQ⟩ := hex.2.2.2.2 S Nd hW hD
+        exact ⟨S', Nd', hsub, hWT, hOG, hFO, hQ.1⟩⟩
+    exact WkBal.worldStep_with_locals_right
+      (HolFiniteMapExact.resVarEq mid.locals (ofString "del", s.locals.lookup (ofString "del")))
+      mid.clock
+      (fun _ _ hQ => retTransactionLogs_congr_memory_heap_bo_ptx rfl rfl rfl rfl hQ) hex1
+
+theorem ptxAfterPhase4_phase5_relRun_strong_uncond_clean
+    (hinc : WorldKeepsSc WorldOK (bufRegions ptxIncorpBufs) ptxIncorpGlobals ptxIncorpKeep NoExtra
+      (ofString "incorporate_tx_into_block"))
+    (hbo_inc : ∀ {F : Type} {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)},
+      WorldStepSc (bufRegions ptxIncorpBufs) ptxIncorpGlobals ptxIncorpKeep NoExtra s r post →
+        PtxBlockOutUnhit s post)
+    {F : Type} (entry s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (h : PtxAfterPhase4 entry s) :
+    PtxRelRunStrong entry R13Shards.ptxPhase5 s := by
+  rw [ptxPhase5_eq_cleanup_incorporate_release]
+  apply ptxPhase5Cleanup_cut_strong_uncond entry _ _ s hc h
+  intro mid hcode hdata
+  obtain ⟨hfall, hstop⟩ := ptxPhase5Incorporate_step_strong hinc hbo_inc entry mid hcode hdata
+  exact ptxRelRunStrong_seq_of_cut hcode hfall hstop
+    (fun _ hc2 hd2 hres => ptxAfterPhase4_release_return_logs_slices hc2 hd2 hres)
+
+theorem ptxAfterPhase4_phase5_relRun_uncond_clean
+    (hinc : WorldKeepsSc WorldOK (bufRegions ptxIncorpBufs) ptxIncorpGlobals ptxIncorpKeep NoExtra
+      (ofString "incorporate_tx_into_block"))
+    (hbo_inc : ∀ {F : Type} {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)},
+      WorldStepSc (bufRegions ptxIncorpBufs) ptxIncorpGlobals ptxIncorpKeep NoExtra s r post →
+        PtxBlockOutUnhit s post)
+    {F : Type} (entry s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (h : PtxAfterPhase4 entry s) :
+    PtxRelRun entry R13Shards.ptxPhase5 s :=
+  ptxRelRun_of_strong (ptxAfterPhase4_phase5_relRun_strong_uncond_clean hinc hbo_inc entry s hc h)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

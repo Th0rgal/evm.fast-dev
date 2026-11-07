@@ -15815,6 +15815,393 @@ def FcBranchWalk : Prop :=
     FinishPost s0 (evaluateHOLFiniteState st (.seq fcBranches fcCleanup)).1
       (evaluateHOLFiniteState st (.seq fcBranches fcCleanup)).2
 
+/-- The master branch walk: `finish_child`'s branching tail, composed from the
+W-leaves (set_retdata, stack_push, address_to_u256, incorporate-on-success,
+min-tail) plus the already-proven error path. -/
+theorem fcBranchWalk_of_leaves (hSR : FcSetRetdataStepW) (hSP : FcStackPushStepW)
+    (hA2 : FcAddrToU256StepW) (hIS : FcIncorpSuccessStepW) (hMT : FcMinTailStepW) :
+    FcBranchWalk := by
+  intro F s0 st S hBS hPC hgas hgas2 hnt
+  have hse : scratchEnd = 2965299200 := rfl
+  have hbnd_child : globN s0 "ev" + 280 ≤ 2 ^ 64 := by
+    have h := hPC.child_scr.1.2; omega
+  -- structural no-return facts
+  have hnr_call : ∀ (fn : MlS) (args : List (ExpHOL 64)) {F : Type}
+      (t : PanSemStateFiniteExact 64 F) (u : ValueHOL 64),
+      (evaluateHOLFiniteState t (.call (some (none, none)) fn args)).1 ≠
+        some (.returned u) := by
+    intro fn args _ t u
+    exact call0_ne_returned_fc t fn args u
+  have hnr_skip : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F) (u : ValueHOL 64),
+      (evaluateHOLFiniteState t ProgHOL.skip).1 ≠ some (.returned u) := by
+    intro t u; simp [evaluateHOLFiniteState_skip]
+  have hnr_pathErr : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F) (u : ValueHOL 64),
+      (evaluateHOLFiniteState t fcPathErr).1 ≠ some (.returned u) :=
+    fun t u => seq_ne_returned (hnr_call _ _) (seq_ne_returned (hnr_call _ _)
+      (seq_ne_returned (ite_ne_returned_fc (hnr_call _ _) hnr_skip)
+        (seq_ne_returned (hnr_call _ _) (hnr_call _ _)))) t u
+  have hnr_kind2 : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F) (u : ValueHOL 64),
+      (evaluateHOLFiniteState t fcPathKind2Ok).1 ≠ some (.returned u) :=
+    fun t u => seq_ne_returned (hnr_call _ _) (seq_ne_returned (hnr_call _ _)
+      (decCall_ne_returned_fc (hnr_call _ _))) t u
+  have hnr_ne2ok : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F) (u : ValueHOL 64),
+      (evaluateHOLFiniteState t fcPathNe2Ok).1 ≠ some (.returned u) :=
+    fun t u => seq_ne_returned (hnr_call _ _) (seq_ne_returned (hnr_call _ _)
+      (hnr_call _ _)) t u
+  have hnr_minTail : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F) (u : ValueHOL 64),
+      (evaluateHOLFiniteState t fcMinTail).1 ≠ some (.returned u) :=
+    fun t u => decCall_ne_returned_fc
+      (ite_ne_returned_fc (hnr_call _ _) hnr_skip) t u
+  rw [fcBranches_eq] at hnt ⊢
+  -- the kind = 2 comparison
+  have hlk_kind : st.locals.lookup (ofString "kind") =
+      some (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16))))) :=
+    hBS.locals_ok.kind_lk
+  have hkind : @evalHOLExact 64 F _ st.toExact
+      (fun a => Classical.propDecidable (st.memaddrs a)) (.var .local (ofString "kind")) =
+      some (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16))))) :=
+    eval_var_local_word_fc st hlk_kind
+  have hc2 : @evalHOLExact 64 F _ st.toExact
+      (fun a => Classical.propDecidable (st.memaddrs a)) (.const 2#64) =
+      some (.val (.word 2#64)) := rfl
+  have hc_kind : @evalHOLExact 64 F _ st.toExact
+      (fun a => Classical.propDecidable (st.memaddrs a))
+      (.cmp .equal (.var .local (ofString "kind")) (.const 2#64)) =
+      some (.val (.word (if (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16))) = 2#64
+        then 1#64 else 0#64))) :=
+    eval_cmp_equal_word st _ _ _ _ hkind hc2
+  refine seq_finishPost
+    (fun u => ite_ne_returned_fc (dec_ne_returned_fc (ite_ne_returned_fc hnr_pathErr hnr_kind2))
+      (seq_ne_returned (ite_ne_returned_fc hnr_pathErr hnr_ne2ok) hnr_minTail) st u) ?_ hnt
+  intro hntB
+  -- the kind = 2 arm: the dec
+  have hkind2arm : (if (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16))) = 2#64
+      then 1#64 else 0#64) ≠ 0 →
+      (∀ u, (evaluateHOLFiniteState st
+          (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                (.const 0#64))
+              fcPathErr fcPathKind2Ok))).1 ≠ some (.returned u)) ∧
+      ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st
+          (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                (.const 0#64))
+              fcPathErr fcPathKind2Ok))).1 ∧
+      ((evaluateHOLFiniteState st
+          (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                (.const 0#64))
+              fcPathErr fcPathKind2Ok))).1 = none →
+        ∃ S'', FcBranchState s0 (evaluateHOLFiniteState st
+          (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                (.const 0#64))
+              fcPathErr fcPathKind2Ok))).2 S'') := by
+    intro hw
+    have hntDec : (evaluateHOLFiniteState st
+        (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+          (.ite (.cmp .notEqual
+              (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+              (.const 0#64))
+            fcPathErr fcPathKind2Ok))).1 ≠ some .timeOut :=
+      (ite_hnt_fc hc_kind hntB).2 hw
+    obtain ⟨ew, hew⟩ := hBS.arena.2.2.2.2.2.2.2.2.2 "evm_empty" (by decide)
+    have hev : @evalHOLExact 64 F _ st.toExact
+        (fun a => Classical.propDecidable (st.memaddrs a)) (.var .global (ofString "evm_empty")) =
+        some (.val (.word ew)) :=
+      eval_var_global_word_fc st hew
+    have hsh : shapeEqHOL .one (shapeOfHOLExact (.val (.word ew))) = true := by
+      simp [shapeEqHOL, shapeOfHOLExact]
+    have hBS' : FcBranchState s0
+        (setVarHOLFinite (ofString "empty") (.val (.word ew)) st) S :=
+      fcBranchState_setVar_fc hBS (ofString "empty") (.val (.word ew))
+        (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+        (by decide) (by decide) (by decide) (by decide)
+    have hPC' : FcPoppedChild s0
+        (setVarHOLFinite (ofString "empty") (.val (.word ew)) st) S :=
+      fcPoppedChild_setVar_fc hPC (ofString "empty") (.val (.word ew))
+    have hlk_empty : ∃ ew2, (setVarHOLFinite (ofString "empty") (.val (.word ew)) st).locals.lookup
+        (ofString "empty") = some (.val (.word ew2)) := by
+      refine ⟨ew, ?_⟩
+      simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    -- gas facts transfer along setVar (memory, globals, clock unchanged)
+    have hbr : setVarHOLFinite (ofString "empty") (.val (.word ew)) st =
+        { st with locals := (setVarHOLFinite (ofString "empty") (.val (.word ew)) st).locals, clock := st.clock } := rfl
+    have hevR' : OpDispatchSpec.evmR
+        (setVarHOLFinite (ofString "empty") (.val (.word ew)) st) =
+        OpDispatchSpec.evmR st := by
+      rw [hbr]; exact evmR_lc_fc st _ st.clock
+    have hmw' : ∀ a, memW (setVarHOLFinite (ofString "empty") (.val (.word ew)) st) a =
+        memW st a := by
+      intro a; rw [hbr]; unfold memW; dsimp only
+    have hgas' : OpDispatchSpec.evmR
+          (setVarHOLFinite (ofString "empty") (.val (.word ew)) st) +
+        (memW (setVarHOLFinite (ofString "empty") (.val (.word ew)) st) (globN s0 "ev" + 64) +
+          memW (setVarHOLFinite (ofString "empty") (.val (.word ew)) st)
+            (globN s0 "ev" + 192)) ≤
+      OpDispatchSpec.evmR s0 := by
+      rw [hevR', hmw', hmw']; exact hgas
+    have hgas2' : OpDispatchSpec.evmR
+          (setVarHOLFinite (ofString "empty") (.val (.word ew)) st) +
+        (memW (setVarHOLFinite (ofString "empty") (.val (.word ew)) st) (globN s0 "ev" + 64) +
+          memW (setVarHOLFinite (ofString "empty") (.val (.word ew)) st)
+            (globN s0 "ev" + 192)) + 1 < 2 ^ 64 := by
+      rw [hevR', hmw', hmw']; exact hgas2
+    -- the body's no-timeout fact, by unfolding the dec
+    have hntBody : (evaluateHOLFiniteState
+          (setVarHOLFinite (ofString "empty") (.val (.word ew)) st)
+          (.ite (.cmp .notEqual
+              (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+              (.const 0#64))
+            fcPathErr fcPathKind2Ok)).1 ≠ some .timeOut := by
+      rw [evaluateHOLFiniteState_dec_total] at hntDec
+      dsimp only at hntDec
+      rw [hev] at hntDec
+      dsimp only at hntDec
+      rw [if_pos hsh] at hntDec
+      dsimp only at hntDec
+      exact hntDec
+    -- the body's triple
+    have hlk_child' : (setVarHOLFinite (ofString "empty") (.val (.word ew)) st).locals.lookup
+        (ofString "child") = some (.val (.word (BitVec.ofNat 64 (globN s0 "ev")))) :=
+      hBS'.locals_ok.child_lk
+    have hcond : @evalHOLExact 64 F _
+        (setVarHOLFinite (ofString "empty") (.val (.word ew)) st).toExact
+        (fun a => Classical.propDecidable
+          ((setVarHOLFinite (ofString "empty") (.val (.word ew)) st).memaddrs a))
+        (.load .one (.op .add [.var .local (ofString "child"), .const 160#64])) =
+        some (.val (.word (BitVec.ofNat 64
+          (memW (setVarHOLFinite (ofString "empty") (.val (.word ew)) st)
+            (globN s0 "ev" + 160))))) :=
+      eval_load_local_off _ hlk_child' hBS'.arena.1.memaddrs hPC'.child_scr.2 hbnd_child
+        (by omega) (by omega)
+    have hbody : (∀ u, (evaluateHOLFiniteState
+            (setVarHOLFinite (ofString "empty") (.val (.word ew)) st)
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                (.const 0#64))
+              fcPathErr fcPathKind2Ok)).1 ≠ some (.returned u)) ∧
+        ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState
+            (setVarHOLFinite (ofString "empty") (.val (.word ew)) st)
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                (.const 0#64))
+              fcPathErr fcPathKind2Ok)).1 ∧
+        ((evaluateHOLFiniteState
+            (setVarHOLFinite (ofString "empty") (.val (.word ew)) st)
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                (.const 0#64))
+              fcPathErr fcPathKind2Ok)).1 = none →
+          ∃ S'', FcBranchState s0 (evaluateHOLFiniteState
+              (setVarHOLFinite (ofString "empty") (.val (.word ew)) st)
+              (.ite (.cmp .notEqual
+                  (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+                fcPathErr fcPathKind2Ok)).2 S'') := by
+      have hcI : @evalHOLExact 64 F _
+          (setVarHOLFinite (ofString "empty") (.val (.word ew)) st).toExact
+          (fun a => Classical.propDecidable
+            ((setVarHOLFinite (ofString "empty") (.val (.word ew)) st).memaddrs a))
+          (.cmp .notEqual
+              (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+              (.const 0#64)) =
+          some (.val (.word (if (BitVec.ofNat 64
+              (memW (setVarHOLFinite (ofString "empty") (.val (.word ew)) st)
+                (globN s0 "ev" + 160))) ≠ 0#64 then 1#64 else 0#64))) :=
+        eval_cmp_notEqual_word_fc _ _ _ _ _ hcond rfl
+      refine ite_step_fc (Q := fun post => ∃ S'', FcBranchState s0 post S'') hcI
+        (fun hw2 => ?_) (fun hw2 => ?_)
+      · have hntE := (ite_hnt_fc hcI hntBody).2 hw2
+        obtain ⟨nE, eE, qE⟩ := fcPathErr_step hSR hSP hBS' hPC' hgas' hgas2' hntE
+        exact ⟨nE, eE, fun hn => ⟨S, qE hn⟩⟩
+      · have hntK := (ite_hnt_fc hcI hntBody).1 hw2
+        exact fcPathKind2Ok_step hSR hA2 hIS hBS' hPC' hlk_empty hgas' hgas2' hntK
+    -- assemble the dec arm
+    refine ⟨dec_ne_returned_fc
+        (ite_ne_returned_fc hnr_pathErr hnr_kind2) st, ?_, ?_⟩
+    · rw [evaluateHOLFiniteState_dec_total]
+      dsimp only
+      rw [hev]
+      dsimp only
+      rw [if_pos hsh]
+      dsimp only
+      exact hbody.2.1
+    · intro hnone
+      rw [evaluateHOLFiniteState_dec_total] at hnone
+      dsimp only at hnone
+      rw [hev] at hnone
+      dsimp only at hnone
+      rw [if_pos hsh] at hnone
+      dsimp only at hnone
+      rw [evaluateHOLFiniteState_dec_total]
+      dsimp only
+      rw [hev]
+      dsimp only
+      rw [if_pos hsh]
+      dsimp only
+      obtain ⟨S'', hBSb⟩ := hbody.2.2 hnone
+      refine ⟨S'', fcBranchState_congr_locals_clock _ _ hBSb ?_⟩
+      exact fcEntryLocals_resVarEq (by decide) (by decide) (by decide) (by decide)
+        (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+        (by decide) hBSb.locals_ok
+  -- the kind ≠ 2 arm: the seq
+  have hne2arm : (if (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16))) = 2#64
+      then 1#64 else 0#64) = 0 →
+      (∀ u, (evaluateHOLFiniteState st
+          (.seq
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+              fcPathErr fcPathNe2Ok)
+            fcMinTail)).1 ≠ some (.returned u)) ∧
+      ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st
+          (.seq
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+              fcPathErr fcPathNe2Ok)
+            fcMinTail)).1 ∧
+      ((evaluateHOLFiniteState st
+          (.seq
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+              fcPathErr fcPathNe2Ok)
+            fcMinTail)).1 = none →
+        ∃ S'', FcBranchState s0 (evaluateHOLFiniteState st
+          (.seq
+            (.ite (.cmp .notEqual
+                (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+              fcPathErr fcPathNe2Ok)
+            fcMinTail)).2 S'') := by
+    intro hw
+    have hntArm : (evaluateHOLFiniteState st
+        (.seq
+          (.ite (.cmp .notEqual
+              (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+              (.const 0#64))
+            fcPathErr fcPathNe2Ok)
+          fcMinTail)).1 ≠ some .timeOut :=
+      (ite_hnt_fc hc_kind hntB).1 hw
+    obtain ⟨hntIte, _⟩ := seq_hnt_fc hntArm
+    have hlk_child : st.locals.lookup (ofString "child") =
+        some (.val (.word (BitVec.ofNat 64 (globN s0 "ev")))) :=
+      hBS.locals_ok.child_lk
+    have hcond : @evalHOLExact 64 F _ st.toExact
+        (fun a => Classical.propDecidable (st.memaddrs a))
+        (.load .one (.op .add [.var .local (ofString "child"), .const 160#64])) =
+        some (.val (.word (BitVec.ofNat 64 (memW st (globN s0 "ev" + 160))))) :=
+      eval_load_local_off st hlk_child hBS.arena.1.memaddrs hPC.child_scr.2 hbnd_child
+        (by omega) (by omega)
+    have hcI : @evalHOLExact 64 F _ st.toExact
+        (fun a => Classical.propDecidable (st.memaddrs a))
+        (.cmp .notEqual
+            (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+            (.const 0#64)) =
+        some (.val (.word (if (BitVec.ofNat 64 (memW st (globN s0 "ev" + 160))) ≠ 0#64
+          then 1#64 else 0#64))) :=
+      eval_cmp_notEqual_word_fc _ _ _ _ _ hcond rfl
+    refine seq_step_fc (Q := fun u => ∃ S'', FcBranchState s0 u S'')
+      (R := fun u => ∃ S'', FcBranchState s0 u S'') hntArm ?_ ?_
+    · refine ite_step_fc (Q := fun post => ∃ S'', FcBranchState s0 post S'') hcI
+        (fun hw2 => ?_) (fun hw2 => ?_)
+      · have hntE := (ite_hnt_fc hcI hntIte).2 hw2
+        obtain ⟨nE, eE, qE⟩ := fcPathErr_step hSR hSP hBS hPC hgas hgas2 hntE
+        exact ⟨nE, eE, fun hn => ⟨S, qE hn⟩⟩
+      · have hntK := (ite_hnt_fc hcI hntIte).1 hw2
+        exact fcPathNe2Ok_step hSR hSP hIS hBS hPC hgas hgas2 hntK
+    · -- fcMinTail at the post-ite state
+      intro u hQ hntMT
+      obtain ⟨S'', hBS''⟩ := hQ
+      have hhead_u : (globN u "ev", globN u "cur_cont") ∈ evmChain u := by
+        rw [evmChain_cons]; exact List.mem_cons_self
+      have hhead_st : (globN st "ev", globN st "cur_cont") ∈ evmChain st := by
+        rw [evmChain_cons]; exact List.mem_cons_self
+      have hev_u : globN u "ev" = globN st "ev" := hBS''.ev_eq.trans hBS.ev_eq.symm
+      have hc40_u : memW u (globN u "ev" + 40) = memW s0 (globN u "ev" + 40) :=
+        (hBS''.cells _ hhead_u).2.2.1
+      have hc40_st : memW st (globN st "ev" + 40) = memW s0 (globN st "ev" + 40) :=
+        (hBS.cells _ hhead_st).2.2.1
+      have hmid : memW s0 (globN u "ev" + 40) = memW s0 (globN st "ev" + 40) := by
+        rw [hev_u]
+      have heu40 : memW u (globN u "ev" + 40) = memW st (globN st "ev" + 40) :=
+        hc40_u.trans (hmid.trans hc40_st.symm)
+      have hwin : memW s0 (globN s0 "cur_cont" + 16) ≠ 2 →
+          memW s0 (globN s0 "cur_cont" + 80) = 0 ∨
+            memW s0 (globN s0 "cur_cont" + 72) + memW s0 (globN s0 "cur_cont" + 80) ≤
+              memW u (globN u "ev" + 40) := by
+        intro hne2
+        rcases hPC.out_win_ok hne2 with h0 | hle
+        · exact Or.inl h0
+        · exact Or.inr (hle.trans (Nat.le_of_eq heu40.symm))
+      obtain ⟨nM, eM, qM⟩ := hMT hBS'' hwin hntMT
+      exact ⟨nM, eM, fun hn => ⟨S'', (qM hn).1⟩⟩
+  have htriple : (∀ u, (evaluateHOLFiniteState st
+          (.ite (.cmp .equal (.var .local (ofString "kind")) (.const 2#64))
+            (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+              (.ite (.cmp .notEqual
+                  (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+                fcPathErr fcPathKind2Ok))
+            (.seq
+              (.ite (.cmp .notEqual
+                  (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+                fcPathErr fcPathNe2Ok)
+              fcMinTail))).1 ≠ some (.returned u)) ∧
+      ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st
+          (.ite (.cmp .equal (.var .local (ofString "kind")) (.const 2#64))
+            (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+              (.ite (.cmp .notEqual
+                  (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+                fcPathErr fcPathKind2Ok))
+            (.seq
+              (.ite (.cmp .notEqual
+                  (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+                fcPathErr fcPathNe2Ok)
+              fcMinTail))).1 ∧
+      ((evaluateHOLFiniteState st
+          (.ite (.cmp .equal (.var .local (ofString "kind")) (.const 2#64))
+            (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+              (.ite (.cmp .notEqual
+                  (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+                fcPathErr fcPathKind2Ok))
+            (.seq
+              (.ite (.cmp .notEqual
+                  (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+                fcPathErr fcPathNe2Ok)
+              fcMinTail))).1 = none →
+        ∃ S'', FcBranchState s0 (evaluateHOLFiniteState st
+          (.ite (.cmp .equal (.var .local (ofString "kind")) (.const 2#64))
+            (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+              (.ite (.cmp .notEqual
+                  (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+                fcPathErr fcPathKind2Ok))
+            (.seq
+              (.ite (.cmp .notEqual
+                  (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                  (.const 0#64))
+                fcPathErr fcPathNe2Ok)
+              fcMinTail))).2 S'') :=
+    ite_step_fc (Q := fun post => ∃ S'', FcBranchState s0 post S'') hc_kind hkind2arm hne2arm
+  refine ⟨?_, ?_⟩
+  · intro hnone hntCleanup
+    obtain ⟨S'', hBS''⟩ := htriple.2.2 hnone
+    exact fcBranchState_cleanup hBS'' hntCleanup
+  · intro herr
+    exact absurd herr htriple.2.1
+
 /-- The pop assignments plus the pop invariants reduce the post-prelude continuation to the
 branch walk. -/
 theorem fcAfterPrelude_pop {F : Type}
