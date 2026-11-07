@@ -439,4 +439,266 @@ theorem phase2_htabA_set {ι : Type} [Nonempty ι]
   refine ⟨⟨wa, hwa⟩, ⟨hstore', hnames'⟩, htx', ?_, hworld'⟩
   · exact phase2_phase4_shapes_localsOnly s s.locals post.clock (fun _ _ => rfl) hp4
 
+/-! ### Segment B part 2a L3: the warming loops on the `aa` table (positions 80..84).
+
+A flowing `call0` restores the caller's locals, so the loop body (`htab_set`
+followed by the counter bump) never yields `continue`, and the counter `i` —
+which the region invariant never reads — can change freely. -/
+
+/-- A flowing `call0` (no result binding) restores the caller's locals. Local
+copy of the delivery-level `call0_flow`, reduced to the shape needed here. -/
+private theorem phase2_call0_flow {F : Type} (s : PanSemStateFiniteExact 64 F) (fname : MlS)
+    (args : List (ExpHOL 64))
+    (hflow : (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).1 = none ∨
+      (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).1 = some .continue) :
+    ∃ cpost : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState s (.call (some (none, none)) fname args) =
+        (none, { cpost with locals := s.locals }) := by
+  rw [evaluateHOLFiniteState_call] at hflow ⊢
+  revert hflow
+  rcases hargs : evalListHOLFinite s
+      (h := fun address => Classical.propDecidable (s.memaddrs address)) args with _ | values
+  · intro h; rcases h with h | h <;> cases h
+  · dsimp only
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body, callee, ret⟩
+    · intro h; rcases h with h | h <;> cases h
+    · dsimp only
+      by_cases hz : s.clock = 0
+      · simp only [hz, ↓reduceIte]; intro h; rcases h with h | h <;> cases h
+      · simp only [hz, ↓reduceIte]
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with
+          ⟨res, cpost⟩
+        rcases res with _ | r
+        · intro h; rcases h with h | h <;> cases h
+        · cases r with
+          | returned v =>
+            try dsimp only
+            split
+            · intro _; exact ⟨cpost, rfl⟩
+            · intro h; rcases h with h | h <;> cases h
+          | exception _ _ => (try dsimp only); intro h; rcases h with h | h <;> cases h
+          | _ => (try dsimp only); intro h; rcases h with h | h <;> cases h
+
+/-- The while rule of the R13 machinery, with the `IncrBody` side condition
+weakened to the only fact the proof uses: the body never yields `continue`
+when entered with the counter bound. -/
+theorem hoare_while_less_noCont {names : List String}
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : LocalsOnly names P) (counter : MlS) (bound : ExpHOL 64) {body : ProgHOL 64}
+    (hp : Hoare P body (fun r t => r = none → P t))
+    (hnc : ∀ {F : Type} (st : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState st body).1 ≠ some .continue)
+    (hnb : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true) :
+    Hoare P (.while (.cmp .less (.var .local counter) bound) body) (fun r t => r = none → P t) := by
+  refine ⟨fun {F} s hcode hs _ hr => ?_⟩
+  rcases hrun : evaluateHOLFiniteState s (.while (.cmp .less (.var .local counter) bound) body) with
+    ⟨r, post⟩
+  rw [hrun] at hr
+  dsimp only at hr
+  subst hr
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F),
+      st.clock = k → st.code = originalRuntimeCode → P st →
+      evaluateHOLFiniteState st (.while (.cmp .less (.var .local counter) bound) body) =
+        (none, post) → P post from
+    this s.clock s rfl hcode hs hrun
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk st_code hPst hst_run
+    rw [evaluateHOLFiniteState_while_total] at hst_run
+    split at hst_run
+    · rename_i res hcond
+      split at hst_run
+      · rename_i hwnz
+        split at hst_run
+        · simp at hst_run
+        · dsimp only at hst_run
+          rw [fixClockHOLFinite_evaluateState] at hst_run
+          have hrem := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hmeta := (InitECandidate.Solver.PanRunBounded.evaluateHOLFiniteState_metadata
+            (decClockHOLFinite st) body).1
+          have hno_brk :=
+            InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hnb
+              (decClockHOLFinite st)
+          have hnc_w := hnc (decClockHOLFinite st)
+          rcases bRun : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r1, mid⟩
+          rw [bRun] at hst_run hrem hmeta hnc_w hno_brk
+          have hclk_lt : mid.clock < k := by
+            change mid.clock ≤ st.clock - 1 at hrem
+            omega
+          cases r1 with
+          | none =>
+            have hPmid := hp.run (decClockHOLFinite st) st_code
+              (hP.decClock st hPst) (by rw [bRun]; simp)
+              (by rw [bRun])
+            rw [bRun] at hPmid
+            exact ih mid.clock hclk_lt mid rfl (hmeta.trans st_code) hPmid hst_run
+          | some r1' =>
+            cases r1' with
+            | «continue» => exact absurd rfl hnc_w
+            | «break» => exact absurd rfl hno_brk
+            | _ => simp at hst_run
+      · simp at hst_run
+        obtain ⟨_, rfl⟩ := hst_run
+        exact hPst
+    · simp at hst_run
+
+/-- The strengthened region invariant reads only the listed locals (and is
+clock-insensitive), so the loop-head clock tick preserves it. -/
+theorem ptxHtabAInv2_locallyOnly {ι : Type} [Nonempty ι] (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String) :
+    LocalsOnly (["aa", "m", "index", "tx", "sender", "gas", "tx_blob_gas_used",
+      "price", "intrinsic"] ++ names) (PtxHtabAInv2 buffers contents names) := by
+  intro F s locals k hl hp
+  obtain ⟨haa_w, ⟨hstore, hnames⟩, htx, hp4, hworld⟩ := hp
+  have hlk (n : String) (hn : n ∈ ["aa", "m", "index", "tx", "sender", "gas",
+      "tx_blob_gas_used", "price", "intrinsic"] ++ names) :
+      locals.lookup (ofString n) = s.locals.lookup (ofString n) := hl n hn
+  have haa' : locN { s with locals := locals, clock := k } "aa" = locN s "aa" :=
+    locN_congr s locals k "aa" (hlk "aa" (by simp))
+  have hm' : locN { s with locals := locals, clock := k } "m" = locN s "m" :=
+    locN_congr s locals k "m" (hlk "m" (by simp))
+  have h7 : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price",
+      "intrinsic"] : List String),
+      locals.lookup (ofString n) = s.locals.lookup (ofString n) := by
+    intro n hn
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> exact hlk _ (by simp)
+  have hstore' : PtxStoreReadyIn buffers contents
+      (locN { s with locals := locals, clock := k } "aa")
+      { s with locals := locals, clock := k } := by
+    rw [haa']
+    refine ⟨(R16Shards.WkBal.worldOK_with_locals s locals k).2 hstore.1,
+      txEnv_with_locals s locals k (hlk "index" (by simp)) hstore.2.1, ?_, ?_, ?_, ?_⟩
+    · obtain ⟨w, hw⟩ := hstore.2.2.1
+      refine ⟨w, ?_⟩
+      show locals.lookup (ofString "m") = some (.val (.word w))
+      rw [hlk "m" (by simp)]
+      exact hw
+    · rw [hm']
+      exact hstore.2.2.2.1
+    · rw [hm']
+      exact hstore.2.2.2.2.1
+    · intro i
+      obtain ⟨hd, S, Nd, hmem, hwS, hb, hsep⟩ := hstore.2.2.2.2.2 i
+      rw [hm']
+      refine ⟨hd, S, Nd, hmem, ?_, hb, ?_⟩
+      · exact (worldTypedWith_with_locals s locals k S Nd).mpr hwS
+      · exact hsep
+  have hnames' : ∀ name ∈ names, ∃ w : BitVec 64,
+      { s with locals := locals, clock := k }.locals.lookup (ofString name) =
+        some (.val (.word w)) := by
+    intro name hn
+    obtain ⟨w, hw⟩ := hnames name hn
+    refine ⟨w, ?_⟩
+    show locals.lookup (ofString name) = some (.val (.word w))
+    rw [hlk name (List.mem_append.2 (Or.inr hn))]
+    exact hw
+  have hworld' : PtxMessageTablesA { s with locals := locals, clock := k }
+      (locN { s with locals := locals, clock := k } "aa") := by
+    rw [haa']
+    obtain ⟨S, Nd, hwS, ham, hhal, haf, hdisj⟩ := hworld
+    refine ⟨S, Nd, (worldTypedWith_with_locals s locals k S Nd).mpr hwS, ham, hhal, haf, ?_⟩
+    rw [hm']
+    exact hdisj
+  obtain ⟨wa, hwa⟩ := haa_w
+  have haa_new : locals.lookup (ofString "aa") = some (.val (.word wa)) := by
+    rw [hlk "aa" (by simp)]
+    exact hwa
+  refine ⟨⟨wa, haa_new⟩,
+    ⟨hstore', hnames'⟩, htx, phase2_phase4_shapes_localsOnly s locals k h7 hp4, hworld'⟩
+
+/-- Setting the loop counter `i` — a name the region invariant never reads —
+preserves the invariant. -/
+theorem phase2_htabAInv2_set_i {ι : Type} [Nonempty ι] (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String) (v : ValueHOL 64)
+    (hne : ∀ n ∈ names, ofString n ≠ ofString "i")
+    {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxHtabAInv2 buffers contents names s) :
+    PtxHtabAInv2 buffers contents names (setVarHOLFinite (ofString "i") v s) := by
+  have hlk : ∀ n ∈ (["aa", "m", "index", "tx", "sender", "gas", "tx_blob_gas_used",
+      "price", "intrinsic"] ++ names : List String),
+      (s.locals.update (ofString "i", v)).lookup (ofString n) = s.locals.lookup (ofString n) := by
+    intro n hn
+    have hni : ofString n ≠ ofString "i" := by
+      rcases List.mem_append.1 hn with hb | hb
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+        rcases hb with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide
+      · exact hne n hb
+    simp [HolFiniteMapExact.update, FUPDATE, Ne.symm hni]
+  exact ptxHtabAInv2_locallyOnly buffers contents names s
+    (s.locals.update (ofString "i", v)) s.clock hlk hp
+
+/-- The loop counter increment preserves the region invariant. -/
+theorem phase2_htabA_increment_hoare {ι : Type} [Nonempty ι] (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String)
+    (hne : ∀ n ∈ names, ofString n ≠ ofString "i") :
+    Hoare (PtxHtabAInv2 buffers contents names)
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const (BitVec.ofNat 64 1)]))
+      (fun r s => r = none → PtxHtabAInv2 buffers contents names s) := by
+  apply Hoare.assign
+  · intro F s v hp _
+    exact fun _ => phase2_htabAInv2_set_i buffers contents names v hne hp
+  · exact fun _ _ hr => by cases hr
+
+/-- The warming-loop body never yields `continue`: a flowing `call0` restores
+the caller's locals, and the trailing assign never continues. -/
+private theorem phase2_warm_body_noCont (fname : MlS) (args : List (ExpHOL 64)) :
+    ∀ {F : Type} (st : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState st
+        (.seq (.call (some (none, none)) fname args)
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"), .const (BitVec.ofNat 64 1)])))).1 ≠
+        some .continue := by
+  intro F st
+  rw [evaluateHOLFiniteState_seq_line780]
+  rcases hr : evaluateHOLFiniteState st (.call (some (none, none)) fname args) with ⟨r, mid⟩
+  cases r with
+  | none =>
+    exact InitECandidate.Solver.PanRunBounded.evaluate_noTopContinue
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const (BitVec.ofNat 64 1)]))
+      (by rfl) mid
+  | some r' =>
+    cases r' with
+    | «continue» =>
+      obtain ⟨cpost, hfin⟩ := phase2_call0_flow st fname args (Or.inr (by rw [hr]))
+      rw [hr] at hfin
+      simp at hfin
+    | _ => simp
+
+/-- One warming-loop body: the `htab_set` call followed by the counter bump
+preserves the region invariant. -/
+theorem phase2_htabA_warm_body {ι : Type} [Nonempty ι] (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String) (key : ExpHOL 64)
+    (hne :∀ n ∈ names, ofString n ≠ ofString "i") :
+    Hoare (PtxHtabAInv2 buffers contents names)
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+          [.var .local (ofString "aa"), key, .const (BitVec.ofNat 64 1)])
+        (.assign .local (ofString "i")
+          (.op .add [.var .local (ofString "i"), .const (BitVec.ofNat 64 1)])))
+      (fun r s => r = none → PtxHtabAInv2 buffers contents names s) := by
+  refine Hoare.seq_fall
+    (phase2_htabA_set buffers contents names key (.const (BitVec.ofNat 64 1))) ?_
+  exact phase2_htabA_increment_hoare buffers contents names hne
+
+/-- The warming loop over the `aa` table (positions 81..82 and 83..84)
+preserves the region invariant. -/
+theorem phase2_htabA_warm_while {ι : Type} [Nonempty ι] (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String) (key bound : ExpHOL 64)
+    (hne : ∀ n ∈ names, ofString n ≠ ofString "i") :
+    Hoare (PtxHtabAInv2 buffers contents names)
+      (.while (.cmp .less (.var .local (ofString "i")) bound)
+        (.seq (.call (some (none, none)) (ofString "htab_set")
+            [.var .local (ofString "aa"), key, .const (BitVec.ofNat 64 1)])
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"), .const (BitVec.ofNat 64 1)]))))
+      (fun r s => r = none → PtxHtabAInv2 buffers contents names s) :=
+  hoare_while_less_noCont (ptxHtabAInv2_locallyOnly buffers contents names)
+    (ofString "i") bound (phase2_htabA_warm_body buffers contents names key hne)
+    (phase2_warm_body_noCont (ofString "htab_set")
+      [.var .local (ofString "aa"), key, .const (BitVec.ofNat 64 1)])
+    (by rfl)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
