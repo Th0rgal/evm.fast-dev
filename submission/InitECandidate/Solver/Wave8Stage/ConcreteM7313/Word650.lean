@@ -1,22 +1,23 @@
 import InitECandidate.Solver.Wave8Stage.PrefixChecks.Shard586
 import InitECandidate.Solver.Wave8Stage.ConcreteM7313.Oracle650
 import InitECandidate.Solver.Wave8Stage.ConcreteM7313.BackendDecomposition
+import InitECandidate.Solver.Wave8Stage.CertifiedKernelPasses
 
 set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 200000
-set_option maxHeartbeats 64000000
-set_option cbv.maxSteps 64000000
+set_option maxHeartbeats 128000000
 
 namespace InitECandidate.Solver.Wave8Stage.ConcreteM7313.Word650
 open InitE Flapjack Flapjack.Compiler.Backend
 open Flapjack.Compiler.Encoders.RiscV.Target
+open InitECandidate.Solver.Wave8Stage
 open BackendDecomposition PrefixChecks.Shard586
 
-wave8_certified_reduce allocated := WordToWord.wordAllocWith RegAlloc.regAllocExecutable
+wave8_kernel_reduce allocated := WordToWord.wordAllocWith RegAlloc.regAllocExecutable
   name riscvConfig (oracleCompilerConfig []).wordToWordConf.regAlg registers
   prefixProgram oracle650
-wave8_certified_reduce program := WordRemove.removeMustTerminate allocated
+wave8_kernel_reduce program := WordRemove.removeMustTerminate allocated
 
 theorem wordFunction_eq : wordFunction oracle650 entry = (name, arity, program) := by
   unfold wordFunction

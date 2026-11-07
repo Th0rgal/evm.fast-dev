@@ -5,8 +5,8 @@ import InitECandidate.Solver.Wave8Stage.ConcreteM7313.BackendDecomposition
 set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 200000
-set_option maxHeartbeats 16000000
-set_option cbv.maxSteps 20000000
+set_option maxHeartbeats 64000000
+set_option cbv.maxSteps 40000000
 
 namespace InitECandidate.Solver.Wave8Stage.ConcreteM7313.Word630
 open InitE Flapjack Flapjack.Compiler.Backend
