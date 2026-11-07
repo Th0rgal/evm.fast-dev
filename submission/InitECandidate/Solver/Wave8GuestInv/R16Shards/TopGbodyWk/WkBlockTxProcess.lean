@@ -24,6 +24,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2Strong
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PayloadWorldHelpers
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyMptInsert.RlpWord
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockAuxLeaves
 
 /-!
 # R16k Shard `WkBlockTxProcess`: Block & Transaction Execution `wk_*` Contracts
@@ -11777,6 +11778,49 @@ private theorem validBufList_ptxIncorpBufs : ValidBufList ptxIncorpBufs := by
   · exact ⟨64, by decide, by decide, le_rfl⟩
   · exact ⟨64, by decide, by decide, by decide⟩
 
+/-! ### `incorporate_tx_into_block` from the decode witness
+
+The only semantic dependency of the phase-5 incorporate step is the
+`decode_witness_to_mpt` spec (`idx_start_storage` → `ws_storage_trie`):
+`merge_tx_into_block` is unconditional (`wkSc_merge_tx_into_block`), and
+`update_builder_from_tx` follows from `idx_start_storage`'s world step. The
+mask delivered here is the exact `ptxIncorp*` mask the phase-5 wiring consumes,
+so `hinc` can be discharged by this theorem modulo the witness hypotheses. -/
+
+theorem ptxIncorpKeeps_of_decode_witness
+    {ExtraGuard : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat → Prop}
+    (hdw : WkBalStateInit.DecodeWitnessToMptSpec @ExtraGuard)
+    (hdb : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      WorldOK s → globN s "ws" ≠ 0 → ExtraGuard s (memW s (globN s "ws"))) :
+    WorldKeepsSc WorldOK (bufRegions ptxIncorpBufs) ptxIncorpGlobals ptxIncorpKeep NoExtra
+      (ofString "incorporate_tx_into_block") := by
+  have hidx : WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "idx_start_storage") :=
+    wkSc_idx_start_storage_of_decode_witness hdw hdb
+  have hbuilder : WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "update_builder_from_tx") := by
+    obtain ⟨ps, body, ret, hl, hb⟩ := wkSc_update_builder_from_tx_of_idx_storage hidx
+    refine ⟨ps, body, ret, hl, ?_⟩
+    intro F s hc hW hex hnt hres
+    refine worldStepSc_mono_mask (B1 := builderBufs)
+      (gw1 := ["heap_ptr", "scratch_ptr"]) (keep1 := stdKeep)
+      (by intro p hp
+          simp only [builderBufs, withdrawalBufs, List.mem_cons, List.not_mem_nil,
+            or_false] at hp ⊢
+          rcases hp with rfl | rfl | rfl | rfl | rfl <;> simp)
+      (by intro g hg
+          simp only [withdrawalGlobals, List.mem_cons, List.not_mem_nil, or_false] at hg ⊢
+          rcases hg with rfl | rfl | rfl <;> simp)
+      ?_ (hb s hc hW hex hnt hres)
+    intro rec hr k hk
+    simp only [withdrawalKeep, List.mem_cons, List.not_mem_nil, or_false] at hr
+    rcases hr with rfl | rfl | rfl | rfl
+    · exact ⟨[0, 8, 16, 24, 32], by simp [stdKeep], hk⟩
+    · exact ⟨[0, 8, 16, 24, 32, 40, 48, 56, 64, 72], by simp [stdKeep], hk⟩
+    · cases hk
+    · exact ⟨[0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80], by simp [stdKeep], hk⟩
+  exact wkSc_incorporate_tx_into_block_of_steps hbuilder wkSc_merge_tx_into_block
+
 private theorem ptxIncorpBufs_sub_ptx : ∀ p ∈ ptxIncorpBufs, p ∈ ptxBufs ∧ p.1 ∉ ptxGlobals := by
   intro p hp
   simp only [ptxIncorpBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
@@ -12128,6 +12172,136 @@ theorem ptxBlockOutUnhit_trans_step {F : Type}
     (hsm : PtxBlockOutUnhit s mid) (hmp : PtxBlockOutUnhit mid post) :
     PtxBlockOutUnhit s post :=
   ptxBlockOutUnhit_trans hsm hmp (blockOutObjects_stable_of_step hB hgw hW hstep hsm)
+
+/-! ### `htab_union_into` exit frame preserves the block-output objects
+
+The merge storage loop's `htab_union_into` steps carry positive write frames: the
+`HtabUnionInto.ExitR` frame confines writes to the table footprint plus the fresh
+heap gap.  This leaf converts that frame into the Bo-grade unhit fact (and the
+resulting `blockOutObjects` stability) that the phase-5 incorporate wiring needs. -/
+
+theorem ptxBlockOutUnhit_of_htabUnionExit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaOK s) (hWT : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (hex : HtabUnionInto.ExitR t s post) :
+    PtxBlockOutUnhit s post ∧ blockOutObjects post = blockOutObjects s := by
+  obtain ⟨hT, hJ, hF, hTr⟩ := id hWT
+  obtain ⟨hApost, hWt, hk0, hk1, hhp, hfpp, hfr, hgl⟩ := hex
+  have hhp8 : globN s "heap_ptr" % 8 = 0 := hA.2.2.2.2.2.1
+  have hhp_le : globN s "heap_ptr" ≤ heapLimit := hA.2.1
+  have hpp_le : globN post "heap_ptr" ≤ heapLimit := hApost.2.2.1
+  have hlim8 : heapLimit % 8 = 0 := by rw [M13.heapLimit_val]
+  have hbo_glob : globN post "bo" = globN s "bo" :=
+    (M13.globN_eq_of_lookup_eq (hgl (ofString "bo") (by decide))).symm
+  have hfp_align : ∀ j ∈ htabFootprint s t, j.1 % 8 = 0 := fun j hj =>
+    ((hT.2.1 t ht).1.1 j hj).2.1
+  -- every fixed object the footprint misses is unhit
+  have hivl_unhit : ∀ i : Ivl, i ∈ fixedObjects s →
+      (∀ j ∈ htabFootprint s t, Disj j i) →
+      R10Shards.Fast_GbodyC17ToC21.IvlUnhit s post i := by
+    intro i hfix hdj a ha8 hhit
+    have hz : i.2 = 0 ∨ (Allocated s i ∧ WordsOK s i) := hF.1 i hfix
+    have hi1 : i.1 % 8 = 0 ∧ i.2 % 8 = 0 := by
+      rcases hz with h0 | ⟨_, hw⟩
+      · have h1 := R13Shards.fixedObjects_zero_aligned i hfix h0
+        omega
+      · exact ⟨hw.1, hw.2.1⟩
+    have h1 : i.1 < a.toNat + 8 := hhit.1
+    have h2 : a.toNat < i.1 + i.2 := hhit.2
+    refine hfr a ?_ ?_
+    · intro j hj hjh
+      exact cellHits_disj_false ha8 (fun _ => hi1.1) (fun _ => hfp_align j hj)
+        (fun _ => hi1) hhit hjh (R13Shards.disj_symm (hdj j hj))
+    · intro hh
+      have hf1 : globN s "heap_ptr" < a.toNat + 8 := hh.1
+      have hf2 : a.toNat < globN s "heap_ptr" + (globN post "heap_ptr" -
+        globN s "heap_ptr") := hh.2
+      rcases hz with h0 | ⟨hal, hw⟩
+      · have h1' := R13Shards.fixedObjects_zero_aligned i hfix h0
+        omega
+      · have hdis : Disj i (globN s "heap_ptr", heapLimit - globN s "heap_ptr") :=
+          M13.allocated_disj_heapFree hA hal
+        rcases hdis with hd0 | hd0 | hle | hge
+        · have h1' := R13Shards.fixedObjects_zero_aligned i hfix hd0
+          omega
+        · have hd0' : heapLimit - globN s "heap_ptr" = 0 := hd0
+          omega
+        · have hle' : i.1 + i.2 ≤ globN s "heap_ptr" := hle
+          omega
+        · have hge' : globN s "heap_ptr" + (heapLimit - globN s "heap_ptr") ≤ i.1 := hge
+          omega
+  have hunhit : PtxBlockOutUnhit s post :=
+    ptxBlockOutUnhit_of_nonempty fun i hi _ =>
+      hivl_unhit i (M13.blockOut_in_fixedObjects hi) fun j hj =>
+        ((hT.2.1 t ht).2 j hj).2 i (M13.blockOut_in_fixedObjects hi)
+  refine ⟨hunhit, ?_⟩
+  simp only [blockOutObjects]
+  rw [hbo_glob]
+  by_cases hb0 : globN s "bo" = 0
+  · simp [hb0]
+  · -- the bo record is a fixed object with aligned, bounded cells
+    have hbo_fix : (globN s "bo", 88) ∈ fixedObjects s := by
+      have hmem : (globN s "bo", if globN s "bo" = 0 then 0 else 88) ∈ fixedObjects s := by
+        unfold fixedObjects
+        apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+        exact List.mem_map.2 ⟨("bo", 88), by decide, rfl⟩
+      rwa [if_neg hb0] at hmem
+    have hzbo : (globN s "bo", 88).2 = 0 ∨ (Allocated s (globN s "bo", 88) ∧
+        WordsOK s (globN s "bo", 88)) := hF.1 _ hbo_fix
+    rcases hzbo with h0 | ⟨_, hwbo⟩
+    · simp at h0
+    have hbo8 : globN s "bo" % 8 = 0 := hwbo.1
+    have hbo_hi : globN s "bo" + 88 ≤ 2 ^ 64 := by
+      rcases EvmBase.fixedObject_le_2pow64 hA hF hbo_fix with h0 | hbnd
+      · simp at h0
+      · exact hbnd
+    have hbo_unhit := hivl_unhit _ hbo_fix fun j hj =>
+      ((hT.2.1 t ht).2 j hj).2 _ hbo_fix
+    have hcell : ∀ k : Nat, k % 8 = 0 → k + 8 ≤ 88 →
+        memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := fun k hk8 hk88 =>
+      R13Shards.memW_eq_of_ivlUnhit hbo_unhit (by omega) (by omega) (by omega)
+    -- list headers of the two output lists
+    have hll : ∀ k ∈ ([40, 72] : List Nat), memW s (globN s "bo" + k) ≠ 0 →
+        memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) ∧
+        memW post (memW s (globN s "bo" + k) + 16) = memW s (memW s (globN s "bo" + k) + 16) := by
+      intro k hk hl0
+      have hkc : memW s (globN s "bo" + k) = memW s (globN s "bo" + 40) ∨
+          memW s (globN s "bo" + k) = memW s (globN s "bo" + 72) := by
+        simp at hk
+        rcases hk with rfl | rfl
+        · exact Or.inl rfl
+        · exact Or.inr rfl
+      have hl_bo := lst_push_bo_disj_fixed hWT hb0 hl0 hkc
+      have hl_fix : (memW s (globN s "bo" + k), 24) ∈ fixedObjects s :=
+        M13.blockOut_in_fixedObjects hl_bo.1
+      have hzL : (memW s (globN s "bo" + k), 24).2 = 0 ∨
+          (Allocated s (memW s (globN s "bo" + k), 24) ∧
+            WordsOK s (memW s (globN s "bo" + k), 24)) := hF.1 _ hl_fix
+      rcases hzL with h0 | ⟨_, hwL⟩
+      · simp at h0
+      have hl8 : memW s (globN s "bo" + k) % 8 = 0 := hwL.1
+      have hl_hi : memW s (globN s "bo" + k) + 24 ≤ 2 ^ 64 := by
+        rcases EvmBase.fixedObject_le_2pow64 hA hF hl_fix with h0 | hbnd
+        · simp at h0
+        · exact hbnd
+      have hu := hivl_unhit _ hl_fix (hl_bo.2.1 t ht)
+      exact ⟨R13Shards.memW_eq_of_ivlUnhit hu (by omega) (by omega) (by omega),
+        R13Shards.memW_eq_of_ivlUnhit hu (by omega) (by omega) (by omega)⟩
+    rw [hcell 24 (by decide) (by omega), hcell 32 (by decide) (by omega),
+      hcell 40 (by decide) (by omega), hcell 56 (by decide) (by omega),
+      hcell 72 (by decide) (by omega), hcell 80 (by decide) (by omega)]
+    by_cases hl40 : memW s (globN s "bo" + 40) = 0 <;>
+      by_cases hl72 : memW s (globN s "bo" + 72) = 0
+    · simp [hl40, hl72]
+    · have ⟨h72a, h72b⟩ := hll 72 (by decide) hl72
+      simp [hl40]
+      rw [h72a, h72b]
+    · have ⟨h40a, h40b⟩ := hll 40 (by decide) hl40
+      simp [hl72]
+      rw [h40a, h40b]
+    · have ⟨h40a, h40b⟩ := hll 40 (by decide) hl40
+      have ⟨h72a, h72b⟩ := hll 72 (by decide) hl72
+      rw [h40a, h40b, h72a, h72b]
 
 theorem ptxBlockOutUnhit_sk_make_eval {F : Type}
     (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
