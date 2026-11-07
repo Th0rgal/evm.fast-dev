@@ -16533,4 +16533,13 @@ theorem «gbody__node_rlp_fill_strong» : GBody.«_node_rlp_fill_strong» :=
   fun hn hb hf ha hm hrel _ _ _ _ _ _ =>
     gbody__node_rlp_fill_strong_of hn hb hf ha hm hrel
 
+/-- Conditional `GBody.«_node_rlp_fill»` bridge from `NodeRlpReady` to `NodeRlpReadyStrong`. -/
+theorem gbody__node_rlp_fill_of_entry
+    (hentry : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      NodeRlpReady s → NodeRlpReadyStrong s) :
+    InitECandidate.Solver.Wave8GuestInv.GBody.«_node_rlp_fill» :=
+  fun hn hb hf ha hm hrel _ _ _ _ _ _ =>
+    let ⟨ps, body, rt, hl, hprog⟩ := gbody__node_rlp_fill_strong_of hn hb hf ha hm hrel
+    ⟨ps, body, rt, hl, fun s hc hP => hprog s hc (hentry s hP)⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
