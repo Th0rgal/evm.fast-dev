@@ -1,6 +1,7 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.SetLstNew
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkLstPush
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 set_option autoImplicit false
@@ -21513,5 +21514,2653 @@ theorem gbody_process_transaction_backing_strong_of_h12_pmc
       K.«process_transaction» :=
   gbody_process_transaction_backing_strong_of_h12 h hwk (resume_pmc_backing hkeep)
     h12 (h4_backing_strong_uncond h)
+
+/-! ## R11 Cutover Spec-Bridge: Eliminating Unprovable `PtxCallees` Fields -/
+
+/-- Cutover callee contract bundle for `process_transaction`: eliminates
+`wk_lst_push` (which used unprovable `BoListArg` without nonzero backing),
+`wk_process_message_call` (superseded by `PtxP34.PmcStrong` + `PmcBackingStrong`),
+and `wk_create_ether` (superseded in Phase 4 by concrete `create_ether` framing). -/
+structure PtxCalleesCutover : Prop where
+  fb_alloc : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»
+  fb_calculate_blob_gas_price : TerminatingFunBoundedOn GuestInv (ofString "calculate_blob_gas_price") K.«calculate_blob_gas_price»
+  fb_calculate_total_blob_gas : TerminatingFunBoundedOn GuestInv (ofString "calculate_total_blob_gas") K.«calculate_total_blob_gas»
+  fb_check_transaction : TerminatingFunBoundedOn GuestInv (ofString "check_transaction") K.«check_transaction»
+  fb_clear_account_preserving_balance : TerminatingFunBoundedOn GuestInv (ofString "clear_account_preserving_balance") K.«clear_account_preserving_balance»
+  fb_compute_contract_address : TerminatingFunBoundedOn GuestInv (ofString "compute_contract_address") K.«compute_contract_address»
+  fb_create_ether : TerminatingFunBoundedOn GuestInv (ofString "create_ether") K.«create_ether»
+  fb_encode_receipt : TerminatingFunBoundedOn GuestInv (ofString "encode_receipt") K.«encode_receipt»
+  fb_encode_transaction : TerminatingFunBoundedOn GuestInv (ofString "encode_transaction") K.«encode_transaction»
+  fb_fee_mul : TerminatingFunBoundedOn GuestInv (ofString "fee_mul") K.«fee_mul»
+  fb_frame_mem_release : TerminatingFunBoundedOn GuestInv (ofString "frame_mem_release") K.«frame_mem_release»
+  fb_get_account : TerminatingFunBoundedOn GuestInv (ofString "get_account") K.«get_account»
+  fb_htab_item : TerminatingFunBoundedOn GuestInv (ofString "htab_item") K.«htab_item»
+  fb_htab_new : TerminatingFunBoundedOn GuestInv (ofString "htab_new") K.«htab_new»
+  fb_htab_set : TerminatingFunBoundedOn GuestInv (ofString "htab_set") K.«htab_set»
+  gb_incorporate_tx_into_block : TerminatingFunBoundedOn WorldOK (ofString "incorporate_tx_into_block") K.«incorporate_tx_into_block»
+  fb_increment_nonce : TerminatingFunBoundedOn GuestInv (ofString "increment_nonce") K.«increment_nonce»
+  fb_keccak256 : TerminatingFunBoundedOn GuestInv (ofString "keccak256") K.«keccak256»
+  fb_lst_new : TerminatingFunBoundedOn GuestInv (ofString "lst_new") K.«lst_new»
+  fb_lst_push : TerminatingFunBoundedOn GuestInv (ofString "lst_push") K.«lst_push»
+  fb_max : TerminatingFunBoundedOn GuestInv (ofString "max") K.«max»
+  fb_memcpy : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»
+  fb_min : TerminatingFunBoundedOn GuestInv (ofString "min") K.«min»
+  fb_msg_new : TerminatingFunBoundedOn GuestInv (ofString "msg_new") K.«msg_new»
+  gb_process_message_call : TerminatingFunBoundedOn MsgReady (ofString "process_message_call") K.«process_message_call»
+  fb_recover_sender_with_chain_id : TerminatingFunBoundedOn GuestInv (ofString "recover_sender_with_chain_id") K.«recover_sender_with_chain_id»
+  fb_scratch_release : TerminatingFunBoundedOn GuestInv (ofString "scratch_release") K.«scratch_release»
+  fb_set_account_balance : TerminatingFunBoundedOn GuestInv (ofString "set_account_balance") K.«set_account_balance»
+  fb_state_fresh_tx : TerminatingFunBoundedOn GuestInv (ofString "state_fresh_tx") K.«state_fresh_tx»
+  fb_te_new : TerminatingFunBoundedOn GuestInv (ofString "te_new") K.«te_new»
+  fb_tx_chain_id : TerminatingFunBoundedOn GuestInv (ofString "tx_chain_id") K.«tx_chain_id»
+  fb_tx_has_access_list : TerminatingFunBoundedOn GuestInv (ofString "tx_has_access_list") K.«tx_has_access_list»
+  fb_tx_is_blob : TerminatingFunBoundedOn GuestInv (ofString "tx_is_blob") K.«tx_is_blob»
+  fb_tx_is_setcode : TerminatingFunBoundedOn GuestInv (ofString "tx_is_setcode") K.«tx_is_setcode»
+  fb_u256_sub : TerminatingFunBoundedOn GuestInv (ofString "u256_sub") K.«u256_sub»
+  fb_udiv_small5 : TerminatingFunBoundedOn GuestInv (ofString "udiv_small5") K.«udiv_small5»
+  fb_validate_transaction : TerminatingFunBoundedOn GuestInv (ofString "validate_transaction") K.«validate_transaction»
+  wk_alloc : WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")
+  rt_alloc : Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
+    (ofString "alloc")
+  wk_calculate_blob_gas_price : WorldKeeps WorldOK (fun s => [(globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+    []
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "calculate_blob_gas_price")
+  ro_calculate_total_blob_gas : ReadOnlyFn (ofString "calculate_total_blob_gas")
+  wk_check_transaction : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+    ["heap_ptr", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "check_transaction")
+  wk_clear_account_preserving_balance : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
+    ["heap_ptr", "journal_n", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "clear_account_preserving_balance")
+  wk_compute_contract_address : WorldKeeps WorldOK (fun s => [(locN s "out", 20), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "compute_contract_address")
+  wk_encode_receipt : WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs") ∧ LogsDisjFixed s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    RetReceiptBounded (ofString "encode_receipt")
+  wk_encode_transaction : WorldKeeps ((fun s => WorldOK s ∧ TxValid s)) (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "encode_transaction")
+  ro_fee_mul : ReadOnlyFn (ofString "fee_mul")
+  wk_get_account : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
+    ["heap_ptr", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "get_account")
+  ro_htab_item : ReadOnlyFn (ofString "htab_item")
+  htab_new_spec : type_of% @htab_new_spec
+  htab_set_spec : type_of% @htab_set_spec
+  wk_increment_nonce : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
+    ["heap_ptr", "journal_n", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "increment_nonce")
+  wk_keccak256 : WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+    []
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "keccak256")
+  wk_lst_new : WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    (RetAvoidsIf (fun s => locN s "esz" * locN s "cap" < 2 ^ 64)
+      (fun s post w => [(w, 24), (memW post w, locN s "esz" * locN s "cap")])) (ofString "lst_new")
+  rt_lst_new : Returns ArenaReady (fun s post l =>
+      locN s "esz" * locN s "cap" < 2 ^ 64 → 1 ≤ locN s "cap" →
+        FreshBlock s post l 24 ∧ FreshBlock s post (memW post l) (locN s "esz" * locN s "cap") ∧
+        Disj (l, 24) (memW post l, locN s "esz" * locN s "cap") ∧
+        memW post (l + 8) = 0 ∧ memW post (l + 16) = locN s "cap")
+    (ofString "lst_new")
+  ro_max : ReadOnlyFn (ofString "max")
+  wk_memcpy : WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")])
+    []
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "memcpy")
+  dm_memcpy : ResumesInDomain (fun s => (locN s "dst", locN s "n")) (ofString "memcpy")
+  ro_min : ReadOnlyFn (ofString "min")
+  rv_min : RetLe (fun s => locN s "a") (ofString "min")
+  wk_msg_new : WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    (RetAvoids (fun _ _ w => [(w, 176)])) (ofString "msg_new")
+  rt_msg_new : Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧
+      ∀ k, k < 22 → memW post (m + 8 * k) = 0)
+    (ofString "msg_new")
+  wk_recover_sender_with_chain_id : WorldKeeps ((fun s => WorldOK s ∧ TxValid s)) (fun s => [(locN s "out20", 20), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "recover_sender_with_chain_id")
+  wk_set_account_balance : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
+    ["heap_ptr", "journal_n", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "set_account_balance")
+  wk_state_fresh_tx : WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr", "journal_n", "ts"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "state_fresh_tx")
+  wk_te_new : WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    (RetAvoids (fun _ _ w => [(w, 200)])) (ofString "te_new")
+  rt_te_new : Returns ArenaReady (fun s post m => FreshBlock s post m 200 ∧
+      ∀ k, k < 25 → memW post (m + 8 * k) = 0)
+    (ofString "te_new")
+  ro_tx_chain_id : ReadOnlyFn (ofString "tx_chain_id")
+  ro_tx_has_access_list : ReadOnlyFn (ofString "tx_has_access_list")
+  ro_tx_is_blob : ReadOnlyFn (ofString "tx_is_blob")
+  ro_tx_is_setcode : ReadOnlyFn (ofString "tx_is_setcode")
+  ro_u256_sub : ReadOnlyFn (ofString "u256_sub")
+  ro_udiv_small5 : ReadOnlyFn (ofString "udiv_small5")
+  ro_validate_transaction : ReadOnlyFn (ofString "validate_transaction")
+  rv_validate_transaction : RetIntrinsic (ofString "validate_transaction")
+
+/-- Legacy `PtxCallees` projects directly onto `PtxCalleesCutover`. -/
+theorem PtxCallees.toCutover (h : PtxCallees) : PtxCalleesCutover where
+  fb_alloc := h.fb_alloc
+  fb_calculate_blob_gas_price := h.fb_calculate_blob_gas_price
+  fb_calculate_total_blob_gas := h.fb_calculate_total_blob_gas
+  fb_check_transaction := h.fb_check_transaction
+  fb_clear_account_preserving_balance := h.fb_clear_account_preserving_balance
+  fb_compute_contract_address := h.fb_compute_contract_address
+  fb_create_ether := h.fb_create_ether
+  fb_encode_receipt := h.fb_encode_receipt
+  fb_encode_transaction := h.fb_encode_transaction
+  fb_fee_mul := h.fb_fee_mul
+  fb_frame_mem_release := h.fb_frame_mem_release
+  fb_get_account := h.fb_get_account
+  fb_htab_item := h.fb_htab_item
+  fb_htab_new := h.fb_htab_new
+  fb_htab_set := h.fb_htab_set
+  gb_incorporate_tx_into_block := h.gb_incorporate_tx_into_block
+  fb_increment_nonce := h.fb_increment_nonce
+  fb_keccak256 := h.fb_keccak256
+  fb_lst_new := h.fb_lst_new
+  fb_lst_push := h.fb_lst_push
+  fb_max := h.fb_max
+  fb_memcpy := h.fb_memcpy
+  fb_min := h.fb_min
+  fb_msg_new := h.fb_msg_new
+  gb_process_message_call := h.gb_process_message_call
+  fb_recover_sender_with_chain_id := h.fb_recover_sender_with_chain_id
+  fb_scratch_release := h.fb_scratch_release
+  fb_set_account_balance := h.fb_set_account_balance
+  fb_state_fresh_tx := h.fb_state_fresh_tx
+  fb_te_new := h.fb_te_new
+  fb_tx_chain_id := h.fb_tx_chain_id
+  fb_tx_has_access_list := h.fb_tx_has_access_list
+  fb_tx_is_blob := h.fb_tx_is_blob
+  fb_tx_is_setcode := h.fb_tx_is_setcode
+  fb_u256_sub := h.fb_u256_sub
+  fb_udiv_small5 := h.fb_udiv_small5
+  fb_validate_transaction := h.fb_validate_transaction
+  wk_alloc := h.wk_alloc
+  rt_alloc := h.rt_alloc
+  wk_calculate_blob_gas_price := h.wk_calculate_blob_gas_price
+  ro_calculate_total_blob_gas := h.ro_calculate_total_blob_gas
+  wk_check_transaction := h.wk_check_transaction
+  wk_clear_account_preserving_balance := h.wk_clear_account_preserving_balance
+  wk_compute_contract_address := h.wk_compute_contract_address
+  wk_encode_receipt := h.wk_encode_receipt
+  wk_encode_transaction := h.wk_encode_transaction
+  ro_fee_mul := h.ro_fee_mul
+  wk_get_account := h.wk_get_account
+  ro_htab_item := h.ro_htab_item
+  htab_new_spec := h.htab_new_spec
+  htab_set_spec := h.htab_set_spec
+  wk_increment_nonce := h.wk_increment_nonce
+  wk_keccak256 := h.wk_keccak256
+  wk_lst_new := h.wk_lst_new
+  rt_lst_new := h.rt_lst_new
+  ro_max := h.ro_max
+  wk_memcpy := h.wk_memcpy
+  dm_memcpy := h.dm_memcpy
+  ro_min := h.ro_min
+  rv_min := h.rv_min
+  wk_msg_new := h.wk_msg_new
+  rt_msg_new := h.rt_msg_new
+  wk_recover_sender_with_chain_id := h.wk_recover_sender_with_chain_id
+  wk_set_account_balance := h.wk_set_account_balance
+  wk_state_fresh_tx := h.wk_state_fresh_tx
+  wk_te_new := h.wk_te_new
+  rt_te_new := h.rt_te_new
+  ro_tx_chain_id := h.ro_tx_chain_id
+  ro_tx_has_access_list := h.ro_tx_has_access_list
+  ro_tx_is_blob := h.ro_tx_is_blob
+  ro_tx_is_setcode := h.ro_tx_is_setcode
+  ro_u256_sub := h.ro_u256_sub
+  ro_udiv_small5 := h.ro_udiv_small5
+  ro_validate_transaction := h.ro_validate_transaction
+  rv_validate_transaction := h.rv_validate_transaction
+
+namespace PtxP34
+open PtxP1
+
+theorem alloc_return_nonzero_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hA : ArenaReady (callEntryStateHOLFinite s callee))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ np : BitVec 64, v = .val (.word np) ∧ np.toNat ≠ 0 ∧ ArenaReady post := by
+  have ha := funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl hA
+    (by rw [hr]; simp)
+  rw [hr] at ha
+  obtain ⟨np, hv, hpost, _, hf⟩ := ha v rfl
+  exact ⟨np, hv, fresh_backing_nonzero hA.2 hf, hpost⟩
+
+theorem lst_push_alloc_branch_fall_cutover (h : PtxCalleesCutover) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l cap : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "np") .one (ofString "alloc")
+        [.panop .mul [.panop .mul
+          [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.var .local (ofString "np"),
+             .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "l"), .const 0])
+              (.var .local (ofString "np")))
+            (.store (.op .add [.var .local (ofString "l"), .const 16])
+              (.panop .mul [.var .local (ofString "cap"), .const 2]))))) = (none, post)) :
+    memW post l.toNat ≠ 0 := by
+  obtain ⟨vs, body, callee, ret, rv, allocated, done, hlookup, hrun, hcont, hmem, _⟩ :=
+    dec_call_fall_inv hr
+  have hentry : ArenaReady (callEntryStateHOLFinite s callee) :=
+    (arenaReady_with_locals s callee (s.clock - 1)).2 hA
+  obtain ⟨np, rfl, hnz, hpost⟩ :=
+    alloc_return_nonzero_cutover h s vs body callee ret rv allocated hc hentry hlookup hrun
+  have hb := lst_push_copy_stores_fall
+    (setVarHOLFinite (ofString "np") (.val (.word np)) { allocated with locals := s.locals })
+    done l cap np hpost.1.code
+    (by simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "np" ≠ ofString "l" by decide] using hl)
+    (by simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "np" ≠ ofString "cap" by decide] using hcap)
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]) hnz hcont
+  simpa only [memW, hmem] using hb
+
+theorem lst_push_capacity_branch_fall_cutover (h : PtxCalleesCutover) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l cap : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hb : memW s l.toNat ≠ 0)
+    (cond : ExpHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (.ite cond
+        (.decCall (ofString "np") .one (ofString "alloc")
+          [.panop .mul [.panop .mul
+            [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+          (.seq
+            (.call (some (none, none)) (ofString "memcpy")
+              [.var .local (ofString "np"),
+               .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+               .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+            (.seq
+              (.store (.op .add [.var .local (ofString "l"), .const 0])
+                (.var .local (ofString "np")))
+              (.store (.op .add [.var .local (ofString "l"), .const 16])
+                (.panop .mul [.var .local (ofString "cap"), .const 2]))))) .skip) =
+      (none, post)) : memW post l.toNat ≠ 0 ∧
+        (∀ k, k ≠ ofString "np" → post.locals.lookup k = s.locals.lookup k) := by
+  rcases ite_skip_fall_inv hr with hg | rfl
+  · exact ⟨lst_push_alloc_branch_fall_cutover h s post l cap hc hA hl hcap hg,
+      fun k hk => lst_push_alloc_branch_lookup s post _ hg k hk⟩
+  · exact ⟨hb, fun _ _ => rfl⟩
+
+theorem lst_push_capacity_tail_returned_cutover (h : PtxCalleesCutover) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hb : memW s l.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s
+      (.seq
+        (.ite (.cmp .notLower (.var .local (ofString "n")) (.var .local (ofString "cap")))
+          (.decCall (ofString "np") .one (ofString "alloc")
+            [.panop .mul [.panop .mul
+              [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+            (.seq
+              (.call (some (none, none)) (ofString "memcpy")
+                [.var .local (ofString "np"),
+                 .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+                 .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+              (.seq
+                (.store (.op .add [.var .local (ofString "l"), .const 0])
+                  (.var .local (ofString "np")))
+                (.store (.op .add [.var .local (ofString "l"), .const 16])
+                  (.panop .mul [.var .local (ofString "cap"), .const 2]))))) .skip)
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+          (.op .add [.var .local (ofString "n"), .const 1]))
+          (.return (.op .add
+            [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]])))) =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  obtain ⟨mid, hm, _⟩ := seq_returned_of_not_returned (by
+    apply ite_not_returned
+    · apply dec_call_not_returned
+      intro a
+      apply seq_not_returned
+      · exact ignored_call_not_returned _ _ _ _
+      · intro b
+        apply seq_not_returned
+        · exact store_not_returned _ _ _ _
+        · intro c; exact store_not_returned _ _ _ _
+    · simp [evaluateHOLFiniteState_skip]) hr
+  obtain ⟨hbmid, hlocals⟩ := lst_push_capacity_branch_fall_cutover h s mid l cap hc hA hl hcap hb _ hm
+  exact lst_push_branch_to_tail s mid post l n v _ hc hm hbmid
+    (hlocals _ (by decide)) (hlocals _ (by decide)) hl hn hr
+
+theorem lst_push_body_backing_nonzero_cutover (h : PtxCalleesCutover) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hb : memW s l.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1 =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_lst_push,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, List.map, Option.map] at hr
+  obtain ⟨n, mid, hr, hm⟩ := dec_word_returned_inv hr
+  obtain ⟨cap, last, hr, hm'⟩ := dec_word_returned_inv hr
+  have hs := lst_push_capacity_tail_returned_cutover h
+    (setVarHOLFinite (ofString "cap") (.val (.word cap))
+      (setVarHOLFinite (ofString "n") (.val (.word n)) s)) last l n cap v hc
+    ((arenaReady_with_locals s _ s.clock).mpr hA) (by
+      simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hl,
+        show ofString "cap" ≠ ofString "l" by decide,
+        show ofString "n" ≠ ofString "l" by decide])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "cap" ≠ ofString "n" by decide])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]) hb hr
+  simpa only [memW, hm, hm'] using hs
+
+theorem lst_push_backing_nonzero_strong_cutover (h : PtxCalleesCutover) :
+    FunSpec BoListArgStrong (fun s r post => ∀ v, r = some (.returned v) →
+      memW post (locN s "l") ≠ 0) (ofString "lst_push") := by
+  have hlookup : originalRuntimeCode.lookup (ofString "lst_push") =
+      some ([(ofString "l", .one), (ofString "esz", .one)],
+        (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1, .one) := by
+    exact lookup_lst_push
+  refine ⟨_, _, _, hlookup, ?_⟩
+  intro F s hc hp hvalid hnt v hv
+  obtain ⟨values, hvalid⟩ := hvalid
+  have hx := lookupCodeHOLFinite_eq_some originalRuntimeCode.lookup (ofString "lst_push")
+    values _ s.locals _ hvalid
+  simp only [lookupCodeHOLExact, hlookup] at hx
+  rcases values with _ | ⟨vl, _ | ⟨ve, _ | ⟨_, _⟩⟩⟩
+  · simp at hx
+  · simp at hx
+  swap
+  · simp at hx
+  · rcases vl with ⟨⟨lw⟩⟩ | _ | _
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    rcases ve with ⟨⟨ew⟩⟩ | _ | _
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    simp [shapeOfHOLExact, shapeEqHOL] at hx
+    obtain ⟨_, hlocals⟩ := hx
+    have hl : s.locals.lookup (ofString "l") = some (.val (.word lw)) := by
+      have he := congrFun hlocals (ofString "l")
+      simpa [FUPDATE, show ofString "esz" ≠ ofString "l" by decide,
+        show ofString "l" ≠ ofString "esz" by decide] using he.symm
+    have hrun : evaluateHOLFiniteState s
+        (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1 =
+        (some (.returned v), (evaluateHOLFiniteState s
+          (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1).2) :=
+      Prod.ext hv rfl
+    simpa only [locN, hl] using lst_push_body_backing_nonzero_cutover h s _ lw v hc hp.1.1 hl
+      (by simpa only [locN, hl] using hp.2.2) hrun
+
+theorem lst_push_slot_result_strong {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (harg : WkBal.BoListArgStrong (callEntryStateHOLFinite s callee)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat % 8 = 0 ∧
+      Inside (w.toNat, 8) (memW post (locN (callEntryStateHOLFinite s callee) "l"))
+        (memW post (locN (callEntryStateHOLFinite s callee) "l") +
+          8 * memW post (locN (callEntryStateHOLFinite s callee) "l" + 16)) := by
+  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl harg (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, hW⟩ := harg.1.1.2
+  obtain ⟨Nd, hTr⟩ := hW.2.2.2
+  have hWT : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd :=
+    ⟨hW.1, hW.2.1, hW.2.2.1, hTr⟩
+  obtain ⟨_, _, _, _, _, _, hret⟩ := hs.2.2.2.2 S Nd hWT (by intro i hi; cases hi)
+  exact hret v rfl
+
+theorem lst_push_bo40_slot_result_strong {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : TxWorld s) (hb : TxBacking s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat % 8 = 0 ∧
+      Inside (w.toNat, 8) (memW post (memW post (globN post "bo" + 40)))
+        (memW post (memW post (globN post "bo" + 40)) +
+          8 * memW post (memW post (globN post "bo" + 40) + 16)) := by
+  have harg := lst_push_bo40_arg s vs body callee ret hc hp ha hl
+  have hstrong : WkBal.BoListArgStrong (callEntryStateHOLFinite s callee) :=
+    ⟨harg.1, by rw [harg.2]; exact hb.1⟩
+  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl hstrong (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 40) = memW s (globN s "bo" + 40) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.2.bo_nz 40 (by simp) (by intro i hi; cases hi)
+  obtain ⟨w, hv, hal, hin⟩ := lst_push_slot_result_strong s vs body callee ret v post hc hl hr hstrong
+  refine ⟨w, hv, hal, ?_⟩
+  rw [hbo, hm]
+  simpa only [harg.2] using hin
+
+theorem lst_push_bo72_slot_result_strong {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : TxWorld s) (hb : TxBacking s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat % 8 = 0 ∧
+      Inside (w.toNat, 8) (memW post (memW post (globN post "bo" + 72)))
+        (memW post (memW post (globN post "bo" + 72)) +
+          8 * memW post (memW post (globN post "bo" + 72) + 16)) := by
+  have harg := lst_push_bo72_arg s vs body callee ret hc hp ha hl
+  have hstrong : WkBal.BoListArgStrong (callEntryStateHOLFinite s callee) :=
+    (lst_push_bo72_arg_backing s vs body callee ret hc hp hb ha hl).2
+  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl hstrong (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 72) = memW s (globN s "bo" + 72) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.2.bo_nz 72 (by simp) (by intro i hi; cases hi)
+  obtain ⟨w, hv, hal, hin⟩ := lst_push_slot_result_strong s vs body callee ret v post hc hl hr hstrong
+  refine ⟨w, hv, hal, ?_⟩
+  rw [hbo, hm]
+  simpa only [harg.2] using hin
+
+theorem lst_push_logPointers_resume_strong {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hp : Phase4LogPointersReady s) (hn : locN s "logs" ≠ 0)
+    (harg : WkBal.BoListArgStrong (callEntryStateHOLFinite s callee)) :
+    Phase4LogPointersReady (setVarHOLFinite (ofString "slot") v {post with locals := s.locals}) := by
+  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl harg (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  exact LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) v _
+    (logPointers_heapStep hs' hp hn)
+
+theorem lst_push_logSlot_resume_strong {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4LogPointersReady s) (hb : TxBacking s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hback : memW post (memW post (globN post "bo" + 40)) ≠ 0) :
+    Phase4LogSlotReady (setVarHOLFinite (ofString "slot") v {post with locals := s.locals}) := by
+  have hW := hp.1.1.1.1
+  have harg := lst_push_bo40_arg s vs body callee ret hc hW ha hl
+  have hstrong : WkBal.BoListArgStrong (callEntryStateHOLFinite s callee) :=
+    ⟨harg.1, by rw [harg.2]; exact hb.1⟩
+  have hptr := lst_push_logPointers_resume_strong s vs body callee ret v post hc hl hr hp
+    hp.1.2.2 hstrong
+  obtain ⟨w, rfl, _, hin⟩ := lst_push_bo40_slot_result_strong s vs body callee ret v post
+    hc hW hb ha hl hr
+  refine ⟨hptr, hback, ?_⟩
+  simpa [locN, memW, globN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hin
+
+theorem resume_lst_push_logSlot_backing_cutover (h : PtxCalleesCutover) :
+    DecCallResumeOn (fun s => Phase4LogPointersReady s ∧ TxBacking s) Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have harg := lst_push_bo40_arg s vs body callee ret hc hp.1.1.1.1.1 ha hl
+  have hstrong : BoListArgStrong (callEntryStateHOLFinite s callee) := by
+    refine ⟨harg.1.1, harg.1, ?_⟩
+    rw [harg.2]
+    exact hp.2.1
+  have hn := funSpec_at_lookup (lst_push_backing_nonzero_strong_cutover h) s hc vs body callee ret hl
+    hstrong (by rw [hr]; simp)
+  rw [hr] at hn
+  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl hstrong.2
+    (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 40) = memW s (globN s "bo" + 40) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.1.1.1.1.1.2.bo_nz 40 (by simp) (by intro i hi; cases hi)
+  apply lst_push_logSlot_resume_strong s vs body callee ret v post hc hp.1 hp.2 ha hl hr
+  rw [hbo, hm]
+  simpa only [harg.2] using hn v rfl
+
+theorem resume_lst_push_typed_logSlot_backing_cutover (h : PtxCalleesCutover) :
+    DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  refine ⟨resume_lst_push_logSlot_backing_cutover h s vs body callee ret v post hc
+    ⟨hp.1.1, hp.2⟩ ha hl hr, ?_, ?_⟩
+  · obtain ⟨n, hn⟩ := hp.1.2.1
+    exact ⟨n, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "slot" ≠ ofString "nl" by decide] using hn⟩
+  · obtain ⟨p, hp⟩ := hp.1.2.2.2
+    exact ⟨p, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "slot" ≠ ofString "lp" by decide] using hp⟩
+
+theorem resume_lst_push_typed_logSlot_backing_of_other_header_cutover (h : PtxCalleesCutover)
+    (hother : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) vs body callee ret v post,
+      s.code = originalRuntimeCode → (Phase4TypedLogPointers s ∧ TxBacking s) →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs →
+      lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned v), post) →
+      memW post (memW s (globN s "bo" + 72)) = memW s (memW s (globN s "bo" + 72))) :
+    DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hout := resume_lst_push_typed_logSlot_backing_cutover h s vs body callee ret v post hc hp ha hl hr
+  refine ⟨hout, hout.1.2.1, ?_⟩
+  have hW := hp.1.1.1.1.1.1
+  have harg := lst_push_bo40_arg s vs body callee ret hc hW ha hl
+  have hstrong : WkBal.BoListArgStrong (callEntryStateHOLFinite s callee) :=
+    ⟨harg.1, by rw [harg.2]; exact hp.2.1⟩
+  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl hstrong
+    (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 72) = memW s (globN s "bo" + 72) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hW.2.bo_nz 72 (by simp) (by intro i hi; cases hi)
+  change memW post (memW post (globN post "bo" + 72)) ≠ 0
+  rw [hbo, hm, hother s vs body callee ret v post hc hp ha hl hr]
+  exact hp.2.2
+
+theorem alloc_copy_header_disjoint_cutover (h : PtxCalleesCutover) {F : Type}
+    (s allocated : PanSemStateFiniteExact 64 F) (n cap esz np a : BitVec 64)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hesz : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hle : n.toNat ≤ cap.toNat)
+    (hbound : esz.toNat * cap.toNat * 2 < 2 ^ 64)
+    (ha : Allocated s (a.toNat, 8))
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.panop .mul [.panop .mul
+        [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned (.val (.word np))), allocated)) :
+    ∀ args,
+      evalListHOLFinite
+        (setVarHOLFinite (ofString "np") (.val (.word np)) {allocated with locals := s.locals})
+        (h := fun a => Classical.propDecidable (allocated.memaddrs a))
+        [.var .local (ofString "np"),
+         .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+         .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]] = some args →
+      ¬ CellHitsPos a.toNat
+        (valWordNat (args[0]?.getD (.rStruct [])), valWordNat (args[2]?.getD (.rStruct []))) := by
+  have hv : vs = [.val (.word (esz * cap * 2))] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, hesz, hcap,
+      valueIsWord, valueWord, panOpHOL] using hargs.symm
+  subst vs
+  have hlookup := hl
+  rw [hc] at hlookup
+  have hb := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "alloc")
+    [(ofString "n", .one)] (sourceFnBody Guest.Software.guestFn_alloc) body .one ret _ callee
+    (by rw [hc]; exact R13Shards.lookup_alloc_r13) hl
+  subst body
+  have ht := lookupCodeHOLFinite_installed_return s (ofString "alloc") [(ofString "n", .one)]
+    (sourceFnBody Guest.Software.guestFn_alloc) (sourceFnBody Guest.Software.guestFn_alloc)
+    .one ret _ callee (by rw [hc]; exact R13Shards.lookup_alloc_r13) hl
+  subst ret
+  obtain ⟨w, he, hnentry⟩ := R13Shards.lookupCode_one_word R13Shards.lookup_alloc_r13 hlookup
+  have hw : w = esz * cap * 2 := by simpa using he.symm
+  subst w
+  have hspec := PtxP1.funSpec_at_lookup h.rt_alloc s hc _ _ callee _ hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).2 hA) (by rw [hr]; simp)
+  rw [hr] at hspec
+  obtain ⟨p, hp, hAp, _, hf⟩ := hspec _ rfl
+  have hp' : p = np := by simpa using hp.symm
+  subst p
+  have heq : locN (callEntryStateHOLFinite s callee) "n" = esz.toNat * cap.toNat * 2 := by
+    simp only [locN, callEntryStateHOLFinite, hnentry]
+    have hb : esz.toNat * cap.toNat < 2 ^ 64 := by omega
+    simp only [BitVec.toNat_mul]
+    rw [Nat.mod_eq_of_lt hb]
+    exact Nat.mod_eq_of_lt hbound
+  rw [heq] at hf
+  have hmul : (esz * n).toNat ≤ esz.toNat * cap.toNat * 2 := by
+    have hh := Nat.mul_le_mul_left esz.toNat hle
+    have hb : esz.toNat * n.toNat < 2 ^ 64 := by omega
+    rw [BitVec.toNat_mul, Nat.mod_eq_of_lt hb]
+    omega
+  intro args he
+  simp [evalListHOLFinite, evalListHOLExact, evalHOLExact,
+    setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+    show ofString "np" ≠ ofString "esz" by decide,
+    show ofString "np" ≠ ofString "n" by decide,
+    show ofString "np" ≠ ofString "l" by decide,
+    hesz, hn, valueIsWord, valueWord, panOpHOL] at he
+  split at he
+  · rename_i value values hv hvalues
+    split at hvalues
+    · rename_i src rest hsrc hrest
+      have hrst : rest = [.val (.word (esz * n))] := by simpa using hrest.symm
+      subst rest
+      simp only [Option.some.injEq] at hvalues
+      subst values
+      have hv' : value = .val (.word np) := Option.some.inj hv.symm
+      subst value
+      have he' := Option.some.inj he
+      subst args
+      change ¬ CellHitsPos a.toNat (np.toNat, (esz * n).toNat)
+      apply fresh_copy_not_hits hA.2 hAp.2 hf ha
+      have hround : esz.toNat * cap.toNat * 2 ≤ (esz.toNat * cap.toNat * 2 + 7) / 8 * 8 := by omega
+      exact hmul.trans hround
+    · cases hvalues
+  · cases he
+
+theorem lst_push_alloc_branch_allocated_frame_cutover (h : PtxCalleesCutover) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap esz a : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hesz : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hle : n.toNat ≤ cap.toNat) (hbound : esz.toNat * cap.toNat * 2 < 2 ^ 64)
+    (ha : Allocated s (a.toNat, 8)) (h0 : a ≠ l) (h16 : a ≠ l + 16)
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "np") .one (ofString "alloc")
+        [.panop .mul [.panop .mul
+          [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "np"),
+           .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+           .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+          (.seq (.store (.op .add [.var .local (ofString "l"), .const 0])
+              (.var .local (ofString "np")))
+            (.store (.op .add [.var .local (ofString "l"), .const 16])
+              (.panop .mul [.var .local (ofString "cap"), .const 2]))))) = (none, post)) :
+    post.memory a = s.memory a := by
+  obtain ⟨vs, body, callee, ret, rv, allocated, done, hargs, hlookup, hrun, hcont, hmem⟩ :=
+    dec_call_fall_inv_args hr
+  have hm := alloc_return_memory s allocated vs body callee ret rv hc hA hlookup hrun
+  obtain ⟨np, rfl, _, hpost⟩ := alloc_return_nonzero_cutover h s vs body callee ret rv allocated hc
+    ((arenaReady_with_locals s callee (s.clock - 1)).2 hA) hlookup hrun
+  have hf := lst_push_copy_stores_memory_frame
+    (setVarHOLFinite (ofString "np") (.val (.word np)) {allocated with locals := s.locals})
+    done l cap np a hpost.1.code
+    (guestInv_setVar _ _ _ ((arenaReady_with_locals allocated s.locals allocated.clock).2 hpost).1)
+    (by simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "np" ≠ ofString "l" by decide] using hl)
+    (by simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "np" ≠ ofString "cap" by decide] using hcap)
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]) h0 h16
+    (alloc_copy_header_disjoint_cutover h s allocated n cap esz np a vs body callee ret
+      hc hA hn hcap hesz hle hbound ha hargs hlookup hrun) hcont
+  rw [hmem]
+  exact hf.trans (congrFun hm a)
+
+theorem lst_push_capacity_tail_memory_frame_cutover (h : PtxCalleesCutover) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap esz a : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hesz : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hle : n.toNat ≤ cap.toNat) (hbound : esz.toNat * cap.toNat * 2 < 2 ^ 64)
+    (ha : Allocated s (a.toNat, 8)) (h0 : a ≠ l) (h8 : a ≠ l + 8) (h16 : a ≠ l + 16)
+    (hr : evaluateHOLFiniteState s
+      (.seq
+        (.ite (.cmp .notLower (.var .local (ofString "n")) (.var .local (ofString "cap")))
+          (.decCall (ofString "np") .one (ofString "alloc")
+            [.panop .mul [.panop .mul
+              [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+            (.seq
+              (.call (some (none, none)) (ofString "memcpy")
+                [.var .local (ofString "np"),
+                 .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+                 .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+              (.seq
+                (.store (.op .add [.var .local (ofString "l"), .const 0])
+                  (.var .local (ofString "np")))
+                (.store (.op .add [.var .local (ofString "l"), .const 16])
+                  (.panop .mul [.var .local (ofString "cap"), .const 2]))))) .skip)
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+          (.op .add [.var .local (ofString "n"), .const 1]))
+          (.return (.op .add
+            [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]])))) =
+      (some (.returned v), post)) : post.memory a = s.memory a := by
+  obtain ⟨mid, hm, ht⟩ := seq_returned_of_not_returned (by
+    apply ite_not_returned
+    · apply dec_call_not_returned
+      intro t
+      apply seq_not_returned
+      · exact ignored_call_not_returned _ _ _ _
+      · intro t
+        apply seq_not_returned
+        · exact store_not_returned _ _ _ _
+        · intro t; exact store_not_returned _ _ _ _
+    · simp [evaluateHOLFiniteState_skip]) hr
+  rcases ite_skip_fall_inv hm with hg | rfl
+  · have hf := lst_push_alloc_branch_allocated_frame_cutover h s mid l n cap esz a
+      hc hA hl hn hcap hesz hle hbound ha h0 h16 hg
+    have hloc := lst_push_alloc_branch_lookup s mid _ hg
+    have hmeta : ∀ p, evaluateHOLFiniteState s p = (none, mid) → mid.code = s.code := by
+      intro p hp
+      have hm := (evaluateHOLFiniteState_metadata s p).1
+      rw [hp] at hm
+      exact hm
+    have hcode := hmeta _ hg
+    exact (lst_push_tail_memory_frame mid post l n a v (hcode.trans hc)
+      ((hloc _ (by decide)).trans hl) ((hloc _ (by decide)).trans hn) h8 ht).trans hf
+  · exact lst_push_tail_memory_frame mid post l n a v hc hl hn h8 ht
+
+theorem lst_push_body_memory_frame_cutover (h : PtxCalleesCutover) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l esz a : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hesz : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hlb : l.toNat + 24 ≤ 2 ^ 64)
+    (hlen : memW s (l.toNat + 8) ≤ memW s (l.toNat + 16))
+    (hbound : esz.toNat * memW s (l.toNat + 16) * 2 < 2 ^ 64)
+    (ha : Allocated s (a.toNat, 8)) (h0 : a ≠ l) (h8 : a ≠ l + 8) (h16 : a ≠ l + 16)
+    (hr : evaluateHOLFiniteState s (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1 =
+      (some (.returned v), post)) : post.memory a = s.memory a := by
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_lst_push,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, List.map, Option.map] at hr
+  obtain ⟨n, mid, hen, hr, hm⟩ := dec_word_returned_inv_eval hr
+  obtain ⟨cap, last, hec, hr, hm'⟩ := dec_word_returned_inv_eval hr
+  have hnval := loaded_header_word_nat hl (by omega : l.toNat + 8 < 2 ^ 64) hen
+  have hcl : (setVarHOLFinite (ofString "n") (.val (.word n)) s).locals.lookup (ofString "l") =
+      some (.val (.word l)) := by
+    simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "n" ≠ ofString "l" by decide] using hl
+  have hcval := loaded_header_word_nat hcl (by omega : l.toNat + 16 < 2 ^ 64) hec
+  change cap.toNat = memW s (l.toNat + 16) at hcval
+  have hf := lst_push_capacity_tail_memory_frame_cutover h
+    (setVarHOLFinite (ofString "cap") (.val (.word cap))
+      (setVarHOLFinite (ofString "n") (.val (.word n)) s)) last l n cap esz a v hc
+    ((arenaReady_with_locals s _ s.clock).2 hA)
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hl,
+      show ofString "cap" ≠ ofString "l" by decide, show ofString "n" ≠ ofString "l" by decide])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "cap" ≠ ofString "n" by decide])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hesz,
+      show ofString "cap" ≠ ofString "esz" by decide, show ofString "n" ≠ ofString "esz" by decide])
+    (by rw [hnval, hcval]; exact hlen) (by rw [hcval]; exact hbound) ha h0 h8 h16 hr
+  rw [hm, hm']
+  exact hf
+
+theorem lst_push_bo40_other_header_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : TxWorld s) (hback : TxBacking s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    memW post (memW s (globN s "bo" + 72)) = memW s (memW s (globN s "bo" + 72)) := by
+  have harg := lst_push_bo40_arg s vs body callee ret hc hW ha hl
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "lst_push")
+    [(ofString "l", .one), (ofString "esz", .one)] _ body .one ret vs callee
+    (by rw [hc]; exact R13Shards.lookup_lst_push) hl
+  subst body
+  have hret := lookupCodeHOLFinite_installed_return s (ofString "lst_push")
+    [(ofString "l", .one), (ofString "esz", .one)] _ _ .one ret vs callee
+    (by rw [hc]; exact R13Shards.lookup_lst_push) hl
+  subst ret
+  have hl' := hl
+  rw [hc] at hl'
+  obtain ⟨l, esz, _, hloc, hesz⟩ := R13Shards.lookupCode_two_words (by decide) R13Shards.lookup_lst_push hl'
+  have hln : l.toNat = memW s (globN s "bo" + 40) := by
+    simpa only [locN, callEntryStateHOLFinite, hloc] using harg.2
+  have hen : esz.toNat = 8 := by
+    simpa only [locN, callEntryStateHOLFinite, hesz] using harg.1.2.2.2
+  have hlbv : l = BitVec.ofNat 64 (memW s (globN s "bo" + 40)) := by
+    simp [← hln]
+  let a := BitVec.ofNat 64 (memW s (globN s "bo" + 72))
+  have han : a.toNat = memW s (globN s "bo" + 72) := by
+    unfold a memW
+    split
+    simp
+  obtain ⟨hb, hn, hcap, haa⟩ := txWorld_log_push_frame_bounds hW hback
+  obtain ⟨h0, h8, h16⟩ := txWorld_other_header_ne_push_writes hW
+  have hf := lst_push_body_memory_frame_cutover h (callEntryStateHOLFinite s callee) post l esz a v hc
+    harg.1.1.1 hloc hesz (by simpa [hln] using hb)
+    (by simpa only [callEntryStateHOLFinite, memW, hln] using hn)
+    (by simpa only [callEntryStateHOLFinite, memW, hln, hen] using hcap)
+    (by change Allocated s (a.toNat, 8); rw [han]; exact haa)
+    (by simpa only [hlbv] using h0) (by simpa only [hlbv] using h8)
+    (by simpa only [hlbv] using h16) hr
+  change (match post.memory a with | .word w => w.toNat) =
+    (match s.memory a with | .word w => w.toNat)
+  rw [hf]
+  rfl
+
+theorem resume_lst_push_typed_logSlot_txBacking_cutover (h : PtxCalleesCutover) :
+    DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  apply resume_lst_push_typed_logSlot_backing_of_other_header_cutover h
+  intro F s vs body callee ret v post hc hp ha hl hr
+  exact lst_push_bo40_other_header_cutover h s vs body callee ret v post hc
+    hp.1.1.1.1.1.1 hp.2 ha hl hr
+
+theorem resume_lst_push_owned_receiptSlot_backing_cutover (h : PtxCalleesCutover) :
+    DecCallResumeOn (fun s => (PtxReceiptsDone s ∧
+      LogsWorldOwned s (locN s "stable_logs") ∧ locN s "stable_logs" ≠ 0 ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+      TxBacking s) Phase4ReceiptSlotReady (ofString "rl") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have harg := lst_push_bo72_arg s vs body callee ret hc hp.1.1.1 ha hl
+  have hstrong_r16 := lst_push_bo72_arg_backing s vs body callee ret hc hp.1.1.1 hp.2 ha hl
+  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl hstrong_r16.2
+    (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  obtain ⟨hdone, hown⟩ := ptxReceiptsDone_heapStep hs' hp.1.1 hp.1.2.1 hp.1.2.2.1
+  have hn := funSpec_at_lookup (lst_push_backing_nonzero_strong_cutover h) s hc vs body callee ret hl
+    hstrong_r16 (by rw [hr]; simp)
+  rw [hr] at hn
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 72) = memW s (globN s "bo" + 72) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.1.1.1.2.bo_nz 72 (by simp) (by intro i hi; cases hi)
+  have hback : memW post (memW post (globN post "bo" + 72)) ≠ 0 := by
+    rw [hbo, hm]
+    simpa only [harg.2] using hn v rfl
+  obtain ⟨q, rfl, _, hin⟩ := lst_push_bo72_slot_result_strong s vs body callee ret v post hc hp.1.1.1 hp.2 ha hl hr
+  have he : locN (setVarHOLFinite (ofString "rl") (.val (.word q))
+      {post with locals := s.locals}) "stable_logs" = locN s "stable_logs" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "rl" ≠ ofString "stable_logs" by decide]
+  refine ⟨ptxReceiptsDone_set_rl _ _ hdone, ?_, ?_, hback, ?_, ?_⟩
+  · rw [he]; exact hp.1.2.2.1
+  · rw [he]
+    exact logsWorldOwned_with_locals _ post.clock hown
+  · simpa [locN, memW, globN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hin
+  · obtain ⟨w, hw⟩ := hp.1.2.2.2
+    exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "rl" ≠ ofString "stable_logs" by decide] using hw⟩
+
+theorem phase4ReceiptPush_backing_cut_cutover (h : PtxCalleesCutover)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") ∧
+        locN s "stable_logs" ≠ 0 ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+        TxBacking s)
+      (spinePlug 2 (spineAt 137 ptxCode) tail) (K.lst_push + b + 1) := by
+  have hs : TerminatingProgBoundedOn Phase4ReceiptSlotReady
+      (.seq (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))) tail) b := by
+    intro F s hc hp
+    have hb := seq_bound_trans (a := 0) (fun u _ _ _ => by
+      have hu := clock_store u (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))
+      exact ⟨by omega, by omega⟩) hoare_receiptSlot_store htail s hc hp
+    simpa only [Nat.zero_add] using hb
+  have he : spinePlug 2 (spineAt 137 ptxCode) tail =
+      .decCall (ofString "rl") .one (ofString "lst_push")
+        [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8]
+        (.seq (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact TerminatingProgBoundedOn.decCall_on
+    h.fb_lst_push _ _ _
+    (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1.1.1)
+    (resume_lst_push_owned_receiptSlot_backing_cutover h) hs s hc hp
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+theorem phase4Totals_backing_cut_cutover (h : PtxCalleesCutover) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 9 (spineAt 110 ptxCode) tail) (K.max + b + 1) := by
+  have hb : TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 9 (spineAt 110 ptxCode) tail) (0 + (K.max + b + 1)) := by
+    unfold ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine seq_bound_trans (Q := TxAfterCallBackingStrong) ?_ ?_ ?_
+    · exact TerminatingProgBoundedOn.ite_on
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+        (TerminatingProgBoundedOn.of_clock clock_skip)
+    · apply Hoare.ite
+      · apply Hoare.mono (P' := TxAfterCallBackingStrong) _ (fun _ hp => hp.1)
+        exact Hoare.assign
+          (fun s v hp _ _ => LocalsOnly.setVar localsOnly_txAfterCallBackingStrong
+            (name := ofString "tx_state_gas_nat") (by decide) v s hp)
+          (fun _ _ hr => absurd hr (by simp))
+      · exact Hoare.skip (fun _ hp _ => hp.1)
+      · exact fun _ _ hr => absurd hr (by simp)
+    · refine TerminatingProgBoundedOn.decCall_on h.fb_max _ _ _
+        (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1.1)
+        (resume_ro_txAfterCallBackingStrong h.ro_max (by decide) _) ?_
+      have hh := @phase4TotalStores_backing_cut tail b htail
+      unfold ptxCode at hh
+      intro F s hc hp
+      exact hh s hc hp
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+theorem phase4CreditPrefix_backing_cut_cutover (h : PtxCalleesCutover)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong (phase4CreditPrefix tail)
+      (phase4CreditCost + b) := by
+  have he : ∀ fn args, CallEntryOn TxAfterCallBackingStrong GuestInv fn args := by
+    intro fn args F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  have hb : TerminatingProgBoundedOn TxAfterCallBackingStrong (phase4CreditPrefix tail)
+      (K.udiv_small5 + (K.min + (K.max + (K.fee_mul +
+        (K.u256_sub + (K.fee_mul + ((K.create_ether + 1) +
+          ((K.create_ether + 1) + b)) + 1) + 1) + 1) + 1) + 1) + 1) := by
+    unfold phase4CreditPrefix ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_udiv_small5 _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_udiv_small5 (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_min _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_min (by decide) _) ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_max _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_max (by decide) _) ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_fee_mul _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_fee_mul (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_u256_sub _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_u256_sub (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_fee_mul _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_fee_mul (by decide) _) ?_
+    refine seq_bound_trans ?_ (hcredit _) ?_
+    · exact bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_create_ether none _)
+        (fun s hp => hp.1.1.1.1.1)
+    refine seq_bound_trans ?_ (hcredit _) htail
+    exact bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_create_ether none _)
+      (fun s hp => hp.1.1.1.1.1)
+  have heq : K.udiv_small5 + (K.min + (K.max + (K.fee_mul +
+        (K.u256_sub + (K.fee_mul + ((K.create_ether + 1) +
+          ((K.create_ether + 1) + b)) + 1) + 1) + 1) + 1) + 1) + 1 =
+      phase4CreditCost + b := by unfold phase4CreditCost; omega
+  rw [heq] at hb
+  intro F s hc hp
+  exact hb s hc hp
+
+theorem phase4CreditTotals_backing_cut_cutover (h : PtxCalleesCutover)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 20 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + b) := by
+  have hb := @phase4CreditPrefix_backing_cut_cutover h hcredit _ _ (phase4Totals_backing_cut_cutover h htail)
+  have he : spinePlug 20 (spineAt 99 ptxCode) tail =
+      phase4CreditPrefix (spinePlug 9 (spineAt 110 ptxCode) tail) := by
+    unfold phase4CreditPrefix ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  have hr := hb s hc hp
+  convert hr using 1 <;> omega
+
+theorem phase4ThroughLogs_backing_cut_cutover (h : PtxCalleesCutover)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4LogsReady s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 21 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + b) := by
+  have hl : TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (.dec (ofString "logs") .one
+        (.load .one (.op .add [.var .local (ofString "out"), .const 16])) tail) b :=
+    dec_bound_trans (fun s v hp he => ⟨phase4LogsReady_load s v hp.1 he, hp.2⟩) htail
+  have hb := @phase4CreditTotals_backing_cut_cutover h hcredit _ _ hl
+  have he : spinePlug 21 (spineAt 99 ptxCode) tail =
+      spinePlug 20 (spineAt 99 ptxCode)
+        (.dec (ofString "logs") .one
+          (.load .one (.op .add [.var .local (ofString "out"), .const 16])) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+theorem lst_new_txAfterCallStrong_resume_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs =
+      some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : TxAfterCallStrong s) :
+    TxAfterCallStrong (setVarHOLFinite (ofString "logs") v
+      { post with locals := s.locals }) := by
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  exact LocalsOnly.setVar localsOnly_txAfterCallStrong (by decide) v _
+    (txAfterCallStrong_heapStep hs' hp)
+
+theorem lst_new_receiptReady_resume_cutover (h : PtxCalleesCutover) :
+    DecCallResumeOn TxAfterCallStrong Phase4ReceiptReady (ofString "logs")
+      (ofString "lst_new") [.const 8, .const 1] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hlc := R13Shards.lookup_lst_new
+  rw [← hc] at hlc
+  obtain ⟨_, he, hcap⟩ := callee_param_two_exp s (ofString "lst_new")
+    (ofString "esz") (ofString "cap") .one .one _ _ hlc
+    (.const 8) (.const 1) (.val (.word 8)) (.val (.word 1))
+    vs body callee ret rfl rfl ha hl
+  let ent := callEntryStateHOLFinite s callee
+  have he8 : locN ent "esz" = 8 := by simp [ent, locN, callEntryStateHOLFinite, he]
+  have hc4 : locN ent "cap" = 1 := by simp [ent, locN, callEntryStateHOLFinite, hcap]
+  have hmul : locN ent "esz" * locN ent "cap" < 2 ^ 64 := by rw [he8, hc4]; norm_num
+  have hpos : 1 ≤ locN ent "cap" := by omega
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hWT, _, _⟩ := hp.2.2.2.2
+  have hWTc := (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hWT
+  obtain ⟨S', Nd', _, hWT', _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc
+    (by intro i hi; cases hi)
+  obtain ⟨w, hv, hd⟩ := hret hmul v rfl
+  have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1 callee).1 (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w', hv', _, _, hf⟩ := ht v rfl
+  have heq : w' = w := by rw [hv] at hv'; cases hv'; rfl
+  subst w'
+  obtain ⟨hh, hb, _, hn, _⟩ := hf hmul hpos
+  have hb32 : FreshBlock ent post (memW post w.toNat) 8 := by
+    change FreshBlock ent post (memW post w.toNat) (locN ent "esz" * locN ent "cap") at hb
+    simpa only [he8, hc4] using hb
+  have hd32 : IvlsDisj [(w.toNat, 24), (memW post w.toNat, 8)]
+      (worldOwned post S' Nd') := by
+    change IvlsDisj [(w.toNat, 24), (memW post w.toNat, locN ent "esz" * locN ent "cap")]
+      (worldOwned post S' Nd') at hd
+    simpa only [he8, hc4] using hd
+  obtain ⟨hL, hO, hD⟩ := fresh_empty_logs (s := ent) hp.1.1.1.2 hh hb32 hd32 hn
+  have hout := lst_new_txAfterCallStrong_resume_cutover h s vs body callee ret v post hc hl hr hp
+  refine ⟨hout, ?_, ?_, ?_⟩
+  all_goals rw [hv]; simp only [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, if_pos rfl]
+  · exact (R13Shards.logsListOK_with_locals post _ post.clock w.toNat).mpr hL
+  · exact hD
+  · exact logsWorldOwned_with_locals _ _ ⟨S', Nd', hWT', hO⟩
+
+theorem lst_new_receiptReady_backing_resume_cutover (h : PtxCalleesCutover) :
+    DecCallResumeOn TxAfterCallBackingStrong (fun s => Phase4ReceiptReady s ∧ TxBacking s)
+      (ofString "logs") (ofString "lst_new") [.const 8, .const 1] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  refine ⟨lst_new_receiptReady_resume_cutover h s vs body callee ret v post hc hp.1 ha hl hr, ?_⟩
+  have hlc := R13Shards.lookup_lst_new
+  rw [← hc] at hlc
+  obtain ⟨_, he, hcap⟩ := callee_param_two_exp s (ofString "lst_new")
+    (ofString "esz") (ofString "cap") .one .one _ _ hlc
+    (.const 8) (.const 1) (.val (.word 8)) (.val (.word 1))
+    vs body callee ret rfl rfl ha hl
+  have hbody := lookupCodeHOLFinite_installed_body _ _ _ _ _ _ _ _ _ hlc hl
+  have hbody' : body = InitECandidate.Solver.GuestTrapAndLookup.sourceFnBody
+      Guest.Software.guestFn_lst_new := hbody
+  let ent := callEntryStateHOLFinite s callee
+  have hrun : evaluateHOLFiniteState ent
+      (InitECandidate.Solver.GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_lst_new) =
+      (some (.returned v), post) := by rw [← hbody']; exact hr
+  have hprops := WkBal.lst_new_heap_props ent 8 1
+    ⟨guestInv_callEntry s callee hp.1.1.1.1.1, hp.1.1.1.1.2⟩
+    (by decide) (by decide) (by decide) (by decide) he hcap v
+    (congrArg Prod.fst hrun)
+  rw [hrun] at hprops
+  obtain ⟨w, hv, hw, hw8, hwn, hmem, hlen, hcap', hheap, hgrow, hAR,
+    hbe, hsp, hfp, hL, hobjs, hd, ha', hfr, hglob⟩ := hprops
+  have hbo : globN post "bo" = globN s "bo" := by
+    unfold globN
+    rw [← hglob (ofString "bo") (by decide)]
+    rfl
+  exact txBacking_fresh_heap_world hp hAR.2 hbo (Nat.le_of_lt hgrow) hfr
+
+theorem phase4NullLogs_backing_cut_cutover (h : PtxCalleesCutover) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4ReceiptReady s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4LogsReady s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 120 ptxCode) tail) ((K.lst_new + 1) + b) := by
+  have hb : TerminatingProgBoundedOn (fun s => Phase4LogsReady s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 120 ptxCode) tail) (max (K.lst_new + 1) 0 + b) := by
+    unfold ptxCode
+    refine seq_bound_trans (P := fun s => Phase4LogsReady s ∧ TxBacking s)
+      (Q := fun s => Phase4ReceiptReady s ∧ TxBacking s) ?_ ?_ htail
+    · apply TerminatingProgBoundedOn.ite_on
+      · exact TerminatingProgBoundedOn.call_on (P := fun s => Phase4LogsReady s ∧ TxBacking s)
+          h.fb_lst_new _ _
+          (fun s vs body callee ret hc hp ha hl => guestInv_callEntry s callee hp.1.1.1.1.1.1)
+      · exact TerminatingProgBoundedOn.of_clock
+          (P := fun s => Phase4LogsReady s ∧ TxBacking s) clock_skip
+    · apply Hoare.ite
+      · apply Hoare.mono (P' := TxAfterCallBackingStrong) _ (fun _ hp => ⟨hp.1.1.1, hp.1.2⟩)
+        exact Hoare.callLocal_resume (lst_new_receiptReady_backing_resume_cutover h)
+      · apply Hoare.skip
+        intro F s hp _
+        refine ⟨⟨hp.1.1.1, hp.1.1.2.2.1, hp.1.1.2.2.2, ?_⟩, hp.1.2⟩
+        rw [hp.1.1.2.1]
+        obtain ⟨S, Nd, hw, _, ho⟩ := hp.1.1.1.2.2.2.2
+        exact ⟨S, Nd, hw, ho⟩
+      · exact fun _ _ hr => absurd hr (by simp)
+  intro F s hc hp
+  simpa only [Nat.max_zero] using hb s hc hp
+
+theorem phase4BeforeReceipt_backing_cut_cutover (h : PtxCalleesCutover)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4ReceiptReady s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 24 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) + b)) := by
+  have hb := @phase4ThroughLogs_backing_cut_cutover h hcredit _ _
+    (phase4NullLogs_backing_cut_cutover h (phase4Succeeded_backing_cut htail))
+  have he : spinePlug 24 (spineAt 99 ptxCode) tail =
+      spinePlug 21 (spineAt 99 ptxCode)
+        (spinePlug 1 (spineAt 120 ptxCode)
+          (spinePlug 2 (spineAt 121 ptxCode) tail)) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+theorem encode_receipt_output_resume_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : Phase4ReceiptReady s)
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs") :
+    TxAfterCallStrong { post with locals := s.locals } := by
+  have hL : LogsListOK (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]
+    exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
+  have hD : LogsDisjFixed (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]; exact hp.2.2.1
+  have hw := funSpec_at_lookup h.wk_encode_receipt s hc vs body callee ret hl
+    ⟨worldOK_callEntry hp.1.1.1 callee, hL, hD⟩ (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hsc : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  exact txAfterCallStrong_scratchStep
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    hs' hp.1 ⟨hs.2.1, by omega⟩ receiptScratchSpec_ok
+    rfl (by decide) (by decide) (by decide) (by simp)
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+
+theorem encode_receipt_result_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : Phase4ReceiptReady s)
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs") :
+    ∃ a b : BitVec 64, v = .rStruct [.val (.word a), .val (.word b)] ∧
+      Inside (a.toNat, b.toNat) sourceBase (globN post "heap_ptr") ∧
+      a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧
+      memW post (locN s "logs" + 8) < 2 ^ 28 ∧ LogsListOK post (locN s "logs") := by
+  have hL : LogsListOK (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]
+    exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
+  have hD : LogsDisjFixed (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]; exact hp.2.2.1
+  have hw := funSpec_at_lookup h.wk_encode_receipt s hc vs body callee ret hl
+    ⟨worldOK_callEntry hp.1.1.1 callee, hL, hD⟩ (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hWT, _, _⟩ := hp.1.2.2.2.2
+  have hWTc := (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hWT
+  have hR : IvlsDisj
+      (receiptScratchSpec.map (fun e => bufferRegion (callEntryStateHOLFinite s callee) (e.1, e.2.2)))
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd) := by
+    intro i hi j hj
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact bufferRegion_disj_le hWTc (e.1, e.2.1) (receiptScratchSpec_ok e he).1
+      (receiptScratchSpec_ok e he).2.1 e.2.2 (receiptScratchSpec_ok e he).2.2.2 j hj
+  obtain ⟨S', Nd', _, _, _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc hR
+  simpa only [hg] using hret v rfl
+
+theorem encode_receipt_owned_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : Phase4ReceiptReady s)
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs") :
+    LogsWorldOwned post (locN s "logs") := by
+  have hL : LogsListOK (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]
+    exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
+  have hD : LogsDisjFixed (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]; exact hp.2.2.1
+  have hw := funSpec_at_lookup h.wk_encode_receipt s hc vs body callee ret hl
+    ⟨worldOK_callEntry hp.1.1.1 callee, hL, hD⟩ (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hsc : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  exact (logsWorldOwned_scratchStep hs' hp.1.1.1.1
+    ⟨hs.2.1, by change globN post "scratch_ptr" ≤ globN s "scratch_ptr"; omega⟩
+    hp.2.1 hp.2.2.2 receiptScratchSpec_ok rfl (by decide)).2
+
+theorem encode_receipt_encoded_resume_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : Phase4ReceiptReady s)
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs") :
+    Phase4ReceiptEncoded (setVarHOLFinite (ofString "rc") v { post with locals := s.locals }) := by
+  have ho := encode_receipt_output_resume_cutover h s vs body callee ret v post hc hl hr hp hg
+  obtain ⟨a, b, hv, hi, ha, hb, hn, hL⟩ :=
+    encode_receipt_result_cutover h s vs body callee ret v post hc hl hr hp hg
+  let t := setVarHOLFinite (ofString "rc") v { post with locals := s.locals }
+  have hlogs : locN t "logs" = locN s "logs" := by
+    simp [t, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "rc" ≠ ofString "logs" from by decide]
+  refine ⟨LocalsOnly.setVar localsOnly_txAfterCallStrong (by decide) v _ ho, ?_, ?_, a, b, ?_, hi, ha, hb, ?_⟩
+  · change LogsListOK t (locN t "logs")
+    rw [hlogs]
+    exact (R13Shards.logsListOK_with_locals post t.locals post.clock _).mpr hL
+  · change memW post (locN t "logs" + 8) < 2 ^ 28
+    rw [hlogs]; exact hn
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hv]
+  · change LogsWorldOwned t (locN t "logs")
+    rw [hlogs]
+    exact logsWorldOwned_with_locals (s := post) t.locals post.clock
+      (encode_receipt_owned_cutover h s vs body callee ret v post hc hl hr hp hg)
+
+theorem encode_receipt_backing_of_frame_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4ReceiptReady s) (hb : TxBacking s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs")
+    (hfr : FrameOutside s post
+      (receiptScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2)) ++ [freeGap s])
+      (heapFree s)) : TxBacking post := by
+  have hL : LogsListOK (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]
+    exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
+  have hD : LogsDisjFixed (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]; exact hp.2.2.1
+  have hw := funSpec_at_lookup h.wk_encode_receipt s hc vs body callee ret hl
+    ⟨worldOK_callEntry hp.1.1.1 callee, hL, hD⟩ (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hsc : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  exact txBacking_of_scratch_frame receiptScratchSpec_ok hp.1.1 hb hs.1.2
+    ⟨hs.2.1, by omega⟩
+    (R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))) hfr
+
+theorem encode_receipt_backing_of_heapByteEff_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4ReceiptReady s) (hb : TxBacking s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs")
+    (he : WkBlockTxEnc.HeapByteEff (callEntryStateHOLFinite s callee) post
+      (receiptScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2))) ["heap_ptr"]) :
+    TxBacking post := by
+  apply encode_receipt_backing_of_frame_cutover h s vs body callee ret v post hc hp hb hl hr hg
+  have hf := receipt_heapByteEff_frame (s := callEntryStateHOLFinite s callee) he
+  exact hf
+
+theorem encode_receipt_backing_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4ReceiptReady s) (hb : TxBacking s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs") :
+    TxBacking post := by
+  have hl' := hl
+  rw [hc] at hl'
+  have hbr : body = GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_encode_receipt ∧
+      ret = .comb [.one, .one] := by
+    have hx := lookupCodeHOLFinite_eq_some originalRuntimeCode.lookup
+      (ofString "encode_receipt") vs body callee ret hl'
+    simp only [lookupCodeHOLExact, WkBlockTxEnc.lookup_encode_receipt] at hx
+    split at hx <;> simp_all
+  have hbody := hbr.1
+  have hl'' := hl'
+  rw [hbr.1, hbr.2] at hl''
+  obtain ⟨tx, succeeded, gas, logs, _, _, hsu, hgas, hlogs⟩ :=
+    WkBlockTxEnc.lookupCode_four_words (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) WkBlockTxEnc.lookup_encode_receipt hl''
+  have hlogN : locN (callEntryStateHOLFinite s callee) "logs" = logs.toNat := by
+    simp [locN, callEntryStateHOLFinite, hlogs]
+  have hL : LogsListOK (callEntryStateHOLFinite s callee) logs.toNat := by
+    rw [← hlogN, hg]
+    exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
+  have hD : LogsDisjFixed (callEntryStateHOLFinite s callee) logs.toNat := by
+    rw [← hlogN, hg]; exact hp.2.2.1
+  have he := encode_receipt_body_heapByteEff (callEntryStateHOLFinite s callee) post
+    logs gas succeeded v (PtxP1.worldOK_callEntry hp.1.1.1 callee).1 hlogs hgas hsu hL hD
+    (by rw [← hbody]; exact hr)
+  apply encode_receipt_backing_of_heapByteEff_cutover h s vs body callee ret v post hc hp hb hl hr hg
+  change WkBlockTxEnc.HeapByteEff (callEntryStateHOLFinite s callee) post
+    (WkBlockTxEnc.receiptKeccakIvls (callEntryStateHOLFinite s callee)) ["heap_ptr"]
+  exact he
+
+theorem phase4EncodeReceipt_backing_cut_cutover (h : PtxCalleesCutover)
+    (hkeep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) vs body callee ret v post,
+      s.code = originalRuntimeCode → Phase4ReceiptReady s → TxBacking s →
+      lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs" → TxBacking post)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptReady s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 123 ptxCode) tail) (K.encode_receipt + b + 1) := by
+  unfold ptxCode
+  refine @TerminatingProgBoundedOn.decCall_on
+    (fun s => Phase4ReceiptReady s ∧ TxBacking s) GuestInv
+    (fun s => Phase4ReceiptEncoded s ∧ TxBacking s) _ _ _
+    h.fb_encode_receipt _ _ _ _ ?_ ?_ htail
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1
+  · intro F s vs body callee ret v post hc hp ha hl hr
+    have hg := encode_receipt_logs_param s _ _ _ vs body callee ret hc ha hl
+    refine ⟨encode_receipt_encoded_resume_cutover h s vs body callee ret v post hc hl hr hp.1 hg, ?_⟩
+    exact hkeep s vs body callee ret v post hc hp.1 hp.2 hl hr hg
+
+theorem lst_new_stable_fresh_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      FreshBlock (callEntryStateHOLFinite s callee) post w.toNat 24 ∧
+      FreshBlock (callEntryStateHOLFinite s callee) post (memW post w.toNat)
+        (8 * locN s "stable_log_cap") ∧ memW post (w.toNat + 8) = 0 ∧
+      ∃ S Nd, WorldTypedWith post S Nd ∧
+        IvlsDisj [(w.toNat, 24), (memW post w.toNat, 8 * locN s "stable_log_cap")]
+          (worldOwned post S Nd) := by
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  have hW := hp.1.1.1.1.1.1
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hW callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, hWT⟩ := hW.2
+  obtain ⟨Nd, hTr⟩ := hWT.2.2.2
+  have hWTc := (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr
+    ⟨hWT.1, hWT.2.1, hWT.2.2.1, hTr⟩
+  obtain ⟨S', Nd', _, hWT', _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc
+    (by intro i hi; cases hi)
+  obtain ⟨w, hv, hd⟩ := hret hargs.2.2.2 v rfl
+  have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hW callee).1 (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w', hv', _, _, hf⟩ := ht v rfl
+  have heq : w' = w := by rw [hv] at hv'; cases hv'; rfl
+  subst w'
+  obtain ⟨hh, hb, _, hn, _⟩ := hf hargs.2.2.2 hargs.2.2.1
+  refine ⟨w, hv, hh, ?_, hn, S', Nd', hWT', ?_⟩
+  · simpa only [hargs.1, hargs.2.1] using hb
+  · simpa only [hargs.1, hargs.2.1] using hd
+
+theorem lst_new_stable_resumed_header_backing_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Disj (locN t "stable_logs", 24)
+      (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1 (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w, rfl, _, _, hf⟩ := ht v rfl
+  have hd := (hf hargs.2.2.2 hargs.2.2.1).2.2.1
+  rw [hargs.1, hargs.2.1] at hd
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using hd
+
+theorem lst_new_stable_header_allocated_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Allocated t (locN t "stable_logs", 24) := by
+  obtain ⟨w, rfl, hh, _⟩ := lst_new_stable_fresh_cutover h s vs body callee ret v post hc hp ha hl hr
+  have hbase := hp.1.1.1.1.1.1.1.2.1
+  have hi := hh.2.1
+  apply Or.inl
+  simpa [Inside, locN, globN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    callEntryStateHOLFinite] using
+    (show sourceBase ≤ w.toNat ∧ w.toNat + 24 ≤ globN post "heap_ptr" from
+      ⟨hbase.trans hi.1, hi.2⟩)
+
+theorem lst_new_stable_source_resume_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    Phase4StableCapReady (setVarHOLFinite (ofString "stable_logs") v
+      {post with locals := s.locals}) := by
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  have hp' := logPointers_heapStep hs' hp.1 hp.1.1.2.2
+  refine ⟨LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) v _ hp', ?_⟩
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide,
+    show ofString "stable_logs" ≠ ofString "nl" from by decide] using hp.2
+
+theorem lst_new_stable_capacity_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      memW post (w.toNat + 16) = locN s "stable_log_cap" := by
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1 (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w, hv, _, _, hf⟩ := ht v rfl
+  obtain ⟨_, _, _, _, hcap⟩ := hf hargs.2.2.2 hargs.2.2.1
+  exact ⟨w, hv, hcap.trans hargs.2.1⟩
+
+theorem lst_new_stable_owned_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ LogsListOK post w.toNat ∧
+      LogsWorldOwned post w.toNat ∧ LogsDisjFixed post w.toNat := by
+  obtain ⟨w, hv, hh, hb, hn, S, Nd, hw, hd⟩ :=
+    lst_new_stable_fresh_cutover h s vs body callee ret v post hc hp ha hl hr
+  have ho := fresh_empty_stable_logs
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2 hh hb hd hn
+  exact ⟨w, hv, ho.1, ⟨S, Nd, hw, ho.2.1⟩, ho.2.2⟩
+
+theorem lst_new_stable_allocated_resume_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    Phase4StableAllocated (setVarHOLFinite (ofString "stable_logs") v
+      {post with locals := s.locals}) := by
+  have hp' := lst_new_stable_source_resume_cutover h s vs body callee ret v post hc hp hl hr
+  obtain ⟨w, rfl, hlst, howned, hfixed⟩ :=
+    lst_new_stable_owned_cutover h s vs body callee ret v post hc hp ha hl hr
+  refine ⟨hp', ?_, ?_, ?_⟩
+  all_goals simp only [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update,
+    if_pos rfl, valueWord, Option.getD]
+  · exact hlst
+  · exact logsWorldOwned_with_locals _ _ howned
+  · exact hfixed
+
+theorem lst_new_stable_source_cells_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    memW post (locN s "logs") = memW s (locN s "logs") ∧
+    memW post (locN s "logs" + 8) = memW s (locN s "logs" + 8) := by
+  have hp' := lst_new_stable_source_resume_cutover h s vs body callee ret v post hc hp hl hr
+  have hlp := hp'.1.2
+  have hnl := hp'.1.1.2.1
+  simp only [locN, memW, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "lp" by decide,
+    show ofString "stable_logs" ≠ ofString "logs" by decide,
+    show ofString "stable_logs" ≠ ofString "nl" by decide, if_false] at hlp hnl
+  exact ⟨hlp.symm.trans hp.1.2, hnl.symm.trans hp.1.1.2.1⟩
+
+theorem lst_new_stable_source_entries_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∀ i, i < memW s (locN s "logs" + 8) →
+      memW post (memW s (locN s "logs") + 8 * i) =
+        memW s (memW s (locN s "logs") + 8 * i) := by
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := R13Shards.worldStep_with_locals (hw (Or.inl ⟨v, rfl⟩)) s.locals s.clock
+  obtain ⟨a, b, _, _, _, _, ho⟩ := hp.1.1.1.2.2.2
+  exact logsWorldOwned_heapStep_array hs hp.1.1.1.1.1.1.1 hp.1.1.1.2.1 ho hp.1.1.2.2
+
+theorem lst_new_stable_capacity_resume_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Phase4StableAllocated resumed ∧
+      memW resumed (locN resumed "stable_logs" + 16) = locN resumed "stable_log_cap" := by
+  refine ⟨lst_new_stable_allocated_resume_cutover h s vs body callee ret v post hc hp ha hl hr, ?_⟩
+  obtain ⟨w, rfl, hw⟩ := lst_new_stable_capacity_cutover h s vs body callee ret v post hc hp ha hl hr
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide] using hw
+
+theorem lst_new_stable_backing_resume_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    let p := memW resumed (locN resumed "stable_logs")
+    p % 8 = 0 ∧ Allocated resumed (p, 8 * locN resumed "stable_log_cap") ∧
+      WordsOK resumed (p, 8 * locN resumed "stable_log_cap") := by
+  obtain ⟨w, rfl, _, hb, _⟩ :=
+    lst_new_stable_fresh_cutover h s vs body callee ret v post hc hp ha hl hr
+  have hb' := stable_backing_allocated
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2 hb
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    Allocated, WordsOK, WordAt, globN,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide] using hb'
+
+theorem lst_new_stable_storage_resume_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    Phase4StableStorageReady (setVarHOLFinite (ofString "stable_logs") v
+      {post with locals := s.locals}) := by
+  obtain ⟨hp', hcap⟩ := lst_new_stable_capacity_resume_cutover h s vs body callee ret v post hc hp ha hl hr
+  exact ⟨hp', hcap, lst_new_stable_backing_resume_cutover h s vs body callee ret v post hc hp ha hl hr⟩
+
+theorem lst_new_stable_header_resume_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    WordsOK resumed (locN resumed "stable_logs", 24) ∧
+      Allocated resumed (locN resumed "stable_logs", 24) := by
+  obtain ⟨w, rfl, hh, _⟩ :=
+    lst_new_stable_fresh_cutover h s vs body callee ret v post hc hp ha hl hr
+  have hi : Inside (w.toNat, 24) sourceBase (globN post "heap_ptr") :=
+    ⟨(worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2.1.trans hh.2.1.1, hh.2.1.2⟩
+  have hw : WordsOK post (w.toNat, 24) := hh.2.2
+  have ho : Allocated post (w.toNat, 24) := Or.inl hi
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    Allocated, WordsOK, WordAt, globN] using And.intro hw ho
+
+theorem lst_new_stable_pointer_resume_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    resumed.locals.lookup (ofString "stable_logs") =
+      some (.val (.word (BitVec.ofNat 64 (locN resumed "stable_logs")))) := by
+  obtain ⟨w, rfl, _⟩ := lst_new_stable_fresh_cutover h s vs body callee ret v post hc hp ha hl hr
+  simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+theorem lst_new_stable_length_operands_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hn : s.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "nl")))))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Phase4StableStorageReady t ∧ Allocated t (locN t "stable_logs", 24) ∧
+      t.locals.lookup (ofString "stable_logs") =
+        some (.val (.word (BitVec.ofNat 64 (locN t "stable_logs")))) ∧
+      t.locals.lookup (ofString "nl") =
+        some (.val (.word (BitVec.ofNat 64 (locN t "nl")))) := by
+  exact ⟨lst_new_stable_storage_resume_cutover h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_header_allocated_cutover h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_pointer_resume_cutover h s vs body callee ret v post hc hp ha hl hr,
+    stable_length_operand_resume s post v hn⟩
+
+theorem lst_new_stable_source_separation_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      ∀ a ∈ [(w.toNat, 24), (memW post w.toNat, 8 * locN s "stable_log_cap")],
+        Disj a (locN s "logs", 24) ∧
+        Disj a (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8)) ∧
+        ∀ i, i < memW s (locN s "logs" + 8) →
+          Disj a (memW s (memW s (locN s "logs") + 8 * i), 40) := by
+  obtain ⟨w, hv, hh, hb, _⟩ := lst_new_stable_fresh_cutover h s vs body callee ret v post hc hp ha hl hr
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hpost := (hw (Or.inl ⟨v, rfl⟩)).1
+  refine ⟨w, hv, ?_⟩
+  intro a ha
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl
+  · exact fresh_stable_disj_source hp.1.1.1.1.1.1.1.2 hpost.2 hh (by decide) hp.1
+  · exact fresh_stable_disj_source hp.1.1.1.1.1.1.1.2 hpost.2 hb (by omega) hp.1
+
+theorem lst_new_stable_post_source_array_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      Disj (memW post w.toNat, 8 * locN s "stable_log_cap")
+        (memW post (locN s "logs"), 8 * memW post (locN s "logs" + 8)) := by
+  obtain ⟨w, hv, hs⟩ := lst_new_stable_source_separation_cutover h s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨hptr, hlen⟩ := lst_new_stable_source_cells_cutover h s vs body callee ret v post hc hp hl hr
+  refine ⟨w, hv, ?_⟩
+  rw [hptr, hlen]
+  exact (hs _ (by simp)).2.1
+
+theorem lst_new_stable_resumed_source_header_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Disj (locN t "logs", 24)
+      (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  obtain ⟨w, rfl, hs⟩ :=
+    lst_new_stable_source_separation_cutover h s vs body callee ret v post hc hp ha hl hr
+  have hd := (hs (memW post w.toNat, 8 * locN s "stable_log_cap") (by simp)).1
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "logs" by decide,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using
+    R13Shards.disj_symm hd
+
+theorem lst_new_stable_resumed_source_array_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Disj (memW t (locN t "logs"), 8 * memW t (locN t "logs" + 8))
+      (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  obtain ⟨w, rfl, hd⟩ :=
+    lst_new_stable_post_source_array_cutover h s vs body callee ret v post hc hp ha hl hr
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "logs" by decide,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using
+    R13Shards.disj_symm hd
+
+theorem lst_new_stable_post_header_separation_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      Disj (locN s "logs", 24) (w.toNat, 24) ∧
+      Disj (memW post (locN s "logs"), 8 * memW post (locN s "logs" + 8))
+        (w.toNat, 24) := by
+  obtain ⟨w, hv, hs⟩ := lst_new_stable_source_separation_cutover h s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨hptr, hlen⟩ := lst_new_stable_source_cells_cutover h s vs body callee ret v post hc hp hl hr
+  have hd := hs (w.toNat, 24) (by simp)
+  refine ⟨w, hv, R13Shards.disj_symm hd.1, ?_⟩
+  rw [hptr, hlen]
+  exact R13Shards.disj_symm hd.2.1
+
+theorem lst_new_stable_resumed_header_separation_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Disj (locN t "logs", 24) (locN t "stable_logs", 24) ∧
+      Disj (memW t (locN t "logs"), 8 * memW t (locN t "logs" + 8))
+        (locN t "stable_logs", 24) := by
+  obtain ⟨w, rfl, hh, hb⟩ :=
+    lst_new_stable_post_header_separation_cutover h s vs body callee ret v post hc hp ha hl hr
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "logs" by decide] using And.intro hh hb
+
+theorem lst_new_stable_post_record_separation_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      ∀ i, i < memW post (locN s "logs" + 8) →
+        Disj (memW post (memW post (locN s "logs") + 8 * i), 40) (w.toNat, 24) := by
+  obtain ⟨w, hv, hs⟩ := lst_new_stable_source_separation_cutover h s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨hptr, hlen⟩ := lst_new_stable_source_cells_cutover h s vs body callee ret v post hc hp hl hr
+  have he := lst_new_stable_source_entries_cutover h s vs body callee ret v post hc hp hl hr
+  refine ⟨w, hv, ?_⟩
+  intro i hi
+  rw [hlen] at hi
+  rw [hptr, he i hi]
+  exact R13Shards.disj_symm ((hs _ (by simp)).2.2 i hi)
+
+theorem lst_new_stable_post_backing_records_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      ∀ i, i < memW post (locN s "logs" + 8) →
+        Disj (memW post (memW post (locN s "logs") + 8 * i), 40)
+          (memW post w.toNat, 8 * locN s "stable_log_cap") := by
+  obtain ⟨w, hv, hs⟩ := lst_new_stable_source_separation_cutover h s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨hptr, hlen⟩ := lst_new_stable_source_cells_cutover h s vs body callee ret v post hc hp hl hr
+  have he := lst_new_stable_source_entries_cutover h s vs body callee ret v post hc hp hl hr
+  refine ⟨w, hv, ?_⟩
+  intro i hi
+  rw [hlen] at hi
+  rw [hptr, he i hi]
+  exact R13Shards.disj_symm ((hs _ (by simp)).2.2 i hi)
+
+theorem lst_new_stable_resumed_backing_records_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    ∀ i, i < memW t (locN t "logs" + 8) →
+      Disj (memW t (memW t (locN t "logs") + 8 * i), 40)
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  obtain ⟨w, rfl, he⟩ :=
+    lst_new_stable_post_backing_records_cutover h s vs body callee ret v post hc hp ha hl hr
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "logs" by decide,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using he
+
+theorem lst_new_stable_resumed_record_separation_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    ∀ i, i < memW t (locN t "logs" + 8) →
+      Disj (memW t (memW t (locN t "logs") + 8 * i), 40) (locN t "stable_logs", 24) := by
+  obtain ⟨w, rfl, he⟩ :=
+    lst_new_stable_post_record_separation_cutover h s vs body callee ret v post hc hp ha hl hr
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "logs" by decide] using he
+
+theorem lst_new_stable_joint_owned_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ ∃ S Nd,
+      WorldTypedWith post S Nd ∧ LogsLiveOwned post S Nd (locN s "logs") ∧
+      ∀ o ∈ worldOwned post S Nd, Disj (w.toNat, 24) o := by
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  obtain ⟨a, b, _, _, _, _, ho⟩ := hp.1.1.1.2.2.2
+  have hLc := (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.1.1.1.2.1
+  have hOc := logsWorldOwned_with_locals callee (s.clock - 1) ho
+  obtain ⟨S, Nd, hW, hO, hQ⟩ := logsWorldOwned_heapStep_joint
+    (hw (Or.inl ⟨v, rfl⟩)) (worldOK_callEntry hp.1.1.1.1.1.1 callee).1 hLc hOc
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  obtain ⟨w, hv, hd⟩ := hQ hargs.2.2.2 v rfl
+  exact ⟨w, hv, S, Nd, hW, hO, fun o ho => hd _ (by simp) o ho⟩
+
+theorem lst_new_stable_joint_regions_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ ∃ S Nd,
+      WorldTypedWith post S Nd ∧ LogsLiveOwned post S Nd (locN s "logs") ∧
+      (∀ o ∈ worldOwned post S Nd, Disj (w.toNat, 24) o) ∧
+      (∀ o ∈ worldOwned post S Nd,
+        Disj (memW post w.toNat, 8 * locN s "stable_log_cap") o) := by
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  obtain ⟨a, b, _, _, _, _, ho⟩ := hp.1.1.1.2.2.2
+  have hLc := (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.1.1.1.2.1
+  have hOc := logsWorldOwned_with_locals callee (s.clock - 1) ho
+  obtain ⟨S, Nd, hW, hO, hQ⟩ := logsWorldOwned_heapStep_joint
+    (hw (Or.inl ⟨v, rfl⟩)) (worldOK_callEntry hp.1.1.1.1.1.1 callee).1 hLc hOc
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  obtain ⟨w, hv, hd⟩ := hQ hargs.2.2.2 v rfl
+  refine ⟨w, hv, S, Nd, hW, hO, fun o ho => hd _ (by simp) o ho, ?_⟩
+  intro o ho
+  have hb := hd (memW post w.toNat,
+    locN (callEntryStateHOLFinite s callee) "esz" *
+      locN (callEntryStateHOLFinite s callee) "cap") (by simp) o ho
+  simpa only [hargs.1, hargs.2.1] using hb
+
+theorem lst_new_stable_resumed_joint_regions_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    ∃ S Nd, WorldTypedWith t S Nd ∧ LogsLiveOwned t S Nd (locN t "logs") ∧
+      (∀ o ∈ worldOwned t S Nd, Disj (locN t "stable_logs", 24) o) ∧
+      (∀ o ∈ worldOwned t S Nd,
+        Disj (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") o) := by
+  obtain ⟨w, rfl, S, Nd, hW, hO, hh, hb⟩ :=
+    lst_new_stable_joint_regions_cutover h s vs body callee ret v post hc hp ha hl hr
+  refine ⟨S, Nd, ?_, ?_, ?_, ?_⟩
+  · exact (R13Shards.worldTypedWith_with_locals post _ post.clock S Nd).mpr hW
+  · change LogsLiveOwned post S Nd _
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_logs" ≠ ofString "logs" by decide] using hO
+  · change ∀ o ∈ worldOwned post S Nd, Disj _ o
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hh
+  · change ∀ o ∈ worldOwned post S Nd, Disj _ o
+    simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using hb
+
+theorem lst_new_stable_resumed_spatial_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    StableCopySpatial
+      (setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}) := by
+  obtain ⟨S, Nd, hW, hO, _, hb⟩ :=
+    lst_new_stable_resumed_joint_regions_cutover h s vs body callee ret v post hc hp ha hl hr
+  exact ⟨S, Nd, hW, hO, hb,
+    lst_new_stable_resumed_source_header_cutover h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_header_backing_cutover h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_source_array_cutover h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_backing_records_cutover h s vs body callee ret v post hc hp ha hl hr⟩
+
+theorem lst_new_stable_length_pre_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hn : s.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "nl")))))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    StableLengthPre (setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}) := by
+  obtain ⟨hstorage, halloc, hword, hnword⟩ :=
+    lst_new_stable_length_operands_cutover h s vs body callee ret v post hc hp hn ha hl hr
+  obtain ⟨hh, hb⟩ := lst_new_stable_resumed_header_separation_cutover h s vs body callee ret v post hc hp ha hl hr
+  have he := lst_new_stable_resumed_record_separation_cutover h s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨w, rfl, S, Nd, hW, hO, hdisj⟩ := lst_new_stable_joint_owned_cutover h s vs body callee ret v post hc hp ha hl hr
+  refine ⟨hstorage, halloc, hword, hnword, S, Nd, ?_, ?_, ?_, hh, hb, he⟩
+  · exact (R13Shards.worldTypedWith_with_locals post _ post.clock S Nd).mpr hW
+  · change LogsLiveOwned post S Nd _
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_logs" ≠ ofString "logs" by decide] using hO
+  · change ∀ o ∈ worldOwned post S Nd, Disj _ o
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hdisj
+
+theorem lst_new_stable_length_joint_pre_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hn : s.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "nl")))))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    StableLengthPre t ∧
+      (∃ S Nd, WorldTypedWith t S Nd ∧ LogsLiveOwned t S Nd (locN t "logs") ∧
+        (∀ o ∈ worldOwned t S Nd, Disj (locN t "stable_logs", 24) o) ∧
+        (∀ o ∈ worldOwned t S Nd,
+          Disj (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") o)) ∧
+      Disj (locN t "logs", 24)
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") ∧
+      Disj (locN t "stable_logs", 24)
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") ∧
+      Disj (memW t (locN t "logs"), 8 * memW t (locN t "logs" + 8))
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") ∧
+      ∀ j, j < memW t (locN t "logs" + 8) →
+        Disj (memW t (memW t (locN t "logs") + 8 * j), 40)
+          (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  exact ⟨lst_new_stable_length_pre_cutover h s vs body callee ret v post hc hp hn ha hl hr,
+    lst_new_stable_resumed_joint_regions_cutover h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_source_header_cutover h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_header_backing_cutover h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_source_array_cutover h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_backing_records_cutover h s vs body callee ret v post hc hp ha hl hr⟩
+
+theorem lst_new_stable_copy_operands_cutover (h : PtxCalleesCutover) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hz : locN s "logs" ≠ 0)
+    (hptr : ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    locN t "logs" ≠ 0 ∧ WordsOK t (locN t "stable_logs", 24) ∧
+      ∃ p : BitVec 64, t.locals.lookup (ofString "lp") = some (.val (.word p)) := by
+  refine ⟨?_, (lst_new_stable_header_resume_cutover h s vs body callee ret v post hc hp ha hl hr).1, ?_⟩
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_logs" ≠ ofString "logs" by decide] using hz
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_logs" ≠ ofString "lp" by decide] using hptr
+
+theorem stable_allocation_decl_loop_backing_cut_cutover (h : PtxCalleesCutover)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableBackingReady tail b) :
+    TerminatingProgBoundedOn (fun s => (Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (spinePlug 5 (spineAt 132 ptxCode) tail)
+      (K.lst_new + (2 ^ 28 + 1 + b) + 1) := by
+  have he : spinePlug 5 (spineAt 132 ptxCode) tail =
+      .decCall (ofString "stable_logs") .one (ofString "lst_new")
+        [.const 8, .var .local (ofString "stable_log_cap")]
+        (spinePlug 4 (spineAt 133 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  refine TerminatingProgBoundedOn.decCall_on
+    (P := fun s => (Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+    h.fb_lst_new _ _ _ ?_ ?_ (stable_length_decl_loop_backing_cut htail) s hc hp
+  · intro G t vs body callee ret hc hp ha hl
+    exact guestInv_callEntry t callee hp.1.1.1.1.1.1.1.1.1.1
+  · intro G t vs body callee ret v post hc hp ha hl hr
+    refine ⟨⟨lst_new_stable_length_joint_pre_cutover h t vs body callee ret v post hc hp.1.1
+        (stable_length_canonical_operand t hp.1.2.1) ha hl hr,
+      lst_new_stable_copy_operands_cutover h t vs body callee ret v post hc hp.1.1 hp.1.2.2.1 hp.1.2.2.2 ha hl hr⟩, ?_⟩
+    exact lst_new_stable_txBacking_resume t vs body callee ret v post hc ⟨hp.1.1, hp.2⟩ ha hl hr
+
+theorem phase4LogCopyLoop_backing_bound_cutover (h : PtxCalleesCutover)
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody) ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1)) := by
+  apply while_less_localsOnly localsOnly_phase4TypedLogPointers_backing
+  · have hb : TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+        phase4LogCopyBody (K.lst_push + (0 + 0) + 1) :=
+      TerminatingProgBoundedOn.decCall_on h.fb_lst_push
+        (ofString "slot") ShapeHOL.one
+        [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]
+        (Bc := 0 + 0)
+        (continuation := .seq (.store (.var .local (ofString "slot")) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+        (P := fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+        (Q := fun s => (Phase4LogSlotReady s ∧
+          (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+          ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+        (by intro F s vs body callee ret hc hp ha hl
+            exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1.1)
+        hresume
+        (by
+          intro F s hc hp
+          exact seq_bound_trans
+            (P := fun s => (Phase4LogSlotReady s ∧
+              (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+              ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+            (Q := fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+            (fun t _ _ _ => by
+              have ht := clock_store t (.var .local (ofString "slot")) phase4LogCopySrc
+              exact ⟨by omega, by omega⟩)
+            ⟨fun t ht hp hnt hr =>
+              ⟨(hoare_logSlot_store_typed phase4LogCopySrc phase4LogCopySrc_word).run t ht hp.1 hnt hr,
+                hoare_logSlot_store_txBacking.run t ht ⟨hp.1.1, hp.2⟩ hnt hr⟩⟩
+            (fun t _ _ _ => by
+              have ht := clock_assign t .local (ofString "i")
+                (.op .add [.var .local (ofString "i"), .const 1])
+              exact ⟨by omega, by omega⟩) s hc hp)
+    intro F s hc hp
+    simpa only [Nat.zero_add, Nat.add_zero] using hb s hc hp
+  · exact hoare_phase4LogCopyBody_backing hresume
+  · unfold phase4LogCopyBody
+    ptx_incr
+
+theorem phase4LogCopyLoop_backing_cut_cutover (h : PtxCalleesCutover)
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 129 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + b) := by
+  have hb := @seq_bound_trans _ _ _ _ _ _ (phase4LogCopyLoop_backing_bound_cutover h hresume)
+    (hoare_phase4LogCopyLoop_backing hresume) htail
+  unfold ptxCode
+  intro F s hc hp
+  exact hb s hc hp
+
+theorem phase4LogLoop_stable_backing_cut_cutover (h : PtxCalleesCutover)
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableBackingReady tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (spinePlug 9 (spineAt 128 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + (K.lst_new + (2 ^ 28 + 1 + b) + 1)) := by
+  have hb := @phase4LogCounter_backing_cut _ _
+    (phase4LogCopyLoop_backing_cut_cutover h hresume
+      (stable_capacity_setup_copy_backing_cut (stable_allocation_decl_loop_backing_cut_cutover h htail)))
+  have he : spinePlug 9 (spineAt 128 ptxCode) tail =
+      spinePlug 1 (spineAt 128 ptxCode)
+        (spinePlug 1 (spineAt 129 ptxCode)
+          (spinePlug 2 (spineAt 130 ptxCode) (spinePlug 5 (spineAt 132 ptxCode) tail))) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+theorem phase4Encoded_stable_backing_cut_cutover (h : PtxCalleesCutover)
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableBackingReady tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (spinePlug 13 (spineAt 124 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + (K.lst_new + (2 ^ 28 + 1 + b) + 1)) := by
+  have hb := @phase4ReceiptStores_backing_cut _ _ (phase4LogPointers_backing_cut
+    (phase4LogLoop_stable_backing_cut_cutover h hresume htail))
+  have he : spinePlug 13 (spineAt 124 ptxCode) tail =
+      spinePlug 2 (spineAt 124 ptxCode)
+        (spinePlug 2 (spineAt 126 ptxCode) (spinePlug 9 (spineAt 128 ptxCode) tail)) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+theorem phase4Encoded_stable_txBacking_cut_cutover (h : PtxCalleesCutover)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableBackingReady tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (spinePlug 13 (spineAt 124 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + (K.lst_new + (2 ^ 28 + 1 + b) + 1)) := by
+  exact phase4Encoded_stable_backing_cut_cutover h
+    (resume_lst_push_typed_logSlot_txBacking_cutover h) htail
+
+theorem phase4BackingPrefix_of_credit_encode_cutover (h : PtxCalleesCutover)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    (hkeep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) vs body callee ret v post,
+      s.code = originalRuntimeCode → Phase4ReceiptReady s → TxBacking s →
+      lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs" → TxBacking post) :
+    Phase4BackingPrefix := by
+  intro tail b ht
+  have hb := @phase4BeforeReceipt_backing_cut_cutover h hcredit _ _
+    (phase4EncodeReceipt_backing_cut_cutover h hkeep (phase4Encoded_stable_txBacking_cut_cutover h ht))
+  have he : spinePlug 38 (spineAt 99 ptxCode) tail =
+      spinePlug 24 (spineAt 99 ptxCode)
+        (spinePlug 1 (spineAt 123 ptxCode) (spinePlug 13 (spineAt 124 ptxCode) tail)) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp.1
+
+theorem phase4BackingPrefix_of_credit_cutover (h : PtxCalleesCutover)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t)) :
+    Phase4BackingPrefix :=
+  phase4BackingPrefix_of_credit_encode_cutover h hcredit (encode_receipt_backing_cutover h)
+
+theorem phase4BackingPrefix_holds_cutover (h : PtxCalleesCutover) : Phase4BackingPrefix :=
+  phase4BackingPrefix_of_credit_cutover h hoare_create_ether_txAfterCallBackingStrong
+
+end PtxP34
+
+/-- Phase 3 cut over `PtxCalleesCutover`: eliminates unused `wk_process_message_call`. -/
+theorem ptxPhase3_cut_backing_strong_shapes_cutover (h : PtxCalleesCutover) (hwk : PtxP34.PmcStrong)
+    (hback : DecCallResumeOn (fun s => PtxMessageReady s ∧ TxBacking s)
+      TxBacking (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (ptxPhase3 tail) (ptxCost3 + b) := by
+  have he : CallEntryOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      MsgReady (ofString "process_message_call") [.var .local (ofString "m")] := by
+    intro F s vs body callee ret hc hp ha hl
+    exact PtxP34.entry_pmc s vs body callee ret hc hp.1.1 ha hl
+  have hr : DecCallResumeOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+      (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")] := by
+    intro F s vs body callee ret v post hc hp ha hl hb
+    exact ⟨⟨PtxP34.resume_pmc_strong hwk s vs body callee ret v post hc hp.1.1 ha hl hb,
+      hback s vs body callee ret v post hc hp.1 ha hl hb⟩,
+      ptxPhase4LocalShapes_resume s post v hp.2⟩
+  have hb : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (ptxPhase3 tail) (K.«process_message_call» + b + 1) := by
+    unfold ptxPhase3 ptxCode
+    exact TerminatingProgBoundedOn.decCall_on h.gb_process_message_call
+      (ofString "out") .one [.var .local (ofString "m")] he hr htail
+  have heq : K.«process_message_call» + b + 1 = ptxCost3 + b := by
+    unfold ptxCost3; omega
+  rw [heq] at hb
+  intro F s hc hp
+  exact hb s hc hp
+
+/-- Phase 4 cut over `PtxCalleesCutover` from a `Phase4BackingPrefix` and the concrete `WkBal.wk_lst_push_strong` receipt suffix. -/
+theorem ptxPhase4_cut_backing_strong_cutover (h : PtxCalleesCutover)
+    (hprefix : Phase4BackingPrefix)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+      (ptxPhase4 tail) (ptxCost4 + b) := by
+  have he : ptxPhase4 tail =
+      spinePlug 38 (spineAt 99 ptxCode) (spinePlug 2 (spineAt 137 ptxCode) tail) := by
+    unfold ptxPhase4 ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  have hb := hprefix _ _ (PtxP34.phase4ReceiptPush_backing_cut_cutover h htail) (F := F)
+  apply (hb s hc hp).weaken
+  unfold phase4CreditCost ptxCost4
+  simp only [Nat.max_eq_left (Nat.zero_le _)]
+  omega
+
+/-- Unconditional Phase 4 cut over `PtxCalleesCutover` (zero `wk_lst_push`, `wk_create_ether`, `wk_process_message_call` dependencies). -/
+theorem ptxPhase4_cut_backing_strong_uncond_cutover (h : PtxCalleesCutover)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+      (ptxPhase4 tail) (ptxCost4 + b) :=
+  ptxPhase4_cut_backing_strong_cutover h (PtxP34.phase4BackingPrefix_holds_cutover h) htail
+
+/-- Unconditional quantified Phase-4 interface over `PtxCalleesCutover`. -/
+theorem h4_backing_strong_uncond_cutover (h : PtxCalleesCutover) :
+    ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn PtxReceiptsDone tail b →
+      TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+        (ptxPhase4 tail) (ptxCost4 + b) :=
+  fun _ _ htail => ptxPhase4_cut_backing_strong_uncond_cutover h htail
+
+/-- Combined Phase 3 + Phase 4 parameterized cut over `PtxCallees` for arbitrary continuation `tail`. -/
+theorem ptxPhase34_cut_pmc_backing_strong (h : PtxCallees)
+    (hwk : PtxP34.PmcStrong) (hkeep : PmcBackingStrong)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (ptxPhase3 (ptxPhase4 tail))
+      (ptxCost3 + (ptxCost4 + b)) :=
+  ptxPhase3_cut_backing_strong_shapes h hwk (resume_pmc_backing hkeep)
+    (ptxPhase4_cut_backing_strong_uncond h htail)
+
+/-- Combined Phase 3 + Phase 4 parameterized cut over `PtxCalleesCutover` for arbitrary continuation `tail`. -/
+theorem ptxPhase34_cut_pmc_backing_strong_cutover (h : PtxCalleesCutover)
+    (hwk : PtxP34.PmcStrong) (hkeep : PmcBackingStrong)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (ptxPhase3 (ptxPhase4 tail))
+      (ptxCost3 + (ptxCost4 + b)) :=
+  ptxPhase3_cut_backing_strong_shapes_cutover h hwk (resume_pmc_backing hkeep)
+    (ptxPhase4_cut_backing_strong_uncond_cutover h htail)
+
+/-- Phase 5 `WorldOK` cut over `PtxCalleesCutover`. -/
+theorem ptxPhase5_cut_worldOK_cutover (h : PtxCalleesCutover) :
+    TerminatingProgBoundedOn WorldOK ptxPhase5 ptxCost5 := by
+  have hk_clear : KeepsOn WorldOK WorldOK (ofString "clear_account_preserving_balance") := by
+    apply h.wk_clear_account_preserving_balance.keepsOn_buffer_parts
+    intro F s i hi
+    change i ∈ [bufferRegion s ("keccak_pad", 136), bufferRegion s ("keccak_st", 200),
+      bufferRegion s ("mpt_nib_scratch", 64), bufferRegion s ("sk_buf", 52)] at hi
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl | rfl
+    · exact ⟨("keccak_pad", 136), by decide, by decide, 136, le_rfl, rfl⟩
+    · exact ⟨("keccak_st", 200), by decide, by decide, 200, le_rfl, rfl⟩
+    · exact ⟨("mpt_nib_scratch", 64), by decide, by decide, 64, le_rfl, rfl⟩
+    · exact ⟨("sk_buf", 64), by decide, by decide, 52, by decide, rfl⟩
+  let b5 : Nat :=
+    max (0 + (2 ^ 64 + 1) * ((K.«htab_item» + (max (K.«clear_account_preserving_balance» + 1) 0 + 0) + 1) + 1)) 0 +
+      ((K.«incorporate_tx_into_block» + 1) +
+        (max ((K.«scratch_release» + 1) + (K.«frame_mem_release» + 1)) 0 + 0))
+  have hb : TerminatingProgBoundedOn WorldOK ptxPhase5 b5 := by
+    unfold b5 ptxPhase5 ptxCode
+    simp only [sourceFunctionEntry, Guest.Software.guestFn_process_transaction,
+      InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
+      Option.map_none, Option.map_some, List.map_cons, List.map_nil, spineAt]
+    apply TerminatingProgBoundedOn.dec_on localsFree_worldOK
+    refine seq_bound_trans (Q := WorldOK) ?_ ?_ ?_
+    · apply TerminatingProgBoundedOn.ite_on
+      · apply TerminatingProgBoundedOn.dec_on localsFree_worldOK
+        refine seq_bound_trans (Q := WorldOK)
+          (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+          (Hoare.assign (fun s v hW _ _ => localsFree_worldOK s (s.locals.update (_, v)) s.clock hW)
+            (fun _ _ hr => absurd hr (by simp))) ?_
+        apply while_less_localsOnly (LocalsOnly.of_localsFree localsFree_worldOK)
+        · refine TerminatingProgBoundedOn.decCall_on h.fb_htab_item _ _ _
+            (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _)
+            (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv
+              h.ro_htab_item _ (by simp) _) ?_
+          refine seq_bound_trans (Q := WorldOK) ?_ ?_
+            (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+          · apply TerminatingProgBoundedOn.ite_on
+            · exact TerminatingProgBoundedOn.call_on h.fb_clear_account_preserving_balance none _
+                (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _)
+            · exact TerminatingProgBoundedOn.of_clock clock_skip
+          · exact Hoare.ite
+              (Hoare.mono (Hoare.call_keeps localsFree_worldOK hk_clear _) (fun _ hp => hp.1))
+              (Hoare.skip (fun _ hp _ => hp.1))
+              (fun _ _ hr => absurd hr (by simp))
+        · apply Hoare.decCall_fall (names := []) (by simp) (LocalsOnly.of_localsFree localsFree_worldOK)
+            (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv
+              h.ro_htab_item _ (by simp) _)
+          exact Hoare.seq_fall
+            (Hoare.ite
+              (Hoare.mono (Hoare.call_keeps localsFree_worldOK hk_clear _) (fun _ hp => hp.1))
+              (Hoare.skip (fun _ hp _ => hp.1))
+              (fun _ _ hr => absurd hr (by simp)))
+            (Hoare.assign (fun s v hW _ _ => localsFree_worldOK s (s.locals.update (_, v)) s.clock hW)
+              (fun _ _ hr => absurd hr (by simp)))
+        · ptx_incr
+      · exact TerminatingProgBoundedOn.of_clock clock_skip
+    · apply Hoare.ite
+      · refine Hoare.mono (P' := WorldOK) ?_ (fun _ hp => hp.1)
+        refine Hoare.dec (names := []) (P' := WorldOK) (by simp)
+          (fun s v hW _ => localsFree_worldOK s (s.locals.update (_, v)) s.clock hW) ?_
+          (fun _ t locals _ hh hr => localsFree_worldOK t locals t.clock (hh hr))
+          (fun _ _ hr => absurd hr (by simp))
+        refine Hoare.seq_fall
+          (Hoare.assign (fun s v hW _ _ => localsFree_worldOK s (s.locals.update (_, v)) s.clock hW)
+            (fun _ _ hr => absurd hr (by simp))) ?_
+        refine hoare_while_less_localsOnly (LocalsOnly.of_localsFree localsFree_worldOK) _ _ ?_
+          (by ptx_incr) rfl
+        apply Hoare.decCall_fall (names := []) (by simp) (LocalsOnly.of_localsFree localsFree_worldOK)
+          (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv
+            h.ro_htab_item _ (by simp) _)
+        exact Hoare.seq_fall
+          (Hoare.ite
+            (Hoare.mono (Hoare.call_keeps localsFree_worldOK hk_clear _) (fun _ hp => hp.1))
+            (Hoare.skip (fun _ hp _ => hp.1))
+            (fun _ _ hr => absurd hr (by simp)))
+          (Hoare.assign (fun s v hW _ _ => localsFree_worldOK s (s.locals.update (_, v)) s.clock hW)
+            (fun _ _ hr => absurd hr (by simp)))
+      · exact Hoare.skip (fun _ hp _ => hp.1)
+      · exact fun _ _ hr => absurd hr (by simp)
+    · refine TerminatingProgBoundedOn.seq_guestInv_after
+        (TerminatingProgBoundedOn.call_on h.gb_incorporate_tx_into_block none []
+          (callEntryOn_of_localsFree localsFree_worldOK _ _))
+        worldOK_guestInv ?_
+      apply TerminatingProgBoundedOn.dec_on localsFree_guestInv
+      refine TerminatingProgBoundedOn.seq_guestInv ?_
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))
+      apply TerminatingProgBoundedOn.ite_on
+      · exact TerminatingProgBoundedOn.seq_guestInv
+          (TerminatingProgBoundedOn.call_guestInv h.fb_scratch_release none _)
+          (TerminatingProgBoundedOn.call_guestInv h.fb_frame_mem_release none _)
+      · exact TerminatingProgBoundedOn.of_clock clock_skip
+  have heq : b5 ≤ ptxCost5 := by
+    dsimp only [b5]
+    unfold ptxCost5
+    simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
+    omega
+  intro F s hc hp
+  exact (hb s hc hp).weaken heq
+
+/-- Phase 5 cut over `PtxCalleesCutover`. -/
+theorem ptxPhase5_cut_cutover (h : PtxCalleesCutover) :
+    TerminatingProgBoundedOn PtxReceiptsDone ptxPhase5 ptxCost5 :=
+  fun {_} s hc hp => ptxPhase5_cut_worldOK_cutover h s hc hp.1.1
+
+/-- Combined Phase 3 + Phase 4 + Phase 5 backing-aware suffix cut over `PtxCalleesCutover`
+(with `wk_lst_push`, `wk_process_message_call`, and `wk_create_ether` eliminated). -/
+theorem ptxPhase345_cut_pmc_backing_strong_cutover (h : PtxCalleesCutover)
+    (hwk : PtxP34.PmcStrong) (hkeep : PmcBackingStrong) :
+    TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (ptxPhase3 (ptxPhase4 ptxPhase5))
+      (ptxCost3 + (ptxCost4 + ptxCost5)) :=
+  ptxPhase34_cut_pmc_backing_strong_cutover h hwk hkeep (ptxPhase5_cut_cutover h)
+
+/-- Parameterized backing-aware transaction export over `PtxCalleesCutover`. -/
+theorem gbody_process_transaction_backing_strong_of_h12_cutover
+    (h : PtxCalleesCutover) (hwk : PtxP34.PmcStrong)
+    (hback : DecCallResumeOn (fun s => PtxMessageReady s ∧ TxBacking s)
+      TxBacking (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")])
+    (h12 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn
+        (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b →
+      TerminatingProgBoundedOn TxReadyBackingStrong (ptxPhase1 (ptxPhase2 tail))
+        (ptxCost1 + (ptxCost2 + b)))
+    (h4 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn PtxReceiptsDone tail b →
+      TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+        (ptxPhase4 tail) (ptxCost4 + b)) :
+    TerminatingFunBoundedOn TxReadyBackingStrong (ofString "process_transaction")
+      K.«process_transaction» := by
+  refine ⟨_, _, _, ptx_lookup, ?_⟩
+  have hb : TerminatingProgBoundedOn TxReadyBackingStrong
+      (ptxPhase1 (ptxPhase2 (ptxPhase3 (ptxPhase4 ptxPhase5))))
+      (ptxCost1 + (ptxCost2 + (ptxCost3 + (ptxCost4 + ptxCost5)))) :=
+    h12 _ _ (ptxPhase3_cut_backing_strong_shapes_cutover h hwk hback
+      (h4 _ _ (ptxPhase5_cut_cutover h)))
+  rw [← ptx_phases_eq, ptx_cost_eq] at hb
+  intro F s hc hp
+  simpa only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural] using
+    (hb (F := F) s hc hp)
+
+/-- Cutover backing-aware transaction export with Phase 4 and Phase 5 closed over
+`PtxCalleesCutover` (zero dependence on `wk_lst_push`, `wk_process_message_call`, or `wk_create_ether`). -/
+theorem gbody_process_transaction_backing_strong_of_h12_pmc_cutover
+    (h : PtxCalleesCutover) (hwk : PtxP34.PmcStrong) (hkeep : PmcBackingStrong)
+    (h12 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn
+        (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b →
+      TerminatingProgBoundedOn TxReadyBackingStrong (ptxPhase1 (ptxPhase2 tail))
+        (ptxCost1 + (ptxCost2 + b))) :
+    TerminatingFunBoundedOn TxReadyBackingStrong (ofString "process_transaction")
+      K.«process_transaction» :=
+  gbody_process_transaction_backing_strong_of_h12_cutover h hwk (resume_pmc_backing hkeep)
+    h12 (h4_backing_strong_uncond_cutover h)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
