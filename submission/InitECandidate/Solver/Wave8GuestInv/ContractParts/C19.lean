@@ -1,6 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C18
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.HeaderHash
-import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkHostPayloadHeaders
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.HostPayloadHeaderGuards
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).

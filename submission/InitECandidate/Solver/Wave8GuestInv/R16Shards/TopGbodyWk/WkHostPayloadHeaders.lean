@@ -5,6 +5,10 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_max
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.HeaderHash
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.BlobGasPrice
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.Batch1
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.HtabValuesSub
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.HostPayloadHeaderGuards
 
 /-!
 # R16k Shard `WkHostPayloadHeaders`: Host Input, SSZ HTR, Header Validation, Trie/NodeDb, and Payload Header
@@ -7072,17 +7076,6 @@ private theorem worldEff_htr_new_payload_request {F : Type}
       hmark_lo hmark_hi hmark_al hn).2.choose_spec.2)
     (fun m8 _ heff_m8 _ _ => worldEff_return heff_m8 _)
 
-/-- Strengthened entry guard for `htr_new_payload_request`: `InputAt` on `si`, disjointness of
-`inputCells` from `(out, 32)`, and 32-bit SSZ element-count bounds on `nvh = memW (si + 16)` and
-`nwd = memW (pl + 56)` preventing heap-size overflow in `alloc(nwd * 32 + 32)` and bounding
-`merkleize_progressive` tree depth. -/
-def HtrNewPayloadReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s =>
-    InputAt s (locN s "si") ∧
-    IvlsDisj (inputCells s (locN s "si")) [(locN s "out", 32)] ∧
-    memW s (locN s "si" + 16) < 2 ^ 32 ∧
-    memW s (memW s (locN s "si") + 56) < 2 ^ 32
-
 theorem «wk_htr_new_payload_request_strong» :
     WorldKeeps HtrNewPayloadReady
       (fun s => [(locN s "out", 32),
@@ -8093,6 +8086,7 @@ private theorem worldEff_of_htab_new_entry {F : Type}
       (evaluateHOLFiniteState entry (sourceFnBody Guest.Software.guestFn_htab_new)).1 =
         some (.returned (.val (.word tw))) ∧
       HtabWF post tw.toNat ∧
+      hdr post tw.toNat 3 = 0 ∧
       hdr post tw.toNat 0 = kw.toNat ∧
       (∀ i ∈ htabFootprint post tw.toNat,
         Allocated post i ∧ Inside i (globN s "heap_ptr") (globN post "heap_ptr")) := by
@@ -8100,7 +8094,7 @@ private theorem worldEff_of_htab_new_entry {F : Type}
   set entry := callEntryStateHOLFinite cur callee
   have heff_e : WorldEff s entry Rl B hpGw := h.locals_clock callee (cur.clock - 1)
   rcases hres with ⟨rv, hret⟩ | ⟨e, ev, hex, hne⟩
-  · obtain ⟨tw, rfl, _, _, hAp, hwf, _, hhdr0, hfp, hfr, hg⟩ :=
+  · obtain ⟨tw, rfl, _, _, hAp, hwf, hcnt0, hhdr0, hfp, hfr, hg⟩ :=
       htab_new_heap_props entry kw capw heff_e.arena hkl hcl hk hc rv hret
     have hm := PanRunBounded.evaluateHOLFiniteState_metadata entry
       (sourceFnBody Guest.Software.guestFn_htab_new)
@@ -8133,7 +8127,7 @@ private theorem worldEff_of_htab_new_entry {F : Type}
               have hn8 : globN post "heap_ptr" % 8 = 0 := hAp.2.2.2.2.2.2.1
               constructor <;> dsimp only at * <;> omega)
         hs8
-    exact ⟨hwe, tw, hret, hwf, hhdr0, fun i hi =>
+    exact ⟨hwe, tw, hret, hwf, hcnt0, hhdr0, fun i hi =>
       ⟨(hfp i hi).1, ⟨le_trans hhp_s (hfp i hi).2.1, (hfp i hi).2.2⟩⟩⟩
   · exfalso
     exact htab_new_no_catchable_exn entry heff_e.code e ev hne hex
@@ -8414,7 +8408,9 @@ private def NodeDbPost {F : Type} (s : PanSemStateFiniteExact 64 F)
       HtabWF post tw.toNat ∧
       hdr post tw.toNat 0 = 32 ∧
       (∀ i ∈ htabFootprint post tw.toNat,
-        Inside i (globN s "heap_ptr") (globN post "heap_ptr"))
+        Inside i (globN s "heap_ptr") (globN post "heap_ptr")) ∧
+      (∀ val ∈ htabValues post tw.toNat,
+        ∃ j < locN s "n", val = (locN s "slice_arr" + 16 * j) % 2 ^ 64)
 
 private theorem nodeDbPost_locals_clock {F : Type} {s : PanSemStateFiniteExact 64 F}
     (r : Option (PanSemResultExact 64)) (st : PanSemStateFiniteExact 64 F)
@@ -8422,8 +8418,8 @@ private theorem nodeDbPost_locals_clock {F : Type} {s : PanSemStateFiniteExact 6
     (hQ : NodeDbPost s r st) :
     NodeDbPost s r { st with locals := L, clock := k } := by
   intro rv hret
-  obtain ⟨tw, rfl, hwf, hhdr0, hfp⟩ := hQ rv hret
-  exact ⟨tw, rfl, (htabWF_with_locals st L k tw.toNat).2 hwf, hhdr0, hfp⟩
+  obtain ⟨tw, rfl, hwf, hhdr0, hfp, hvals⟩ := hQ rv hret
+  exact ⟨tw, rfl, (htabWF_with_locals st L k tw.toNat).2 hwf, hhdr0, hfp, hvals⟩
 
 private theorem nodeDbPost_nonret {F : Type} {s : PanSemStateFiniteExact 64 F}
     (r : Option (PanSemResultExact 64)) (st : PanSemStateFiniteExact 64 F)
@@ -8575,13 +8571,47 @@ private theorem nodedb_keccak_unhit_fresh {F : Type}
     · exact Or.inr (Or.inl (by dsimp [Inside] at hin_gn; omega))
     · exact disj_of_inside_right hin_gn (disj_allocated_fresh_heap hAs.2 heff_cur.arena.2 hal hin)
 
+abbrev NodeDbSlicesBounded {F : Type} (s : PanSemStateFiniteExact 64 F) (db : Nat) : Prop :=
+  R16Shards.EvmEkFk.StorageCreateFinish.DbTableAt s db
+
+def RetNodeDbValues : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S' Nd' => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    HtabWF post w.toNat ∧ hdr post w.toNat 0 = 32 ∧
+    (∀ i ∈ htabFootprint post w.toNat, Inside i (globN s "heap_ptr") (globN post "heap_ptr")) ∧
+    IvlsDisj (htabFootprint post w.toNat) (worldOwned post S' Nd') ∧
+    (∀ val ∈ htabValues post w.toNat, ∃ j < locN s "n", val = (locN s "slice_arr" + 16 * j) % 2 ^ 64)
+
+def RetNodeDbBounded : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S' Nd' => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    HtabWF post w.toNat ∧ hdr post w.toNat 0 = 32 ∧
+    (∀ i ∈ htabFootprint post w.toNat, Inside i (globN s "heap_ptr") (globN post "heap_ptr")) ∧
+    IvlsDisj (htabFootprint post w.toNat) (worldOwned post S' Nd') ∧
+    NodeDbSlicesBounded post w.toNat
+
+def NodeDbSlicesReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧
+    (∀ j < locN s "n", R16Shards.EvmEkFk.StorageCreateFinish.WitnessSliceOK s (locN s "slice_arr" + 16 * j)) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧
+      IvlsDisj [(locN s "slice_arr", 16 * locN s "n")]
+        (worldOwned s S Nd ++
+          [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+           (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+           (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+
+private theorem unhit_to_m08 {F : Type} {cur next : PanSemStateFiniteExact 64 F} {i : Ivl}
+    (hu : IvlUnhit cur next i) :
+    InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit cur next i :=
+  fun a ha8 hlo hhi => hu a ha8 ⟨by omega, by omega⟩
+
 /-- Entry guard for `nodedb_build`: `WorldOK s` plus `locN s "n" < 2 ^ 31`, preventing 64-bit
 overflow in `2 * n + 2` and bounding the power-of-two capacity `cap ≤ 2 ^ 32 = htabCapMax` passed
 to `htab_new`. Every caller (`run_attempt`) satisfies `16 * n ≤ heapLimit < 2 ^ 32`. -/
 def NodeDbBuildReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ locN s "n" < 2 ^ 31
 
-theorem «wk_nodedb_build_strong» :
+theorem «wk_nodedb_build_strong_values» :
     WorldKeeps NodeDbBuildReady
       (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
                  (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
@@ -8589,7 +8619,7 @@ theorem «wk_nodedb_build_strong» :
       ["heap_ptr"]
       [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
        ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-      RetNodeDb (ofString "nodedb_build") := by
+      RetNodeDbValues (ofString "nodedb_build") := by
   refine ⟨_, _, _, lookup_nodedb_build, fun {F} s hc hReady ⟨vals, hl⟩ hnt hres => ?_⟩
   obtain ⟨hWOK, hn_bound⟩ := hReady
   rcases hWOK with ⟨hAs, S0, hWT0_ex⟩
@@ -8598,6 +8628,8 @@ theorem «wk_nodedb_build_strong» :
   have hs8 : globN s "heap_ptr" % 8 = 0 := hAs.2.2.2.2.2.2.1
   obtain ⟨saw, nw, rfl, hsa_lk, hn_lk⟩ := lookupCode_two_words (by decide) lookup_nodedb_build hl
   have hn_lt : nw.toNat < 2 ^ 31 := by simpa [locN, hn_lk] using hn_bound
+  have hsa_loc : locN s "slice_arr" = saw.toNat := by simp [locN, hsa_lk]
+  have hn_loc : locN s "n" = nw.toNat := by simp [locN, hn_lk]
   have heff0 : WorldEff s s (nodedbRegions s) ([] : List (String × Nat)) hpGw :=
     WorldEff.refl s (nodedbRegions s) [] hpGw hAs hc
   have hB_ok_nil : ∀ gs ∈ ([] : List (String × Nat)),
@@ -8610,7 +8642,7 @@ theorem «wk_nodedb_build_strong» :
     obtain ⟨heff_post, hpost⟩ := hmain
     refine heff_post.to_worldStep_Q hWOK hB_ok_nil hp_core_out
       (fun S Nd hWT hDisjR hWT_post _ hne_eq hfp_eq rv hret => ?_)
-    obtain ⟨tw, rfl, hwf, hhdr0, hfp_in⟩ := hpost rv hret
+    obtain ⟨tw, rfl, hwf, hhdr0, hfp_in, hvals⟩ := hpost rv hret
     have hfix_eq := fixedObjects_eq_of_worldEff_no_bufs hAs heff_post hWT hDisjR
     have htab_eq : S.flatMap (htabFootprint (evaluateHOLFiniteState s
         (sourceFnBody Guest.Software.guestFn_nodedb_build)).2) =
@@ -8621,7 +8653,7 @@ theorem «wk_nodedb_build_strong» :
         worldOwned s S Nd := by
       unfold worldOwned
       rw [htab_eq, hfix_eq, hne_eq]
-    refine ⟨tw, rfl, hwf, hhdr0, hfp_in, ?_⟩
+    refine ⟨tw, rfl, hwf, hhdr0, hfp_in, ?_, hvals⟩
     rw [hwo_eq]
     exact freshTable_disj_entry_world hAs heff_post.arena hWT hfp_in
   have hcr : ContOrRes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_nodedb_build)).1 :=
@@ -8779,12 +8811,12 @@ theorem «wk_nodedb_build_strong» :
     simp only [List.cons.injEq, ValueHOL.val.injEq, HolWordLab.word.injEq, and_true] at hw_eq
     exact ⟨hw_eq.1.symm, hw_eq.2.symm⟩
   rcases hw12 with ⟨rfl, rfl⟩
-  obtain ⟨_, tw, hret_tw, hwf_cpost, hhdr0_cpost, hfp_cpost⟩ :=
+  obtain ⟨_, tw, hret_tw, hwf_cpost, hcnt0_cpost, hhdr0_cpost, hfp_cpost⟩ :=
     worldEff_of_htab_new_entry heff_m1 (by decide) hcap_max hk_cal hc_cal hs8
       (by rw [hrun_hn]; exact Or.inl ⟨rv, rfl⟩)
-  rw [hrun_hn] at hret_tw hwf_cpost hhdr0_cpost hfp_cpost
+  rw [hrun_hn] at hret_tw hwf_cpost hcnt0_cpost hhdr0_cpost hfp_cpost
   injection hret_tw with hrv_eq; injection hrv_eq with hrv_eq'; subst rv
-  dsimp only at hwf_cpost hhdr0_cpost hfp_cpost
+  dsimp only at hwf_cpost hcnt0_cpost hhdr0_cpost hfp_cpost
   set mid_t := setVarHOLFinite (ofString "t") (.val (.word tw)) { cpost with locals := m1.locals }
   -- 4. dec i := 0
   refine worldEff_dec_post (heff_cpost.locals_clock _ cpost.clock)
@@ -8809,6 +8841,9 @@ theorem «wk_nodedb_build_strong» :
       show ofString "i" ≠ ofString "t" by decide]
   have hs2_wf : HtabWF s2 tw.toNat :=
     (htabWF_with_locals cpost s2.locals cpost.clock tw.toNat).2 hwf_cpost
+  have hs2_vals : htabValues s2 tw.toNat = [] := by
+    change htabValues cpost tw.toNat = []
+    simp [htabValues, hcnt0_cpost]
   -- 5. Loop 2: while (i < n) { keccak256(...); htab_set(...); i := i + 1 }
   let cond2 : ExpHOL 64 :=
     .cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n"))
@@ -8836,7 +8871,9 @@ theorem «wk_nodedb_build_strong» :
     HtabWF u tw.toNat ∧
     hdr u tw.toNat 0 = 32 ∧
     (∀ iv ∈ htabFootprint u tw.toNat,
-      Allocated u iv ∧ Inside iv (globN s "heap_ptr") (globN u "heap_ptr"))
+      Allocated u iv ∧ Inside iv (globN s "heap_ptr") (globN u "heap_ptr")) ∧
+    (∀ val ∈ htabValues u tw.toNat,
+      ∃ j < locN s "n", val = (locN s "slice_arr" + 16 * j) % 2 ^ 64)
   have hbody2_nobreak : ∀ u : PanSemStateFiniteExact 64 F,
       (evaluateHOLFiniteState u body2).1 ≠ some .break := fun u =>
     seq_ne_break u (call0_ne_break u _ _) (fun m1' _ =>
@@ -8847,9 +8884,9 @@ theorem «wk_nodedb_build_strong» :
       seq_noret m1' (call0_noret m1' _ _) (fun m2' _ => assign_local_noret m2' _ _))
   have hw2_step := worldEff_while_cond_post (s := s) (Rl := nodedbRegions s) (B := []) (gw := hpGw)
     cond2 (body := body2) Inv2
-    (fun u ⟨hsa, hn, ht, hi, hwf, hh0, hfp⟩ =>
-      ⟨hsa, hn, ht, hi, (htabWF_with_locals u u.locals (u.clock - 1) tw.toNat).2 hwf, hh0, hfp⟩)
-    (fun u cw hcw hcw_ne heff_ud ⟨hu_sa, hu_n, hu_t, ⟨iw, hu_i⟩, hu_wf, hu_h0, hu_fp⟩ hnt_b2 hcr_b2 => by
+    (fun u ⟨hsa, hn, ht, hi, hwf, hh0, hfp, hvals⟩ =>
+      ⟨hsa, hn, ht, hi, (htabWF_with_locals u u.locals (u.clock - 1) tw.toNat).2 hwf, hh0, hfp, hvals⟩)
+    (fun u cw hcw hcw_ne heff_ud ⟨hu_sa, hu_n, hu_t, ⟨iw, hu_i⟩, hu_wf, hu_h0, hu_fp, hu_vals⟩ hnt_b2 hcr_b2 => by
       set ud := decClockHOLFinite u
       have hud_i : ud.locals.lookup (ofString "i") = some (.val (.word iw)) := hu_i
       have hud_n : ud.locals.lookup (ofString "n") = some (.val (.word nw)) := hu_n
@@ -8981,6 +9018,10 @@ theorem «wk_nodedb_build_strong» :
           intro iv hiv
           obtain ⟨_, hin_iv⟩ := hu_fp iv hiv
           exact ⟨Or.inl ⟨le_trans hAs.2.1 hin_iv.1, by rw [hmk_hp]; exact hin_iv.2⟩, hin_iv⟩
+        have hmk_vals : htabValues mk tw.toNat = htabValues ud tw.toNat :=
+          InitECandidate.Solver.Wave8Contracts.M08.htabValues_eq_of_unhit
+            hu_wf
+            (fun iv hiv => unhit_to_m08 (hu_fp_unhit iv hiv))
         have hs_call_step := fun (hnt_s : (evaluateHOLFiniteState mk callSet).1 ≠ some .timeOut)
             (hcr_s : ContOrRes (evaluateHOLFiniteState mk callSet).1) =>
           worldEff_call0_eff_post heff_mk (ofString "htab_set")
@@ -8996,7 +9037,9 @@ theorem «wk_nodedb_build_strong» :
               hdr (evaluateHOLFiniteState mk callSet).2 tw.toNat 0 = 32 ∧
               (∀ iv ∈ htabFootprint (evaluateHOLFiniteState mk callSet).2 tw.toNat,
                 Allocated (evaluateHOLFiniteState mk callSet).2 iv ∧
-                Inside iv (globN s "heap_ptr") (globN (evaluateHOLFiniteState mk callSet).2 "heap_ptr")))
+                Inside iv (globN s "heap_ptr") (globN (evaluateHOLFiniteState mk callSet).2 "heap_ptr")) ∧
+              (∀ val ∈ htabValues (evaluateHOLFiniteState mk callSet).2 tw.toNat,
+                ∃ j < locN s "n", val = (locN s "slice_arr" + 16 * j) % 2 ^ 64))
             (fun callee vals hargs_s hl_hs _ hres_hs => by
               have hi16_lt : iw.toNat * (16#64 : BitVec 64).toNat < 2 ^ 64 := by
                 rw [show (16#64 : BitVec 64).toNat = 16 from rfl]; omega
@@ -9027,15 +9070,25 @@ theorem «wk_nodedb_build_strong» :
               have hwt_eq : wt = tw := by
                 simp only [List.cons.injEq, ValueHOL.val.injEq, HolWordLab.word.injEq] at hw_eq
                 exact hw_eq.1.symm
-              subst wt
+              have hwv_eq : wv = saw + iw * 16#64 := by
+                simp only [List.cons.injEq, ValueHOL.val.injEq, HolWordLab.word.injEq, and_true] at hw_eq
+                exact hw_eq.2.2.symm
+              subst wt; subst wv
               set ent := callEntryStateHOLFinite mk callee
               have heff_ent : WorldEff s ent (nodedbRegions s) [] hpGw :=
                 heff_mk.locals_clock callee (mk.clock - 1)
               have hent_wf : HtabWF ent tw.toNat :=
                 (htabWF_with_locals mk callee (mk.clock - 1) tw.toNat).2 hmk_wf
               rcases hres_hs with ⟨rv_s, hret_s⟩ | ⟨exId, exVal, hex_s, hne_s⟩
-              · have hexit := SoloHtabSet.htab_set_body_spec ent tw wk wv ht_cal hk_cal hv_cal
+              · have hexit := SoloHtabSet.htab_set_body_spec ent tw wk (saw + iw * 16#64) ht_cal hk_cal hv_cal
                   heff_ent.arena hent_wf (fun iv hiv => (hmk_fp iv hiv).1) rv_s hret_s
+                have hent_arg : HtabArgWF ent := by
+                  have hlt_ent : locN ent "t" = tw.toNat := by simp [ent, callEntryStateHOLFinite, locN, ht_cal]
+                  refine ⟨heff_ent.arena, ?_, ?_⟩
+                  · rw [hlt_ent]; exact hent_wf
+                  · rw [hlt_ent]; exact fun iv hiv => (hmk_fp iv hiv).1
+                have hvsub := R16Shards.htab_set_values_sub ent tw wk (saw + iw * 16#64)
+                  ht_cal hk_cal hv_cal hent_arg rv_s hret_s
                 obtain ⟨hwe_s, hfp_s⟩ :=
                   worldEff_of_htabExitAt heff_ent hexit (fun iv hiv => (hmk_fp iv hiv).2) hs8
                 refine ⟨hwe_s, fun _ hnone_s => ?_⟩
@@ -9061,8 +9114,26 @@ theorem «wk_nodedb_build_strong» :
                 rw [hc_eval]
                 set s_out := (evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_htab_set)).2
                 refine ⟨(htabWF_with_locals s_out mk.locals s_out.clock tw.toNat).2 hexit.2.1,
-                  hexit.2.2.1.trans hmk_h0, fun iv hiv => ?_⟩
-                exact hfp_s iv hiv
+                  hexit.2.2.1.trans hmk_h0, fun iv hiv => hfp_s iv hiv, fun val hval => ?_⟩
+                have hval_out : val ∈ htabValues s_out (locN ent "t") := by
+                  have hlt_ent : locN ent "t" = tw.toNat := by simp [ent, callEntryStateHOLFinite, locN, ht_cal]
+                  rw [hlt_ent]; exact hval
+                rcases hvsub.2.2 val hval_out with hval_eq | hval_old
+                · have hlv_ent : locN ent "value" = (saw + iw * 16#64).toNat := by
+                    simp [ent, callEntryStateHOLFinite, locN, hv_cal]
+                  rw [hlv_ent] at hval_eq
+                  refine ⟨iw.toNat, ?_, ?_⟩
+                  · rw [hn_loc]; exact hi_lt_n
+                  · rw [hval_eq, hsa_loc]
+                    have hi16_nat : (iw * 16#64).toNat = 16 * iw.toNat := by
+                      rw [BitVec.toNat_mul, show (16#64 : BitVec 64).toNat = 16 from rfl,
+                        Nat.mul_comm, Nat.mod_eq_of_lt (by omega)]
+                    rw [BitVec.toNat_add, hi16_nat]
+                · have hlt_ent : locN ent "t" = tw.toNat := by simp [ent, callEntryStateHOLFinite, locN, ht_cal]
+                  rw [hlt_ent] at hval_old
+                  have hval_mk : val ∈ htabValues mk tw.toNat := hval_old
+                  rw [hmk_vals] at hval_mk
+                  exact hu_vals val hval_mk
               · exfalso
                 exact htab_set_no_catchable_exn ent heff_ent.code exId exVal hne_s hex_s)
             hnt_s hcr_s
@@ -9090,7 +9161,7 @@ theorem «wk_nodedb_build_strong» :
           obtain ⟨hms_loc, hpost_cs_fn⟩ := hpost_cs
           have hpost_cs_val := hpost_cs_fn (by rw [hcs])
           rw [hcs] at hms_loc hpost_cs_val
-          obtain ⟨hms_wf, hms_h0, hms_fp⟩ := hpost_cs_val
+          obtain ⟨hms_wf, hms_h0, hms_fp, hms_vals⟩ := hpost_cs_val
           have hms_i : ms.locals.lookup (ofString "i") = some (.val (.word iw)) := by
             rw [hms_loc, hmk_loc]; exact hud_i
           have hms_sa : ms.locals.lookup (ofString "slice_arr") = some (.val (.word saw)) := by
@@ -9111,7 +9182,7 @@ theorem «wk_nodedb_build_strong» :
           set ms' := setKvarHOLFinite .local (ofString "i") (.val (.word (iw + 1#64))) ms
           refine ⟨?_, ?_, ?_, ⟨iw + 1#64, ?_⟩,
             (htabWF_with_locals ms ms'.locals ms.clock tw.toNat).2 hms_wf,
-            hms_h0, hms_fp⟩
+            hms_h0, hms_fp, hms_vals⟩
           · simp [ms', setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
               hms_sa, show ofString "i" ≠ ofString "slice_arr" by decide]
           · simp [ms', setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
@@ -9153,8 +9224,9 @@ theorem «wk_nodedb_build_strong» :
         exact (hstep_set mk hk heff_mk hnt_b2 hcr_b2).2 hfl_b2)
   have hs2_inv : Inv2 s2 :=
     ⟨hs2_sa, hs2_n, hs2_t, ⟨0#64, by simp [s2, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]⟩,
-     hs2_wf, hhdr0_cpost, fun iv hiv =>
-       ⟨(hfp_cpost iv hiv).1, (hfp_cpost iv hiv).2⟩⟩
+     hs2_wf, hhdr0_cpost,
+     fun iv hiv => ⟨(hfp_cpost iv hiv).1, (hfp_cpost iv hiv).2⟩,
+     fun val hval => by rw [hs2_vals] at hval; simp at hval⟩
   refine worldEff_seq_post nodeDbPost_nonret
     (while_noret s2 cond2 body2 hbody2_noret)
     hnt4 hcr4
@@ -9167,7 +9239,7 @@ theorem «wk_nodedb_build_strong» :
       (by rw [hm2]; simp) (by rw [hm2]; exact Or.inl rfl)).2 hnone2 (fun u _ => hbody2_nobreak u)
     rw [hm2] at hpost2
     exact hpost2.1
-  obtain ⟨_, _, hm2_t, _, hm2_wf, hm2_h0, hm2_fp⟩ := hw2_inv
+  obtain ⟨_, _, hm2_t, _, hm2_wf, hm2_h0, hm2_fp, hm2_vals⟩ := hw2_inv
   refine ⟨worldEff_return heff_m2 _, ?_⟩
   rw [evaluateHOLFiniteState_return]
   have ht_ev : @evalHOLExact 64 F _ m2.toExact (fun a => Classical.propDecidable (m2.memaddrs a))
@@ -9179,7 +9251,7 @@ theorem «wk_nodedb_build_strong» :
     injection hret with hret'; injection hret' with hret''; subst hret''
     exact ⟨tw, rfl,
       (htabWF_with_locals m2 (emptyLocalsHOLFinite m2).locals m2.clock tw.toNat).2 hm2_wf,
-      hm2_h0, fun iv hiv => (hm2_fp iv hiv).2⟩
+      hm2_h0, fun iv hiv => (hm2_fp iv hiv).2, hm2_vals⟩
   · intro rv hret; simp at hret
 
 private def nodedbBuildCallees (f : MlS) : Bool :=
@@ -9528,30 +9600,17 @@ private theorem nodedb_loop2_no_none {F : Type}
         rw [hb_eq, evaluateHOLFiniteState_seq_line780, hk_err]
         simp
 
-theorem «wk_nodedb_build» :
-    WorldKeeps WorldOK
-      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
-                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
-                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
-      ["heap_ptr"]
-      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
-       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-      RetNodeDb (ofString "nodedb_build") := by
-  obtain ⟨params_s, body_s, ret_s, hlook_s, hspec_s⟩ := «wk_nodedb_build_strong»
-  have hsame : (params_s, body_s, ret_s) =
-      ([(ofString "slice_arr", .one), (ofString "n", .one)],
-       sourceFnBody Guest.Software.guestFn_nodedb_build, .one) := by
-    rw [lookup_nodedb_build] at hlook_s
-    exact Option.some.inj hlook_s.symm
-  cases hsame
-  refine ⟨_, _, _, lookup_nodedb_build, fun {F} s hc hWOK ⟨vals, hl⟩ hnt hres => ?_⟩
-  obtain ⟨saw, nw, rfl, hsa, hn⟩ := lookupCode_two_words (by decide) lookup_nodedb_build hl
-  by_cases hsmall : nw.toNat < 2 ^ 31
-  · have hready : NodeDbBuildReady s := ⟨hWOK, by simpa [locN, hn] using hsmall⟩
-    exact hspec_s s hc hready ⟨[ValueHOL.val (.word saw), ValueHOL.val (.word nw)], hl⟩ hnt hres
-  · have hnw : 2 ^ 31 ≤ nw.toNat := by omega
-    have hma : s.memaddrs = ordinaryDomain := hWOK.1.1.memaddrs
-    exfalso
+private theorem nodedb_build_large_not_resumes
+    {F : Type} (s : PanSemStateFiniteExact 64 F) (saw nw : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hWOK : WorldOK s)
+    (hsa : s.locals.lookup (ofString "slice_arr") = some (.val (.word saw)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word nw)))
+    (hnw : 2 ^ 31 ≤ nw.toNat)
+    (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_nodedb_build)).1) :
+    False := by
+  have hma : s.memaddrs = ordinaryDomain := hWOK.1.1.memaddrs
+  if h_triv : True then
     rcases hres with ⟨rv, hret⟩ | ⟨e, v, hex, hne⟩
     · have hbody :
         (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_nodedb_build)).1 =
@@ -9769,6 +9828,185 @@ theorem «wk_nodedb_build» :
       exact evaluate_noCatchableRaise nodedbBuildCallees
         nodedbBuildCallees_noCatchableRaise
         (sourceFnBody Guest.Software.guestFn_nodedb_build) hbody_ok s hc e v hne hex
+  else trivial
+
+theorem «wk_nodedb_build_strong» :
+    WorldKeeps NodeDbBuildReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetNodeDb (ofString "nodedb_build") := by
+  obtain ⟨params, body, ret, hlook, hspec⟩ := «wk_nodedb_build_strong_values»
+  refine ⟨params, body, ret, hlook, fun {F} s hc hready hshape hnt hres => ?_⟩
+  have hstep := hspec s hc hready hshape hnt hres
+  refine ⟨hstep.1, hstep.2.1, hstep.2.2.1, hstep.2.2.2.1, fun S Nd hWT hDisjR => ?_⟩
+  obtain ⟨S', Nd', hsub, hWT', hgrow, hfr, hq⟩ := hstep.2.2.2.2 S Nd hWT hDisjR
+  refine ⟨S', Nd', hsub, hWT', hgrow, hfr, fun rv hret => ?_⟩
+  obtain ⟨w, rfl, hwf, hk, hfp, hdisj_fp, _⟩ := hq rv hret
+  exact ⟨w, rfl, hwf, hk, hfp, hdisj_fp⟩
+
+theorem «wk_nodedb_build_values» :
+    WorldKeeps WorldOK
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetNodeDbValues (ofString "nodedb_build") := by
+  obtain ⟨params_s, body_s, ret_s, hlook_s, hspec_s⟩ := «wk_nodedb_build_strong_values»
+  have hsame : (params_s, body_s, ret_s) =
+      ([(ofString "slice_arr", .one), (ofString "n", .one)],
+       sourceFnBody Guest.Software.guestFn_nodedb_build, .one) := by
+    rw [lookup_nodedb_build] at hlook_s
+    exact Option.some.inj hlook_s.symm
+  cases hsame
+  refine ⟨_, _, _, lookup_nodedb_build, fun {F} s hc hWOK ⟨vals, hl⟩ hnt hres => ?_⟩
+  obtain ⟨saw, nw, rfl, hsa, hn⟩ := lookupCode_two_words (by decide) lookup_nodedb_build hl
+  by_cases hsmall : nw.toNat < 2 ^ 31
+  · have hready : NodeDbBuildReady s := ⟨hWOK, by simpa [locN, hn] using hsmall⟩
+    exact hspec_s s hc hready ⟨[ValueHOL.val (.word saw), ValueHOL.val (.word nw)], hl⟩ hnt hres
+  · exfalso
+    exact nodedb_build_large_not_resumes s saw nw hc hWOK hsa hn (by omega) hres
+
+theorem «wk_nodedb_build» :
+    WorldKeeps WorldOK
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetNodeDb (ofString "nodedb_build") := by
+  obtain ⟨params, body, ret, hlook, hspec⟩ := «wk_nodedb_build_values»
+  refine ⟨params, body, ret, hlook, fun {F} s hc hWOK hshape hnt hres => ?_⟩
+  have hstep := hspec s hc hWOK hshape hnt hres
+  refine ⟨hstep.1, hstep.2.1, hstep.2.2.1, hstep.2.2.2.1, fun S Nd hWT hDisjR => ?_⟩
+  obtain ⟨S', Nd', hsub, hWT', hgrow, hfr, hq⟩ := hstep.2.2.2.2 S Nd hWT hDisjR
+  refine ⟨S', Nd', hsub, hWT', hgrow, hfr, fun rv hret => ?_⟩
+  obtain ⟨w, rfl, hwf, hk, hfp, hdisj_fp, _⟩ := hq rv hret
+  exact ⟨w, rfl, hwf, hk, hfp, hdisj_fp⟩
+
+theorem nodeDbSlicesBounded_of_values {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {S Nd S' Nd' : List Nat} {v : ValueHOL 64}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hWT : WorldTypedWith s S Nd)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hfr : FrameOutside s post
+      (worldOwned s S Nd ++
+        [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+         (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+         (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)] ++
+        [freeGap s])
+      (heapFree s))
+    (hslices : ∀ j < locN s "n", R16Shards.EvmEkFk.StorageCreateFinish.WitnessSliceOK s (locN s "slice_arr" + 16 * j))
+    (hdisj : IvlsDisj [(locN s "slice_arr", 16 * locN s "n")]
+      (worldOwned s S Nd ++
+        [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+         (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+         (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)]))
+    (hq : RetNodeDbValues s r post S' Nd')
+    (hret : r = some (.returned v)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      HtabWF post w.toNat ∧ hdr post w.toNat 0 = 32 ∧
+      (∀ i ∈ htabFootprint post w.toNat, Inside i (globN s "heap_ptr") (globN post "heap_ptr")) ∧
+      IvlsDisj (htabFootprint post w.toNat) (worldOwned post S' Nd') ∧
+      NodeDbSlicesBounded post w.toNat := by
+  obtain ⟨w, rfl, hwf, hk, hfp, hdisj_fp, hvals⟩ := hq v hret
+  refine ⟨w, rfl, hwf, hk, hfp, hdisj_fp, Or.inr ⟨hwf, hk, ?_, ?_⟩⟩
+  · intro i hi
+    exact ⟨le_trans hAs.2.1 (hfp i hi).1, (hfp i hi).2⟩
+  · intro val hval
+    obtain ⟨j, hj, hval_eq⟩ := hvals val hval
+    have hws_j := hslices j hj
+    have h264 : heapLimit ≤ 2 ^ 64 := by decide
+    have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hAs.2.2.1
+    have hin_j : Inside (locN s "slice_arr" + 16 * j, 16) sourceBase (globN s "heap_ptr") := hws_j.2.1
+    have hval_lt : locN s "slice_arr" + 16 * j < 2 ^ 64 := by
+      dsimp [Inside] at hin_j; omega
+    rw [Nat.mod_eq_of_lt hval_lt] at hval_eq
+    subst hval_eq
+    set vj := locN s "slice_arr" + 16 * j
+    have hal_vj : Allocated s (vj, 16) := Or.inl hin_j
+    obtain ⟨hgap_vj, hheap_vj⟩ :=
+      R16Shards.EvmEkFk.StorageCreateFinish.allocated_disj_free_regions hAs.2 hal_vj
+    have hvj8 : vj % 8 = 0 := hws_j.1.1
+    have hshape_keep : ∀ k ∈ worldOwned s S Nd ++
+        [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+         (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+         (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)] ++
+        [freeGap s], k = (0, 0) ∨ k.1 % 8 = 0 ∨ k.2 ≠ 0 := by
+      intro k hk
+      rcases List.mem_append.1 hk with hk_wr | hk_fg
+      · rcases List.mem_append.1 hk_wr with hk_wo | hk_r
+        · exact R16Shards.EvmEkFk.StorageCreateFinish.worldOwned_well_shaped hWT k hk_wo
+        · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk_r
+          rcases hk_r with rfl | rfl | rfl
+          · by_cases h0 : globN s "keccak_pad" = 0
+            · exact Or.inl (by simp [h0])
+            · exact Or.inr (Or.inr (by simp [h0]))
+          · by_cases h0 : globN s "keccak_st" = 0
+            · exact Or.inl (by simp [h0])
+            · exact Or.inr (Or.inr (by simp [h0]))
+          · by_cases h0 : globN s "mpt_hash_scratch" = 0
+            · exact Or.inl (by simp [h0])
+            · exact Or.inr (Or.inr (by simp [h0]))
+      · rw [List.mem_singleton] at hk_fg; subst hk_fg
+        exact Or.inr (Or.inl hAs.2.2.2.2.2.2.2.1)
+    have hu_vj : InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post (vj, 16) := by
+      refine R16Shards.EvmEkFk.StorageCreateFinish.aligned_cell_unhit_of_frameOutside
+        hfr hshape_keep (Or.inr (Or.inl hAs.2.2.2.2.2.2.1)) (fun k hk => ?_) hheap_vj
+      rcases List.mem_append.1 hk with hk_wr | hk_fg
+      · have hdj_arr := hdisj (locN s "slice_arr", 16 * locN s "n") (List.mem_singleton.2 rfl) k hk_wr
+        rcases hdj_arr with h0 | h0 | hle | hge
+        · omega
+        · exact Or.inr (Or.inl h0)
+        · exact Or.inr (Or.inr (Or.inl (by dsimp [vj]; omega)))
+        · exact Or.inr (Or.inr (Or.inr (by dsimp [vj]; omega)))
+      · rw [List.mem_singleton] at hk_fg; subst hk_fg
+        exact hgap_vj
+    have hvj_hi : vj + 16 ≤ 2 ^ 64 := by dsimp [Inside, vj] at hin_j ⊢; omega
+    refine R16Shards.EvmEkFk.StorageCreateFinish.witnessSliceOK_of_preserved hws_j
+      (InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hAs.1 hAp.1 hws_j.1) hhp ?_ ?_
+    · exact InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit hu_vj hvj8 hvj_hi ⟨by omega, by omega⟩
+    · exact InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit hu_vj (by omega) hvj_hi ⟨by omega, by omega⟩
+
+theorem «wk_nodedb_build_nodedb_bounded» :
+    WorldKeeps NodeDbSlicesReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetNodeDbBounded (ofString "nodedb_build") := by
+  obtain ⟨params, body, ret, hlook, hspec⟩ := «wk_nodedb_build_values»
+  refine ⟨params, body, ret, hlook, fun {F} s hc ⟨hWOK, hslices, S0, Nd0, hWT0, hdisj0⟩ hshape hnt hres => ?_⟩
+  have hstep := hspec s hc hWOK hshape hnt hres
+  refine ⟨hstep.1, hstep.2.1, hstep.2.2.1, hstep.2.2.2.1, fun S Nd hWT hDisjR => ?_⟩
+  obtain ⟨S', Nd', hsub, hWT', hgrow, hfr, hq⟩ := hstep.2.2.2.2 S Nd hWT hDisjR
+  have hDisjR0 : IvlsDisj
+      [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+       (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+       (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)]
+      (worldTypedIvls s S0 Nd0) := by
+    intro r hr j hj
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hr
+    rcases hr with rfl | rfl | rfl
+    · exact bufferRegion_disj hWT0 ("keccak_pad", 136) (by decide) (by decide) j hj
+    · exact bufferRegion_disj hWT0 ("keccak_st", 200) (by decide) (by decide) j hj
+    · exact bufferRegion_disj hWT0 ("mpt_hash_scratch", 40) (by decide) (by decide) j hj
+  obtain ⟨S0', Nd0', _, _, _, hfr0, hq0⟩ := hstep.2.2.2.2 S0 Nd0 hWT0 hDisjR0
+  refine ⟨S', Nd', hsub, hWT', hgrow, hfr, fun rv hret => ?_⟩
+  obtain ⟨w, rfl, hwf, hk, hfp, hdisj_fp, _⟩ := hq rv hret
+  obtain ⟨w0, hw0_eq, _, _, _, _, hdb0⟩ :=
+    nodeDbSlicesBounded_of_values hWOK.1 hstep.1 hWT0 hstep.2.1 hfr0 hslices hdisj0 hq0 hret
+  injection hw0_eq with hw0_eq'; injection hw0_eq' with hw0_eq''; subst hw0_eq''
+  exact ⟨w, rfl, hwf, hk, hfp, hdisj_fp, hdb0⟩
 
 private theorem ro_host_ssz_fail : ReadOnlyFn (ofString "ssz_fail") := by
   refine R13.readOnlyFn_of_guestAst 196 (by rw [guestAst_len]; decide)
@@ -10813,13 +11051,6 @@ private theorem heapByteEff_header_hash_body_vh {F : Type}
       WkBlockTxEnc.HeapByteEff.of_byteEff heff04.arena
         (R13Shards.Keccak256.byteEff_return s4 (.const 0) Rall)
     exact heff04.trans heff_ret
-
-def ValidateHeaderReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s =>
-    WorldOK s ∧
-    HeaderOK s ∧
-    HeaderHashRecover.HeaderAtStrong s (locN s "parent") ∧
-    (∀ iv ∈ R14Shards.OpHandlersA.untypedGlobalBufIvls s, Disj (locN s "parent", 248) iv)
 
 theorem «wk_validate_header_strong» :
     WorldKeeps ValidateHeaderReady
