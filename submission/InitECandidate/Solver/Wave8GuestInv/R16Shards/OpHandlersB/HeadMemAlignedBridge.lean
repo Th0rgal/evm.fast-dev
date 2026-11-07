@@ -16251,4 +16251,359 @@ theorem fcKind2ErrTail_srd_sp_step {F : Type}
     dsimp only
     rw [hf]
 
+/-- Rung 26: the `incorporate_child_on_error`/refund-ite prefix of the kind-2
+error tail.  Chaining rungs 20 and 24: when the whole prefix-plus-rest tail
+avoids timeouts, a quiet prefix exposes the incorporate post state `m2`
+(rung-20 facts: branch state, locals/globals/chain kept, evmR raised by the
+charged word, the child-record window and the frame words kept) and the
+refund-ite post state `m3` (rung-24 facts relative to `m2`), with the tail
+peeled to the set_retdata/stack_push rest at `m3`.  An incorporate terminal
+propagates as the tail's outcome; with incorporate quiet an ite terminal
+propagates as the tail's outcome. -/
+theorem fcKind2ErrTail_incorporate_refund_step {F : Type}
+    {s0 m : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hbnd : globN s0 "ev" + 280 ≤ 2 ^ 64)
+    (hBS : FcBranchState s0 m S)
+    (hwok : WordsOK m (globN s0 "ev", 280))
+    (hdfo : ∀ ec ∈ evmChain m, ∀ o ∈ frameObjects m ec, Disj (globN s0 "ev", 280) o)
+    (hr_sum : OpDispatchSpec.evmR m + memW m (globN s0 "ev" + 64) ≤ OpDispatchSpec.evmR s0)
+    (hgas_sum : OpDispatchSpec.evmR m + memW m (globN s0 "ev" + 64) + 1 < 2 ^ 64)
+    (hnt : (evaluateHOLFiniteState m
+        (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+            [.var .local (ofString "child")])
+          (.seq (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                (.const 0#64))
+              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                [.const 183600#64])
+              .skip)
+            (.seq (.call (some (none, none)) (ofString "set_retdata")
+                [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                 .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+              (.call (some (none, none)) (ofString "stack_push")
+                [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))))).1 ≠
+      some .timeOut) :
+    ((evaluateHOLFiniteState m
+        (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+            [.var .local (ofString "child")])
+          (.seq (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                (.const 0#64))
+              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                [.const 183600#64])
+              .skip)
+            (.seq (.call (some (none, none)) (ofString "set_retdata")
+                [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                 .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+              (.call (some (none, none)) (ofString "stack_push")
+                [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))))).1 = none →
+      ∃ m2 m3 : PanSemStateFiniteExact 64 F,
+        m2 = (evaluateHOLFiniteState m
+            (.call (some (none, none)) (ofString "incorporate_child_on_error")
+              [.var .local (ofString "child")])).2 ∧
+        FcBranchState s0 m2 S ∧
+        m2.locals = m.locals ∧
+        m2.globals = m.globals ∧
+        evmChain m2 = evmChain m ∧
+        OpDispatchSpec.evmR m2 = OpDispatchSpec.evmR m + memW m (globN s0 "ev" + 64) ∧
+        (∀ off : Nat, off + 8 ≤ 280 →
+          memW m2 (globN s0 "ev" + off) = memW m (globN s0 "ev" + off)) ∧
+        memW m2 (globN m2 "ev" + 16) = memW m (globN m "ev" + 16) ∧
+        memW m2 (globN m2 "ev" + 40) = memW m (globN m "ev" + 40) ∧
+        memW m2 (globN m2 "ev" + 232) = memW m (globN m "ev" + 232) ∧
+        m3 = (evaluateHOLFiniteState m2
+            (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                (.const 0#64))
+              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                [.const 183600#64])
+              .skip)).2 ∧
+        FcBranchState s0 m3 S ∧
+        m3.locals = m2.locals ∧
+        m3.globals = m2.globals ∧
+        m3.be = m2.be ∧
+        evmChain m3 = evmChain m2 ∧
+        OpDispatchSpec.evmR m3 = OpDispatchSpec.evmR m2 ∧
+        (∀ x : BitVec 64, x ≠ BitVec.ofNat 64 (globN m2 "ev" + 64) →
+          x ≠ BitVec.ofNat 64 (globN m2 "ev" + 72) →
+          x ≠ BitVec.ofNat 64 (globN m2 "ev" + 192) →
+          m3.memory x = m2.memory x) ∧
+        memW m3 (globN m3 "ev" + 16) = memW m2 (globN m2 "ev" + 16) ∧
+        memW m3 (globN m3 "ev" + 40) = memW m2 (globN m2 "ev" + 40) ∧
+        memW m3 (globN m3 "ev" + 232) = memW m2 (globN m2 "ev" + 232) ∧
+        (evaluateHOLFiniteState m3
+            (.seq (.call (some (none, none)) (ofString "set_retdata")
+                [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                 .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+              (.call (some (none, none)) (ofString "stack_push")
+                [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))).1 ≠
+          some .timeOut ∧
+        evaluateHOLFiniteState m
+            (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                [.var .local (ofString "child")])
+              (.seq (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                    (.const 0#64))
+                  (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                    [.const 183600#64])
+                  .skip)
+                (.seq (.call (some (none, none)) (ofString "set_retdata")
+                    [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                     .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                  (.call (some (none, none)) (ofString "stack_push")
+                    [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))) =
+          evaluateHOLFiniteState m3
+            (.seq (.call (some (none, none)) (ofString "set_retdata")
+                [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                 .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+              (.call (some (none, none)) (ofString "stack_push")
+                [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))) ∧
+    (∀ f, (evaluateHOLFiniteState m
+        (.call (some (none, none)) (ofString "incorporate_child_on_error")
+          [.var .local (ofString "child")])).1 = some f →
+      evaluateHOLFiniteState m
+          (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+              [.var .local (ofString "child")])
+            (.seq (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                  (.const 0#64))
+                (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                  [.const 183600#64])
+                .skip)
+              (.seq (.call (some (none, none)) (ofString "set_retdata")
+                  [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                   .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                (.call (some (none, none)) (ofString "stack_push")
+                  [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))) =
+        evaluateHOLFiniteState m
+          (.call (some (none, none)) (ofString "incorporate_child_on_error")
+            [.var .local (ofString "child")])) ∧
+    ((evaluateHOLFiniteState m
+        (.call (some (none, none)) (ofString "incorporate_child_on_error")
+          [.var .local (ofString "child")])).1 = none →
+      ∀ f, (evaluateHOLFiniteState
+            (evaluateHOLFiniteState m
+              (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                [.var .local (ofString "child")])).2
+            (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                (.const 0#64))
+              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                [.const 183600#64])
+              .skip)).1 = some f →
+        evaluateHOLFiniteState m
+            (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                [.var .local (ofString "child")])
+              (.seq (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                    (.const 0#64))
+                  (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                    [.const 183600#64])
+                  .skip)
+                (.seq (.call (some (none, none)) (ofString "set_retdata")
+                    [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                     .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                  (.call (some (none, none)) (ofString "stack_push")
+                    [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))) =
+          evaluateHOLFiniteState
+            (evaluateHOLFiniteState m
+              (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                [.var .local (ofString "child")])).2
+            (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                (.const 0#64))
+              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                [.const 183600#64])
+              .skip)) := by
+  classical
+  have hnt_inc : (evaluateHOLFiniteState m
+      (.call (some (none, none)) (ofString "incorporate_child_on_error")
+        [.var .local (ofString "child")])).1 ≠ some .timeOut := by
+    intro ht
+    apply hnt
+    rw [evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [ht]
+    exact ht
+  obtain ⟨hnret20, hnerr20, hquiet20, hterm20⟩ :=
+    fcKind2ErrTail_incorporate_step hbnd hBS hwok hdfo hr_sum hgas_sum hnt_inc
+  refine ⟨?_, ?_, ?_⟩
+  · intro hq
+    have hq1 : (evaluateHOLFiniteState m
+        (.call (some (none, none)) (ofString "incorporate_child_on_error")
+          [.var .local (ofString "child")])).1 = none := by
+      rw [evaluateHOLFiniteState_seq_line780] at hq
+      dsimp only at hq
+      cases hS : (evaluateHOLFiniteState m
+        (.call (some (none, none)) (ofString "incorporate_child_on_error")
+          [.var .local (ofString "child")])).1 with
+      | none => rfl
+      | some f =>
+        rw [hS] at hq
+        dsimp only at hq
+        rw [← hS]
+        exact hq
+    obtain ⟨m2, hm2, hBS2, hloc2, hglob2, hch2, hR2, hwin2, h16b, h40b, h232b, hpeel20⟩ :=
+      hquiet20 hq1
+    have hq2 : (evaluateHOLFiniteState m2
+        (.seq (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+              (.const 0#64))
+            (.call (some (none, none)) (ofString "credit_state_gas_refund")
+              [.const 183600#64])
+            .skip)
+          (.seq (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+            (.call (some (none, none)) (ofString "stack_push")
+              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))).1 = none := by
+      rw [← hpeel20]
+      exact hq
+    have hq3 : (evaluateHOLFiniteState m2
+        (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+            (.const 0#64))
+          (.call (some (none, none)) (ofString "credit_state_gas_refund")
+            [.const 183600#64])
+          .skip)).1 = none := by
+      rw [evaluateHOLFiniteState_seq_line780] at hq2
+      dsimp only at hq2
+      cases hS : (evaluateHOLFiniteState m2
+        (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+            (.const 0#64))
+          (.call (some (none, none)) (ofString "credit_state_gas_refund")
+            [.const 183600#64])
+          .skip)).1 with
+      | none => rfl
+      | some f =>
+        rw [hS] at hq2
+        dsimp only at hq2
+        rw [← hS]
+        exact hq2
+    have hpeelI : evaluateHOLFiniteState m2
+        (.seq (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+              (.const 0#64))
+            (.call (some (none, none)) (ofString "credit_state_gas_refund")
+              [.const 183600#64])
+            .skip)
+          (.seq (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+            (.call (some (none, none)) (ofString "stack_push")
+              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))) =
+        evaluateHOLFiniteState
+          ((evaluateHOLFiniteState m2
+              (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                  (.const 0#64))
+                (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                  [.const 183600#64])
+                .skip)).2)
+          (.seq (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+            (.call (some (none, none)) (ofString "stack_push")
+              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])) := by
+      rw [evaluateHOLFiniteState_seq_line780]
+      dsimp only
+      rw [hq3]
+    have hnt_rest : (evaluateHOLFiniteState
+          ((evaluateHOLFiniteState m2
+              (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                  (.const 0#64))
+                (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                  [.const 183600#64])
+                .skip)).2)
+          (.seq (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+            (.call (some (none, none)) (ofString "stack_push")
+              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))).1 ≠
+        some .timeOut := by
+      intro ht
+      apply hnt
+      rw [hpeel20, hpeelI]
+      exact ht
+    obtain ⟨nacv, hnac⟩ : ∃ nacv : BitVec 64,
+        m2.locals.lookup (ofString "new_account_charged") = some (.val (.word nacv)) :=
+      ⟨_, hBS2.locals_ok.nac_lk⟩
+    by_cases hz : nacv = 0#64
+    · have hrw := fcKind2ErrTail_refund_ite_eq m2 hnac
+      rw [if_pos hz] at hrw
+      have hm3z : (evaluateHOLFiniteState m2
+          (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+              (.const 0#64))
+            (.call (some (none, none)) (ofString "credit_state_gas_refund")
+              [.const 183600#64])
+            .skip)).2 = m2 := by
+        rw [hrw]
+      have hnt_rest0 : (evaluateHOLFiniteState m2
+          (.seq (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+            (.call (some (none, none)) (ofString "stack_push")
+              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))).1 ≠
+          some .timeOut := by
+        have hcopy := hnt_rest
+        rw [hm3z] at hcopy
+        exact hcopy
+      have hpeelI0 : evaluateHOLFiniteState m2
+          (.seq (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                (.const 0#64))
+              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                [.const 183600#64])
+              .skip)
+            (.seq (.call (some (none, none)) (ofString "set_retdata")
+                [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                 .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+              (.call (some (none, none)) (ofString "stack_push")
+                [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))) =
+          evaluateHOLFiniteState m2
+            (.seq (.call (some (none, none)) (ofString "set_retdata")
+                [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                 .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+              (.call (some (none, none)) (ofString "stack_push")
+                [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])) := by
+        have hcopy := hpeelI
+        rw [hm3z] at hcopy
+        exact hcopy
+      refine ⟨m2, m2, hm2, hBS2, hloc2, hglob2, hch2, hR2, hwin2, h16b, h40b, h232b,
+        hm3z.symm, hBS2, rfl, rfl, rfl, rfl, rfl, fun x _ _ _ => rfl, rfl, rfl, rfl,
+        hnt_rest0, hpeel20.trans hpeelI0⟩
+    · have hrw := fcKind2ErrTail_refund_ite_eq m2 hnac
+      rw [if_neg hz] at hrw
+      have hnt_credit : (evaluateHOLFiniteState m2
+          (.call (some (none, none)) (ofString "credit_state_gas_refund")
+            [.const 183600#64])).1 ≠ some .timeOut := by
+        intro ht
+        apply hnt
+        rw [hpeel20]
+        rw [evaluateHOLFiniteState_seq_line780]
+        dsimp only
+        have hite : (evaluateHOLFiniteState m2
+            (.ite (.cmp .notEqual (.var .local (ofString "new_account_charged"))
+                (.const 0#64))
+              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                [.const 183600#64])
+              .skip)).1 = some .timeOut :=
+          (congrArg Prod.fst hrw).trans ht
+        rw [hite]
+        exact hite
+      obtain ⟨hnret24, hnerr24, hquiet24, hterm24⟩ :=
+        fcKind2ErrTail_refund_ite_step hBS2 hnac hnt_credit
+      obtain ⟨m3, hm3, hBS3, hloc3, hglob3, hbe3, hch3, hR3, hmem3, h16c, h40c, h232c,
+        hpeel24⟩ := hquiet24 hq3
+      have hnt_rest3 : (evaluateHOLFiniteState m3
+          (.seq (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+            (.call (some (none, none)) (ofString "stack_push")
+              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))).1 ≠
+          some .timeOut := by
+        intro ht
+        apply hnt
+        rw [hpeel20, hpeel24]
+        exact ht
+      refine ⟨m2, m3, hm2, hBS2, hloc2, hglob2, hch2, hR2, hwin2, h16b, h40b, h232b,
+        hm3, hBS3, hloc3, hglob3, hbe3, hch3, hR3, hmem3, h16c, h40c, h232c,
+        hnt_rest3, hpeel20.trans hpeel24⟩
+  · intro f hf
+    exact hterm20 f hf
+  · intro hq1 f hf
+    rw [evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [hq1]
+    rw [evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [hf]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
