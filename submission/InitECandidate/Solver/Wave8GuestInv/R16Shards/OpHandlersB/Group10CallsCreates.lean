@@ -10411,7 +10411,8 @@ structure WorldAccountSpecsA : Prop where
       (ofString "get_account")
   epsA_ext_code_of :
     EvmPreservingSpecA (fun _ => True)
-      (fun s _ post => GlobalsKept ["heap_ptr", "scratch_ptr"] s post ∧ evmR post = evmR s)
+      (fun s _ post => GlobalsKept ["heap_ptr", "scratch_ptr"] s post ∧ evmR post = evmR s ∧
+        memW post (globN s "ev" + 32) = memW s (globN s "ev" + 32))
       (ofString "ext_code_of")
   epsA_get_storage :
     EvmPreservingSpecA (fun _ => True)
@@ -14570,7 +14571,7 @@ theorem epsA_calculate_delegation_cost_g10 (hW : WorldAccountSpecsA) :
     have hch1 : evmChain s1 = evmChain s :=
       (evmChain_congr (s := cp1) (t := s1) rfl rfl).trans (hch_cp1.trans (evmChain_congr (s := s) (t := callEntryStateHOLFinite s cal1) rfl rfl))
     have hR1 : evmR s1 = evmR s :=
-      (evmR_congr_g10 (s := cp1) (t := s1) rfl rfl).trans (hR_cp1.trans (evmR_congr_g10 (s := s) (t := callEntryStateHOLFinite s cal1) rfl rfl))
+      (evmR_congr_g10 (s := cp1) (t := s1) rfl rfl).trans (hR_cp1.1.trans (evmR_congr_g10 (s := s) (t := callEntryStateHOLFinite s cal1) rfl rfl))
     have hs1_code : s1.locals.lookup (ofString "code") = some (.rStruct [.val (.word c0), .val (.word c1)]) := by
       simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
     have hs1_addr : s1.locals.lookup (ofString "addr") = some (.val (.word addrw)) := by
@@ -15220,6 +15221,52 @@ theorem HandlerRunA.seq_store_ev64_charged_g10 {F : Type} {s0 : PanSemStateFinit
     dsimp only at hnt ⊢
     obtain ⟨w, hw_ev, ht1_eq⟩ := R14Shards.OpHandlersA.store_global_off_word (t := t) (post := t1)
       (gname := "ev") (gbase := globN t "ev") (off := 64) hevw hevw_nat (by omega)
+      (fun v hv => hval t v hP hv) hst
+    subst ht1_eq
+    obtain ⟨hInv1, hWF1, hch1, hQ1, hR1⟩ := hstep t w hw_ev hInv hWF hP hR_lt
+    refine hcont _ ?_ hInv1 hWF1 ?_ hR1 hQ1 hnt
+    · exact hc
+    · rw [hch1]; exact hlen
+
+/-- Generalization of `HandlerRunA.seq_store_ev64_charged_g10` to an arbitrary fixed offset
+`off` inside the head frame's 280-byte bookkeeping region (op_delegatecall's `ev+184`
+stipend restore and `ev+72` reservoir clear). -/
+theorem HandlerRunA.seq_store_ev_off_charged_g10 {F : Type} {s0 : PanSemStateFiniteExact 64 F}
+    {P Q : PanSemStateFiniteExact 64 F → Prop} {off : Nat} {valExp : ExpHOL 64}
+    {cont : ProgHOL 64}
+    (hoff : off < 280)
+    (hval : ∀ (t : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      P t →
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) valExp = some v →
+      ∃ w : BitVec 64, v = .val (.word w))
+    (hstep : ∀ t (w : BitVec 64),
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) valExp =
+        some (.val (.word w)) →
+      EvmInv t → Group10.HeadMemChainWF t → P t → evmR t < evmR s0 →
+      EvmInv { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w } ∧
+      Group10.HeadMemChainWF { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w } ∧
+      evmChain { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w } = evmChain t ∧
+      Q { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w } ∧
+      evmR { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w } < evmR s0)
+    (hcont : HandlerRunA s0 Q true cont) :
+    HandlerRunA s0 P true
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) valExp) cont) := by
+  intro t hc hInv hWF hlen hR hP hnt
+  have hR_lt : evmR t < evmR s0 := by simpa using hR
+  obtain ⟨hb_ev, evw, hevw, hevw_nat⟩ := ev_word_bounds hInv
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  rcases hst : evaluateHOLFiniteState t
+      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) valExp) with ⟨r1, t1⟩
+  simp only [hst] at hnt ⊢
+  cases r1 with
+  | some res1 =>
+    have herr := store_some_eq_error_g10 hst
+    subst herr
+    exact opDispatchPostA_error s0 t1
+  | none =>
+    dsimp only at hnt ⊢
+    obtain ⟨w, hw_ev, ht1_eq⟩ := R14Shards.OpHandlersA.store_global_off_word (t := t) (post := t1)
+      (gname := "ev") (gbase := globN t "ev") (off := off) hevw hevw_nat (by omega)
       (fun v hv => hval t v hP hv) hst
     subst ht1_eq
     obtain ⟨hInv1, hWF1, hch1, hQ1, hR1⟩ := hstep t w hw_ev hInv hWF hP hR_lt
