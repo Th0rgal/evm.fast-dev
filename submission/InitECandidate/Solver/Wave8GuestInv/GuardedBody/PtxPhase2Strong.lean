@@ -21336,4 +21336,168 @@ theorem phase2_htab_new_store_ready {ι F : Type} [Nonempty ι]
       exact phase2_htab_new_world_disj hA_s hw_i hAp hag hfp_t hfr hbe hgs hin_m
         (fun j' hj' => hsep_i _ (by simp) j' hj') j hj
 
+/-! ### Segment B part 2a: the `aa` table allocation (position 77) -/
+
+/-- The htab region after the `aa` allocation (positions 77..84): the B-scalar
+frame plus a world whose table list ends in the `aa` table, with role freshness,
+the 20-byte key header, footprint well-formedness and message separation. -/
+def PtxHtabAInv {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+  PtxMessageBScalarReady buffers contents names s ∧
+    ∃ S Nd, WorldTypedWith s (S ++ [locN s "aa"]) Nd ∧
+      (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ locN s "aa") ∧
+      hdr s (locN s "aa") 0 = 20 ∧ HtabWF s (locN s "aa") ∧
+      IvlsDisj [(locN s "m", 176)] (worldOwned s (S ++ [locN s "aa"]) Nd)
+
+/-- A `setVar` of a name other than `m` preserves the saved-buffer store
+invariant (only the `m` and `index` locals are read by the store predicate). -/
+theorem phase2_storeReady_setVar_ne {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) {name : MlS}
+    (hne : ofString "m" ≠ name) (hni : ofString "index" ≠ name) (v : ValueHOL 64)
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s) :
+    PtxMessageStoreReady buffers contents (setVarHOLFinite name v s) := by
+  obtain ⟨hW, hE, hm, hin, hwok, hbufs⟩ := hp
+  have hlu : ∀ str : String, ofString str ≠ name →
+      (setVarHOLFinite name v s).locals.lookup (ofString str) =
+        s.locals.lookup (ofString str) := by
+    intro str hn
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm hn]
+  have hmn : locN (setVarHOLFinite name v s) "m" = locN s "m" :=
+    locN_setVar_ne _ "m" name v hne
+  have hin2 : locN (setVarHOLFinite name v s) "index" = locN s "index" :=
+    locN_setVar_ne _ "index" name v hni
+  refine ⟨⟨⟨guestInv_setVar name v s hW.1.1, hW.1.2⟩, ?_⟩,
+    ⟨hE.bo_nz, hE.bo24, hE.bo32, hE.bo40, hE.bo72, ?_, hE.jcap_nz⟩, ?_, ?_, ?_, ?_⟩
+  · obtain ⟨S, hWT⟩ := hW.2
+    obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hWT
+    exact ⟨S, (worldTyped_iff_with _ S).mpr ⟨Nd,
+      (worldTypedWith_with_locals s (s.locals.update (name, v)) s.clock S Nd).mpr hw⟩⟩
+  · rw [hin2]; exact hE.idx_lt
+  · obtain ⟨w, hw⟩ := hm
+    exact ⟨w, by rw [hlu "m" hne]; exact hw⟩
+  · rw [hmn]; exact hin
+  · rw [hmn]; exact hwok
+  · intro i
+    obtain ⟨hd, S, Nd, hw, hb, hsep⟩ := hbufs i
+    refine ⟨?_, S, Nd,
+      (worldTypedWith_with_locals s (s.locals.update (name, v)) s.clock S Nd).mpr hw, hb, ?_⟩
+    · rw [hmn]; exact hd
+    · rw [hmn]; exact hsep
+
+/-- A `setVar` of a name other than `index` preserves the transaction
+environment (the only local it reads is `index`). -/
+theorem phase2_txEnv_setVar_ne {F : Type} {name : MlS}
+    (hni : ofString "index" ≠ name) (v : ValueHOL 64)
+    {s : PanSemStateFiniteExact 64 F} (he : TxEnv s) :
+    TxEnv (setVarHOLFinite name v s) := by
+  have hin2 : locN (setVarHOLFinite name v s) "index" = locN s "index" :=
+    locN_setVar_ne _ "index" name v hni
+  exact ⟨he.bo_nz, he.bo24, he.bo32, he.bo40, he.bo72, by rw [hin2]; exact he.idx_lt,
+    he.jcap_nz⟩
+
+/-- Entry guard for the `htab_new` callee: the caller B-frame gives `GuestInv`. -/
+theorem phase2_htabA_callEntry {ι : Type} (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) {fname : MlS} (arguments : List (ExpHOL 64)) :
+    CallEntryOn (PtxMessageBScalarReady buffers contents
+      ["te", "sender", "mgas", "reservoir"]) GuestInv fname arguments := by
+  intro F s vs body callee ret hc hp ha hl
+  exact guestInv_callEntry s callee hp.1.1.1.1.1
+
+/-- Resuming after the `aa` allocation (position 77) with the full htab-region
+invariant: the store/Backing/shapes frame from the part-2a transports, and the
+world extended by the fresh table root with role freshness and separation. -/
+theorem phase2_htabA_new_aa_resume (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    DecCallResumeOn (PtxMessageBScalarReady buffers contents
+      ["te", "sender", "mgas", "reservoir"])
+      (PtxHtabAInv buffers contents ["te", "sender", "mgas", "reservoir"])
+      (ofString "aa") (ofString "htab_new") [.const (20#64), .const (64#64)] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hsReady : PtxMessageStoreReady buffers contents s := hp.1.1
+  have hA_s : ArenaReady s := hp.1.1.1.1
+  have hE_s : TxEnv s := hp.1.1.2.1
+  have htx : R16Shards.TxBacking s := hp.2.1
+  have hp4 : R16Shards.PtxPhase4LocalShapes s := hp.2.2
+  obtain ⟨S0, hWT⟩ := hp.1.1.1.2
+  obtain ⟨Nd0, hw0⟩ := (worldTyped_iff_with s S0).mp hWT
+  have hin_m : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr") :=
+    hsReady.2.2.2.1
+  have hc2 := R16Shards.callee_param_two s (ofString "htab_new") (ofString "key_len")
+    (ofString "cap") .one .one _ _
+    (by rw [hc]; exact R10Shards.SoloHtabNew.lookup_htab_new) (.const (20#64)) (.const (64#64))
+    (.val (.word (20#64))) (.val (.word (64#64))) vs body callee ret
+    (by simp [evalAt, evalHOLExact]) (by simp [evalAt, evalHOLExact]) he hl
+  have hkl : locN (callEntryStateHOLFinite s callee) "key_len" = 20 := by
+    unfold locN callEntryStateHOLFinite; dsimp only; rw [hc2.2.1]; decide
+  have hcap : locN (callEntryStateHOLFinite s callee) "cap" = 64 := by
+    unfold locN callEntryStateHOLFinite; dsimp only; rw [hc2.2.2]; decide
+  have hA_ent : ArenaReady (callEntryStateHOLFinite s callee) :=
+    (arenaReady_with_locals s callee (s.clock - 1)).mpr hA_s
+  have hW_ent : WorldTypedWith (callEntryStateHOLFinite s callee) S0 Nd0 :=
+    (worldTypedWith_with_locals s callee (s.clock - 1) S0 Nd0).mpr hw0
+  have hready : HtabNewReady (callEntryStateHOLFinite s callee) :=
+    ⟨hA_ent, by rw [hkl]; decide, by rw [hcap]; decide⟩
+  have hexit := FunSpec.at_lookup h.htab_new_spec s hc vs body callee ret hl hready
+    (by rw [hb]; simp)
+  rw [hb] at hexit
+  obtain ⟨w, hvw, hAp, hag, hwf_t, hc3, hkl0, hfp_t, hfr, hgk⟩ := hexit v rfl
+  subst hvw
+  have hmeta := (InitECandidate.Solver.PanRunBounded.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).2.2.1
+  rw [hb] at hmeta
+  have hgs : R16Shards.GbodyC17ToC21Common.WorldGlobalsSame s post :=
+    R16Shards.GbodyC17ToC21Common.worldGlobalsSame_of_globalsKept hgk
+      (by decide) (by decide) (by decide) (by decide) (by decide)
+  have hsr : PtxMessageStoreReady buffers contents
+      (setVarHOLFinite (ofString "aa") (.val (.word w)) {post with locals := s.locals}) :=
+    phase2_storeReady_setVar_ne buffers contents (by decide) (by decide) (.val (.word w))
+      (phase2_htab_new_store_ready buffers contents hsReady hAp hag hwf_t hfp_t hfr hmeta hgk)
+  have htxb0 : R16Shards.TxBacking post :=
+    phase2_htab_new_txBacking hA_s hAp hE_s hw0 htx hag hgs hfr
+  have htxb : R16Shards.TxBacking
+      (setVarHOLFinite (ofString "aa") (.val (.word w)) {post with locals := s.locals}) :=
+    htxb0
+  have hnames : ∀ name ∈ (["te", "sender", "mgas", "reservoir"] : List String),
+      ∃ w' : BitVec 64, (setVarHOLFinite (ofString "aa") (.val (.word w))
+        {post with locals := s.locals}).locals.lookup (ofString name) =
+        some (.val (.word w')) := by
+    intro name hn
+    obtain ⟨w', hw'⟩ := hp.1.2 name hn
+    refine ⟨w', ?_⟩
+    have hne : ofString name ≠ ofString "aa" := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl | rfl | rfl <;> decide
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm hne]
+    exact hw'
+  -- the world-with-aa witness: extend one saved-buffer world
+  obtain ⟨i0⟩ := ‹Nonempty ι›
+  obtain ⟨_, S_i, Nd_i, hw_i, hb_i, hsep_i⟩ := hsReady.2.2.2.2.2 i0
+  have hW_i' := R16Shards.GbodyC17ToC21Common.worldTypedWith_htab_new hA_ent
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S_i Nd_i).mpr hw_i)
+    hAp hag hwf_t hfp_t hfr hmeta hgk
+  have haa : locN (setVarHOLFinite (ofString "aa") (.val (.word w))
+      {post with locals := s.locals}) "aa" = w.toNat :=
+    locN_setVar_same _ "aa" w
+  have hmm : locN (setVarHOLFinite (ofString "aa") (.val (.word w))
+      {post with locals := s.locals}) "m" = locN s "m" :=
+    locN_setVar_ne _ "m" (ofString "aa") _ (by decide)
+  have hw_mid : WorldTypedWith (setVarHOLFinite (ofString "aa") (.val (.word w))
+      {post with locals := s.locals}) (S_i ++ [w.toNat]) Nd_i :=
+    (worldTypedWith_with_locals post (s.locals.update (ofString "aa", .val (.word w)))
+      post.clock (S_i ++ [w.toNat]) Nd_i).mpr hW_i'.2.2.2.1
+  refine ⟨⟨⟨hsr, hnames⟩, htxb,
+      phase2_p4Shapes_htab_new_aa s post (.val (.word w)) hp4⟩, S_i, Nd_i, ?_, ?_, ?_, ?_,
+    ?_⟩
+  · rw [haa]
+    exact hw_mid
+  · rw [haa]; exact hW_i'.2.2.1
+  · rw [haa]; exact hkl0.trans hkl
+  · rw [haa]; exact (hw_mid.1.2.1 w.toNat (by simp)).1
+  · intro o ho j hj
+    simp only [List.mem_singleton] at ho; subst ho
+    rw [hmm]
+    rw [haa] at hj
+    exact phase2_htab_new_world_disj hA_s hw_i hAp hag hfp_t hfr hmeta hgs hin_m
+      (fun j' hj' => hsep_i _ (by simp) j' hj') j hj
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
