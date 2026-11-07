@@ -20991,4 +20991,349 @@ theorem phase2_msgPrefix_backing_bound (h : PtxCallees) {ι : Type} [Nonempty ι
   obtain ⟨h1, h2⟩ := hmain s hc hp hnt
   exact ⟨by omega, h2⟩
 
+
+open InitECandidate.Solver.Wave8GuestInv
+
+
+/-- Any region allocated at `s` (heap or scratch) is untouched by the standard
+`htab_new` frame: its writes stay in the fresh heap gap and the new scratch
+allocations below the old scratch pointer. -/
+theorem phase2_htab_new_frame_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (hAp : ArenaReady post) (hag : AllocatorGrows s post)
+    (hfr : FrameOutside s post
+      [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
+    {i : Ivl} (hai : Allocated s i) : IvlUnhit s post i := by
+  have hsep : heapLimit ≤ InitE.scratchStart := by decide
+  have hsb : InitE.sourceBase ≤ globN s "heap_ptr" := hs.2.1
+  have hhp : globN s "heap_ptr" ≤ heapLimit := hs.2.2.1
+  have hp8 : globN s "heap_ptr" % 8 = 0 := hs.2.2.2.2.2.2.1
+  have hsc8 : globN s "scratch_ptr" % 8 = 0 := hs.2.2.2.2.2.2.2.2.1
+  have hsc : InitE.scratchStart ≤ globN s "scratch_ptr" :=
+    Nat.le_trans hs.2.2.2.1 hs.2.2.2.2.1
+  have hhp' : globN post "heap_ptr" ≤ heapLimit := hAp.2.2.1
+  have hsc' : InitE.scratchStart ≤ globN post "scratch_ptr" :=
+    Nat.le_trans hAp.2.2.2.1 hAp.2.2.2.2.1
+  have hg_hp := hag.1; have hg_sc := hag.2
+  intro a ha8 hh
+  unfold CellHits at hh
+  obtain ⟨hh1, hh2⟩ := hh
+  rcases hai with hheap | hscr
+  · unfold Inside at hheap
+    obtain ⟨he1, he2⟩ := hheap
+    apply hfr a
+    · intro j hj
+      simp only [List.mem_singleton] at hj; subst j
+      unfold CellHits
+      intro hcon; obtain ⟨hc1, _⟩ := hcon; dsimp at hc1
+      omega
+    · unfold CellHits
+      intro hcon; obtain ⟨hc1, _⟩ := hcon; dsimp at hc1
+      omega
+  · unfold Inside at hscr
+    obtain ⟨hs1, hs2⟩ := hscr
+    apply hfr a
+    · intro j hj
+      simp only [List.mem_singleton] at hj; subst j
+      unfold CellHits
+      intro hcon; obtain ⟨_, hc2⟩ := hcon; dsimp at hc2
+      omega
+    · unfold CellHits
+      intro hcon; obtain ⟨_, hc2⟩ := hcon; dsimp at hc2
+      omega
+
+/-- The caller transaction environment survives the `htab_new` frame. -/
+theorem phase2_htab_new_txEnv {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (hAp : ArenaReady post) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hag : AllocatorGrows s post) (hgs : R16Shards.GbodyC17ToC21Common.WorldGlobalsSame s post)
+    (hfr : FrameOutside s post
+      [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    TxEnv {post with locals := s.locals} := by
+  have hbo := bo_words hw.2.2.1 he.bo_nz
+  have hbo_u : IvlUnhit s post (globN s "bo", 88) :=
+    phase2_htab_new_frame_unhit hs hAp hag hfr hbo.1
+  have hbo_eq : globN post "bo" = globN s "bo" := hgs.1 ("bo", 88) (by simp [globalBuffers])
+  have hjc : globN post "journal_cap" = globN s "journal_cap" := hgs.2.2.2.1
+  have hgo : ∀ n, globN {post with locals := s.locals} n = globN post n := fun n => rfl
+  have hmo : ∀ a, memW {post with locals := s.locals} a = memW post a := fun a => rfl
+  have hhi := (ivl_allocated_bound hs.2 hbo.1).2
+  have hf (k : Nat) (hk : k % 8 = 0) (hb : k + 8 ≤ 88) :
+      memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+    apply memW_eq_of_ivlUnhit hbo_u
+    · simpa [Nat.add_mod, Nat.add_mod_mod, hk] using hbo.2.1
+    · exact hhi
+    · constructor <;> dsimp <;> omega
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [hgo, hbo_eq]; exact he.bo_nz
+  · rw [hgo, hmo, hbo_eq, hf 24 (by decide) (by decide)]; exact he.bo24
+  · rw [hgo, hmo, hbo_eq, hf 32 (by decide) (by decide)]; exact he.bo32
+  · rw [hgo, hmo, hbo_eq, hf 40 (by decide) (by decide)]; exact he.bo40
+  · rw [hgo, hmo, hbo_eq, hf 72 (by decide) (by decide)]; exact he.bo72
+  · have hidx : locN {post with locals := s.locals} "index" = locN s "index" := rfl
+    rw [hidx, hgo, hmo, hbo_eq, hf 80 (by decide) (by decide)]; exact he.idx_lt
+  · rw [hgo, hjc]; exact he.jcap_nz
+
+/-- Nested block-output backing survives the `htab_new` frame. -/
+theorem phase2_htab_new_txBacking {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (hAp : ArenaReady post) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hb : R16Shards.TxBacking s) (hag : AllocatorGrows s post)
+    (hgs : R16Shards.GbodyC17ToC21Common.WorldGlobalsSame s post)
+    (hfr : FrameOutside s post
+      [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    R16Shards.TxBacking post := by
+  have hbo := bo_words hw.2.2.1 he.bo_nz
+  have hmem : ∀ k ∈ ([40, 72] : List Nat),
+      Allocated s (memW s (globN s "bo" + k), 24) ∧
+        memW s (globN s "bo" + k) % 8 = 0 := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · have hm : (memW s (globN s "bo" + 40), 24) ∈ fixedObjects s := by
+        simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+      exact ⟨(hw.2.2.1.1 _ hm).resolve_left (by simp) |>.1,
+        (hw.2.2.1.1 _ hm).resolve_left (by simp) |>.2.1⟩
+    · have hm : (memW s (globN s "bo" + 72), 24) ∈ fixedObjects s := by
+        simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+      exact ⟨(hw.2.2.1.1 _ hm).resolve_left (by simp) |>.1,
+        (hw.2.2.1.1 _ hm).resolve_left (by simp) |>.2.1⟩
+  exact R16Shards.PtxP34.txBacking_of_unhit_headers hb
+    (hgs.1 ("bo", 88) (by simp [globalBuffers])) hbo.2.1
+    (ivl_allocated_bound hs.2 hbo.1).2
+    (phase2_htab_new_frame_unhit hs hAp hag hfr hbo.1)
+    (fun k hk => (hmem k hk).2)
+    (fun k hk => (ivl_allocated_bound hs.2 (hmem k hk).1).2)
+    (fun k hk => phase2_htab_new_frame_unhit hs hAp hag hfr (hmem k hk).1)
+
+/-- Setting `aa` (never read by Phase 4) preserves the Phase 4 caller-local shapes. -/
+theorem phase2_p4Shapes_htab_new_aa {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (h : R16Shards.PtxPhase4LocalShapes s) :
+    R16Shards.PtxPhase4LocalShapes
+      (setVarHOLFinite (ofString "aa") v {post with locals := s.locals}) := by
+  have hlu : ∀ name : String, ofString name ≠ ofString "aa" →
+      (setVarHOLFinite (ofString "aa") v {post with locals := s.locals}).locals.lookup
+        (ofString name) = s.locals.lookup (ofString name) := by
+    intro name hn
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm hn]
+  refine ⟨?_, ?_, ?_⟩
+  · intro name hn
+    have hne : ofString name ≠ ofString "aa" := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl | rfl | rfl | rfl <;> decide
+    rw [hlu name hne]
+    exact h.1 name hn
+  · rw [hlu "price" (by decide)]; exact h.2.1
+  · rw [hlu "intrinsic" (by decide)]; exact h.2.2
+
+/-- Under the `htab_new` frame, the world-owned regions of the extended world
+`(S ++ [t])` are the old ones plus the fresh table's footprint, so any
+heap-inside region disjoint from the old world stays disjoint. -/
+theorem phase2_htab_new_world_disj {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hAp : ArenaReady post) (hag : AllocatorGrows s post) {t : Nat}
+    (hfp_t : ∀ i ∈ htabFootprint post t, Allocated post i ∧
+      (Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∨
+        Inside i (globN post "scratch_ptr") (globN s "scratch_ptr")))
+    (hfr : FrameOutside s post
+      [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
+    (hbe : post.be = s.be) (hgs : R16Shards.GbodyC17ToC21Common.WorldGlobalsSame s post)
+    {b : Ivl} (hb_in : Inside b InitE.sourceBase (globN s "heap_ptr"))
+    (hb_disj : ∀ j ∈ worldOwned s S Nd, Disj b j) :
+    ∀ o ∈ worldOwned post (S ++ [t]) Nd, Disj b o := by
+  have hsep : heapLimit ≤ InitE.scratchStart := by decide
+  have hsb : InitE.sourceBase ≤ globN s "heap_ptr" := hs.2.1
+  have hhp : globN s "heap_ptr" ≤ heapLimit := hs.2.2.1
+  have hsc' : InitE.scratchStart ≤ globN post "scratch_ptr" :=
+    Nat.le_trans hAp.2.2.2.1 hAp.2.2.2.2.1
+  have hunhit_owned : ∀ o ∈ worldOwned s S Nd, IvlUnhit s post o :=
+    fun o ho => R16Shards.GbodyC17ToC21Common.ivl_unhit_free_of_zero_or_allocated
+      hs.2 hAp.2 hag hfr (fun k hk => List.mem_singleton.1 hk) rfl
+      (R16Shards.GbodyC17ToC21Common.worldOwned_zero_or_allocated hw o ho)
+  have hunhit : ∀ i ∈ worldTypedIvls s S Nd, IvlUnhit s post i :=
+    fun i hi => hunhit_owned i
+      (R16Shards.GbodyC17ToC21Common.worldTypedIvls_sub_worldOwned s S Nd i hi)
+  have hbo_u : globN s "bo" ≠ 0 → IvlUnhit s post (globN s "bo", 88) := fun hnz =>
+    hunhit _ (by
+      unfold worldTypedIvls
+      apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; left
+      apply List.mem_append.2; left; apply List.mem_append.2; right
+      exact List.mem_map.2 ⟨("bo", 88), by simp [typedRecords], by simp [hnz]⟩)
+  have hsb264 : InitE.sourceBase < 2 ^ 64 := by decide
+  have hm_low : memW post 8 = memW s 8 ∧ memW post 16 = memW s 16 := by
+    have hlow : ∀ a : Nat, a + 8 ≤ InitE.sourceBase → memW post a = memW s a := fun a ha => by
+      have ha_lt : a < 2 ^ 64 := by omega
+      have hm := hfr (BitVec.ofNat 64 a)
+        (fun j hj hcj => by
+          simp only [List.mem_singleton] at hj; subst hj
+          obtain ⟨h1, _⟩ := hcj
+          dsimp at h1
+          rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt] at h1
+          omega)
+        (fun hcf => by
+          obtain ⟨h1, _⟩ := hcf
+          dsimp at h1
+          rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt] at h1
+          omega)
+      unfold memW; rw [hm]
+    exact ⟨hlow 8 (by decide), hlow 16 (by decide)⟩
+  have hbase := R16Shards.GbodyC17ToC21Common.worldTypedWith_congr_bo hs hAp hbe hag hgs hw
+    (fun u hu i hi => hunhit i (by
+      unfold worldTypedIvls
+      apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; left
+      apply List.mem_append.2; left; apply List.mem_append.2; left
+      exact List.mem_flatMap.2 ⟨u, hu, hi⟩))
+    (fun hnz => hunhit _ (by
+      unfold worldTypedIvls
+      apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; left
+      apply List.mem_append.2; left; apply List.mem_append.2; right
+      exact List.mem_map.2 ⟨("ws", 40), by simp [typedRecords], by simp [hnz]⟩))
+    (fun hnz => hunhit _ (by
+      unfold worldTypedIvls
+      apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; left
+      apply List.mem_append.2; left; apply List.mem_append.2; right
+      exact List.mem_map.2 ⟨("bs", 80), by simp [typedRecords], by simp [hnz]⟩))
+    (fun hnz => hunhit _ (by
+      unfold worldTypedIvls
+      apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; left
+      apply List.mem_append.2; left; apply List.mem_append.2; right
+      exact List.mem_map.2 ⟨("ts", 72), by simp [typedRecords], by simp [hnz]⟩))
+    (fun hnz => hunhit _ (by
+      unfold worldTypedIvls
+      apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; left
+      apply List.mem_append.2; right; simp [hnz]))
+    (fun i hi _ => hunhit i (by
+      unfold worldTypedIvls
+      apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; right
+      exact hi))
+    (fun i hi => hunhit i (by
+      unfold worldTypedIvls
+      apply List.mem_append.2; left; apply List.mem_append.2; right
+      exact hi))
+    (fun o ho => hunhit o (by
+      unfold worldTypedIvls
+      exact List.mem_append.2 (Or.inr ho)))
+    (fun hnz k hk => by
+      have hk_in : k % 8 = 0 ∧ k + 8 ≤ 88 := by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl | rfl | rfl | rfl | rfl <;> omega
+      have hbo_g : globN post "bo" = globN s "bo" := hgs.1 ("bo", 88) (by simp [globalBuffers])
+      simpa [hbo_g] using
+        R16Shards.GbodyC17ToC21Common.rec_word_eq_of_unhit hs.2 hw.2.2.1 "bo" 88
+          (by simp [typedRecords]) hbo_g hnz (hbo_u hnz) hk_in.1 hk_in.2)
+    hm_low
+  obtain ⟨_, howned_S, _, _, _⟩ := hbase
+  intro o ho
+  unfold worldOwned at ho
+  rcases List.mem_append.1 ho with h1 | hnd
+  · rcases List.mem_append.1 h1 with htab | hfix
+    · rw [List.flatMap_append] at htab
+      rcases List.mem_append.1 htab with htabS | htab_t
+      · refine hb_disj o ?_
+        rw [← howned_S]
+        unfold worldOwned
+        exact List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl htabS)))
+      · simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil] at htab_t
+        rcases (hfp_t o htab_t).2 with hin_hp | hin_sc
+        · exact Or.inr (Or.inr (Or.inl (Nat.le_trans hb_in.2 hin_hp.1)))
+        · exact Or.inr (Or.inr (Or.inl (by
+            unfold Inside at hb_in hin_sc; omega)))
+    · refine hb_disj o ?_
+      rw [← howned_S]
+      unfold worldOwned
+      exact List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr hfix)))
+  · refine hb_disj o ?_
+    rw [← howned_S]
+    unfold worldOwned
+    exact List.mem_append.2 (Or.inr hnd)
+
+/-- A live buffer survives a fresh-table allocation with its witness world
+extended by the new table root. -/
+theorem phase2_htab_new_live_buffer {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hAp : ArenaReady post) (hag : AllocatorGrows s post) {t : Nat}
+    (hfp_t : ∀ i ∈ htabFootprint post t, Allocated post i ∧
+      (Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∨
+        Inside i (globN post "scratch_ptr") (globN s "scratch_ptr")))
+    (hfr : FrameOutside s post
+      [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
+    (hbe : post.be = s.be) (hgs : R16Shards.GbodyC17ToC21Common.WorldGlobalsSame s post)
+    {buffer : Ivl} {contents : Nat → BitVec 64}
+    (hb : PtxLiveBufferAt s S Nd buffer contents) :
+    PtxLiveBufferAt {post with locals := s.locals} (S ++ [t]) Nd buffer contents := by
+  have hdisj := phase2_htab_new_world_disj hs hw hAp hag hfp_t hfr hbe hgs hb.1
+    (fun j hj => hb.2.1 buffer (by simp) j hj)
+  refine ⟨⟨hb.1.1, hb.1.2.trans hag.1⟩, ?_, ?_⟩
+  · intro o ho j hj
+    rcases List.mem_cons.1 ho with rfl | hnil
+    · exact hdisj j hj
+    · simp at hnil
+  · intro p hlo hhi hal
+    have hu := phase2_htab_new_frame_unhit hs hAp hag hfr (Or.inl hb.1)
+    have hhp := hs.2.2.1
+    have h264 : heapLimit < 2 ^ 64 := by decide
+    have hbin : InitE.sourceBase ≤ buffer.1 ∧ buffer.1 + buffer.2 ≤
+        globN s "heap_ptr" := hb.1
+    have hlt : p < 2 ^ 64 := by omega
+    have hpt : (BitVec.ofNat 64 p).toNat = p := by
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]
+    have hmem := hu (BitVec.ofNat 64 p)
+      (by rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]; exact hal)
+      (by unfold CellHits; omega)
+    have hmo : ∀ a, memW {post with locals := s.locals} a = memW post a := fun a => rfl
+    have hmps : memW post p = memW s p := by
+      unfold memW
+      rw [hmem]
+    rw [hmo p, hmps]
+    exact hb.2.2 p hlo hhi hal
+
+/-- The complete saved-buffer message invariant survives a fresh-table
+allocation, with every buffer's witness world extended by the new root. -/
+theorem phase2_htab_new_store_ready {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    {s post : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageStoreReady buffers contents s)
+    (hAp : ArenaReady post) (hag : AllocatorGrows s post) {t : Nat}
+    (hwf_t : HtabWF post t)
+    (hfp_t : ∀ i ∈ htabFootprint post t, Allocated post i ∧
+      (Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∨
+        Inside i (globN post "scratch_ptr") (globN s "scratch_ptr")))
+    (hfr : FrameOutside s post
+      [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
+    (hbe : post.be = s.be) (hg_kept : GlobalsKept ["heap_ptr", "scratch_ptr"] s post) :
+    PtxMessageStoreReady buffers contents {post with locals := s.locals} := by
+  have hgs : R16Shards.GbodyC17ToC21Common.WorldGlobalsSame s post :=
+    R16Shards.GbodyC17ToC21Common.worldGlobalsSame_of_globalsKept hg_kept
+      (by decide) (by decide) (by decide) (by decide) (by decide)
+  obtain ⟨hW_s, hE_s, hm_w, hin_m, hwok_m, hbufs⟩ := hp
+  obtain ⟨hA_s, S0, hWT⟩ := hW_s
+  obtain ⟨Nd0, hw0⟩ := (worldTyped_iff_with s S0).1 hWT
+  have hext := R16Shards.GbodyC17ToC21Common.worldTypedWith_htab_new hA_s hw0 hAp hag hwf_t
+    hfp_t hfr hbe hg_kept
+  have hA_mid : ArenaReady {post with locals := s.locals} :=
+    (arenaReady_with_locals post s.locals post.clock).mpr hAp
+  have hW_mid_ext : WorldTypedWith {post with locals := s.locals} (S0 ++ [t]) Nd0 :=
+    (worldTypedWith_with_locals post s.locals post.clock (S0 ++ [t]) Nd0).mpr
+      hext.2.2.2.1
+  refine ⟨⟨hA_mid, S0 ++ [t], (worldTyped_iff_with _ (S0 ++ [t])).2 ⟨Nd0, hW_mid_ext⟩⟩,
+    phase2_htab_new_txEnv hA_s hAp hE_s hw0 hag hgs hfr, hm_w,
+    ⟨hin_m.1, hin_m.2.trans hag.1⟩, ?_, ?_⟩
+  · exact wordsOK_transfer hA_s.1 hA_mid.1 hwok_m
+  · intro i
+    obtain ⟨hd, S_i, Nd_i, hw_i, hb_i, hsep_i⟩ := hbufs i
+    refine ⟨hd, S_i ++ [t], Nd_i, ?_, ?_, ?_⟩
+    · exact (worldTypedWith_with_locals post s.locals post.clock (S_i ++ [t]) Nd_i).mpr
+        ((R16Shards.GbodyC17ToC21Common.worldTypedWith_htab_new hA_s hw_i hAp hag hwf_t
+          hfp_t hfr hbe hg_kept).2.2.2.1)
+    · exact phase2_htab_new_live_buffer hA_s hw_i hAp hag hfp_t hfr hbe hgs hb_i
+    · intro o ho j hj
+      simp only [List.mem_singleton] at ho; subst o
+      exact phase2_htab_new_world_disj hA_s hw_i hAp hag hfp_t hfr hbe hgs hin_m
+        (fun j' hj' => hsep_i _ (by simp) j' hj') j hj
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
