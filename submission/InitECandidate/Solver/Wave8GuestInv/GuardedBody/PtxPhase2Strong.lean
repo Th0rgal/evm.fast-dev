@@ -20297,4 +20297,164 @@ theorem phase2_teSuf_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   have hd : Nat.max (0 + 0) 0 = 0 := by rfl
   rw [hd] at h1
   exact ⟨by omega, h2⟩
+
+/-! ## Segment 69..76: msg_new allocation and the seven message header stores -/
+
+/-- Entry guard for the msg_new decCall: the te-suffix exit frame plus the
+transaction environment and the live-buffer witnesses the message cut needs. -/
+def PtxMsgPreInv {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+  PtxTeSufInv s ∧ TxEnv s ∧
+    ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧ PtxLiveBufferAt s S Nd (buffers i) (contents i)
+
+/-- Any callee entered from a message-prefix state keeps the guest invariant. -/
+theorem phase2_msgPre_callEntry {ι : Type} (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) {fname : MlS} (arguments : List (ExpHOL 64)) :
+    CallEntryOn (PtxMsgPreInv buffers contents) GuestInv fname arguments := by
+  intro F state values body callee ret hcode hP hargs hl
+  exact guestInv_callEntry state callee hP.1.1.1.1.1.1.1.1.1.1.1
+
+/-- Resuming after msg_new: the fresh message block satisfies the store-ready
+frame and the four scalar locals survive the caller-local restoration. -/
+theorem phase2_msgPre_resume (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    DecCallResumeOn (PtxMsgPreInv buffers contents)
+      (PtxMessageScalarReady buffers contents ["te", "sender", "mgas", "reservoir"])
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hW : WorldOK s := hp.1.1.1.1.1.1.1.1.1
+  have hsr := phase2_msg_new_store_ready h buffers contents s vs body callee ret v post hc
+    ⟨hW, hp.2.1, hp.2.2⟩ he hl hb
+  refine ⟨hsr, ?_⟩
+  intro name hn
+  simp only [List.mem_cons] at hn
+  rcases hn with rfl | rfl | rfl | rfl | hnil
+  · have hlk : (setVarHOLFinite (ofString "m") v {post with locals := s.locals}).locals.lookup
+        (ofString "te") = s.locals.lookup (ofString "te") := by
+      have hne : ofString "m" ≠ ofString "te" := by decide
+      simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+    rw [hlk]
+    exact hp.1.1.1.1.2.1
+  · have hlk : (setVarHOLFinite (ofString "m") v {post with locals := s.locals}).locals.lookup
+        (ofString "sender") = s.locals.lookup (ofString "sender") := by
+      have hne : ofString "m" ≠ ofString "sender" := by decide
+      simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+    rw [hlk]
+    exact hp.1.1.1.1.1.2.scalar "sender" (by simp)
+  · have hlk : (setVarHOLFinite (ofString "m") v {post with locals := s.locals}).locals.lookup
+        (ofString "mgas") = s.locals.lookup (ofString "mgas") := by
+      have hne : ofString "m" ≠ ofString "mgas" := by decide
+      simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+    rw [hlk]
+    exact hp.1.1.1.1.1.2.scalar "mgas" (by simp)
+  · have hlk : (setVarHOLFinite (ofString "m") v {post with locals := s.locals}).locals.lookup
+        (ofString "reservoir") = s.locals.lookup (ofString "reservoir") := by
+      have hne : ofString "m" ≠ ofString "reservoir" := by decide
+      simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+    rw [hlk]
+    exact hp.1.1.1.1.1.2.scalar "reservoir" (by simp)
+  · simp at hnil
+
+/-- The beacon-roots global holds a word, so its flatten is a single word. -/
+theorem phase2_message_scalar_be_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String) :
+    Hoare (PtxMessageScalarReady buffers contents names)
+      (.store (.op .add [.var .local (ofString "m"), .const (8 * 0)])
+        (.var .global (ofString "be")))
+      (fun r s => r = none → PtxMessageScalarReady buffers contents names s) := by
+  apply phase2_message_scalar_expr_store buffers contents names _ 0 1 (by decide)
+  intro F s v hp hv
+  have hgw : GlobalsWord s := hp.1.1.1.2.2.2.2.2.2.2.2.2
+  obtain ⟨w, hw⟩ := hgw "be" (by decide)
+  simp only [evalAt, evalHOLExact] at hv
+  rw [hw] at hv
+  have hve : v = .val (.word w) := (Option.some.inj hv).symm
+  subst hve
+  simp [flattenHOL]
+
+/-- The message-construction prefix (positions 69..76) as a bounded program. -/
+theorem phase2_msgPrefix_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (PtxMessageScalarReady buffers contents ["te", "sender", "mgas", "reservoir"]) tail b) :
+    TerminatingProgBoundedOn (PtxMsgPreInv buffers contents)
+      (spinePlug 8 (spineAt 69 ptxCode) tail)
+      (K.«msg_new» + b + 1) := by
+  have he : spinePlug 8 (spineAt 69 ptxCode) tail =
+      .decCall (ofString "m") .one (ofString "msg_new") []
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 0])
+          (.var .global (ofString "be")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 8])
+          (.var .local (ofString "te")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 16])
+          (.var .local (ofString "sender")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 24])
+          (.load .one (.op .add [.var .local (ofString "tx"), .const 152])))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 40])
+          (.var .local (ofString "mgas")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 48])
+          (.var .local (ofString "reservoir")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 56])
+          (.load (.comb [.one, .one, .one, .one])
+            (.op .add [.var .local (ofString "tx"), .const 160])))
+          tail))))))) := by
+    simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction, spineAt,
+      spinePlug]
+    rfl
+  have hs (addr src : ExpHOL 64) :
+      TerminatingProgBoundedOn
+        (PtxMessageScalarReady buffers contents ["te", "sender", "mgas", "reservoir"])
+        (.store addr src) 0 := by
+    intro F s hc hp hn
+    rw [clock_store]
+    exact ⟨by omega, le_rfl⟩
+  have hcont : TerminatingProgBoundedOn
+      (PtxMessageScalarReady buffers contents ["te", "sender", "mgas", "reservoir"])
+      (.seq (.store (.op .add [.var .local (ofString "m"), .const 0])
+          (.var .global (ofString "be")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 8])
+            (.var .local (ofString "te")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 16])
+            (.var .local (ofString "sender")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 24])
+            (.load .one (.op .add [.var .local (ofString "tx"), .const 152])))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 40])
+            (.var .local (ofString "mgas")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 48])
+            (.var .local (ofString "reservoir")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 56])
+            (.load (.comb [.one, .one, .one, .one])
+              (.op .add [.var .local (ofString "tx"), .const 160])))
+          tail))))))) (0 + (0 + (0 + (0 + (0 + (0 + (0 + b))))))) := by
+    exact seq_bound_trans (hs _ _) (phase2_message_scalar_be_store buffers contents _)
+      (seq_bound_trans (hs _ _)
+        (phase2_message_scalar_local_store buffers contents _ "te" (by simp) 1 (by decide))
+        (seq_bound_trans (hs _ _)
+          (phase2_message_scalar_local_store buffers contents _ "sender" (by simp) 2 (by decide))
+          (seq_bound_trans (hs _ _)
+            (phase2_message_scalar_load_store buffers contents _
+              (.op .add [.var .local (ofString "tx"), .const 152]) 3 (by decide))
+            (seq_bound_trans (hs _ _)
+              (phase2_message_scalar_local_store buffers contents _ "mgas" (by simp) 5
+                (by decide))
+              (seq_bound_trans (hs _ _)
+                (phase2_message_scalar_local_store buffers contents _ "reservoir" (by simp) 6
+                  (by decide))
+                (seq_bound_trans (hs _ _)
+                  (phase2_message_scalar_expr_store buffers contents _
+                    (.load (.comb [.one, .one, .one, .one])
+                      (.op .add [.var .local (ofString "tx"), .const 160])) 7 4 (by decide)
+                    (fun s v _ hv => phase2_load_quad_length s _ v hv))
+                  ht))))))
+  have hmain : TerminatingProgBoundedOn (PtxMsgPreInv buffers contents)
+      (spinePlug 8 (spineAt 69 ptxCode) tail)
+      (K.«msg_new» + (0 + (0 + (0 + (0 + (0 + (0 + (0 + b))))))) + 1) := by
+    rw [he]
+    exact TerminatingProgBoundedOn.decCall_on h.fb_msg_new (ofString "m") .one []
+      (phase2_msgPre_callEntry buffers contents []) (phase2_msgPre_resume h buffers contents) hcont
+  intro F s hc hp hnt
+  obtain ⟨h1, h2⟩ := hmain s hc hp hnt
+  exact ⟨by omega, h2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
