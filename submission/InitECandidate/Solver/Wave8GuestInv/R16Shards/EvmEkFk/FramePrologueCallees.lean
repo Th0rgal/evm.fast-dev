@@ -12463,7 +12463,7 @@ private theorem shaNcrCallees_good :
   intro f hf values body callee rs hfound
   obtain ⟨_, _, hinst⟩ := lookupCode_installed hfound
   simp only [shaNcrCallees, Bool.or_eq_true, beq_iff_eq] at hf
-  rcases hf with ((((((((((rfl | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl
+  rcases hf with (((((((((((rfl | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl)
   · rw [lookup_trap_with_local] at hinst
     rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
   · rw [R13Shards.lookup_alloc_r13] at hinst
