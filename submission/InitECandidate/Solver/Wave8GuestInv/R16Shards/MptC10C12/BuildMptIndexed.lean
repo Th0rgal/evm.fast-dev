@@ -23,6 +23,10 @@ import InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmFrameSpecs
 import InitECandidate.Solver.Wave8GuestInv.R10Ports.ReadOnly
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_memeq
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.ComputeStateRoot
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.GbodyC17ToC21Common
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_CsrLoops
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -3631,6 +3635,33 @@ theorem lookup_rlp_encode_word_bmi :
   lookup_of_guestAst_getElem 123 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn_rlp_encode_word) rfl
 
+/-- The world-owned disjointness carried from the function entry: the slice interval is disjoint
+from the world-owned intervals for some world-typed witnesses. The C11 amendment hypothesis
+instantiates this at the entry state (the slice is the caller's array and may in principle
+overlap the hash tables' footprints, the fixed buffers, or the node extents). -/
+def BmiWorldDisjE : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ∃ S Nd : List Nat, WorldTypedWith s S Nd ∧
+    IvlsDisj [(locN s "slice_arr", 16 * locN s "n")] (worldOwned s S Nd)
+
+/-- The amended entry guard for `build_mpt_indexed`: the ready guard plus the world-owned
+disjointness witness. -/
+def BmiEntry : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => BuildMptIndexedReady s ∧ BmiWorldDisjE s
+
+theorem Disj.trans_inside_bmi {i j k : Ivl} (h : Disj i j)
+    (hin : Inside k j.1 (j.1 + j.2)) : Disj i k := by
+  rcases h with h | h | h | h
+  · exact Or.inl h
+  · obtain ⟨h1, h2⟩ := hin
+    exact Or.inr (Or.inl (by omega))
+  · obtain ⟨h1, h2⟩ := hin
+    exact Or.inr (Or.inr (Or.inl (by omega)))
+  · obtain ⟨h1, h2⟩ := hin
+    exact Or.inr (Or.inr (Or.inr (by omega)))
+
+theorem Disj.of_le_bmi {i j : Ivl} (h : i.1 + i.2 ≤ j.1) : Disj i j :=
+  Or.inr (Or.inr (Or.inl h))
+
 def BuildMptAfterMark : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => BuildMptIndexedReady s ∧
     Inside (locN s "slice_arr", 16 * locN s "n") sourceBase (locN s "mark") ∧
@@ -3639,20 +3670,22 @@ def BuildMptAfterMark : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 
 theorem decCallResume_heap_mark_bmi
     (hro : ReadOnlyFn (ofString "heap_mark")) :
-    DecCallResumeOn BuildMptIndexedReady BuildMptAfterMark (ofString "mark")
+    DecCallResumeOn BmiEntry
+      (fun s => BuildMptAfterMark s ∧ BmiWorldDisjE s) (ofString "mark")
       (ofString "heap_mark") [] := by
   intro F state values body callee ret value post hcode hP hargs hl hrun
+  obtain ⟨hReady, hdisjE⟩ := hP
   have hready : BuildMptIndexedReady
       (setVarHOLFinite (ofString "mark") value { post with locals := state.locals }) :=
     ReadOnlyFn.resumeOn localsOnly_buildMptIndexedReady
       (fun s hs => hs.1.1.1) hro (ofString "mark") (by decide) []
-      state values body callee ret value post hcode hP hargs hl hrun
+      state values body callee ret value post hcode hReady hargs hl hrun
   have hsame := lookupCodeHOLFinite_installed_body state.code.lookup (ofString "heap_mark")
     [] (sourceFnBody Guest.Software.guestFn_heap_mark) body .one ret values callee
     (by rw [hcode]; exact lookup_heap_mark_bmi) hl
   subst hsame
   have hpos : 0 < globN state "heap_ptr" := by
-    have hsb := hP.1.1.2.1
+    have hsb := hReady.1.1.2.1
     have : 0 < sourceBase := by decide
     omega
   obtain ⟨hw, hgw, hwnat⟩ : ∃ hw : BitVec 64,
@@ -3678,17 +3711,28 @@ theorem decCallResume_heap_mark_bmi
     locN_setVar_ne _ "slice_arr" (ofString "mark") (.val (.word hw)) (by decide)
   have hn : locN resumed "n" = locN state "n" :=
     locN_setVar_ne _ "n" (ofString "mark") (.val (.word hw)) (by decide)
-  refine ⟨hready, ?_, ?_, ⟨hw, by simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]⟩⟩
+  refine ⟨⟨hready, ?_, ?_, ⟨hw, by simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]⟩⟩, ?_⟩
   · rw [harr, hn, hmark]
-    exact hP.2.2.2.1
+    exact hReady.2.2.2.1
   · rw [hmark, hhp]
+  · obtain ⟨S0, Nd0, hWT0, hdisj0⟩ := hdisjE
+    refine ⟨S0, Nd0, ?_, ?_⟩
+    · exact (worldTypedWith_build_locals state resumed.locals resumed.clock S0 Nd0).2 hWT0
+    · have hwo : worldOwned resumed S0 Nd0 = worldOwned state S0 Nd0 := by
+        first
+          | rfl
+          | simp [worldOwned, htabFootprint, fixedObjects, nodeExtents, resumed,
+            setVarHOLFinite]
+      rw [hwo, harr, hn]
+      exact hdisj0
 
 def BuildMptAfterNew : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => BuildMptIndexedReady s ∧ BuildMptInv s ∧
     Inside (locN s "slice_arr", 16 * locN s "n") sourceBase (locN s "mark") ∧
     locN s "mark" ≤ globN s "heap_ptr" ∧
     (∀ name ∈ (["mark", "m"] : List String),
-      ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w)))
+      ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w))) ∧
+    locN s "mark" ≤ locN s "m"
 
 theorem decCallResume_mpt_new_bmi
     (hwk : WorldKeeps WorldOK (fun _ => [])
@@ -3697,10 +3741,12 @@ theorem decCallResume_mpt_new_bmi
     (hrt : Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧
       memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")
       (ofString "mpt_new")) :
-    DecCallResumeOn BuildMptAfterMark BuildMptAfterNew (ofString "m")
+    DecCallResumeOn (fun s => BuildMptAfterMark s ∧ BmiWorldDisjE s)
+      (fun s => BuildMptAfterNew s ∧ BmiWorldDisjE s) (ofString "m")
       (ofString "mpt_new") [.const 0, .const 0] := by
   intro F state values body callee ret value post hcode hP hargs hl hrun
-  obtain ⟨hready, hin_mark, hmark_eq, hw_mark⟩ := hP
+  obtain ⟨hP', hdisjE⟩ := hP
+  obtain ⟨hready, hin_mark, hmark_eq, hw_mark⟩ := hP'
   let entry := callEntryStateHOLFinite state callee
   have hentryW : WorldOK entry :=
     localsFree_worldOK state callee (state.clock - 1) hready.1
@@ -3748,8 +3794,13 @@ theorem decCallResume_mpt_new_bmi
       hOG, hFO, hRA⟩
   have hf_c : FreshBlock state postCaller wm.toNat 16 :=
     ⟨hf.1, hf.2.1, hf.2.2⟩
+  obtain ⟨S0, Nd0, hWT0, hdisj0⟩ := hdisjE
+  have hW0 : WorldOK state :=
+    ⟨hready.1.1, S0, (worldTyped_iff_with state S0).2 ⟨Nd0, hWT0⟩⟩
   have hinv : BuildMptInv (setVarHOLFinite (ofString "m") (.val (.word wm)) postCaller) :=
-    buildMptInv_of_new_step hready.1 hstep_c hf_c hroot
+    buildMptInv_of_new_step hW0 hstep_c hf_c hroot
+  obtain ⟨S1, Nd1, hsub1, hWT1, hOG1, hFO1, hQ1⟩ :=
+    hstep_c.2.2.2.2 S0 Nd0 hWT0 (fun i hi => by simp at hi)
   obtain ⟨_, S0, hS0⟩ := hready.1
   obtain ⟨Nd0, hWT0⟩ := (worldTyped_iff_with state S0).1 hS0
   obtain ⟨S0', Nd0', _, hWT0', _, _, _⟩ :=
@@ -3819,7 +3870,7 @@ theorem decCallResume_mpt_new_bmi
     locN_setVar_ne postCaller "n" (ofString "m") (.val (.word wm)) (by decide)
   have hmark_res : locN resumed "mark" = locN state "mark" :=
     locN_setVar_ne postCaller "mark" (ofString "m") (.val (.word wm)) (by decide)
-  refine ⟨hready_res, hinv, ?_, ?_, ?_⟩
+  refine ⟨⟨hready_res, hinv, ?_, ?_, ?_, ?_⟩, ?_⟩
   · rw [harr_res, hn_res, hmark_res]
     exact hin_mark
   · rw [hmark_res, hmark_eq]
@@ -3831,6 +3882,29 @@ theorem decCallResume_mpt_new_bmi
       exact ⟨w0, by simp [resumed, postCaller, setVarHOLFinite, HolFiniteMapExact.lookup_update,
         FUPDATE, hw0, show ofString "m" ≠ ofString "mark" by decide]⟩
     · exact ⟨wm, by simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]⟩
+  · rw [hmark_res, hmark_eq]
+    have hm_loc : locN resumed "m" = wm.toNat := by
+      simp [resumed, setVarHOLFinite, locN, HolFiniteMapExact.lookup_update, FUPDATE]
+    obtain ⟨_, hin_f, _⟩ := hf_c
+    rw [hm_loc]
+    exact hin_f.1
+  · refine ⟨S1, Nd1, ?_, ?_⟩
+    · exact (worldTypedWith_build_locals postCaller resumed.locals resumed.clock S1 Nd1).2
+        hWT1
+    · have hwo : worldOwned resumed S1 Nd1 = worldOwned postCaller S1 Nd1 := by
+        first
+          | rfl
+          | simp [worldOwned, htabFootprint, fixedObjects, nodeExtents, resumed,
+            setVarHOLFinite, postCaller]
+      rw [hwo, harr_res, hn_res]
+      refine fun o ho j hj => ?_
+      rcases List.mem_singleton.mp ho with rfl
+      rcases hOG1 j hj with h0 | ⟨j0, hj0mem, hj0in⟩ | hjfresh
+      · rw [h0]
+        exact Or.inr (Or.inl rfl)
+      · exact Disj.trans_inside_bmi (hdisj0 _ (List.mem_singleton_self _) j0 hj0mem) hj0in
+      · have hsl := hready.2.2.2.1
+        exact Disj.of_le_bmi (by have := hsl.2; have := hjfresh.1; omega)
 
 theorem buildMptAfterNew_set_counter {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : BuildMptAfterNew s) (w : BitVec 64) :
@@ -3847,10 +3921,10 @@ theorem buildMptAfterNew_set_counter {F : Type} {s : PanSemStateFiniteExact 64 F
   · intro name hname
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hname
     rcases hname with rfl | rfl | rfl
-    · obtain ⟨v, hv⟩ := h.2.2.2.2 "mark" (by simp)
+    · obtain ⟨v, hv⟩ := h.2.2.2.2.1 "mark" (by simp)
       exact ⟨v, by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hv,
         show ofString "i" ≠ ofString "mark" by decide]⟩
-    · obtain ⟨v, hv⟩ := h.2.2.2.2 "m" (by simp)
+    · obtain ⟨v, hv⟩ := h.2.2.2.2.1 "m" (by simp)
       exact ⟨v, by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hv,
         show ofString "i" ≠ ofString "m" by decide]⟩
     · exact ⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]⟩
@@ -4004,7 +4078,8 @@ theorem bmi_rlp_resume_strong
     DecCallResumeOn
       (fun s => BuildMptLoopInv2 s ∧
         LoopActive (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n"))) s)
-      (fun s => BuildMptLoopInv2 s ∧ locN s "klen" ≤ 32 ∧ locN s "i" < locN s "n")
+      (fun s => BuildMptLoopInv2 s ∧ locN s "klen" ≤ 32 ∧ locN s "i" < locN s "n" ∧
+        (∃ w : BitVec 64, s.locals.lookup (ofString "klen") = some (.val (.word w))))
       (ofString "klen") (ofString "rlp_encode_word")
       [.var .global (ofString "mpt_key_scratch"), .var .local (ofString "i")] := by
   intro F state values body callee ret value post hcode hP hargs hl hrun
@@ -4457,13 +4532,13 @@ theorem bmi_rlp_resume_strong
   have hiltK : locN resumed "i" < locN resumed "n" := by
     rw [hi_eq, hn_eq]
     exact hlt
+  have hlk : resumed.locals.lookup (ofString "klen") = some (.val (.word klen)) := by
+    simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
   have hklen_le32 : locN resumed "klen" ≤ 32 := by
-    have hlk : resumed.locals.lookup (ofString "klen") = some (.val (.word klen)) := by
-      simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
     simp only [locN, hlk]
     have := hklen9
     omega
-  exact ⟨hinv2K, hklen_le32, hiltK⟩
+  exact ⟨hinv2K, hklen_le32, hiltK, ⟨klen, hlk⟩⟩
 
 /-- Every member of `globalBuffers` has a nonzero literal size. -/
 private theorem bmi_gb_snd_ne (gs : String × Nat) (hg : gs ∈ globalBuffers) : gs.2 ≠ 0 := by
@@ -4772,6 +4847,1840 @@ theorem mptSetStep_caller_bmi {F : Type}
   refine ⟨S', Nd', Nm', hsub,
     (worldTypedWith_build_locals post s.locals post.clock S' Nd').2 hWT',
     hm', hd', hog, hfr⟩
+/-- The loop-state guard after the key-length `decCall` resumes (the `Q` of
+`bmi_rlp_resume_strong`, named). -/
+def BmiAfterKey : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => BuildMptLoopInv2 s ∧ locN s "klen" ≤ 32 ∧ locN s "i" < locN s "n" ∧
+    (∃ w : BitVec 64, s.locals.lookup (ofString "klen") = some (.val (.word w)))
+
+/-- `bmi_rlp_resume_strong` with the named resume guard. -/
+theorem bmi_rlp_resume_named
+    (hwk : WorldKeeps WorldOK (fun s => [(locN s "dst", 9)])
+      [] R10Shards.P26_P28.stdKeep NoExtra (ofString "rlp_encode_word")) :
+    DecCallResumeOn
+      (fun s => BuildMptLoopInv2 s ∧
+        LoopActive (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n"))) s)
+      BmiAfterKey
+      (ofString "klen") (ofString "rlp_encode_word")
+      [.var .global (ofString "mpt_key_scratch"), .var .local (ofString "i")] :=
+  bmi_rlp_resume_strong hwk
+
+/-- `seq` whose second part's guard is only needed when the first part falls through. -/
+theorem TerminatingProgBoundedOn.seq_after
+    {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {first second : ProgHOL 64}
+    {a b : Nat}
+    (h1 : TerminatingProgBoundedOn P first a)
+    (hp : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      s.code = GuestCodeLookup.originalRuntimeCode → P s →
+      (evaluateHOLFiniteState s first).1 = none → Q (evaluateHOLFiniteState s first).2)
+    (h2 : TerminatingProgBoundedOn Q second b) :
+    TerminatingProgBoundedOn P (.seq first second) (a + b) := by
+  intro F state hcode hP
+  have hmeta := PanRunBounded.evaluateHOLFiniteState_metadata state first
+  unfold TerminatingRunBounded
+  dsimp only
+  intro hnt
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  rcases hr1 : evaluateHOLFiniteState state first with ⟨r1, mid⟩
+  simp only [hr1] at hmeta hnt ⊢
+  cases r1 with
+  | none =>
+    dsimp only at hnt ⊢
+    have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simp [hr1]
+    obtain ⟨s1, k1⟩ := h1 state hcode hP hnt1
+    rw [hr1] at s1 k1
+    dsimp only at s1 k1
+    have hmid : Q mid := by
+      have hq := hp state hcode hP (by simp [hr1])
+      rw [hr1] at hq
+      exact hq
+    obtain ⟨s2, k2⟩ := h2 mid (hmeta.1.trans hcode) hmid hnt
+    exact ⟨by omega, by omega⟩
+  | some r =>
+    dsimp only at hnt ⊢
+    have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simpa [hr1] using hnt
+    obtain ⟨s1, k1⟩ := h1 state hcode hP hnt1
+    rw [hr1] at s1 k1
+    dsimp only at s1 k1
+    exact ⟨by omega, k1⟩
+
+/-- Callee-entry obligation for `mpt_set` from the named resume guard (drops the
+key-length word witness that `BuildMptAfterKey` carries but the proof never reads). -/
+theorem callEntryOn_mpt_set_resume_bmi :
+    CallEntryOn BmiAfterKey MptSetReady (ofString "mpt_set")
+      [.var .local (ofString "m"),
+       .var .global (ofString "mpt_key_scratch"),
+       .var .local (ofString "klen"),
+       .load .one (.op .add [.var .local (ofString "slice_arr"),
+         .panop .mul [.var .local (ofString "i"), .const 16]]),
+       .load .one (.op .add
+         [.var .local (ofString "slice_arr"),
+          .panop .mul [.var .local (ofString "i"), .const 16],
+          .const 8])] := by
+  intro F s values body callee ret hcode hP hargs hl
+  obtain ⟨hloop2, hklen_le, hlt, hwklen⟩ := hP
+  obtain ⟨hloop, hmm2, S, Nd, Nm, hWT, hm, hdN, hdW⟩ := hloop2
+  obtain ⟨hready, hinv, _, _, hlocs⟩ := hloop
+  obtain ⟨v1, v2, v3, v4, v5, he1, he2, he3, he4, he5, hc1, hc2, hc3, hc4, hc5⟩ :=
+    callee_param_five_exp s (ofString "mpt_set")
+      (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+      .one .one .one .one .one _ _
+      (by rw [hcode]; exact P3MptSet.lookup_mpt_set)
+      _ _ _ _ _ values body callee ret hargs hl
+  have hm : callee.lookup (ofString "m") = s.locals.lookup (ofString "m") :=
+    hc1.trans (by simpa only [evalAt, evalHOLExact] using he1.symm)
+  have hklen : callee.lookup (ofString "klen") = s.locals.lookup (ofString "klen") :=
+    hc3.trans (by simpa only [evalAt, evalHOLExact] using he3.symm)
+  obtain ⟨_, hsl8⟩ := evalAt_slice_word_bmi s
+    (hready.2.1 "slice_arr" (by simp))
+    (hlocs "i" (by simp))
+    hlt hready.2.2.2.1 hready.1.1 hready.2.2.2.2.1
+  obtain ⟨wvlen, rfl, hwvlen⟩ := hsl8 v5 he5
+  let entry := callEntryStateHOLFinite s callee
+  have hinv_e : BuildMptInv entry :=
+    localsOnly_buildMptInv s callee (s.clock - 1)
+      (fun name hname => by
+        simp only [List.mem_singleton] at hname
+        subst name
+        exact hm) hinv
+  have hklen_e : locN entry "klen" ≤ 32 := by
+    have : locN entry "klen" = locN s "klen" := by
+      simp only [entry, callEntryStateHOLFinite, locN, hklen]
+    omega
+  have hvlen_e : locN entry "vlen" < 2 ^ 40 := by
+    have : locN entry "vlen" = wvlen.toNat := by
+      simp [entry, callEntryStateHOLFinite, locN, hc5]
+    rw [this, hwvlen]
+    exact hready.2.2.2.2.2.2 (locN s "i") hlt
+  exact buildMptInv_mptSetReady hinv_e hklen_e hvlen_e
+
+/-- The loop guard of the `build_mpt_indexed` loop, minus the slice-vs-world
+component `hdW`, which the loop machinery only carries and never reads. -/
+def BuildMptLoopInv2' : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => BuildMptLoopInv s ∧ locN s "mark" ≤ locN s "m" ∧
+    ∃ S Nd Nm : List Nat, WorldTypedWith s S Nd ∧ MptObjInWith s S Nm (locN s "m") ∧
+      IvlsDisj ((locN s "m", 16) :: nodeExtents s Nm) (nodeExtents s Nd)
+
+theorem bmi_loop2_to_loop2' {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : BuildMptLoopInv2 s) : BuildMptLoopInv2' s := by
+  obtain ⟨hloop, hmm2, S, Nd, Nm, hWT, hm, hdN, _⟩ := h
+  exact ⟨hloop, hmm2, S, Nd, Nm, hWT, hm, hdN⟩
+
+/-- The loop-state guard after the key-length `decCall` resumes (weak variant). -/
+def BmiAfterKey' : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => BuildMptLoopInv2' s ∧ locN s "klen" ≤ 32 ∧ locN s "i" < locN s "n"
+
+/-- Callee-entry obligation for `mpt_set` from the weak resume guard. -/
+theorem callEntryOn_mpt_set_resume_bmi' :
+    CallEntryOn BmiAfterKey' MptSetReady (ofString "mpt_set")
+      [.var .local (ofString "m"),
+       .var .global (ofString "mpt_key_scratch"),
+       .var .local (ofString "klen"),
+       .load .one (.op .add [.var .local (ofString "slice_arr"),
+         .panop .mul [.var .local (ofString "i"), .const 16]]),
+       .load .one (.op .add
+         [.var .local (ofString "slice_arr"),
+          .panop .mul [.var .local (ofString "i"), .const 16],
+          .const 8])] := by
+  intro F s values body callee ret hcode hP hargs hl
+  obtain ⟨hloop2, hklen_le, hlt⟩ := hP
+  obtain ⟨hloop, hmm2, S, Nd, Nm, hWT, hm, hdN⟩ := hloop2
+  obtain ⟨hready, hinv, _, _, hlocs⟩ := hloop
+  obtain ⟨v1, v2, v3, v4, v5, he1, he2, he3, he4, he5, hc1, hc2, hc3, hc4, hc5⟩ :=
+    callee_param_five_exp s (ofString "mpt_set")
+      (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+      .one .one .one .one .one _ _
+      (by rw [hcode]; exact P3MptSet.lookup_mpt_set)
+      _ _ _ _ _ values body callee ret hargs hl
+  have hm : callee.lookup (ofString "m") = s.locals.lookup (ofString "m") :=
+    hc1.trans (by simpa only [evalAt, evalHOLExact] using he1.symm)
+  have hklen : callee.lookup (ofString "klen") = s.locals.lookup (ofString "klen") :=
+    hc3.trans (by simpa only [evalAt, evalHOLExact] using he3.symm)
+  obtain ⟨_, hsl8⟩ := evalAt_slice_word_bmi s
+    (hready.2.1 "slice_arr" (by simp))
+    (hlocs "i" (by simp))
+    hlt hready.2.2.2.1 hready.1.1 hready.2.2.2.2.1
+  obtain ⟨wvlen, rfl, hwvlen⟩ := hsl8 v5 he5
+  let entry := callEntryStateHOLFinite s callee
+  have hinv_e : BuildMptInv entry :=
+    localsOnly_buildMptInv s callee (s.clock - 1)
+      (fun name hname => by
+        simp only [List.mem_singleton] at hname
+        subst name
+        exact hm) hinv
+  have hklen_e : locN entry "klen" ≤ 32 := by
+    have : locN entry "klen" = locN s "klen" := by
+      simp only [entry, callEntryStateHOLFinite, locN, hklen]
+    omega
+  have hvlen_e : locN entry "vlen" < 2 ^ 40 := by
+    have : locN entry "vlen" = wvlen.toNat := by
+      simp [entry, callEntryStateHOLFinite, locN, hc5]
+    rw [this, hwvlen]
+    exact hready.2.2.2.2.2.2 (locN s "i") hlt
+  exact buildMptInv_mptSetReady hinv_e hklen_e hvlen_e
+
+theorem bmi_rlp_resume_weak
+    (hwk : WorldKeeps WorldOK (fun s => [(locN s "dst", 9)])
+      [] R10Shards.P26_P28.stdKeep NoExtra (ofString "rlp_encode_word")) :
+    DecCallResumeOn
+      (fun s => BuildMptLoopInv2' s ∧
+        LoopActive (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n"))) s)
+      (fun s => BuildMptLoopInv2' s ∧ locN s "klen" ≤ 32 ∧ locN s "i" < locN s "n")
+      (ofString "klen") (ofString "rlp_encode_word")
+      [.var .global (ofString "mpt_key_scratch"), .var .local (ofString "i")] := by
+  intro F state values body callee ret value post hcode hP hargs hl hrun
+  obtain ⟨hP2, hact⟩ := hP
+  have hlt : locN state "i" < locN state "n" := buildMptLoopInv_active_lt hact
+  obtain ⟨hloop, hmm2, S, Nd, Nm, hWT, hm, hdN⟩ := hP2
+  obtain ⟨hready, hinv, hin_mark, hmark_le, hlocs⟩ := hloop
+  have hinv2 : BuildMptInv state := ⟨hinv.1, hinv.2.1, S, Nd, Nm, hWT, hm, hdN⟩
+
+  let entry := callEntryStateHOLFinite state callee
+  have hentryW : WorldOK entry :=
+    localsFree_worldOK state callee (state.clock - 1) hready.1
+  have hstep0 : WorldStep (fun s => [(locN s "dst", 9)]) [] R10Shards.P26_P28.stdKeep
+      NoExtra entry (some (.returned value)) post := by
+    have hspec := FunSpec.at_lookup hwk state hcode values body callee ret hl hentryW
+      (by rw [hrun]; simp)
+    rw [hrun] at hspec
+    exact hspec (Or.inl ⟨value, rfl⟩)
+  obtain ⟨v1, v2, he1, he2, hc1, hc2⟩ :=
+    callee_param_two_exp state (ofString "rlp_encode_word")
+      (ofString "dst") (ofString "w") .one .one _ _
+      (by rw [hcode]; exact lookup_rlp_encode_word_bmi) _ _ values body callee ret hargs hl
+  have hsame := lookupCodeHOLFinite_installed_body state.code.lookup (ofString "rlp_encode_word")
+    [(ofString "dst", .one), (ofString "w", .one)]
+    (sourceFnBody Guest.Software.guestFn_rlp_encode_word) body .one ret values callee
+    (by rw [hcode]; exact lookup_rlp_encode_word_bmi) hl
+  subst hsame
+  obtain ⟨wi, hwi⟩ := hlocs "i" (by simp)
+  have hv2 : v2 = .val (.word wi) := by
+    simpa [evalAt, evalHOLExact, hwi] using he2.symm
+  subst hv2
+  have hsb_ok : ∀ (t : PanSemStateFiniteExact 64 F) (val : ExpHOL 64),
+      t.memaddrs = ordinaryDomain →
+      t.locals.lookup (ofString "dst") = some v1 →
+      (evaluateHOLFiniteState t (.storeByte (.var .local (ofString "dst")) val)).1 = none →
+      ∃ dst0 : BitVec 64, v1 = .val (.word dst0) ∧ dst0 ≠ 0 := by
+    intro t val hma htd hnone
+    rw [evaluateHOLFiniteState_storeByte] at hnone
+    rcases v1 with ⟨⟨d0⟩⟩ | _ | _
+    · simp only [evalHOLExact, htd] at hnone
+      split at hnone
+      · split at hnone
+        · rename_i m' hst
+          unfold panMemStoreByteWord8HOL at hst
+          dsimp only at hst
+          cases hm : t.memory (panByteAlignHOL d0) with
+          | word cell =>
+            by_cases hdom : t.memaddrs (panByteAlignHOL d0)
+            · have hlo := (M11.byteAlign_lt_heapEnd hma d0 hdom).1
+              refine ⟨d0, rfl, ?_⟩
+              rintro rfl
+              have h0_al : (panByteAlignHOL (0 : BitVec 64)).toNat = 0 := by decide
+              rw [h0_al] at hlo
+              norm_num [sourceBase] at hlo
+            · simp [hdom] at hst
+        · simp at hnone
+      · simp at hnone
+    · simp [evalHOLExact, htd] at hnone
+    · simp [evalHOLExact, htd] at hnone
+  have hsb_none_or_err : ∀ (t : PanSemStateFiniteExact 64 F) (val : ExpHOL 64),
+      (evaluateHOLFiniteState t (.storeByte (.var .local (ofString "dst")) val)).1 = none ∨
+      (evaluateHOLFiniteState t (.storeByte (.var .local (ofString "dst")) val)).1 = some .error := by
+    intro t val
+    rw [evaluateHOLFiniteState_storeByte]
+    split
+    · split
+      · split
+        · exact Or.inl rfl
+        · exact Or.inr rfl
+      · exact Or.inr rfl
+    · exact Or.inr rfl
+  have hdst_ex : ∃ dst0 : BitVec 64, v1 = .val (.word dst0) ∧ dst0 ≠ 0 := by
+    have hb_rlp : sourceFnBody Guest.Software.guestFn_rlp_encode_word =
+        .seq
+          (.ite (.cmp .equal (.var .local (ofString "w")) (.const 0))
+            (.seq (.storeByte (.var .local (ofString "dst")) (.const 128)) (.return (.const 1)))
+            .skip)
+          (.seq
+            (.ite (.cmp .lower (.var .local (ofString "w")) (.const 128))
+              (.seq (.storeByte (.var .local (ofString "dst")) (.var .local (ofString "w"))) (.return (.const 1)))
+              .skip)
+            (.decCall (ofString "ll") .one (ofString "rlp_be_len") [.var .local (ofString "w")]
+              (.seq
+                (.storeByte (.var .local (ofString "dst"))
+                  (.op .add [.const 128, .var .local (ofString "ll")]))
+                (.seq
+                  (.call (some (none, none)) (ofString "rlp_put_be")
+                    [.op .add [.var .local (ofString "dst"), .const 1],
+                     .var .local (ofString "w"),
+                     .var .local (ofString "ll")])
+                  (.return (.op .add [.const 1, .var .local (ofString "ll")])))))) := rfl
+    have hrun' : evaluateHOLFiniteState entry (sourceFnBody Guest.Software.guestFn_rlp_encode_word) =
+        (some (.returned value), post) := hrun
+    rw [hb_rlp, evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hrun'
+    have hwev : @evalHOLExact 64 F _ entry.toExact (fun a => Classical.propDecidable (entry.memaddrs a))
+        (.cmp .equal (.var .local (ofString "w")) (.const 0)) =
+        some (.val (.word (if wi = 0 then 1 else 0))) := by
+      simp [entry, callEntryStateHOLFinite, evalHOLExact, hc2, wordCmpHOL]
+    rw [hwev] at hrun'
+    dsimp only at hrun'
+    by_cases hwz : wi = 0
+    · rw [if_pos hwz, if_neg (by decide : ¬ ((1 : BitVec 64) = 0)),
+        evaluateHOLFiniteState_seq_line780] at hrun'
+      rcases hsb : evaluateHOLFiniteState entry (.storeByte (.var .local (ofString "dst")) (.const 128)) with ⟨rsb, s1⟩
+      simp only [hsb] at hrun'
+      rcases hsb_none_or_err entry (.const 128) with hsn | hse
+      · exact hsb_ok entry (.const 128) hentryW.1.1.memaddrs hc1 hsn
+      · rw [hsb] at hse; dsimp only at hse; subst hse
+        cases hrun'
+    · rw [if_neg hwz, if_pos rfl, evaluateHOLFiniteState_skip] at hrun'
+      dsimp only at hrun'
+      rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hrun'
+      have hwev2 : @evalHOLExact 64 F _ entry.toExact (fun a => Classical.propDecidable (entry.memaddrs a))
+          (.cmp .lower (.var .local (ofString "w")) (.const 128)) =
+          some (.val (.word (if wi < 128 then 1 else 0))) := by
+        simp [entry, callEntryStateHOLFinite, evalHOLExact, hc2, wordCmpHOL]
+      rw [hwev2] at hrun'
+      dsimp only at hrun'
+      by_cases hlt128 : wi < 128
+      · rw [if_pos hlt128, if_neg (by decide : ¬ ((1 : BitVec 64) = 0)),
+          evaluateHOLFiniteState_seq_line780] at hrun'
+        rcases hsb : evaluateHOLFiniteState entry (.storeByte (.var .local (ofString "dst")) (.var .local (ofString "w"))) with ⟨rsb, s1⟩
+        simp only [hsb] at hrun'
+        rcases hsb_none_or_err entry (.var .local (ofString "w")) with hsn | hse
+        · exact hsb_ok entry (.var .local (ofString "w")) hentryW.1.1.memaddrs hc1 hsn
+        · rw [hsb] at hse; dsimp only at hse; subst hse
+          cases hrun'
+      · rw [if_neg hlt128, if_pos rfl, evaluateHOLFiniteState_skip] at hrun'
+        dsimp only at hrun'
+        obtain ⟨ll, mid, _, _, hmid_loc, hmid_eq, _, hr_eq, _⟩ :=
+          M11.eval_decCall_rlp_be_len entry "ll" (.var .local (ofString "w")) wi
+            (.seq
+              (.storeByte (.var .local (ofString "dst"))
+                (.op .add [.const 128, .var .local (ofString "ll")]))
+              (.seq
+                (.call (some (none, none)) (ofString "rlp_put_be")
+                  [.op .add [.var .local (ofString "dst"), .const 1],
+                   .var .local (ofString "w"),
+                   .var .local (ofString "ll")])
+                (.return (.op .add [.const 1, .var .local (ofString "ll")]))))
+            hcode (by simp [entry, callEntryStateHOLFinite, evalHOLExact, hc2])
+            (by rw [hrun']; simp)
+        have hcr_ll : (evaluateHOLFiniteState mid
+            (.seq
+              (.storeByte (.var .local (ofString "dst"))
+                (.op .add [.const 128, .var .local (ofString "ll")]))
+              (.seq
+                (.call (some (none, none)) (ofString "rlp_put_be")
+                  [.op .add [.var .local (ofString "dst"), .const 1],
+                   .var .local (ofString "w"),
+                   .var .local (ofString "ll")])
+                (.return (.op .add [.const 1, .var .local (ofString "ll")]))))).1 =
+            some (.returned value) := by
+          rw [← hr_eq, hrun']
+        have hma_ll : mid.memaddrs = ordinaryDomain := by
+          rw [hmid_eq]; exact hentryW.1.1.memaddrs
+        have hdst_ll : mid.locals.lookup (ofString "dst") = some v1 := by
+          have hne : ofString "ll" ≠ ofString "dst" := by decide
+          rw [hmid_loc]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hne, entry, callEntryStateHOLFinite, hc1]
+        rw [evaluateHOLFiniteState_seq_line780] at hcr_ll
+        rcases hsb : evaluateHOLFiniteState mid
+          (.storeByte (.var .local (ofString "dst"))
+            (.op .add [.const 128, .var .local (ofString "ll")])) with ⟨rsb, s1⟩
+        simp only [hsb] at hcr_ll
+        rcases hsb_none_or_err mid (.op .add [.const 128, .var .local (ofString "ll")]) with hsn | hse
+        · exact hsb_ok mid _ hma_ll hdst_ll hsn
+        · rw [hsb] at hse; dsimp only at hse; subst hse
+          cases hcr_ll
+  obtain ⟨dst0, rfl, hdst_nz⟩ := hdst_ex
+  have hdst_glob : state.globals.lookup (ofString "mpt_key_scratch") = some (.val (.word dst0)) := by
+    simpa [evalAt, evalHOLExact] using he1
+  have hdst_nat : dst0.toNat = globN state "mpt_key_scratch" := by
+    simp [globN, hdst_glob]
+  have hks_nz : globN state "mpt_key_scratch" ≠ 0 := by
+    intro hz
+    apply hdst_nz
+    apply BitVec.eq_of_toNat_eq
+    simp [hdst_nat, hz]
+  have hrlp' := WkBlockTxEnc.eval_rlp_encode_word_body_exact entry dst0 wi
+    [bufferRegion state ("mpt_key_scratch", 16)]
+    hcode hentryW.1.1.memaddrs hc1 hc2
+    ⟨bufferRegion state ("mpt_key_scratch", 16), by simp,
+      by simp [bufferRegion, hks_nz, hdst_nat],
+      by simp [bufferRegion, hks_nz, hdst_nat]⟩
+    (by rw [hrun]; simp)
+  obtain ⟨klen, rfl, _, hklen9, _, heff⟩ := hrlp'.1 value (by rw [hrun])
+  rw [hrun] at heff
+  dsimp only at heff
+  have hpost_glob : post.globals = state.globals := heff.globals
+  let resumed := setVarHOLFinite (ofString "klen") (.val (.word klen))
+    { post with locals := state.locals }
+  have heff_res : M11.ByteRegionEffect state resumed
+      ([bufferRegion state ("mpt_key_scratch", 16)] ++ ([] : List Ivl)) := by
+    have heff0 : M11.ByteRegionEffect state post
+        ([bufferRegion state ("mpt_key_scratch", 16)] ++ ([] : List Ivl)) := by
+      simp only [List.append_nil]
+      exact ⟨heff.code, heff.memaddrs, heff.shMemaddrs, heff.baseAddr, heff.be,
+        heff.globals, heff.out_dom, heff.cell_frame, heff.byte_frame⟩
+    have hres_eq : { post with locals := resumed.locals, clock := resumed.clock } = resumed := by
+      simp [resumed, setVarHOLFinite]
+    rw [← hres_eq]
+    exact heff0.with_locals_clock resumed.locals resumed.clock
+  have hstep_res : WorldStep (fun s => [bufferRegion s ("mpt_key_scratch", 16)])
+      [] R10Shards.P26_P28.stdKeep NoExtra state (some (.returned (.val (.word klen)))) resumed :=
+    M11.ByteRegionEffect.to_worldStep (R := fun s => [bufferRegion s ("mpt_key_scratch", 16)])
+      (extra := fun _ => []) (r := some (.returned (.val (.word klen))))
+      hready.1 (fun _ hx => by simp at hx) heff_res
+  obtain ⟨_, S0, hS0⟩ := hready.1
+  obtain ⟨Nd0, hWT0⟩ := (worldTyped_iff_with state S0).1 hS0
+  have hdisj_w0 : IvlsDisj [bufferRegion state ("mpt_key_scratch", 16)] (worldTypedIvls state S0 Nd0) := by
+    intro iv hi j hj
+    simp only [List.mem_singleton] at hi
+    subst iv
+    exact bufferRegion_disj hWT0 ("mpt_key_scratch", 16) (by decide) (by decide) j hj
+  have hW_res : WorldOK resumed :=
+    hstep_res.worldOK ⟨S0, Nd0, hWT0, hdisj_w0⟩
+  have hl_ne : ∀ name : String, ofString "klen" ≠ ofString name →
+      resumed.locals.lookup (ofString name) = state.locals.lookup (ofString name) := by
+    intro name hne
+    simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne]
+  have hbuf_res : ∀ gn ∈ ([("mpt_hash_scratch", 40), ("mpt_key_scratch", 16),
+      ("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion resumed gn = bufferRegion state gn := by
+    intro gn _
+    have hglob : globN resumed gn.1 = globN state gn.1 := by
+      simp [resumed, setVarHOLFinite, globN, hpost_glob]
+    simp [bufferRegion, hglob]
+  have hfix_ks : (globN state "mpt_key_scratch", 16) ∈ fixedObjects state :=
+    P3MptSet.buf_in_fixedObjects state "mpt_key_scratch" 16 (by decide) hks_nz
+  have hks8 : globN state "mpt_key_scratch" % 8 = 0 := by
+    rcases hWT0.2.2.1.1 _ hfix_ks with hz | ⟨_, hw_ks⟩
+    · omega
+    · exact hw_ks.1
+  have hdisj_arr_ks : Disj (locN state "slice_arr", 16 * locN state "n")
+      (bufferRegion state ("mpt_key_scratch", 16)) :=
+    hready.2.2.2.2.2.1 _ (by simp) _
+      (List.mem_map.mpr ⟨("mpt_key_scratch", 16), by simp, rfl⟩)
+  have hfr_res : FrameOutside state resumed
+      ([bufferRegion state ("mpt_key_scratch", 16)] ++ [] ++ [freeGap state])
+      (heapFree state) := by
+    intro a ha _
+    exact heff_res.cell_frame a fun iv hiv =>
+      ha iv (List.mem_append_left _ (List.mem_append_left _ (by simpa using hiv)))
+  have hready_res : BuildMptIndexedReady resumed :=
+    buildMptIndexedReady_preserved_below_mark
+      (buffers := [bufferRegion state ("mpt_key_scratch", 16)]) (owned := [])
+      hready hW_res
+      (fun name hname => hl_ne name (by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hname
+        rcases hname with rfl | rfl | rfl <;> decide))
+      hstep_res.2.1 hbuf_res hin_mark hmark_le hfr_res
+      (fun j hj => by
+        simp only [List.mem_singleton] at hj
+        subst j
+        exact Or.inl ⟨by simp [bufferRegion, hks_nz, hks8],
+          by simp [bufferRegion, hks_nz], hdisj_arr_ks⟩)
+      (fun _ hj => by simp at hj)
+  have hhp_eq : globN resumed "heap_ptr" = globN state "heap_ptr" := by
+    simp [resumed, setVarHOLFinite, globN, hpost_glob]
+  have hA_st : ArenaReady state := hinv.1
+  have hin_m : Inside (locN state "m", 16) sourceBase (globN state "heap_ptr") := hinv.2.1
+  have hml : locN resumed "m" = locN state "m" := by
+    simp only [locN, hl_ne "m" (by decide)]
+  have hsp_eq : globN resumed "scratch_ptr" = globN state "scratch_ptr" := by
+    simp [resumed, setVarHOLFinite, globN, hpost_glob]
+  have hag_res : AllocatorGrows state resumed :=
+    ⟨le_of_eq hhp_eq.symm, le_of_eq hsp_eq⟩
+  have hdisj_w : IvlsDisj [bufferRegion state ("mpt_key_scratch", 16)]
+      (worldTypedIvls state S Nd) := by
+    intro iv hiv j hj
+    simp only [List.mem_singleton] at hiv
+    subst iv
+    exact bufferRegion_disj hWT ("mpt_key_scratch", 16) (by decide) (by decide) j hj
+  have hbuf_ks : bufferRegion state ("mpt_key_scratch", 16) = (globN state "mpt_key_scratch", 16) := by
+    simp [bufferRegion, hks_nz]
+  have hcell : M11.SameTypedCells state resumed S Nd := by
+    refine ⟨heff_res.be, heff_res.memaddrs, hA_st.1.memaddrs, ?_, ?_, ?_⟩
+    · intro a hna
+      apply heff_res.out_dom a
+      rwa [hA_st.1.memaddrs]
+    · intro a ha ha8 ⟨iv, hiv, ha1, ha2⟩
+      have hbit : (BitVec.ofNat 64 a).toNat = a := Nat.mod_eq_of_lt ha
+      apply heff_res.cell_frame (BitVec.ofNat 64 a)
+      intro x hx hcx
+      have hx' : x = (globN state "mpt_key_scratch", 16) := by
+        simp only [List.append_nil, List.mem_singleton, hbuf_ks] at hx
+        exact hx
+      subst hx'
+      have hdj := hdisj_w (bufferRegion state ("mpt_key_scratch", 16)) (by simp) iv hiv
+      rw [hbuf_ks] at hdj
+      rw [hbit] at hcx
+      obtain ⟨_, _⟩ := hcx
+      rcases hdj with h0 | h0 | h | h <;> omega
+    · intro b hb ⟨iv, hiv, hb1, hb2⟩
+      apply heff_res.byte_frame b hb
+      intro x hx hbx
+      have hx' : x = (globN state "mpt_key_scratch", 16) := by
+        simp only [List.append_nil, List.mem_singleton, hbuf_ks] at hx
+        exact hx
+      subst hx'
+      have hdj := hdisj_w (bufferRegion state ("mpt_key_scratch", 16)) (by simp) iv hiv
+      rw [hbuf_ks] at hdj
+      obtain ⟨_, _⟩ := hbx
+      rcases hdj with h0 | h0 | h | h <;> omega
+  have hfeq : fixedObjects resumed = fixedObjects state :=
+    M11.fixedObjects_eq_of_nonHeapGlobalsKept hA_st.2 hWT.1 hWT.2.2.1 hcell
+      (fun name _ _ _ => by simp [resumed, setVarHOLFinite, hpost_glob])
+  have hFT_res : FixedTyped resumed :=
+    M11.fixedTyped_of_eq hW_res.1 hWT.2.2.1 (le_of_eq hhp_eq.symm) (le_of_eq hsp_eq) hfeq
+  have hglob_eq : ∀ g, globN resumed g = globN state g := fun g => by
+    simp [resumed, setVarHOLFinite, globN, hpost_glob]
+  obtain ⟨hWT_res, _⟩ := M11.worldTypedWith_congr_w1 hA_st hW_res.1
+    (le_of_eq hhp_eq.symm) (le_of_eq hsp_eq) (fun g _ => hglob_eq g) hcell hWT
+    ⟨hFT_res, fun o ho => Or.inl (by rw [← hfeq]; exact ho)⟩
+  have hfp_eq : ∀ t ∈ S, htabFootprint resumed t = htabFootprint state t :=
+    fun t ht => M11.htabFootprint_eq hcell ht (hWT.1.2.1 t ht).1
+  have hne_nd_eq : nodeExtents resumed Nd = nodeExtents state Nd :=
+    M11.nodeExtents_eq hWT.2.2.2.1 hcell
+  obtain ⟨hm_al, hm_w, hm_tab, hm_fix, hm_nh, hm_root, hm_ext⟩ := hm
+  have hu_obj : ∀ o ∈ mptObjIvls state Nm (locN state "m"), o.2 ≠ 0 →
+      P3MptSet.IvlUnhit state resumed o := by
+    intro o ho hpos a _ hhit
+    apply heff_res.cell_frame a
+    intro x hx hcx
+    have hx' : x = (globN state "mpt_key_scratch", 16) := by
+      simp only [List.append_nil, List.mem_singleton, hbuf_ks] at hx
+      exact hx
+    subst hx'
+    have hdj : Disj o (globN state "mpt_key_scratch", 16) := by
+      rcases List.mem_cons.mp ho with rfl | ho'
+      · exact hm_fix _ hfix_ks
+      · exact (hm_ext o ho').2.2 _ hfix_ks
+    obtain ⟨_, _⟩ := hhit
+    obtain ⟨_, _⟩ := hcx
+    rcases hdj with h0 | h0 | h | h <;> omega
+  have hu_m : P3MptSet.IvlUnhit state resumed (locN state "m", 16) :=
+    hu_obj _ (by simp [mptObjIvls]) (by simp)
+  have hm_hi : locN state "m" + 16 ≤ 2 ^ 64 :=
+    P3MptSet.ivl_allocated_bound hA_st.2 hm_al
+  have hm_root_eq : memW resumed (locN state "m") = memW state (locN state "m") :=
+    P3MptSet.memW_eq_of_ivlUnhit hu_m hm_w.1 hm_hi ⟨by omega, by omega⟩
+  have hm_nh_res : NodeHeap resumed Nm :=
+    P3MptSet.nodeHeap_congr_unhit hA_st.1 hW_res.1.1 heff_res.be hag_res hm_nh
+      (fun o ho hpos => hu_obj o (List.mem_cons_of_mem _ ho) hpos)
+  have hne_nm_eq : nodeExtents resumed Nm = nodeExtents state Nm := by
+    unfold nodeExtents
+    apply List.flatMap_congr
+    intro nd hnd
+    obtain ⟨hk3, _, hin_nd, hw_nd, _, _, hkey_nd, _⟩ := hm_nh.1 nd hnd
+    have hhi_nd : nd + nodeSize (memW state nd) ≤ 2 ^ 64 := by
+      have : heapLimit ≤ 2 ^ 64 := by decide
+      have : nd + nodeSize (memW state nd) ≤ heapLimit := hin_nd.2
+      omega
+    have hsz_ge : 32 ≤ nodeSize (memW state nd) := by unfold nodeSize; split_ifs <;> omega
+    have hu_nd : P3MptSet.IvlUnhit state resumed (nd, nodeSize (memW state nd)) :=
+      hu_obj _ (List.mem_cons_of_mem _ (by unfold nodeExtents; exact List.mem_flatMap.2 ⟨nd, hnd, by simp [nodeIvl]⟩))
+        (by dsimp only; omega)
+    have hw0 : memW resumed nd = memW state nd :=
+      P3MptSet.memW_eq_of_ivlUnhit hu_nd hw_nd.1 hhi_nd ⟨by omega, by omega⟩
+    have hni_eq : nodeIvl resumed nd = nodeIvl state nd := by simp [nodeIvl, hw0]
+    have hnp_eq : nodePath resumed nd = nodePath state nd := by
+      unfold nodePath
+      rw [hw0]
+      by_cases h12 : memW state nd = 1 ∨ memW state nd = 2
+      · have h56 : 56 ≤ nodeSize (memW state nd) := by
+          unfold nodeSize
+          rcases h12 with c1 | c2
+          · simp [c1]
+          · simp [c2]
+        have hnd8 : nd % 8 = 0 := hw_nd.1
+        have hw32 : memW resumed (nd + 32) = memW state (nd + 32) :=
+          P3MptSet.memW_eq_of_ivlUnhit hu_nd (by omega) hhi_nd ⟨by omega, by omega⟩
+        have hw40 : memW resumed (nd + 40) = memW state (nd + 40) :=
+          P3MptSet.memW_eq_of_ivlUnhit hu_nd (by omega) hhi_nd ⟨by omega, by omega⟩
+        rw [hw32, hw40]
+      · simp [h12]
+    rw [hni_eq, hnp_eq]
+
+  have hm_res : MptObjInWith resumed S Nm (locN state "m") := by
+    refine ⟨hag_res.allocated hm_al, P3MptSet.wordsOK_transfer hA_st.1 hW_res.1.1 hm_w,
+      ?_, ?_, hm_nh_res, ?_, ?_⟩
+    · intro t ht iv hiv
+      rw [hfp_eq t ht] at hiv
+      exact hm_tab t ht iv hiv
+    · rw [hfeq]
+      exact hm_fix
+    · rw [hm_root_eq]
+      exact hm_root
+    · rw [hne_nm_eq]
+      intro o ho
+      refine ⟨(hm_ext o ho).1, ?_, ?_⟩
+      · intro t ht iv hiv
+        rw [hfp_eq t ht] at hiv
+        exact (hm_ext o ho).2.1 t ht iv hiv
+      · rw [hfeq]
+        exact (hm_ext o ho).2.2
+
+  have hinv_res : BuildMptInv resumed := by
+    refine ⟨hW_res.1, ?_, S, Nd, Nm, hWT_res, hm_res, ?_⟩
+    · rw [hml, hhp_eq]
+      exact hin_m
+    · rw [hml, hne_nm_eq, hne_nd_eq]
+      exact hdN
+
+  have hw_eq : worldOwned resumed S Nd = worldOwned state S Nd := by
+    unfold worldOwned
+    rw [hfeq]
+    have h1 : List.flatMap (htabFootprint resumed) S = List.flatMap (htabFootprint state) S := by
+      apply List.flatMap_congr
+      intro t ht
+      exact hfp_eq t ht
+    rw [h1, hne_nd_eq]
+  have hmo_eq : mptObjIvls resumed Nm (locN state "m") =
+      mptObjIvls state Nm (locN state "m") := by
+    simp only [mptObjIvls, hne_nm_eq]
+  have hmark_eq : locN resumed "mark" = locN state "mark" := by
+    simp only [locN, hl_ne "mark" (by decide)]
+  have harr_eq : locN resumed "slice_arr" = locN state "slice_arr" := by
+    simp only [locN, hl_ne "slice_arr" (by decide)]
+  have hn_eq : locN resumed "n" = locN state "n" := by
+    simp only [locN, hl_ne "n" (by decide)]
+  have hi_eq : locN resumed "i" = locN state "i" := by
+    simp only [locN, hl_ne "i" (by decide)]
+  have hloopK : BuildMptLoopInv resumed := by
+    refine ⟨hready_res, hinv_res, ?_, ?_, ?_⟩
+    · rw [harr_eq, hn_eq, hmark_eq]
+      exact hin_mark
+    · rw [hmark_eq, hhp_eq]
+      exact hmark_le
+    · intro name hname
+      obtain ⟨w, hw⟩ := hlocs name hname
+      refine ⟨w, ?_⟩
+      rw [hl_ne name (by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hname
+        rcases hname with rfl | rfl | rfl <;> decide)]
+      exact hw
+  have hmm2K : locN resumed "mark" ≤ locN resumed "m" := by
+    rw [hmark_eq, hml]
+    exact hmm2
+  have hdNK : IvlsDisj ((locN resumed "m", 16) :: nodeExtents resumed Nm)
+      (nodeExtents resumed Nd) := by
+    rw [hml, hne_nm_eq, hne_nd_eq]
+    exact hdN
+  have hinv2K : BuildMptLoopInv2' resumed :=
+    ⟨hloopK, hmm2K, S, Nd, Nm, hWT_res, hm_res, hdNK⟩
+  have hiltK : locN resumed "i" < locN resumed "n" := by
+    rw [hi_eq, hn_eq]
+    exact hlt
+  have hklen_le32 : locN resumed "klen" ≤ 32 := by
+    have hlk : resumed.locals.lookup (ofString "klen") = some (.val (.word klen)) := by
+      simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    simp only [locN, hlk]
+    have := hklen9
+    omega
+  exact ⟨hinv2K, hklen_le32, hiltK⟩
+
+/-! ### Increment 3a: the loop guard through one caller-side `mpt_set` object step -/
+
+section BmiStepMem
+
+/-- Copy of M08's `disj_symm` (M08.Base is not imported here). -/
+theorem bmi_disj_symm {i j : Ivl} (h : Disj i j) : Disj j i := by
+  rcases h with h | h | h | h
+  · exact Or.inr (Or.inl h)
+  · exact Or.inl h
+  · exact Or.inr (Or.inr (Or.inr h))
+  · exact Or.inr (Or.inr (Or.inl h))
+
+/-- Copy of M08's `disj_of_inside_left`. -/
+theorem bmi_disj_of_inside_left {i i' j : Ivl} (hin : Inside i i'.1 (i'.1 + i'.2))
+    (hd : Disj i' j) : Disj i j := by
+  rcases hin with ⟨h1, h2⟩
+  rcases hd with h0 | h0 | hd | hd
+  · exact Or.inl (by omega)
+  · exact Or.inr (Or.inl h0)
+  · exact Or.inr (Or.inr (Or.inl (by omega)))
+  · exact Or.inr (Or.inr (Or.inr (by omega)))
+
+/-- Copy of M08's `disj_of_inside_right`. -/
+theorem bmi_disj_of_inside_right {i j j' : Ivl} (hin : Inside j j'.1 (j'.1 + j'.2))
+    (hd : Disj i j') : Disj i j :=
+  bmi_disj_symm (bmi_disj_of_inside_left hin (bmi_disj_symm hd))
+
+/-- Copy of M08's `disj_allocated_fresh_heap`. -/
+theorem bmi_disj_allocated_fresh_heap {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaOK s) (hp : ArenaOK post) {i f : Ivl}
+    (hi : Allocated s i) (hf : Inside f (globN s "heap_ptr") (globN post "heap_ptr")) :
+    Disj f i := by
+  rcases hi with hi | hi
+  · exact Or.inr (Or.inr (Or.inr (Nat.le_trans hi.2 hf.1)))
+  · have hsep : heapLimit ≤ scratchStart := by decide
+    exact Or.inr (Or.inr (Or.inl (Nat.le_trans hf.2 (Nat.le_trans hp.2.1
+      (Nat.le_trans hsep (Nat.le_trans hs.2.2.1 (Nat.le_trans hs.2.2.2.1 hi.1)))))))
+
+/-- Copy of the csr's `mptObjInWith_disj_buffer_csr` (ComputeStateRoot is not imported here). -/
+theorem bmi_mptObjInWith_disj_buffer {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nm : List Nat} {m : Nat} (hm : MptObjInWith s S Nm m)
+    {gn : String × Nat} (hg : gn ∈ globalBuffers) :
+    IvlsDisj [bufferRegion s gn] (mptObjIvls s Nm m) := by
+  intro i hi o ho
+  obtain rfl := List.mem_singleton.mp hi
+  have hb : bufferRegion s gn ∈ fixedObjects s := by
+    unfold fixedObjects
+    exact List.mem_append.mpr (Or.inl (List.mem_append.mpr
+      (Or.inl (List.mem_append.mpr
+        (Or.inl (List.mem_map.mpr ⟨gn, hg, rfl⟩))))))
+  apply Disj.flip
+  rcases List.mem_cons.mp ho with rfl | ho
+  · exact hm.2.2.2.1 _ hb
+  · exact (hm.2.2.2.2.2.2 o ho).2.2 _ hb
+
+/-- Copy of the csr's `mptObjStep_parts_csr`. -/
+theorem bmi_mptObjStep_parts {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    (hstep : MptObjStep R gw keep s post) {S Nd Nm : List Nat}
+    (hW : WorldTypedWith s S Nd)
+    (hm : MptObjInWith s S Nm (locN s "m"))
+    (hd : IvlsDisj (mptObjIvls s Nm (locN s "m")) (nodeExtents s Nd))
+    (hR : IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m")))
+    (hRN : IvlsDisj (R s) (nodeExtents s Nd)) :
+    ∃ S' Nd' Nm', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+      MptObjInWith post S' Nm' (locN s "m") ∧
+      IvlsDisj (mptObjIvls post Nm' (locN s "m")) (nodeExtents post Nd') ∧
+      OwnedGrows s post (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m"))
+        (worldOwned post S' Nd' ++ mptObjIvls post Nm' (locN s "m")) ∧
+      FrameOutside s post
+        (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++ R s ++ [freeGap s])
+        (heapFree s) := by
+  apply hstep.2.2.2.2 S Nd Nm hW hm ?_ hR
+  intro i hi j hj
+  rcases List.mem_cons.mp hi with hi | hi
+  · subst i
+    exact hd _ (by simp [mptObjIvls]) j hj
+  · rcases List.mem_append.mp hi with hi | hi
+    · exact hRN i hi j hj
+    · exact hd i (List.mem_cons_of_mem _ hi) j hj
+
+/-- Copy of the csr's `ivlsDisj_ownedGrows_csr`. -/
+theorem bmi_ivlsDisj_ownedGrows {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaOK s) (hp : ArenaOK post) {old new objects : List Ivl}
+    (hg : OwnedGrows s post old new)
+    (ha : ∀ o ∈ objects, o.2 ≠ 0 → Allocated s o)
+    (hd : IvlsDisj objects old) : IvlsDisj objects new := by
+  intro o ho j hj
+  by_cases hz : o.2 = 0
+  · exact Or.inl hz
+  · rcases hg j hj with rfl | ⟨i, hi, hin⟩ | hin
+    · exact Or.inr (Or.inl rfl)
+    · exact bmi_disj_of_inside_right hin (hd o ho i hi)
+    · exact (bmi_disj_allocated_fresh_heap hs hp (ha o ho hz) hin).flip
+
+/-- Every fixed object's base is 8-aligned: the zero-size members are `(0, 0)` by construction
+and the others are allocated words (`FixedTyped`). -/
+theorem bmi_fixed_base_al {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hFT : FixedTyped s) : ∀ i ∈ fixedObjects s, i.1 % 8 = 0 := by
+  have hnz : ∀ x ∈ fixedObjects s, x.2 ≠ 0 → x.1 % 8 = 0 := by
+    intro x hx hz
+    rcases hFT.1 x hx with h0 | ⟨_, hw⟩
+    · omega
+    · exact hw.1
+  have hbufsz : ∀ gn ∈ globalBuffers, 0 < gn.2 := by decide
+  have hzero : ∀ x ∈ fixedObjects s, x.2 = 0 → x.1 = 0 := by
+    intro x hx hz
+    unfold fixedObjects at hx
+    rcases List.mem_append.mp hx with hx | hx
+    · rcases List.mem_append.mp hx with hx | hx
+      · rcases List.mem_append.mp hx with hx | hx
+        · -- the global-buffer map
+          obtain ⟨gp, hgp, heq⟩ := List.mem_map.mp hx
+          have hpos := hbufsz gp hgp
+          obtain ⟨name, sz⟩ := gp
+          subst heq
+          dsimp only at hz ⊢
+          split_ifs at hz ⊢ with hc
+          · omega
+          · omega
+        · -- the journal array
+          rcases List.mem_singleton.mp hx with hej
+          subst hej
+          dsimp only at hz ⊢
+          split_ifs at hz ⊢ with hc
+          · omega
+          · omega
+      · -- blockOutObjects
+        have hobj : ∀ p len : Nat, (if globN s "bo" = 0 ∨ p = 0 ∨ len = 0 then (0, 0)
+            else (p, len)).2 = 0 →
+            (if globN s "bo" = 0 ∨ p = 0 ∨ len = 0 then (0, 0) else (p, len)).1 = 0 := by
+          intro p len hpl
+          split_ifs at hpl ⊢ with h1
+          · rfl
+          · dsimp only at hpl ⊢
+            omega
+        unfold blockOutObjects at hx
+        dsimp only at hx
+        rcases List.mem_append.mp hx with hx | hx
+        · rcases List.mem_append.mp hx with hx | hx
+          · rcases List.mem_cons.mp hx with he | hx
+            · subst he
+              exact hobj _ _ hz
+            · rcases List.mem_cons.mp hx with he | hx
+              · subst he
+                exact hobj _ _ hz
+              · rcases List.mem_singleton.mp hx with hes
+                subst hes
+                exact hobj _ _ hz
+          · -- the lst at bo + 40
+            by_cases hl : globN s "bo" = 0 ∨ memW s (globN s "bo" + 40) = 0
+            · rw [if_pos hl] at hx
+              rcases List.mem_cons.mp hx with he | hx
+              · subst he
+                rfl
+              · rcases List.mem_singleton.mp hx with hes
+                subst hes
+                rfl
+            · rw [if_neg hl] at hx
+              rcases List.mem_cons.mp hx with he | hx
+              · subst he
+                exact hobj _ _ hz
+              · rcases List.mem_singleton.mp hx with hes
+                subst hes
+                exact hobj _ _ hz
+        · -- the lst at bo + 72
+          by_cases hl : globN s "bo" = 0 ∨ memW s (globN s "bo" + 72) = 0
+          · rw [if_pos hl] at hx
+            rcases List.mem_cons.mp hx with he | hx
+            · subst he
+              rfl
+            · rcases List.mem_singleton.mp hx with hes
+              subst hes
+              rfl
+          · rw [if_neg hl] at hx
+            rcases List.mem_cons.mp hx with he | hx
+            · subst he
+              exact hobj _ _ hz
+            · rcases List.mem_singleton.mp hx with hes
+              subst hes
+              exact hobj _ _ hz
+    · -- balObjects
+      have hlsto : ∀ l esz : Nat, ∀ y ∈ lstObjects s l esz, y.2 = 0 → y.1 = 0 := by
+        intro l esz y hy hy0
+        unfold lstObjects at hy
+        by_cases hl : l = 0
+        · rw [if_pos hl] at hy
+          rcases List.mem_cons.mp hy with he | hy
+          · subst he
+            rfl
+          · rcases List.mem_singleton.mp hy with hes
+            subst hes
+            rfl
+        · rw [if_neg hl] at hy
+          rcases List.mem_cons.mp hy with he | hy
+          · subst he
+            dsimp only at hy0
+            omega
+          · by_cases hs : esz * memW s (l + 16) = 0
+            · rw [if_pos hs] at hy
+              rcases List.mem_singleton.mp hy with hes
+              subst hes
+              rfl
+            · rw [if_neg hs] at hy
+              rcases List.mem_singleton.mp hy with hes
+              subst hes
+              dsimp only at hy0
+              omega
+      unfold balObjects at hx
+      obtain ⟨ad, had, hx⟩ := List.mem_flatMap.mp hx
+      rcases List.mem_cons.mp hx with he | hx
+      · subst he
+        dsimp only at hz
+        omega
+      · rcases List.mem_append.mp hx with hx | hx
+        · rcases List.mem_append.mp hx with hx | hx
+          · rcases List.mem_append.mp hx with hx | hx
+            · exact hlsto _ 40 _ hx hz
+            · exact hlsto _ 16 _ hx hz
+          · exact hlsto _ 24 _ hx hz
+        · obtain ⟨l, hl, hx⟩ := List.mem_flatMap.mp hx
+          exact hlsto _ 40 _ hx hz
+  intro i hi
+  by_cases hz : i.2 = 0
+  · rw [hzero i hi hz]
+  · exact hnz i hi hz
+
+theorem bmi_bufs_ok :
+    ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)] : List (String × Nat)),
+      gs ∈ globalBuffers ∧ gs.1 ∉ List.map Prod.fst typedRecords := by
+  decide
+
+theorem bmi_bufRegion_kept {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {keep : List (String × List Nat)}
+    (hstep : MptObjStep R ["heap_ptr", "scratch_ptr"] keep s post) :
+    ∀ gn ∈ ([("mpt_hash_scratch", 40), ("mpt_key_scratch", 16),
+        ("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion post gn = bufferRegion s gn := by
+  intro gn hgn
+  have hgk : s.globals.lookup (ofString gn.1) = post.globals.lookup (ofString gn.1) := by
+    apply hstep.2.2.1 (ofString gn.1)
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hgn
+    rcases hgn with rfl | rfl | rfl | rfl <;> decide
+  have hglob : globN post gn.1 = globN s gn.1 := by
+    simp only [globN]
+    rw [hgk]
+  simp [bufferRegion, hglob]
+
+theorem bmi_R_ti_bmi {F : Type} (s : PanSemStateFiniteExact 64 F)
+    {S Nd Nm : List Nat}
+    (hW : WorldTypedWith s S Nd)
+    (hm : MptObjInWith s S Nm (locN s "m")) :
+    IvlsDisj
+      [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+       (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+       (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)]
+      (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m")) := by
+  let bufs : List (String × Nat) := [("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)]
+  change IvlsDisj (bufs.map (bufferRegion s)) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m"))
+  intro i hi j hj
+  obtain ⟨b, hb_mem, rfl⟩ := List.mem_map.mp hi
+  rcases List.mem_append.mp hj with hjw | hjm
+  · exact bufferRegion_disj hW b (bmi_bufs_ok b hb_mem).1 (bmi_bufs_ok b hb_mem).2 j hjw
+  · exact bmi_mptObjInWith_disj_buffer hm (bmi_bufs_ok b hb_mem).1 _ (List.mem_singleton_self _) j hjm
+
+theorem bmi_loop2_step_mem {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (h : BuildMptLoopInv2 s)
+    (hl : ∀ name ∈ (["slice_arr", "n", "out", "mark", "m", "i"] : List String),
+      post.locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hstep : MptObjStep
+      (fun t => [("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)].map (bufferRegion t))
+      ["heap_ptr", "scratch_ptr"] R10Shards.P26_P28.stdKeep s post) :
+    BuildMptLoopInv2 post := by
+  obtain ⟨hloop, hmm2, S, Nd, Nm, hWT, hm, hdN, hdW⟩ := h
+  obtain ⟨hready, hinv, hin, hmark, hlocs⟩ := hloop
+  have hA : ArenaOK s := hready.1.1.2
+  have hFT := hWT.2.2.1
+  have hin6a : ∀ name ∈ (["slice_arr", "n", "out"] : List String),
+      name ∈ (["slice_arr", "n", "out", "mark", "m", "i"] : List String) := by
+    intro name hname
+    rcases List.mem_cons.mp hname with he | hname
+    · subst he; simp
+    · rcases List.mem_cons.mp hname with he | hname
+      · subst he; simp
+      · rcases List.mem_singleton.mp hname with he
+        subst he; simp
+  have hin6b : ∀ name ∈ (["mark", "m", "i"] : List String),
+      name ∈ (["slice_arr", "n", "out", "mark", "m", "i"] : List String) := by
+    intro name hname
+    rcases List.mem_cons.mp hname with he | hname
+    · subst he; simp
+    · rcases List.mem_cons.mp hname with he | hname
+      · subst he; simp
+      · rcases List.mem_singleton.mp hname with he
+        subst he; simp
+  have hgn4 : ∀ gn ∈ ([("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)] : List (String × Nat)),
+      gn ∈ ([("mpt_hash_scratch", 40), ("mpt_key_scratch", 16), ("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)) := by
+    intro gn hgn
+    rcases List.mem_cons.mp hgn with he | hgn
+    · subst he; simp
+    · rcases List.mem_cons.mp hgn with he | hgn
+      · subst he; simp
+      · rcases List.mem_singleton.mp hgn with he
+        subst he; simp
+  have hbfix : ∀ gn ∈ ([("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)] : List (String × Nat)),
+      bufferRegion s gn ∈ fixedObjects s := by
+    intro gn hgn
+    unfold fixedObjects
+    exact List.mem_append.mpr (Or.inl (List.mem_append.mpr (Or.inl
+      (List.mem_append.mpr (Or.inl (List.mem_map.mpr ⟨gn, (bmi_bufs_ok gn hgn).1, rfl⟩))))))
+  have hR : IvlsDisj ((fun t => [("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)].map (bufferRegion t)) s)
+      (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m")) := bmi_R_ti_bmi s hWT hm
+  have hRN : IvlsDisj ((fun t => [("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)].map (bufferRegion t)) s)
+      (nodeExtents s Nd) := by
+    intro r hr i hi
+    exact hR r hr i (List.mem_append_left _ (by
+      unfold worldTypedIvls
+      exact List.mem_append_right _ hi))
+  have hd : IvlsDisj (mptObjIvls s Nm (locN s "m")) (nodeExtents s Nd) := hdN
+  obtain ⟨S', Nd', Nm', hS, hWT', hm', hdN', hog, hfr⟩ :=
+    bmi_mptObjStep_parts hstep hWT hm hd hR hRN
+  have hW' : WorldOK post := ⟨hstep.1, S', (worldTyped_iff_with post S').2 ⟨Nd', hWT'⟩⟩
+  have hbuf := bmi_bufRegion_kept hstep
+  have halloc : Allocated s (locN s "slice_arr", 16 * locN s "n") :=
+    Or.inl ⟨hin.1, hin.2.trans hmark⟩
+  have hkeepD : ∀ j ∈ (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++
+      [("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)].map (bufferRegion s) ++
+      [freeGap s]),
+    Disj (locN s "slice_arr", 16 * locN s "n") j := by
+    intro j hj
+    rcases List.mem_append.mp hj with hj | hj
+    · rcases List.mem_append.mp hj with hj | hj
+      · exact hdW _ (List.mem_singleton_self _) j hj
+      · obtain ⟨gn, hgn, rfl⟩ := List.mem_map.mp hj
+        exact hready.2.2.2.2.2.1 _ (List.mem_singleton_self _) _
+          (List.mem_map.mpr ⟨gn, hgn4 gn hgn, rfl⟩)
+    · obtain rfl := List.mem_singleton.mp hj
+      exact P3MptSet.disj_allocated_freeGap hA halloc
+  have hNHd : NodeHeap s Nd := hWT.2.2.2.1
+  have hNHm : NodeHeap s Nm := hm.2.2.2.2.1
+  have hkeep8 : ∀ j ∈ (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++
+      [("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)].map (bufferRegion s) ++
+      [freeGap s]),
+    j.2 = 0 → j.1 % 8 = 0 := by
+    intro j hj
+    rcases List.mem_append.mp hj with hj | hj
+    · rcases List.mem_append.mp hj with hj | hj
+      · rcases List.mem_append.mp hj with hj | hj
+        · rcases List.mem_append.mp hj with hj | hj
+          · rcases List.mem_append.mp hj with hj | hj
+            · obtain ⟨t, ht, hjt⟩ := List.mem_flatMap.mp hj
+              obtain ⟨hWF, -⟩ := hWT.1.2.1 t ht
+              obtain ⟨hcl, -⟩ := hWF
+              intro _
+              exact (hcl j hjt).2.1
+            · intro _
+              exact bmi_fixed_base_al s hFT j hj
+          · obtain ⟨n, hn, hjn⟩ := List.mem_flatMap.mp hj
+            rcases List.mem_cons.mp hjn with he | hjn
+            · subst he
+              intro _
+              exact ((hNHd.1 n hn).2.2.2.1).1
+            · rcases List.mem_singleton.mp hjn with he
+              subst he
+              intro hz
+              have h2 : (nodePath s n).2 = 0 := hz
+              unfold nodePath at h2 ⊢
+              by_cases hc : (memW s n = 1 ∨ memW s n = 2) ∧ memW s (n + 40) ≠ 0
+              · rw [if_pos hc] at h2
+                have h3 : memW s (n + 40) = 0 := h2
+                omega
+              · rw [if_neg hc] at h2 ⊢
+                rfl
+        · rcases List.mem_cons.mp hj with he | hj
+          · subst he
+            intro hz
+            have h16 : (16 : Nat) = 0 := hz
+            omega
+          · obtain ⟨n, hn, hjn⟩ := List.mem_flatMap.mp hj
+            rcases List.mem_cons.mp hjn with he | hjn
+            · subst he
+              intro _
+              exact ((hNHm.1 n hn).2.2.2.1).1
+            · rcases List.mem_singleton.mp hjn with he
+              subst he
+              intro hz
+              have h2 : (nodePath s n).2 = 0 := hz
+              unfold nodePath at h2 ⊢
+              by_cases hc : (memW s n = 1 ∨ memW s n = 2) ∧ memW s (n + 40) ≠ 0
+              · rw [if_pos hc] at h2
+                have h3 : memW s (n + 40) = 0 := h2
+                omega
+              · rw [if_neg hc] at h2 ⊢
+                rfl
+      · obtain ⟨gn, hgn, rfl⟩ := List.mem_map.mp hj
+        intro _
+        exact bmi_fixed_base_al s hFT _ (hbfix gn hgn)
+    · obtain rfl := List.mem_singleton.mp hj
+      intro _
+      exact hA.2.2.2.2.2.2.1
+  have hslice8 : locN s "slice_arr" % 8 = 0 := hready.2.2.2.2.1.1
+  have hu : P3MptSet.IvlUnhit s post (locN s "slice_arr", 16 * locN s "n") := by
+    intro a ha8 hhit
+    obtain ⟨hi1, hi2⟩ := hhit
+    have hi1' : locN s "slice_arr" < a.toNat + 8 := hi1
+    have hi2' : a.toNat < locN s "slice_arr" + 16 * locN s "n" := hi2
+    apply hfr a
+    · intro j hj hcj
+      obtain ⟨hc1, hc2⟩ := hcj
+      have hdj := hkeepD j hj
+      have hz8 := hkeep8 j hj
+      rcases hdj with h0 | h0 | h | h
+      · have h0' : 16 * locN s "n" = 0 := h0
+        omega
+      · have hz := hz8 h0
+        omega
+      · have h' : locN s "slice_arr" + 16 * locN s "n" ≤ j.1 := h
+        omega
+      · have h' : j.1 + j.2 ≤ locN s "slice_arr" := h
+        omega
+    · intro hcjf
+      obtain ⟨hc1, hc2⟩ := hcjf
+      have hc1' : globN s "heap_ptr" < a.toNat + 8 := hc1
+      have hc2' : a.toNat < globN s "heap_ptr" + (heapLimit - globN s "heap_ptr") := hc2
+      have hdj := P3MptSet.disj_allocated_heapFree hA halloc
+      rcases hdj with h0 | h0 | h | h
+      · have h0' : 16 * locN s "n" = 0 := h0
+        omega
+      · have hp8 := hA.2.2.2.2.2.1
+        have h0' : heapLimit - globN s "heap_ptr" = 0 := h0
+        omega
+      · have h' : locN s "slice_arr" + 16 * locN s "n" ≤ globN s "heap_ptr" := h
+        omega
+      · have h' : globN s "heap_ptr" + (heapLimit - globN s "heap_ptr") ≤ locN s "slice_arr" := h
+        omega
+  have hl3 : ∀ name ∈ (["slice_arr", "n", "out"] : List String),
+      post.locals.lookup (ofString name) = s.locals.lookup (ofString name) :=
+    fun name hname => hl name (hin6a name hname)
+  have hready' : BuildMptIndexedReady post :=
+    buildMptIndexedReady_of_unhit hready hW' hl3 hstep.2.1 hbuf hu
+  have hml : locN post "m" = locN s "m" := by simp only [locN, hl "m" (by simp)]
+  have hinv' : BuildMptInv post := by
+    refine ⟨hstep.1, ?_, S', Nd', Nm', hWT', ?_, ?_⟩
+    · rw [hml]
+      exact ⟨hinv.2.1.1, hinv.2.1.2.trans hstep.2.1⟩
+    · rw [hml]
+      exact hm'
+    · rw [hml]
+      exact hdN'
+  have harr_eq : locN post "slice_arr" = locN s "slice_arr" := by
+    simp only [locN, hl "slice_arr" (by simp)]
+  have hn_eq : locN post "n" = locN s "n" := by simp only [locN, hl "n" (by simp)]
+  have hmark_eq : locN post "mark" = locN s "mark" := by simp only [locN, hl "mark" (by simp)]
+  have hloop' : BuildMptLoopInv post := by
+    refine ⟨hready', hinv', ?_, ?_, ?_⟩
+    · rw [harr_eq, hn_eq, hmark_eq]
+      exact hin
+    · rw [hmark_eq]
+      exact hmark.trans hstep.2.1
+    · intro name hname
+      obtain ⟨w, hw⟩ := hlocs name hname
+      refine ⟨w, ?_⟩
+      rw [hl name (hin6b name hname)]
+      exact hw
+  have hmm2' : locN post "mark" ≤ locN post "m" := by
+    rw [hmark_eq, hml]
+    exact hmm2
+  have hdW' : IvlsDisj [(locN s "slice_arr", 16 * locN s "n")]
+      (worldOwned post S' Nd' ++ mptObjIvls post Nm' (locN s "m")) := by
+    refine bmi_ivlsDisj_ownedGrows hA hstep.1.2 hog ?_ hdW
+    intro o ho _
+    obtain rfl := List.mem_singleton.mp ho
+    exact halloc
+  refine ⟨hloop', hmm2', S', Nd', Nm', hWT', ?_, ?_, ?_⟩
+  · rw [hml]
+    exact hm'
+  · rw [hml]
+    exact hdN'
+  · rw [harr_eq, hn_eq, hml]
+    exact hdW'
+
+end BmiStepMem
+
+/-! ## Increment 3b: the loop body, the while, and the tail
+
+The guest loop body is `decCall klen rlp_encode_word [...] (seq (call mpt_set [...])
+(assign i (i+1)))`.  At the loop guard `fun s => BuildMptLoopInv2 s ∧ LoopActive cond s`
+the rlp `decCall` resumes into `BmiAfterKey` (`bmi_rlp_resume_named`), the `mpt_set`
+call is bounded by `pBounded_call0_on_csr`, and the counter assign only needs the
+one-clock bound plus the `BuildMptLoopInv2` fall-through (`bmi_inv2_set_counter`).
+-/
+
+/-- The counter increment's `Hoare` fall-through. -/
+theorem bmi_assign_hoare :
+    Hoare BmiAfterKey
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r t => r = none → BuildMptLoopInv2 t) := by
+  refine InitECandidate.Solver.Wave8GuestInv.R16Shards.GbodyC17ToC21Common.Hoare.assign_fall (fun s v hs hv => ?_)
+  obtain ⟨wi, hwi⟩ := hs.1.1.2.2.2.2 "i" (by simp)
+  have hrun := (P3Csr.IncrBody.incr : P3Csr.IncrBody (ofString "i")
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const 1]))).run s wi hwi
+  have hflow : (evaluateHOLFiniteState s (.assign .local (ofString "i")
+      (.op .add [.var .local (ofString "i"), .const 1]))).1 = none := by
+    rw [evaluateHOLFiniteState_assign]
+    simp [hwi, evalHOLExact, evalListHOLExact, wordOpHOL, wordOp, valueIsWord,
+      valueWord, isValidValueHOLExact, lookupKvarHOLExact, shapeOfHOLExact, shapeEqHOL]
+  have hevval : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) =
+      some (.val (.word (wi + 1))) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hwi, wordOpHOL, wordOp, valueIsWord,
+      valueWord]
+  have hev : (evaluateHOLFiniteState s (.assign .local (ofString "i")
+      (.op .add [.var .local (ofString "i"), .const 1]))).2.locals.lookup
+      (ofString "i") = some v := by
+    have hpost := hrun.2 hflow
+    have hboth : some (ValueHOL.val (HolWordLab.word (wi + 1))) = some v := by
+      rw [← hv, hevval]
+    rw [hpost]
+    simpa using hboth
+  rw [hrun.2 hflow] at hev
+  simp at hev
+  subst v
+  exact bmi_inv2_set_counter hs.1 _
+
+/-- The counter increment's one-clock terminating bound. -/
+theorem bmi_tpb_assign :
+    TerminatingProgBoundedOn BmiAfterKey
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const 1]))
+    0 :=
+  TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local (ofString "i") _)
+
+/-- The `mpt_set` call's `PBounded` at the after-key guard. -/
+theorem bmi_pbounded_mpt_set_call
+    (g_ms : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (mk_ms : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"] R10Shards.P26_P28.stdKeep (ofString "mpt_set")) :
+    P3Csr.PBounded BmiAfterKey
+      (.call (some (none, none)) (ofString "mpt_set")
+        [.var .local (ofString "m"),
+         .var .global (ofString "mpt_key_scratch"),
+         .var .local (ofString "klen"),
+         .load .one (.op .add [.var .local (ofString "slice_arr"),
+           .panop .mul [.var .local (ofString "i"), .const 16]]),
+         .load .one (.op .add
+           [.var .local (ofString "slice_arr"),
+            .panop .mul [.var .local (ofString "i"), .const 16],
+            .const 8])])
+      (K.«mpt_set» + 1) := by
+  refine pBounded_call0_on_csr g_ms mk_ms ?_ ?_
+  · exact callEntryOn_mpt_set_resume_bmi
+  · intro F s values body callee ret v post hc hs ha hl hval hq
+    obtain ⟨v1, v2, v3, v4, v5, he1, he2, he3, he4, he5, hc1, hc2, hc3, hc4, hc5⟩ :=
+      callee_param_five_exp s (ofString "mpt_set")
+        (ofString "m") (ofString "key") (ofString "klen") (ofString "vptr") (ofString "vlen")
+        .one .one .one .one .one _ _
+        (by rw [hc]; exact P3MptSet.lookup_mpt_set)
+        _ _ _ _ _ values body callee ret ha hl
+    have hm : callee.lookup (ofString "m") = s.locals.lookup (ofString "m") :=
+      hc1.trans (by simpa only [evalAt, evalHOLExact] using he1.symm)
+    refine ⟨bmi_loop2_step_mem hs.1 (fun name _ => rfl)
+      (mptSetStep_caller_bmi hm (hq (Or.inl ⟨v, rfl⟩))), hs.2.1, hs.2.2.1, hs.2.2.2⟩
+
+/-- The loop-body program. -/
+def bmi_loop2_body : ProgHOL 64 :=
+  .decCall (ofString "klen") .one (ofString "rlp_encode_word")
+    [.var .global (ofString "mpt_key_scratch"), .var .local (ofString "i")]
+    (.seq
+      (.call (some (none, none)) (ofString "mpt_set")
+        [.var .local (ofString "m"),
+         .var .global (ofString "mpt_key_scratch"),
+         .var .local (ofString "klen"),
+         .load .one (.op .add [.var .local (ofString "slice_arr"),
+           .panop .mul [.var .local (ofString "i"), .const 16]]),
+         .load .one (.op .add
+           [.var .local (ofString "slice_arr"),
+            .panop .mul [.var .local (ofString "i"), .const 16],
+            .const 8])])
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const 1])))
+
+/-- The loop body's `Hoare` fall-through. -/
+theorem bmi_body_hoare
+    (hwk : WorldKeeps WorldOK (fun s => [(locN s "dst", 9)])
+      [] R10Shards.P26_P28.stdKeep NoExtra (ofString "rlp_encode_word"))
+    (g_ms : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (mk_ms : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"] R10Shards.P26_P28.stdKeep (ofString "mpt_set")) :
+    Hoare (fun s => BuildMptLoopInv2 s ∧
+        LoopActive (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n"))) s)
+      bmi_loop2_body
+      (fun r t => r = none → BuildMptLoopInv2 t) := by
+  have hcall := bmi_pbounded_mpt_set_call g_ms mk_ms
+  have hname6 : ∀ n ∈ (["slice_arr", "n", "out", "mark", "m", "i"] : List String),
+      ofString n ≠ ofString "klen" := by
+    intro n hn
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl | rfl | rfl | rfl | rfl <;> decide
+  refine InitECandidate.Solver.Wave8GuestInv.R13Shards.Hoare.decCall_fall hname6
+    localsOnly_buildMptLoopInv2
+    (bmi_rlp_resume_strong hwk)
+    (Hoare.seq
+      ⟨fun s' hc' hP' hnt' =>
+        ⟨hcall.hoare.run s' hc' hP' hnt', fun hr hpost => absurd hpost hr⟩⟩
+      bmi_assign_hoare)
+
+/-- The loop body's terminating bound. -/
+theorem bmi_body_bound
+    (fb_rlp : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_word") K.«rlp_encode_word»)
+    (hwk : WorldKeeps WorldOK (fun s => [(locN s "dst", 9)])
+      [] R10Shards.P26_P28.stdKeep NoExtra (ofString "rlp_encode_word"))
+    (g_ms : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (mk_ms : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"] R10Shards.P26_P28.stdKeep (ofString "mpt_set")) :
+    TerminatingProgBoundedOn
+      (fun s => BuildMptLoopInv2 s ∧
+        LoopActive (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n"))) s)
+      bmi_loop2_body
+      (K.«rlp_encode_word» + (K.«mpt_set» + 1) + 1) :=
+  TerminatingProgBoundedOn.decCall_on fb_rlp (ofString "klen") .one _
+    (callEntryOn_of_imp localsFree_guestInv
+      (fun s (h : BuildMptLoopInv2 s ∧
+        LoopActive (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n"))) s) =>
+        worldOK_guestInv _ h.1.1.1.1) _ _)
+    (bmi_rlp_resume_strong hwk)
+    (TerminatingProgBoundedOn.seq_hoare
+      (bmi_pbounded_mpt_set_call g_ms mk_ms).bounded
+      (bmi_pbounded_mpt_set_call g_ms mk_ms).hoare
+      bmi_tpb_assign)
+
+/-- The while loop's terminating bound. -/
+theorem bmi_while_bound
+    (fb_rlp : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_word") K.«rlp_encode_word»)
+    (hwk : WorldKeeps WorldOK (fun s => [(locN s "dst", 9)])
+      [] R10Shards.P26_P28.stdKeep NoExtra (ofString "rlp_encode_word"))
+    (g_ms : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (mk_ms : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"] R10Shards.P26_P28.stdKeep (ofString "mpt_set")) :
+    TerminatingProgBoundedOn BuildMptLoopInv2
+      (.while (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n")))
+        bmi_loop2_body)
+      ((2 ^ 64 + 1) * (K.«rlp_encode_word» + (K.«mpt_set» + 1) + 1 + 1)) := by
+  have hbody : TerminatingProgBoundedOn
+      (fun s => BuildMptLoopInv2 s ∧
+        LoopActive (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n"))) s)
+      bmi_loop2_body (K.«rlp_encode_word» + (K.«mpt_set» + 1) + 1) :=
+    bmi_body_bound fb_rlp hwk g_ms mk_ms
+  have hbodyH := bmi_body_hoare hwk g_ms mk_ms
+  have hloop : TerminatingProgBoundedOn BuildMptLoopInv2
+      (.while (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n")))
+        bmi_loop2_body)
+      ((2 ^ 64 + 1) * (K.«rlp_encode_word» + (K.«mpt_set» + 1) + 1 + 1)) := by
+    apply TerminatingProgBoundedOn.while_rank_active (N := 2 ^ 64)
+      (μ := fun s => 2 ^ 64 - locN s "i")
+      (fun s hP => localsOnly_buildMptLoopInv2.decClock s hP)
+      hbody
+    · intro F s _ _ _; omega
+    · intro F s hcode hP hact hflow
+      have hlt := buildMptLoopInv_active_lt hact
+      have hlim : locN s "n" < 2 ^ 64 := by
+        have h32 := hP.1.1.2.2.1
+        omega
+      have hPd : BuildMptLoopInv2 (decClockHOLFinite s) :=
+        localsOnly_buildMptLoopInv2.decClock s hP
+      have hactd : LoopActive (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n")))
+          (decClockHOLFinite s) := loopActive_decClock hact
+      obtain ⟨wi, hwi⟩ := hP.1.2.2.2.2 "i" (by simp)
+      have atC : (decClockHOLFinite s).locals.lookup (ofString "i") =
+          some (.val (.word wi)) := by
+        simp [decClockHOLFinite, hwi]
+      have hinc : P3Csr.IncrBody (ofString "i") bmi_loop2_body :=
+        P3Csr.IncrBody.decCall _ _ _ _ (by decide)
+          (P3Csr.IncrBody.seq _ (by decide) (by decide) P3Csr.IncrBody.incr)
+      have hrun := hinc.run (decClockHOLFinite s) wi atC
+      rcases hflow with hnone | hcont_r
+      · have hnt : (evaluateHOLFiniteState (decClockHOLFinite s) bmi_loop2_body).1 ≠
+            some .timeOut := by simp [hnone]
+        have hPpost := hbodyH.run (decClockHOLFinite s) hcode ⟨hPd, hactd⟩ hnt hnone
+        have hlook := hrun.2 hnone
+        have hrank : locN (evaluateHOLFiniteState (decClockHOLFinite s) bmi_loop2_body).2 "i" =
+            (wi + 1).toNat := by
+          simp only [locN, hlook]
+        refine ⟨hPpost, ?_⟩
+        simp only [hrank]
+        have hwNat : locN s "i" = wi.toNat := by simp [locN, hwi]
+        have hwl : wi.toNat < 2 ^ 64 := BitVec.isLt wi
+        have hwlt : wi.toNat + 1 < 2 ^ 64 := by
+          rw [← hwNat]; omega
+        have hw1 : (wi + 1).toNat = wi.toNat + 1 := by
+          rw [BitVec.toNat_add]
+          exact Nat.mod_eq_of_lt hwlt
+        rw [hwNat, hw1]
+        omega
+      · exact absurd hcont_r hrun.1
+  intro F s hcode hP
+  exact hloop s hcode hP
+
+/-- The while's post-state keeps `BuildMptLoopInv2` (adapted from `Wave8M19.Htab.while_inv_act`
+with an explicit runtime-code hypothesis threaded through the recursion). -/
+theorem bmi_while_post_inv {F : Type} (cond : ExpHOL 64) (body : ProgHOL 64)
+    (hstep : ∀ s : PanSemStateFiniteExact 64 F, s.code = GuestCodeLookup.originalRuntimeCode →
+      BuildMptLoopInv2 s → LoopActive cond s → s.clock ≠ 0 →
+      ((evaluateHOLFiniteState (decClockHOLFinite s) body).1 = none ∨
+        (evaluateHOLFiniteState (decClockHOLFinite s) body).1 = some .continue ∨
+        (evaluateHOLFiniteState (decClockHOLFinite s) body).1 = some .break) →
+      BuildMptLoopInv2 (evaluateHOLFiniteState (decClockHOLFinite s) body).2) :
+    ∀ (n : Nat) (s : PanSemStateFiniteExact 64 F), s.clock ≤ n →
+      s.code = GuestCodeLookup.originalRuntimeCode → BuildMptLoopInv2 s →
+      (evaluateHOLFiniteState s (.while cond body)).1 = none →
+      BuildMptLoopInv2 (evaluateHOLFiniteState s (.while cond body)).2 := by
+  intro n
+  induction n with
+  | zero =>
+    intro s _ hcode hs hnone
+    rw [evaluateHOLFiniteState_while_fixClockRewrite] at hnone ⊢
+    revert hnone
+    split
+    · rename_i w hw
+      by_cases hz : w = 0
+      · simp [hz]; exact hs
+      · rw [if_pos hz]
+        rw [if_pos (by omega)]
+        simp
+    · simp
+  | succ n ih =>
+    intro s _ hcode hs hnone
+    rw [evaluateHOLFiniteState_while_fixClockRewrite] at hnone ⊢
+    revert hnone
+    split
+    · rename_i w hw
+      by_cases hz : w = 0
+      · simp [hz]; exact hs
+      · rw [if_pos hz]
+        by_cases hc : s.clock = 0
+        · rw [if_pos hc]; simp
+        · rw [if_neg hc]
+          have hle := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) body
+          rcases hb : evaluateHOLFiniteState (decClockHOLFinite s) body with ⟨r, t⟩
+          rw [hb] at hle
+          change t.clock ≤ s.clock - 1 at hle
+          have htc : t.code = GuestCodeLookup.originalRuntimeCode := by
+            have hm := (PanRunBounded.evaluateHOLFiniteState_metadata (decClockHOLFinite s) body).1
+            rw [hb] at hm
+            exact hm.trans hcode
+          have hI' : (r = none ∨ r = some .continue ∨ r = some .break) → BuildMptLoopInv2 t := by
+            intro hr
+            have hstep' := hstep s hcode hs ⟨w, hw, hz⟩ hc (by rw [hb]; exact hr)
+            rw [hb] at hstep'
+            exact hstep'
+          dsimp only
+          rcases r with _ | r
+          · intro hn
+            exact ih t (by omega) htc (hI' (Or.inl rfl)) hn
+          · cases r with
+            | «continue» =>
+              intro hn
+              exact ih t (by omega) htc (hI' (Or.inr (Or.inl rfl))) hn
+            | «break» =>
+              intro _
+              exact hI' (Or.inr (Or.inr rfl))
+            | _ => simp
+    · simp
+
+/-- The while loop plus the `mpt_root`/`heap_release`/`return` tail. -/
+theorem bmi_loop_tail_bound
+    (fb_rlp : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_word") K.«rlp_encode_word»)
+    (hwk : WorldKeeps WorldOK (fun s => [(locN s "dst", 9)])
+      [] R10Shards.P26_P28.stdKeep NoExtra (ofString "rlp_encode_word"))
+    (g_ms : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (mk_ms : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"] R10Shards.P26_P28.stdKeep (ofString "mpt_set"))
+    (hroot : TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root»)
+    (hrelease : TerminatingFunBoundedOn GuestInv (ofString "heap_release") K.«heap_release») :
+    TerminatingProgBoundedOn BuildMptLoopInv2
+      (.seq (.while (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n")))
+          bmi_loop2_body)
+        (.seq
+          (.call (some (none, none)) (ofString "mpt_root")
+            [.var .local (ofString "m"), .var .local (ofString "out")])
+          (.seq
+            (.call (some (none, none)) (ofString "heap_release")
+              [.var .local (ofString "mark")])
+            (.return (.const 0)))))
+      ((2 ^ 64 + 1) * (K.«rlp_encode_word» + (K.«mpt_set» + 1) + 1 + 1) +
+        (K.«mpt_root» + 1) + (K.«heap_release» + 1)) := by
+  exact TerminatingProgBoundedOn.seq_after (bmi_while_bound fb_rlp hwk g_ms mk_ms)
+    (fun s hcode hI hnone => by
+      refine (bmi_while_post_inv
+        (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n"))) bmi_loop2_body
+        ?_ _ s (Nat.le_refl s.clock) hcode hI hnone).1
+      intro u hucode hu ha hc0 hcases
+      have hPd : BuildMptLoopInv2 (decClockHOLFinite u) :=
+        localsOnly_buildMptLoopInv2.decClock u hu
+      have hactd : LoopActive (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n")))
+          (decClockHOLFinite u) := loopActive_decClock ha
+      rcases hcases with hnone | hcont | hbrk
+      · have hbodyH := bmi_body_hoare hwk g_ms mk_ms
+        have hnt : (evaluateHOLFiniteState (decClockHOLFinite u) bmi_loop2_body).1 ≠
+            some .timeOut := by simp [hnone]
+        exact hbodyH.run (decClockHOLFinite u) hucode ⟨hPd, hactd⟩ hnt hnone
+      · obtain ⟨wi, hwi⟩ := hu.1.2.2.2.2 "i" (by simp)
+        have atC : (decClockHOLFinite u).locals.lookup (ofString "i") =
+            some (.val (.word wi)) := by
+          simp [decClockHOLFinite, hwi]
+        have hinc : P3Csr.IncrBody (ofString "i") bmi_loop2_body :=
+          P3Csr.IncrBody.decCall _ _ _ _ (by decide)
+            (P3Csr.IncrBody.seq _ (by decide) (by decide) P3Csr.IncrBody.incr)
+        exact absurd hcont (hinc.run (decClockHOLFinite u) wi atC).1
+      · have hnb : noTopBreak bmi_loop2_body = true := by rfl
+        exact absurd hbrk (evaluate_noTopBreak bmi_loop2_body hnb (decClockHOLFinite u)))
+    (buildMptIndexed_tail_bound hroot hrelease)
+
+/-! ## Chunk C: the entry chain of `build_mpt_indexed`.
+
+`decCallResume_mpt_new_bmi`'s post-guard hides the world witness inside `BuildMptInv`'s
+existential while `BmiWorldDisjE` carries its own; the bridge needs BOTH under one witness.
+`decCallResume_mpt_new_bmi2` strengthens the resume's post-guard to expose the shared grown
+witness `(S1, Nd1)` (the one `buildMptInv_empty` is applied to), so the pre-`dec "i"` guard
+carries exactly the existential part of `BuildMptLoopInv2`. -/
+
+/-- Post-`mpt_new`, pre-`dec "i"`: `BuildMptAfterNew` plus the witness part of
+`BuildMptLoopInv2` (everything but the locals-clock facts, which the `dec` supplies). -/
+def BmiAfterNewInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ∃ S Nd Nm : List Nat, WorldTypedWith s S Nd ∧ MptObjInWith s S Nm (locN s "m") ∧
+    IvlsDisj ((locN s "m", 16) :: nodeExtents s Nm) (nodeExtents s Nd) ∧
+    IvlsDisj [(locN s "slice_arr", 16 * locN s "n")]
+      (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m"))
+
+/-- The `dec "i" (const 0)` step: from `BmiAfterNewInv` to the full loop invariant. -/
+theorem bmi_entry_bridge {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (w : BitVec 64) (h : BuildMptAfterNew s ∧ BmiAfterNewInv s) :
+    BuildMptLoopInv2 (setVarHOLFinite (ofString "i") (.val (.word w)) s) := by
+  obtain ⟨han, S, Nd, Nm, hWT, hm, hd1, hd2⟩ := h
+  have hset := buildMptAfterNew_set_counter han w
+  refine ⟨hset, ?_, S, Nd, Nm, ?_, ?_, ?_, ?_⟩
+  · rw [locN_setVar_ne s "mark" (ofString "i") (.val (.word w)) (by decide),
+      locN_setVar_ne s "m" (ofString "i") (.val (.word w)) (by decide)]
+    exact han.2.2.2.2.2
+  · exact (worldTypedWith_build_locals s
+      (setVarHOLFinite (ofString "i") (.val (.word w)) s).locals
+      (setVarHOLFinite (ofString "i") (.val (.word w)) s).clock S Nd).2 hWT
+  · rw [locN_setVar_ne s "m" (ofString "i") (.val (.word w)) (by decide)]
+    exact hm
+  · rw [locN_setVar_ne s "m" (ofString "i") (.val (.word w)) (by decide)]
+    exact hd1
+  · rw [locN_setVar_ne s "slice_arr" (ofString "i") (.val (.word w)) (by decide),
+      locN_setVar_ne s "n" (ofString "i") (.val (.word w)) (by decide),
+      locN_setVar_ne s "m" (ofString "i") (.val (.word w)) (by decide)]
+    exact hd2
+
+/-- The `dec` with a constant word initializer and a guard-changing bridge. -/
+theorem bmi_dec_i_bound
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {w : BitVec 64}
+    {body : ProgHOL 64} {K : Nat}
+    (hbridge : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      P s → BuildMptLoopInv2 (setVarHOLFinite (ofString "i") (.val (.word w)) s))
+    (hbody : TerminatingProgBoundedOn BuildMptLoopInv2 body K) :
+    TerminatingProgBoundedOn P (.dec (ofString "i") .one (.const w) body) K := by
+  intro F state hcode hP
+  unfold TerminatingRunBounded
+  dsimp only
+  intro hnt
+  rw [evaluateHOLFiniteState_dec_total] at hnt ⊢
+  dsimp only at hnt ⊢
+  revert hnt
+  split <;> intro hnt
+  · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
+  · revert hnt
+    split <;> intro hnt
+    · rename_i v hv _
+      have hvw : v = .val (.word w) := by
+        simpa [evalAt, evalHOLExact] using hv.symm
+      subst hvw
+      have hb := hbody (setVarHOLFinite (ofString "i") (.val (.word w)) state) hcode
+        (hbridge state hP) hnt
+      simpa [setVarHOLFinite] using hb
+    · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
+
+/-- `mpt_new` resume with the shared world witness exposed. -/
+theorem decCallResume_mpt_new_bmi2
+    (hwk : WorldKeeps WorldOK (fun _ => [])
+      ["heap_ptr"] R10Shards.P26_P28.stdKeep
+      (RetAvoids (fun _ _ w => [(w, 16)])) (ofString "mpt_new"))
+    (hrt : Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧
+      memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")
+      (ofString "mpt_new")) :
+    DecCallResumeOn (fun s => BuildMptAfterMark s ∧ BmiWorldDisjE s)
+      (fun s => BuildMptAfterNew s ∧ BmiAfterNewInv s) (ofString "m")
+      (ofString "mpt_new") [.const 0, .const 0] := by
+  intro F state values body callee ret value post hcode hP hargs hl hrun
+  obtain ⟨hP', hdisjE⟩ := hP
+  obtain ⟨hready, hin_mark, hmark_eq, hw_mark⟩ := hP'
+  let entry := callEntryStateHOLFinite state callee
+  have hentryW : WorldOK entry :=
+    localsFree_worldOK state callee (state.clock - 1) hready.1
+  have hstep0 : WorldStep (fun _ => []) ["heap_ptr"] R10Shards.P26_P28.stdKeep
+      (RetAvoids (fun _ _ w => [(w, 16)])) entry (some (.returned value)) post := by
+    have hspec := FunSpec.at_lookup hwk state hcode values body callee ret hl hentryW
+      (by rw [hrun]; simp)
+    rw [hrun] at hspec
+    exact hspec (Or.inl ⟨value, rfl⟩)
+  have hret0 := FunSpec.at_lookup hrt state hcode values body callee ret hl hentryW.1
+    (by rw [hrun]; simp)
+  rw [hrun] at hret0
+  obtain ⟨wm, rfl, hA_post, hAG, hf0, hroot0, _⟩ := hret0 value rfl
+  obtain ⟨v1, v2, he1, he2, hc1, hc2⟩ :=
+    callee_param_two_exp state (ofString "mpt_new")
+      (ofString "root_node") (ofString "secured") .one .one _ _
+      (by rw [hcode]; exact lookup_mpt_new_bmi) _ _ values body callee ret hargs hl
+  have hv1 : v1 = .val (.word 0) := by
+    simpa [evalAt, evalHOLExact] using he1.symm
+  have hv2 : v2 = .val (.word 0) := by
+    simpa [evalAt, evalHOLExact] using he2.symm
+  subst hv1 hv2
+  have hrn0 : locN entry "root_node" = 0 := by
+    simp [entry, callEntryStateHOLFinite, locN, hc1]
+  have hroot : memW post wm.toNat = 0 := hroot0.trans hrn0
+  have hf : FreshBlock state post wm.toNat 16 := hf0
+  have hstep : WorldStep (fun _ => []) ["heap_ptr"] R10Shards.P26_P28.stdKeep
+      (RetAvoids (fun _ _ w => [(w, 16)])) state
+      (some (.returned (.val (.word wm)))) post := by
+    refine ⟨hstep0.1, hstep0.2.1, hstep0.2.2.1, hstep0.2.2.2.1, ?_⟩
+    intro S Nd hWT hD
+    have hWT_e : WorldTypedWith entry S Nd :=
+      (worldTypedWith_build_locals state callee (state.clock - 1) S Nd).2 hWT
+    exact hstep0.2.2.2.2 S Nd hWT_e (fun i hi => by simp at hi)
+  let postCaller : PanSemStateFiniteExact 64 F := { post with locals := state.locals }
+  have hstep_c : WorldStep (fun _ => []) ["heap_ptr"] R10Shards.P26_P28.stdKeep
+      (RetAvoids (fun _ _ w => [(w, 16)])) state
+      (some (.returned (.val (.word wm)))) postCaller := by
+    refine ⟨localsFree_arenaReady post state.locals post.clock hstep.1,
+      hstep.2.1, hstep.2.2.1, hstep.2.2.2.1, ?_⟩
+    intro S Nd hWT hD
+    obtain ⟨S', Nd', hsub, hWT', hOG, hFO, hRA⟩ := hstep.2.2.2.2 S Nd hWT hD
+    refine ⟨S', Nd', hsub,
+      (worldTypedWith_build_locals post state.locals post.clock S' Nd').2 hWT',
+      hOG, hFO, hRA⟩
+  have hf_c : FreshBlock state postCaller wm.toNat 16 :=
+    ⟨hf.1, hf.2.1, hf.2.2⟩
+  obtain ⟨S0, Nd0, hWT0, hdisj0⟩ := hdisjE
+  have hW0 : WorldOK state :=
+    ⟨hready.1.1, S0, (worldTyped_iff_with state S0).2 ⟨Nd0, hWT0⟩⟩
+  obtain ⟨S1, Nd1, hsub1, hWT1, hOG1, hFO1, hQ1⟩ :=
+    hstep_c.2.2.2.2 S0 Nd0 hWT0 (fun i hi => by simp at hi)
+  obtain ⟨w', heqw, hdQ⟩ := hQ1 (.val (.word wm)) rfl
+  have hw' : w' = wm := by cases heqw; rfl
+  subst w'
+  have hW_post : WorldOK post :=
+    ⟨hstep.1, S1, (worldTyped_iff_with post S1).2 ⟨Nd1,
+      (worldTypedWith_build_locals postCaller post.locals post.clock S1 Nd1).2 hWT1⟩⟩
+  let resumed := setVarHOLFinite (ofString "m") (.val (.word wm)) postCaller
+  have hW_res : WorldOK resumed :=
+    localsFree_worldOK post resumed.locals resumed.clock hW_post
+  have hl_res : ∀ name ∈ (["slice_arr", "n", "out"] : List String),
+      resumed.locals.lookup (ofString name) = state.locals.lookup (ofString name) := by
+    intro name hname
+    have hne : ofString "m" ≠ ofString name := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hname
+      rcases hname with rfl | rfl | rfl <;> decide
+    simp [resumed, postCaller, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne]
+  have hbuf_res : ∀ gn ∈ ([("mpt_hash_scratch", 40), ("mpt_key_scratch", 16),
+      ("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion resumed gn = bufferRegion state gn := by
+    intro gn hgn
+    have hgk : state.globals.lookup (ofString gn.1) = post.globals.lookup (ofString gn.1) := by
+      apply hstep.2.2.1 (ofString gn.1)
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hgn
+      rcases hgn with rfl | rfl | rfl | rfl <;> decide
+    have hglob : globN resumed gn.1 = globN state gn.1 := by
+      simp [resumed, postCaller, setVarHOLFinite, globN, ← hgk]
+    simp [bufferRegion, hglob]
+  have hsame := lookupCodeHOLFinite_installed_body state.code.lookup (ofString "mpt_new")
+    [(ofString "root_node", .one), (ofString "secured", .one)]
+    (sourceFnBody Guest.Software.guestFn_mpt_new) body .one ret values callee
+    (by rw [hcode]; exact lookup_mpt_new_bmi) hl
+  subst hsame
+  obtain ⟨hp, q, _, hhp_eq, hhp_al, hq_eq, hq_hi, _, _, hpost_m, _, _, _, _, _, _⟩ :=
+    R13Shards.mpt_new_resumes_props entry 0 0 hcode hentryW.1 hc1 hc2
+      (by rw [hrun]; exact Or.inl ⟨.val (.word wm), rfl⟩)
+  dsimp only [entry] at hpost_m hhp_eq
+  rw [hrun] at hpost_m
+  dsimp only at hpost_m
+  have hhp_st : hp.toNat = globN state "heap_ptr" := by
+    simpa [callEntryStateHOLFinite, globN] using hhp_eq
+  have hne0_hp : hp + 0 = hp := BitVec.add_zero hp
+  have hfr_fresh : FrameOutside state resumed ([] ++ [] ++ [freeGap state]) (heapFree state) := by
+    intro a _ hnhf
+    have hp8_nat : (hp + 8#64).toNat = hp.toNat + 8 :=
+      BitVec.toNat_add_of_lt
+        (by rw [Wave8Contracts.M12.heapLimit_val] at hq_hi; change hp.toNat + 8 < 2 ^ 64; omega)
+    have hne0 : a ≠ hp := by
+      rintro rfl
+      apply hnhf
+      simp only [CellHits, heapFree]
+      omega
+    have hne8 : a ≠ hp + 8#64 := by
+      rintro rfl
+      apply hnhf
+      simp only [CellHits, heapFree, hp8_nat]
+      omega
+    change post.memory a = state.memory a
+    rw [hpost_m, hne0_hp]
+    simp [Wave8Contracts.M26.updW, callEntryStateHOLFinite, hne8, hne0]
+  have hready_res : BuildMptIndexedReady resumed :=
+    buildMptIndexedReady_preserved_below_mark (buffers := []) (owned := [])
+      hready hW_res hl_res hstep.2.1 hbuf_res hin_mark (le_of_eq hmark_eq)
+      hfr_fresh (fun _ hj => by simp at hj) (fun _ hj => by simp at hj)
+  have harr_res : locN resumed "slice_arr" = locN state "slice_arr" :=
+    locN_setVar_ne postCaller "slice_arr" (ofString "m") (.val (.word wm)) (by decide)
+  have hn_res : locN resumed "n" = locN state "n" :=
+    locN_setVar_ne postCaller "n" (ofString "m") (.val (.word wm)) (by decide)
+  have hmark_res : locN resumed "mark" = locN state "mark" :=
+    locN_setVar_ne postCaller "mark" (ofString "m") (.val (.word wm)) (by decide)
+  have hsource := hW0.1.2.1
+  have hm_loc : locN resumed "m" = wm.toNat := by
+    simp [resumed, setVarHOLFinite, locN, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hWT_res : WorldTypedWith resumed S1 Nd1 :=
+    (worldTypedWith_build_locals postCaller resumed.locals resumed.clock S1 Nd1).2 hWT1
+  have hobj : MptObjInWith resumed S1 [] (locN resumed "m") := by
+    rw [hm_loc]
+    refine ⟨Or.inl ⟨hsource.trans hf.2.1.1, hf.2.1.2⟩, hf.2.2, ?_, ?_, ?_, ?_, ?_⟩
+    · intro t ht i hi
+      apply hdQ _ (by simp) i
+      exact List.mem_append_left _ (List.mem_append_left _
+        (List.mem_flatMap.mpr ⟨t, ht, hi⟩))
+    · intro j hj
+      apply hdQ _ (by simp) j
+      exact List.mem_append_left _ (List.mem_append_right _ hj)
+    · simp [NodeHeap]
+    · exact Or.inl hroot
+    · simp [nodeExtents]
+  have hdinv : IvlsDisj ((locN resumed "m", 16) :: nodeExtents resumed [])
+      (nodeExtents resumed Nd1) := by
+    intro i hi j hj
+    rw [hm_loc] at hi
+    simp only [nodeExtents, List.flatMap_nil, List.mem_cons, List.not_mem_nil, or_false] at hi
+    subst i
+    apply hdQ _ (by simp) j
+    exact List.mem_append_right _ hj
+  have hinv : BuildMptInv resumed :=
+    ⟨localsFree_arenaReady post resumed.locals resumed.clock hstep.1,
+      by rw [hm_loc]; exact ⟨hsource.trans hf.2.1.1, hf.2.1.2⟩,
+      S1, Nd1, [], hWT_res, hobj, hdinv⟩
+  refine ⟨⟨hready_res, hinv, ?_, ?_, ?_, ?_⟩, ⟨S1, Nd1, [], hWT_res, hobj, hdinv, ?_⟩⟩
+  · rw [harr_res, hn_res, hmark_res]
+    exact hin_mark
+  · rw [hmark_res, hmark_eq]
+    exact hstep.2.1
+  · intro name hname
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hname
+    rcases hname with rfl | rfl
+    · obtain ⟨w0, hw0⟩ := hw_mark
+      exact ⟨w0, by simp [resumed, postCaller, setVarHOLFinite, HolFiniteMapExact.lookup_update,
+        FUPDATE, hw0, show ofString "m" ≠ ofString "mark" by decide]⟩
+    · exact ⟨wm, by simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]⟩
+  · rw [hmark_res, hmark_eq]
+    rw [hm_loc]
+    obtain ⟨_, hin_f, _⟩ := hf_c
+    exact hin_f.1
+  · have hwo : worldOwned resumed S1 Nd1 = worldOwned postCaller S1 Nd1 := rfl
+    rw [hwo, harr_res, hn_res]
+    intro o ho j hj
+    rcases List.mem_append.mp hj with hj | hj
+    · rcases List.mem_singleton.mp ho with rfl
+      rcases hOG1 j hj with h0 | ⟨j0, hj0mem, hj0in⟩ | hjfresh
+      · rw [h0]
+        exact Or.inr (Or.inl rfl)
+      · exact Disj.trans_inside_bmi (hdisj0 _ (List.mem_singleton_self _) j0 hj0mem) hj0in
+      · have hsl := hready.2.2.2.1
+        exact Disj.of_le_bmi (by have := hsl.2; have := hjfresh.1; omega)
+    · rcases List.mem_singleton.mp ho with rfl
+      simp only [mptObjIvls, List.mem_cons] at hj
+      rcases hj with rfl | hj'
+      · rw [hm_loc]
+        have hsl := hready.2.2.2.1
+        obtain ⟨_, hin_f, _⟩ := hf_c
+        exact Disj.of_le_bmi (by have := hsl.2; have := hin_f.1; omega)
+      · exact absurd hj' (by simp [nodeExtents])
+
+/-- The entry chain assembled: `build_mpt_indexed` is terminating and bounded by
+`K.«build_mpt_indexed»`, from the amended entry guard. -/
+theorem bmi_body_bound_entry
+    (fb_mark : TerminatingFunBoundedOn GuestInv (ofString "heap_mark") K.«heap_mark»)
+    (fb_new : TerminatingFunBoundedOn GuestInv (ofString "mpt_new") K.«mpt_new»)
+    (ro_mark : ReadOnlyFn (ofString "heap_mark"))
+    (wk_new : WorldKeeps WorldOK (fun _ => [])
+      ["heap_ptr"] R10Shards.P26_P28.stdKeep
+      (RetAvoids (fun _ _ w => [(w, 16)])) (ofString "mpt_new"))
+    (rt_new : Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧
+      memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")
+      (ofString "mpt_new"))
+    (htail : TerminatingProgBoundedOn BuildMptLoopInv2
+      (.seq (.while (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n")))
+          bmi_loop2_body)
+        (.seq
+          (.call (some (none, none)) (ofString "mpt_root")
+            [.var .local (ofString "m"), .var .local (ofString "out")])
+          (.seq
+            (.call (some (none, none)) (ofString "heap_release")
+              [.var .local (ofString "mark")])
+            (.return (.const 0)))))
+      ((2 ^ 64 + 1) * (K.«rlp_encode_word» + (K.«mpt_set» + 1) + 1 + 1) +
+        (K.«mpt_root» + 1) + (K.«heap_release» + 1))) :
+    TerminatingProgBoundedOn BmiEntry
+      (.decCall (ofString "mark") .one (ofString "heap_mark") []
+        (.decCall (ofString "m") .one (ofString "mpt_new") [.const 0, .const 0]
+          (.dec (ofString "i") .one (.const 0)
+            (.seq (.while (.cmp .lower (.var .local (ofString "i"))
+                (.var .local (ofString "n"))) bmi_loop2_body)
+              (.seq
+                (.call (some (none, none)) (ofString "mpt_root")
+                  [.var .local (ofString "m"), .var .local (ofString "out")])
+                (.seq
+                  (.call (some (none, none)) (ofString "heap_release")
+                    [.var .local (ofString "mark")])
+                  (.return (.const 0))))))))
+      (K.«heap_mark» + (K.«mpt_new» +
+        ((2 ^ 64 + 1) * (K.«rlp_encode_word» + (K.«mpt_set» + 1) + 1 + 1) +
+          (K.«mpt_root» + 1) + (K.«heap_release» + 1)) + 1) + 1) :=
+  TerminatingProgBoundedOn.decCall_on fb_mark (ofString "mark") .one []
+    (callEntryOn_of_imp localsFree_guestInv
+      (fun s (h : BmiEntry s) => worldOK_guestInv _ h.1.1) _ _)
+    (decCallResume_heap_mark_bmi ro_mark)
+    (TerminatingProgBoundedOn.decCall_on fb_new (ofString "m") .one [.const 0, .const 0]
+      (callEntryOn_of_imp localsFree_guestInv
+        (fun s (h : BuildMptAfterMark s ∧ BmiWorldDisjE s) => worldOK_guestInv _ h.1.1.1) _ _)
+      (decCallResume_mpt_new_bmi2 wk_new rt_new)
+      (bmi_dec_i_bound (fun _s h => bmi_entry_bridge 0 h) htail))
+
+/-- The full `GBody.«build_mpt_indexed»` witness (amended with `hbmi_entry`). -/
+theorem bmi_gbody
+    (fb_mark : TerminatingFunBoundedOn GuestInv (ofString "heap_mark") K.«heap_mark»)
+    (fb_release : TerminatingFunBoundedOn GuestInv (ofString "heap_release") K.«heap_release»)
+    (fb_new : TerminatingFunBoundedOn GuestInv (ofString "mpt_new") K.«mpt_new»)
+    (fb_root : TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root»)
+    (fb_ms : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (fb_rlp : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_word") K.«rlp_encode_word»)
+    (ro_mark : ReadOnlyFn (ofString "heap_mark"))
+    (wk_new : WorldKeeps WorldOK (fun _ => [])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+        ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+        ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (RetAvoids (fun _ _ w => [(w, 16)])) (ofString "mpt_new"))
+    (rt_new : Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧
+      memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")
+      (ofString "mpt_new"))
+    (mk_ms : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+        ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+        ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_set"))
+    (wk_rlp : WorldKeeps WorldOK (fun s => [(locN s "dst", 9)])
+      []
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+        ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+        ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] NoExtra
+      (ofString "rlp_encode_word"))
+    (hbmi_entry : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), WorldOK s → BmiEntry s) :
+    TerminatingFunBoundedOn WorldOK (ofString "build_mpt_indexed") K.«build_mpt_indexed» := by
+  have htail : TerminatingProgBoundedOn BuildMptLoopInv2 _ _ :=
+    bmi_loop_tail_bound fb_rlp wk_rlp fb_ms mk_ms fb_root fb_release
+  have hbody : TerminatingProgBoundedOn BmiEntry _ _ :=
+    bmi_body_bound_entry fb_mark fb_new ro_mark wk_new rt_new htail
+  refine ⟨_, _, _, lookup_build_mpt_indexed_strong, ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_build_mpt_indexed,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  intro F s hc hP hnt
+  refine TerminatingRunBounded.weaken (hbody s hc (hbmi_entry s hP)) ?_ hnt
+  unfold K.«build_mpt_indexed»
+  omega
 
 theorem gbody_mpt_set :
     TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set» := by
