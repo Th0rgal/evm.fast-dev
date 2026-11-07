@@ -13860,6 +13860,38 @@ private theorem heapByteEff_decCall_alloc {F : Type}
   exact ⟨hp, n, q, mid, hev, hhp, hhp8, hq, hpq, hqhi, hq8, hmid, hg, hm, hl,
     heff.trans heff_mid, hnt, hres, heq⟩
 
+/-- Grows the interval region of a `HeapByteEff` (the dual use of `mono`): every old
+interval must already be contained in the new list. -/
+private theorem heapByteEff_widen {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {R1 R2 : List Ivl} {gw : List String}
+    (h : WkBlockTxEnc.HeapByteEff s post R1 gw)
+    (hsub : ∀ i ∈ R1, i ∈ R2) :
+    WkBlockTxEnc.HeapByteEff s post R2 gw :=
+  h.mono (fun i hi _ => Or.inl ⟨i, hsub i hi, le_rfl, le_rfl⟩) (fun _ hg => hg)
+
+/-- Threads a prior `HeapByteEff` through a `call0` callee whose tracked region is exactly
+`Rl`: the callee's `ByteEff` at the call entry composes with the incoming effect. -/
+private theorem heapByteEff_call0 {F : Type}
+    {s0 ent : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {fname : MlS} {argR : List (ValueHOL 64) → HolFiniteMapExact MlS (ValueHOL 64) → List Ivl}
+    (heff : WkBlockTxEnc.HeapByteEff s0 ent Rl gw)
+    (hf : R13Shards.Keccak256.FunByteEff fname argR) (args : List (ExpHOL 64))
+    (hsub_args : ∀ vals,
+      evalListHOLFinite ent (h := fun a => Classical.propDecidable (ent.memaddrs a)) args =
+        some vals →
+      ∀ i ∈ argR vals ent.globals, 0 < i.2 →
+        ∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2)
+    (hnt : (evaluateHOLFiniteState ent
+      (.call (some (none, none)) fname args)).1 ≠ some .timeOut)
+    (hcr : ContOrRes (evaluateHOLFiniteState ent
+      (.call (some (none, none)) fname args)).1) :
+    WkBlockTxEnc.HeapByteEff s0
+      (evaluateHOLFiniteState ent (.call (some (none, none)) fname args)).2 Rl gw :=
+  heff.trans
+    (WkBlockTxEnc.HeapByteEff.of_byteEff heff.arena
+      (R13Shards.Keccak256.call0_byteEff hf ent args Rl heff.arena.1.code heff.arena.1
+        hsub_args hnt (call0_or_resumes ent fname args hcr)))
+
 private theorem cr_seq_left {F : Type} (s : PanSemStateFiniteExact 64 F)
     (a b : ProgHOL 64)
     (h : ContOrRes (evaluateHOLFiniteState s (.seq a b)).1) :
