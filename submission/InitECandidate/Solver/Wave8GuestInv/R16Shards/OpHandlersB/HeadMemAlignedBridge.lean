@@ -16017,4 +16017,238 @@ theorem fcKind2ErrTail_refund_ite_step {F : Type}
       rw [evaluateHOLFiniteState_seq_line780]
       dsimp only
       rw [hf]
+
+/-- Rung 25: the closing `set_retdata`/`stack_push` seq of the kind-2 error
+tail.  At a state `t` carrying the arena, the `ev` global, the child
+retdata pointer/size words, the buffer-safety bounds and the frame words
+(`ev+16` sp, `ev+232` cap, `ev+8` stk, room on the stack), with the
+set_retdata post state satisfying the stack_push frame-word hypotheses
+(`hpost`: frame cells and `ev` survive the retdata copy), the two-call
+tail never returns; when it finishes quietly the set_retdata post state
+`m3` carries the rung-22 retdata facts and the stack_push post state
+`m4` (the tail's own post state) keeps every non-memory field of `m3`
+and writes the four zero words plus the bumped stack pointer; a
+set_retdata terminal outcome propagates as the tail's outcome. -/
+theorem fcKind2ErrTail_srd_sp_step {F : Type}
+    (t : PanSemStateFiniteExact 64 F) (e pv nw sp cap stk : BitVec 64)
+    (hA : ArenaReady t)
+    (hcode : t.code = originalRuntimeCode)
+    (he : t.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hp : evalAt t (.load .one
+        (.op .add [.var .local (ofString "child"), .const 120#64])) = some (.val (.word pv)))
+    (hn : evalAt t (.load .one
+        (.op .add [.var .local (ofString "child"), .const 128#64])) = some (.val (.word nw)))
+    (hn_small : nw.toNat + 32 < 2 ^ 63)
+    (hbuf : ∀ d0 cap : BitVec 64, t.memory (e + 144) = .word d0 → t.memory (e + 216) = .word cap →
+      nw.toNat ≤ cap.toNat → d0.toNat + nw.toNat < 2 ^ 64)
+    (hsp : t.memory (e + 16) = .word sp)
+    (hcap : t.memory (e + 232) = .word cap)
+    (hstk : t.memory (e + 8) = .word stk)
+    (hd8 : t.memaddrs (e + 8))
+    (hroom : sp.toNat + 1 ≤ cap.toNat)
+    (hcap_le : cap.toNat ≤ 1024)
+    (hpost : (evaluateHOLFiniteState t
+        (.call (some (none, none)) (ofString "set_retdata")
+          [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).1 = none →
+      (evaluateHOLFiniteState t
+          (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).2.code =
+        t.code ∧
+      (evaluateHOLFiniteState t
+          (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).2.globals.lookup
+          (ofString "ev") = some (.val (.word e)) ∧
+      (evaluateHOLFiniteState t
+          (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).2.memory
+          (e + 16) = .word sp ∧
+      (evaluateHOLFiniteState t
+          (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).2.memory
+          (e + 232) = .word cap ∧
+      (evaluateHOLFiniteState t
+          (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).2.memory
+          (e + 8) = .word stk ∧
+      (evaluateHOLFiniteState t
+          (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).2.memaddrs
+          (e + 8))
+    (hnt : (evaluateHOLFiniteState t
+        (.seq (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+          (.call (some (none, none)) (ofString "stack_push")
+            [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))).1 ≠
+      some .timeOut) :
+    (∀ u, (evaluateHOLFiniteState t
+        (.seq (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+          (.call (some (none, none)) (ofString "stack_push")
+            [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))).1 ≠
+      some (.returned u)) ∧
+    ((evaluateHOLFiniteState t
+        (.seq (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+          (.call (some (none, none)) (ofString "stack_push")
+            [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))).1 = none →
+      ∃ m3 m4 : PanSemStateFiniteExact 64 F,
+        m3 = (evaluateHOLFiniteState t
+            (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).2 ∧
+        m3.code = t.code ∧
+        m3.memaddrs = t.memaddrs ∧
+        ArenaReady m3 ∧
+        (∀ k : MlS, k ≠ ofString "heap_ptr" →
+          m3.globals.lookup k = t.globals.lookup k) ∧
+        globN t "heap_ptr" ≤ globN m3 "heap_ptr" ∧
+        (∃ d : BitVec 64,
+          (nw = 0 ∨ (t.memory (e + 144) = .word d ∧
+              ∃ cap2 : BitVec 64, t.memory (e + 216) = .word cap2 ∧ nw.toNat ≤ cap2.toNat) ∨
+            (globN t "heap_ptr" ≤ d.toNat ∧ d.toNat + nw.toNat ≤ globN m3 "heap_ptr")) ∧
+          ∀ a : BitVec 64, ¬ Wave8M19.CellHits a.toNat (d.toNat, nw.toNat) →
+            a ≠ e + 144 → a ≠ e + 152 → a ≠ e + 216 →
+            m3.memory a = t.memory a) ∧
+        evaluateHOLFiniteState t
+            (.seq (.call (some (none, none)) (ofString "set_retdata")
+                [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                 .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+              (.call (some (none, none)) (ofString "stack_push")
+                [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])) =
+          evaluateHOLFiniteState m3
+            (.call (some (none, none)) (ofString "stack_push")
+              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]) ∧
+        m4 = (evaluateHOLFiniteState t
+            (.seq (.call (some (none, none)) (ofString "set_retdata")
+                [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                 .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+              (.call (some (none, none)) (ofString "stack_push")
+                [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]))).2 ∧
+        m4.code = m3.code ∧
+        m4.memaddrs = m3.memaddrs ∧
+        m4.shMemaddrs = m3.shMemaddrs ∧
+        m4.baseAddr = m3.baseAddr ∧
+        m4.be = m3.be ∧
+        m4.globals = m3.globals ∧
+        m4.memory = Wave8M19.Htab.updW
+            (updW4 m3.memory (stk + sp * 32) 0#64 0#64 0#64 0#64) (e + 16) (sp + 1)) ∧
+    (∀ f, (evaluateHOLFiniteState t
+        (.call (some (none, none)) (ofString "set_retdata")
+          [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).1 = some f →
+      evaluateHOLFiniteState t
+          (.seq (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+            (.call (some (none, none)) (ofString "stack_push")
+              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])) =
+        evaluateHOLFiniteState t
+          (.call (some (none, none)) (ofString "set_retdata")
+            [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+             .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])) := by
+  classical
+  have hnt_srd : (evaluateHOLFiniteState t
+      (.call (some (none, none)) (ofString "set_retdata")
+        [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+         .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).1 ≠
+      some .timeOut := by
+    intro ht
+    apply hnt
+    rw [evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [ht]
+    exact ht
+  obtain ⟨hnret_srd, hnone_srd, _⟩ :=
+    fcKind2ErrTail_set_retdata_step t e pv nw hA hcode he hp hn hn_small hbuf hnt_srd
+  refine ⟨?_, ?_, ?_⟩
+  · intro u hu
+    rw [evaluateHOLFiniteState_seq_line780] at hu
+    dsimp only at hu
+    cases hS : (evaluateHOLFiniteState t
+        (.call (some (none, none)) (ofString "set_retdata")
+          [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).1 with
+    | none =>
+      rw [hS] at hu
+      dsimp only at hu
+      obtain ⟨hc, hev, h16, h232, h8, hd8'⟩ := hpost hS
+      have hnt_sp : (evaluateHOLFiniteState
+          (evaluateHOLFiniteState t
+            (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).2
+          (.call (some (none, none)) (ofString "stack_push")
+            [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])).1 ≠
+          some .timeOut := by
+        intro ht
+        apply hnt
+        rw [evaluateHOLFiniteState_seq_line780]
+        dsimp only
+        rw [hS]
+        exact ht
+      obtain ⟨hnret_sp, _⟩ :=
+        fcKind2ErrTail_stack_push_step
+          (evaluateHOLFiniteState t
+            (.call (some (none, none)) (ofString "set_retdata")
+              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).2
+          e sp cap stk (hc.trans hcode) hev h16 h232 h8 hd8' hroom hcap_le hnt_sp
+      exact hnret_sp u hu
+    | some f =>
+      rw [hS] at hu
+      dsimp only at hu
+      exact hnret_srd u hu
+  · intro hfin
+    have hfin1 : (evaluateHOLFiniteState t
+        (.call (some (none, none)) (ofString "set_retdata")
+          [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).1 = none := by
+      rw [evaluateHOLFiniteState_seq_line780] at hfin
+      dsimp only at hfin
+      cases hS : (evaluateHOLFiniteState t
+        (.call (some (none, none)) (ofString "set_retdata")
+          [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])).1 with
+      | none => rfl
+      | some f =>
+        rw [hS] at hfin
+        dsimp only at hfin
+        rw [← hS]
+        exact hfin
+    obtain ⟨m3, hm3, hcode3, hma3, hA3, hglob3, hhp3, hwin3, hpeel22⟩ := hnone_srd hfin1
+    obtain ⟨hc, hev, h16, h232, h8, hd8'⟩ := hpost hfin1
+    rw [← hm3] at hc hev h16 h232 h8 hd8'
+    have hfin2 : (evaluateHOLFiniteState m3
+        (.call (some (none, none)) (ofString "stack_push")
+          [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])).1 = none := by
+      rw [← hpeel22]
+      exact hfin
+    have hnt_sp : (evaluateHOLFiniteState m3
+        (.call (some (none, none)) (ofString "stack_push")
+          [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])).1 ≠
+        some .timeOut := by
+      rw [← hpeel22]
+      exact hnt
+    obtain ⟨_, hnone_sp⟩ :=
+      fcKind2ErrTail_stack_push_step m3 e sp cap stk (hc.trans hcode) hev h16 h232 h8 hd8'
+        hroom hcap_le hnt_sp
+    obtain ⟨m4, hm4, hcode4, hma4, hshm4, hba4, hbe4, hglob4, hmem4⟩ := hnone_sp hfin2
+    refine ⟨m3, m4, hm3, hcode3, hma3, hA3, hglob3, hhp3, hwin3, hpeel22, ?_, hcode4, hma4,
+      hshm4, hba4, hbe4, hglob4, hmem4⟩
+    exact hm4.trans (congrArg Prod.snd hpeel22).symm
+  · intro f hf
+    rw [evaluateHOLFiniteState_seq_line780]
+    dsimp only
+    rw [hf]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
