@@ -86,11 +86,11 @@ theorem wordCompileEq : word = wordProgram :=
       (Eq.trans optimise_eq optimiseCompileEq))
     wordProgram_eq
 
-wave8_kernel_reduce simplified := WordSimp.compileExp wordProgram
-wave8_kernel_reduce temporary := maxVarHOL simplified + 1
-wave8_kernel_reduce selected := WordInst.instSelectExecutable riscvConfig temporary simplified
+wave8_certified_reduce simplified := WordSimp.compileExp wordProgram
+wave8_certified_reduce temporary := maxVarHOL simplified + 1
+wave8_certified_reduce selected := WordInst.instSelectExecutable riscvConfig temporary simplified
 
-wave8_kernel_reduce ssa := WordAlloc.fullSsaCcTrans arity selected
+wave8_certified_reduce ssa := WordAlloc.fullSsaCcTrans arity selected
 
 wave8_chunked_remove_dead dead := ssa
 
