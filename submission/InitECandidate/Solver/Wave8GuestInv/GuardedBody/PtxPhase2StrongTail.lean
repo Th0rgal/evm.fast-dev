@@ -851,4 +851,100 @@ theorem phase2_htabA_warm_while_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
     (phase2_warm_body_incr (ofString "htab_set")
       [.var .local (ofString "aa"), key, .const (BitVec.ofNat 64 1)])
 
+/-! ### Segment B part 2a L5: the spine through the warming loops (positions 80..84).
+
+Positions 80..84 are: initialize the loop counter, warm the `aa` table from
+the precompile address table, re-initialize the counter, warm it from the
+access-list address table. Both surrounding source `skip`s are included so
+the lemma matches the exact source spine. -/
+
+/-- Initializing the loop counter preserves the region invariant. -/
+theorem phase2_htabA_assign0_hoare {ι : Type} [Nonempty ι] (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String)
+    (hne : ∀ n ∈ names, ofString n ≠ ofString "i") :
+    Hoare (PtxHtabAInv2 buffers contents names)
+      (.assign .local (ofString "i") (.const (BitVec.ofNat 64 0)))
+      (fun r s => r = none → PtxHtabAInv2 buffers contents names s) := by
+  apply Hoare.assign
+  · intro F s v hp _
+    exact fun _ => phase2_htabAInv2_set_i buffers contents names v hne hp
+  · exact fun _ _ hr => by cases hr
+
+/-- The warming spine (positions 80..84 with its surrounding `skip`s)
+preserves the region invariant, with a clock bound of two bounded warming
+loops plus the tail's. -/
+theorem phase2_htabA_warm_spine_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String)
+    (hne : ∀ n ∈ names, ofString n ≠ ofString "i")
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxHtabAInv2 buffers contents names) tail b) :
+    TerminatingProgBoundedOn (PtxHtabAInv2 buffers contents names)
+      (.seq .skip
+        (.seq (.assign .local (ofString "i") (.const (BitVec.ofNat 64 0)))
+          (.seq (.while (.cmp .less (.var .local (ofString "i"))
+                  (.const (BitVec.ofNat 64 18)))
+                (.seq (.call (some (none, none)) (ofString "htab_set")
+                    [.var .local (ofString "aa"),
+                     .op .add [.var .global (ofString "precompile_addrs"),
+                       .panop .mul [.var .local (ofString "i"),
+                         .const (BitVec.ofNat 64 20)]],
+                     .const (BitVec.ofNat 64 1)])
+                  (.assign .local (ofString "i")
+                    (.op .add [.var .local (ofString "i"),
+                      .const (BitVec.ofNat 64 1)]))))
+            (.seq (.assign .local (ofString "i") (.const (BitVec.ofNat 64 0)))
+              (.seq (.while (.cmp .less (.var .local (ofString "i"))
+                      (.op .add [.var .local (ofString "nal"),
+                        .const (BitVec.ofNat 64 1)]))
+                    (.seq (.call (some (none, none)) (ofString "htab_set")
+                        [.var .local (ofString "aa"),
+                         .load .one (.op .add [.var .local (ofString "al_addrs"),
+                           .panop .mul [.var .local (ofString "i"),
+                             .const (BitVec.ofNat 64 8)]]),
+                         .const (BitVec.ofNat 64 1)])
+                      (.assign .local (ofString "i")
+                        (.op .add [.var .local (ofString "i"),
+                          .const (BitVec.ofNat 64 1)]))))
+                (.seq .skip tail))))))
+      ((2 ^ 64 + 1) * (K.htab_set + 1 + 1) +
+        ((2 ^ 64 + 1) * (K.htab_set + 1 + 1) + b)) := by
+  have hskip : Hoare (PtxHtabAInv2 buffers contents names) .skip
+      (fun r s => r = none → PtxHtabAInv2 buffers contents names s) :=
+    Hoare.skip (fun _ hp _ => hp)
+  have hskipb : TerminatingProgBoundedOn (PtxHtabAInv2 buffers contents names) .skip 0 :=
+    R16Shards.PtxP1.bound_of_clock (P := PtxHtabAInv2 buffers contents names)
+      (fun s => clock_skip s)
+  have ha0 : Hoare (PtxHtabAInv2 buffers contents names)
+      (.assign .local (ofString "i") (.const (BitVec.ofNat 64 0)))
+      (fun r s => r = none → PtxHtabAInv2 buffers contents names s) :=
+    phase2_htabA_assign0_hoare buffers contents names hne
+  have ha0b : TerminatingProgBoundedOn (PtxHtabAInv2 buffers contents names)
+      (.assign .local (ofString "i") (.const (BitVec.ofNat 64 0))) 0 :=
+    R16Shards.PtxP1.bound_of_clock (P := PtxHtabAInv2 buffers contents names)
+      (fun s => clock_assign s .local (ofString "i") (.const (BitVec.ofNat 64 0)))
+  intro F s hc hp
+  simpa only [Nat.zero_add, Nat.add_zero] using
+    seq_bound_trans hskipb hskip
+      (seq_bound_trans ha0b ha0
+        (seq_bound_trans
+          (phase2_htabA_warm_while_bound h buffers contents names
+            (.op .add [.var .global (ofString "precompile_addrs"),
+              .panop .mul [.var .local (ofString "i"), .const (BitVec.ofNat 64 20)]])
+            (.const (BitVec.ofNat 64 18)) hne)
+          (phase2_htabA_warm_while buffers contents names
+            (.op .add [.var .global (ofString "precompile_addrs"),
+              .panop .mul [.var .local (ofString "i"), .const (BitVec.ofNat 64 20)]])
+            (.const (BitVec.ofNat 64 18)) hne)
+          (seq_bound_trans ha0b ha0
+            (seq_bound_trans
+              (phase2_htabA_warm_while_bound h buffers contents names
+                (.load .one (.op .add [.var .local (ofString "al_addrs"),
+                  .panop .mul [.var .local (ofString "i"), .const (BitVec.ofNat 64 8)]]))
+                (.op .add [.var .local (ofString "nal"), .const (BitVec.ofNat 64 1)]) hne)
+              (phase2_htabA_warm_while buffers contents names
+                (.load .one (.op .add [.var .local (ofString "al_addrs"),
+                  .panop .mul [.var .local (ofString "i"), .const (BitVec.ofNat 64 8)]]))
+                (.op .add [.var .local (ofString "nal"), .const (BitVec.ofNat 64 1)]) hne)
+              (seq_bound_trans hskipb hskip ht))))) s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
