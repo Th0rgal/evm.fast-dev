@@ -421,7 +421,9 @@ def InputReadyWithRoot : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     w_rt.toNat % 8 = 0 ∧
     Inside (w_rt.toNat, 32) sourceBase (globN s "heap_ptr") ∧
     IvlsDisj [(w_rt.toNat, 32)] (worldOwned s S Nd) ∧
-    IvlsDisj (inputCells s w_si.toNat) [(w_rt.toNat, 32)]
+    IvlsDisj (inputCells s w_si.toNat) [(w_rt.toNat, 32)] ∧
+    memW s (w_si.toNat + 16) < 2 ^ 32 ∧
+    memW s (memW s w_si.toNat + 56) < 2 ^ 32
 
 theorem inputReadyWithRoot_guestInv {F : Type} (s : PanSemStateFiniteExact 64 F)
     (h : InputReadyWithRoot s) : GuestInv s := by
@@ -441,10 +443,10 @@ theorem resumeOn_alloc32_inputReady
     (rtal : Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n")) (ofString "alloc")) :
     DecCallResumeOn
       (fun s => ∃ w_si : BitVec 64, s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
-        InputAt s w_si.toNat)
+        InputAtNwd s w_si.toNat)
       InputReadyWithRoot
       (ofString "root") (ofString "alloc") [.const 32#64] := by
-  intro F state values body callee ret value post hcode ⟨w_si, hlu_si, hIA0⟩ hargs hl hrun
+  intro F state values body callee ret value post hcode ⟨w_si, hlu_si, hIA0, hnvh0, hnwd0⟩ hargs hl hrun
   obtain ⟨S, Nd, hIA⟩ := (inputAt_iff_with state w_si.toNat).1 hIA0
   have hAs := hIA.1
   have hW_state : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.2.1⟩⟩
@@ -471,37 +473,40 @@ theorem resumeOn_alloc32_inputReady
   injection hw_eq with hw_eq'; injection hw_eq' with hw_eq''; subst hw_eq''
   dsimp only at hav; rw [hn_loc] at hav
   set resumed := setVarHOLFinite (ofString "root") (.val (.word w_rt)) { post with locals := state.locals }
+  have hsi_mem : (w_si.toNat, 40) ∈ inputCells state w_si.toNat := by simp [inputCells]
+  have hpl_mem : (memW state w_si.toNat, 136) ∈ inputCells state w_si.toNat := by simp [inputCells]
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+  obtain ⟨_, hhp_grow, _, _, hStep0⟩ := hws
+  obtain ⟨S1, Nd1, _, _, hog1, hfr1, _⟩ := hStep0 S Nd hIA_entry.2.1 (fun _ hx => by simp at hx)
+  have hold_z := worldOwned_zero_aligned hIA_entry.2.1
+  have hsi_u := (heap_ivl_survives_step hAs.2 hhp_grow hog1 hfr1 hold_z (fun _ hx => by simp at hx)
+    (hIA.2.2.1 _ hsi_mem).2.1 (hIA.2.2.1 _ hsi_mem).2.2.1 (hIA.2.2.1 _ hsi_mem).1
+    (fun j hj => hIA.2.2.2.1 _ hsi_mem j hj) (fun _ hx => by simp at hx)).2.2
+  have hpl_u := (heap_ivl_survives_step hAs.2 hhp_grow hog1 hfr1 hold_z (fun _ hx => by simp at hx)
+    (hIA.2.2.1 _ hpl_mem).2.1 (hIA.2.2.1 _ hpl_mem).2.2.1 (hIA.2.2.1 _ hpl_mem).1
+    (fun j hj => hIA.2.2.2.1 _ hpl_mem j hj) (fun _ hx => by simp at hx)).2.2
+  have hsi0_eq : memW post w_si.toNat = memW state w_si.toNat :=
+    memW_eq_of_ivlUnhit hsi_u (hIA.2.2.1 _ hsi_mem).2.1
+      (by have := (hIA.2.2.1 _ hsi_mem).1.2; omega) ⟨le_rfl, by omega⟩
+  have hsi16_eq : memW post (w_si.toNat + 16) = memW state (w_si.toNat + 16) :=
+    memW_eq_of_ivlUnhit hsi_u (by have := (hIA.2.2.1 _ hsi_mem).2.1; omega)
+      (by have := (hIA.2.2.1 _ hsi_mem).1.2; omega) ⟨by omega, by omega⟩
+  have hsi32_eq : memW post (w_si.toNat + 32) = memW state (w_si.toNat + 32) :=
+    memW_eq_of_ivlUnhit hsi_u (by have := (hIA.2.2.1 _ hsi_mem).2.1; omega)
+      (by have := (hIA.2.2.1 _ hsi_mem).1.2; omega) ⟨by omega, by omega⟩
+  have hpl32_eq : memW post (memW state w_si.toNat + 32) = memW state (memW state w_si.toNat + 32) :=
+    memW_eq_of_ivlUnhit hpl_u (by have := (hIA.2.2.1 _ hpl_mem).2.1; omega)
+      (by have := (hIA.2.2.1 _ hpl_mem).1.2; omega) ⟨by omega, by omega⟩
+  have hpl40_eq : memW post (memW state w_si.toNat + 40) = memW state (memW state w_si.toNat + 40) :=
+    memW_eq_of_ivlUnhit hpl_u (by have := (hIA.2.2.1 _ hpl_mem).2.1; omega)
+      (by have := (hIA.2.2.1 _ hpl_mem).1.2; omega) ⟨by omega, by omega⟩
+  have hpl56_eq : memW post (memW state w_si.toNat + 56) = memW state (memW state w_si.toNat + 56) :=
+    memW_eq_of_ivlUnhit hpl_u (by have := (hIA.2.2.1 _ hpl_mem).2.1; omega)
+      (by have := (hIA.2.2.1 _ hpl_mem).1.2; omega) ⟨by omega, by omega⟩
   have hic_disj_rt : IvlsDisj (inputCells post w_si.toNat) [(w_rt.toNat, 32)] := by
-    -- Every inputCell in `state` was `< globN state "heap_ptr" ≤ w_rt.toNat`, and `inputCells post = inputCells state`!
     intro c hc x hx
     simp only [List.mem_singleton] at hx; subst hx
-    -- Actually, wait: let's prove `c ∈ inputCells state w_si.toNat`? Even simpler: in `state`,
-    -- `hfb_in.1 : globN state "heap_ptr" ≤ w_rt.toNat`, and `WorldStep` FrameOutside keeps `si`, `pl`, `pl+32`, `pl+40`!
-    have hsi_mem : (w_si.toNat, 40) ∈ inputCells state w_si.toNat := by simp [inputCells]
-    have hpl_mem : (memW state w_si.toNat, 136) ∈ inputCells state w_si.toNat := by simp [inputCells]
-    have h264 : heapLimit ≤ 2 ^ 64 := by decide
-    have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
-    obtain ⟨_, hhp_grow, _, _, hStep0⟩ := hws
-    obtain ⟨S1, Nd1, _, _, hog1, hfr1, _⟩ := hStep0 S Nd hIA_entry.2.1 (fun _ hx => by simp at hx)
-    have hold_z := worldOwned_zero_aligned hIA_entry.2.1
-    have hsi_u := (heap_ivl_survives_step hAs.2 hhp_grow hog1 hfr1 hold_z (fun _ hx => by simp at hx)
-      (hIA.2.2.1 _ hsi_mem).2.1 (hIA.2.2.1 _ hsi_mem).2.2.1 (hIA.2.2.1 _ hsi_mem).1
-      (fun j hj => hIA.2.2.2.1 _ hsi_mem j hj) (fun _ hx => by simp at hx)).2.2
-    have hpl_u := (heap_ivl_survives_step hAs.2 hhp_grow hog1 hfr1 hold_z (fun _ hx => by simp at hx)
-      (hIA.2.2.1 _ hpl_mem).2.1 (hIA.2.2.1 _ hpl_mem).2.2.1 (hIA.2.2.1 _ hpl_mem).1
-      (fun j hj => hIA.2.2.2.1 _ hpl_mem j hj) (fun _ hx => by simp at hx)).2.2
-    have hsi0_eq : memW post w_si.toNat = memW state w_si.toNat :=
-      memW_eq_of_ivlUnhit hsi_u (hIA.2.2.1 _ hsi_mem).2.1
-        (by have := (hIA.2.2.1 _ hsi_mem).1.2; omega) ⟨le_rfl, by omega⟩
-    have hsi32_eq : memW post (w_si.toNat + 32) = memW state (w_si.toNat + 32) :=
-      memW_eq_of_ivlUnhit hsi_u (by have := (hIA.2.2.1 _ hsi_mem).2.1; omega)
-        (by have := (hIA.2.2.1 _ hsi_mem).1.2; omega) ⟨by omega, by omega⟩
-    have hpl32_eq : memW post (memW state w_si.toNat + 32) = memW state (memW state w_si.toNat + 32) :=
-      memW_eq_of_ivlUnhit hpl_u (by have := (hIA.2.2.1 _ hpl_mem).2.1; omega)
-        (by have := (hIA.2.2.1 _ hpl_mem).1.2; omega) ⟨by omega, by omega⟩
-    have hpl40_eq : memW post (memW state w_si.toNat + 40) = memW state (memW state w_si.toNat + 40) :=
-      memW_eq_of_ivlUnhit hpl_u (by have := (hIA.2.2.1 _ hpl_mem).2.1; omega)
-        (by have := (hIA.2.2.1 _ hpl_mem).1.2; omega) ⟨by omega, by omega⟩
     have hic_eq : inputCells post w_si.toNat = inputCells state w_si.toNat := by
       simp only [inputCells, hsi0_eq, hsi32_eq, hpl32_eq, hpl40_eq]
     rw [hic_eq] at hc
@@ -511,7 +516,9 @@ theorem resumeOn_alloc32_inputReady
     by have hne : ofString "root" ≠ ofString "si" := by decide
        simp [resumed, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne, hlu_si],
     by simp [resumed, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE],
-    hfb.1, ⟨Nat.le_trans hAs.2.1 hfb_in.1, hfb_in.2⟩, hav, hic_disj_rt⟩
+    hfb.1, ⟨Nat.le_trans hAs.2.1 hfb_in.1, hfb_in.2⟩, hav, hic_disj_rt,
+    by change memW post (w_si.toNat + 16) < 2 ^ 32; rw [hsi16_eq]; exact hnvh0,
+    by change memW post (memW post w_si.toNat + 56) < 2 ^ 32; rw [hsi0_eq, hpl56_eq]; exact hnwd0⟩
 
 theorem hoare_htr_inputReady
     (whtr : WorldKeeps WorldOK
@@ -523,14 +530,14 @@ theorem hoare_htr_inputReady
     Hoare InputReadyWithRoot
       (.call (some (none, none)) (ofString "htr_new_payload_request")
         [.var .local (ofString "si"), .var .local (ofString "root")])
-      (fun r t => r = none → InputReady t) := by
+      (fun r t => r = none → InputReadyNwd t) := by
   refine ⟨fun {F} state hcode hIR _ hr => ?_⟩
   rcases hcall : evaluateHOLFiniteState state
       (.call (some (none, none)) (ofString "htr_new_payload_request")
         [.var .local (ofString "si"), .var .local (ofString "root")]) with ⟨cres, cpost⟩
   have hr' : cres = none := by rw [hcall] at hr; exact hr
   subst hr'
-  obtain ⟨w_si, w_rt, S, Nd, hIA, hlu_si, hlu_rt, hrt8, _, hdisj_rt, hdisj_ic_rt⟩ := hIR
+  obtain ⟨w_si, w_rt, S, Nd, hIA, hlu_si, hlu_rt, hrt8, _, hdisj_rt, hdisj_ic_rt, hnvh0, hnwd0⟩ := hIR
   rw [evaluateHOLFiniteState_call] at hcall
   have hargs : evalListHOLFinite state (h := fun a => Classical.propDecidable (state.memaddrs a))
       [.var .local (ofString "si"), .var .local (ofString "root")] =
@@ -570,36 +577,63 @@ theorem hoare_htr_inputReady
             have hws := hstep (Or.inl ⟨v, rfl⟩)
             have hIA_entry : InputAtWith (callEntryStateHOLFinite state callee) S Nd w_si.toNat :=
               (inputAtWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
-            obtain ⟨S', Nd', _, hIA_post, _, _, _⟩ :=
-              WorldStep.preserves_inputAtWith hIA_entry hws
-                (fun j hj => by
-                  change j ∈ [(locN (callEntryStateHOLFinite state callee) "out", 32),
-                    bufferRegion (callEntryStateHOLFinite state callee) ("ssz_len_chunk", 32)] at hj
-                  simp only [hout_loc, List.mem_cons, List.not_mem_nil, or_false] at hj
-                  rcases hj with rfl | rfl
-                  · intro h0; dsimp at h0; omega
-                  · exact bufferRegion_zero_aligned _ "ssz_len_chunk" 32 (by omega))
-                (fun j hj k hk => by
-                  change j ∈ [(locN (callEntryStateHOLFinite state callee) "out", 32),
-                    bufferRegion (callEntryStateHOLFinite state callee) ("ssz_len_chunk", 32)] at hj
-                  simp only [hout_loc, List.mem_cons, List.not_mem_nil, or_false] at hj
-                  rcases hj with rfl | rfl
-                  · exact hdisj_rt (w_rt.toNat, 32) (by simp) k (worldTypedIvls_sub_worldOwned _ _ _ k hk)
-                  · exact bufferRegion_disj_le hIA_entry.2.1 ("ssz_len_chunk", 32) (by decide) (by decide) 32 le_rfl k hk)
-                (fun i hi j hj => by
-                  change j ∈ [(locN (callEntryStateHOLFinite state callee) "out", 32),
-                    bufferRegion (callEntryStateHOLFinite state callee) ("ssz_len_chunk", 32)] at hj
-                  simp only [hout_loc, List.mem_cons, List.not_mem_nil, or_false] at hj
-                  rcases hj with rfl | rfl
-                  · exact hdisj_ic_rt i hi (w_rt.toNat, 32) (by simp)
-                  · exact inputCells_disj_bufferRegion_le hIA_entry.2.2.2.1 ("ssz_len_chunk", 32) (by decide) 32 le_rfl i hi)
-            have hIR_res : InputReady { post with locals := state.locals } := by
-              show InputAt { post with locals := state.locals } (locN { post with locals := state.locals } "si")
+            have hhz : ∀ j ∈ [(locN (callEntryStateHOLFinite state callee) "out", 32),
+                bufferRegion (callEntryStateHOLFinite state callee) ("ssz_len_chunk", 32)],
+                j.2 = 0 → j.1 % 8 = 0 := by
+              intro j hj
+              simp only [hout_loc, List.mem_cons, List.not_mem_nil, or_false] at hj
+              rcases hj with rfl | rfl
+              · intro h0; dsimp at h0; omega
+              · exact bufferRegion_zero_aligned _ "ssz_len_chunk" 32 (by omega)
+            have hht : IvlsDisj [(locN (callEntryStateHOLFinite state callee) "out", 32),
+                bufferRegion (callEntryStateHOLFinite state callee) ("ssz_len_chunk", 32)]
+                (worldTypedIvls (callEntryStateHOLFinite state callee) S Nd) := by
+              intro j hj k hk
+              simp only [hout_loc, List.mem_cons, List.not_mem_nil, or_false] at hj
+              rcases hj with rfl | rfl
+              · exact hdisj_rt (w_rt.toNat, 32) (by simp) k (worldTypedIvls_sub_worldOwned _ _ _ k hk)
+              · exact bufferRegion_disj_le hIA_entry.2.1 ("ssz_len_chunk", 32) (by decide) (by decide) 32 le_rfl k hk
+            have hhi : IvlsDisj (inputCells (callEntryStateHOLFinite state callee) w_si.toNat)
+                [(locN (callEntryStateHOLFinite state callee) "out", 32),
+                 bufferRegion (callEntryStateHOLFinite state callee) ("ssz_len_chunk", 32)] := by
+              intro i hi j hj
+              simp only [hout_loc, List.mem_cons, List.not_mem_nil, or_false] at hj
+              rcases hj with rfl | rfl
+              · exact hdisj_ic_rt i hi (w_rt.toNat, 32) (by simp)
+              · exact inputCells_disj_bufferRegion_le hIA_entry.2.2.2.1 ("ssz_len_chunk", 32) (by decide) 32 le_rfl i hi
+            obtain ⟨S', Nd', _, hIA_post, hog, hfr, _⟩ :=
+              WorldStep.preserves_inputAtWith hIA_entry hws hhz hht hhi
+            have h264 : heapLimit ≤ 2 ^ 64 := by decide
+            have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hIA.1.2.2.1
+            have hold_z := worldOwned_zero_aligned hIA_entry.2.1
+            have hsi_mem : (w_si.toNat, 40) ∈ inputCells state w_si.toNat := by simp [inputCells]
+            have hpl_mem : (memW state w_si.toNat, 136) ∈ inputCells state w_si.toNat := by simp [inputCells]
+            have hsi_u := (heap_ivl_survives_step hIA_entry.1.2 hws.2.1 hog hfr hold_z hhz
+              (hIA.2.2.1 _ hsi_mem).2.1 (hIA.2.2.1 _ hsi_mem).2.2.1 (hIA.2.2.1 _ hsi_mem).1
+              (fun j hj => hIA.2.2.2.1 _ hsi_mem j hj)
+              (fun j hj => hhi _ hsi_mem j hj)).2.2
+            have hpl_u := (heap_ivl_survives_step hIA_entry.1.2 hws.2.1 hog hfr hold_z hhz
+              (hIA.2.2.1 _ hpl_mem).2.1 (hIA.2.2.1 _ hpl_mem).2.2.1 (hIA.2.2.1 _ hpl_mem).1
+              (fun j hj => hIA.2.2.2.1 _ hpl_mem j hj)
+              (fun j hj => hhi _ hpl_mem j hj)).2.2
+            have hsi0_eq : memW post w_si.toNat = memW state w_si.toNat :=
+              memW_eq_of_ivlUnhit hsi_u (hIA.2.2.1 _ hsi_mem).2.1
+                (by have := (hIA.2.2.1 _ hsi_mem).1.2; omega) ⟨le_rfl, by omega⟩
+            have hsi16_eq : memW post (w_si.toNat + 16) = memW state (w_si.toNat + 16) :=
+              memW_eq_of_ivlUnhit hsi_u (by have := (hIA.2.2.1 _ hsi_mem).2.1; omega)
+                (by have := (hIA.2.2.1 _ hsi_mem).1.2; omega) ⟨by omega, by omega⟩
+            have hpl56_eq : memW post (memW state w_si.toNat + 56) = memW state (memW state w_si.toNat + 56) :=
+              memW_eq_of_ivlUnhit hpl_u (by have := (hIA.2.2.1 _ hpl_mem).2.1; omega)
+                (by have := (hIA.2.2.1 _ hpl_mem).1.2; omega) ⟨by omega, by omega⟩
+            have hIR_res : InputReadyNwd { post with locals := state.locals } := by
+              show InputAtNwd { post with locals := state.locals } (locN { post with locals := state.locals } "si")
               have hloc_si : locN { post with locals := state.locals } "si" = w_si.toNat := by
                 simp [locN, hlu_si]
               rw [hloc_si]
-              exact (inputAt_iff_with _ _).2
-                ⟨S', Nd', (inputAtWith_with_locals post state.locals post.clock S' Nd' w_si.toNat).2 hIA_post⟩
+              exact ⟨(inputAt_iff_with _ _).2
+                ⟨S', Nd', (inputAtWith_with_locals post state.locals post.clock S' Nd' w_si.toNat).2 hIA_post⟩,
+                by change memW post (w_si.toNat + 16) < 2 ^ 32; rw [hsi16_eq]; exact hnvh0,
+                by change memW post (memW post w_si.toNat + 56) < 2 ^ 32; rw [hsi0_eq, hpl56_eq]; exact hnwd0⟩
             rwa [hpost_eq] at hIR_res
           · simp at hcall
         | _ => simp [emptyLocalsHOLFinite] at hcall
@@ -709,7 +743,7 @@ theorem «gbody_main» : GBody.«main» := by
           (ofString "decode_host_input") [])
         (fun r t => r = none →
           ∃ w_si : BitVec 64, t.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
-            InputAt t w_si.toNat) := by
+            InputAtNwd t w_si.toNat) := by
     intro handler hh_ne
     exact Hoare.callHandleDest_fall wdhi
       (callEntryOn_of_localsFree localsFree_worldOK _ _) hh_ne
@@ -722,7 +756,8 @@ theorem «gbody_main» : GBody.«main» := by
           change i ∈ [bufferRegion (callEntryStateHOLFinite s callee) ("ssz_offs", 64)] at hi
           simp only [List.mem_singleton] at hi; subst hi
           exact bufferRegion_disj_le hWT_entry ("ssz_offs", 64) (by decide) (by decide) 64 le_rfl j hj)
-        obtain ⟨w_si, rfl, hcells, hdisj_ow, hntx63, hPay, hReq⟩ := hQ v rfl
+        obtain ⟨w_si, rfl, hcells, hdisj_ow, hntx63, hPay, hReq⟩ := hQ.1 v rfl
+        obtain ⟨hnvh, hnwd⟩ := hQ.2 (.val (.word w_si)) rfl w_si rfl
         have hAp := hws.1
         have hIA_post : InputAtWith post S' Nd' w_si.toNat :=
           ⟨hAp, hWT',
@@ -731,8 +766,9 @@ theorem «gbody_main» : GBody.«main» := by
         set resSt := setVarHOLFinite (ofString "si") (.val (.word w_si)) { post with locals := s.locals }
         exact ⟨w_si,
           by simp [resSt, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE],
-          (inputAt_iff_with resSt w_si.toNat).2
-            ⟨S', Nd', (inputAtWith_with_locals post _ post.clock S' Nd' w_si.toNat).2 hIA_post⟩⟩)
+          ⟨(inputAt_iff_with resSt w_si.toNat).2
+            ⟨S', Nd', (inputAtWith_with_locals post _ post.clock S' Nd' w_si.toNat).2 hIA_post⟩,
+           hnvh, hnwd⟩⟩)
   refine ⟨_, _, _, lookup_main_fn, ?_⟩
   simp only [sourceFunctionEntry, Guest.Software.guestFn_main,
     InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
@@ -812,16 +848,16 @@ theorem «gbody_main» : GBody.«main» := by
                     (fun u => seq3_return_ne_none u _ _ _ _)))
                   (TerminatingProgBoundedOn.decCall_on hal _ _ _
                     (callEntryOn_of_imp (P := fun s => ∃ w_si : BitVec 64,
-                        s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧ InputAt s w_si.toNat)
+                        s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧ InputAtNwd s w_si.toNat)
                       localsFree_guestInv
-                      (fun _ ⟨_, _, hIA⟩ => hIA.1.1) _ _)
+                      (fun _ ⟨_, _, hIA⟩ => hIA.1.1.1) _ _)
                     (resumeOn_alloc32_inputReady wal rtal)
                     (TerminatingProgBoundedOn.seq_hoare_trans
                       (TerminatingProgBoundedOn.call_on hhtr _ _
                         (callEntryOn_of_imp localsFree_guestInv inputReadyWithRoot_guestInv _ _))
                       (hoare_htr_inputReady whtr)
                       (TerminatingProgBoundedOn.decCall_on hvsnp _ _ _
-                        (callEntryOn_inputReady lookup_verify_stateless_new_payload_fn
+                        (callEntryOn_inputReadyNwd lookup_verify_stateless_new_payload_fn
                           (by simp only [sourceFunctionEntry, Guest.Software.guestFn_verify_stateless_new_payload,
                             InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
                             InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
@@ -831,7 +867,7 @@ theorem «gbody_main» : GBody.«main» := by
                             InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
                             Option.map_none, Option.map_some, List.map_cons, List.map_nil,
                             InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural]))
-                        (decCallResumeOn_guestInv inputReady_guestInv _ _ _)
+                        (decCallResumeOn_guestInv inputReadyNwd_guestInv _ _ _)
                         (TerminatingProgBoundedOn.decCall_guestInv hser _ _ _
                           (TerminatingProgBoundedOn.seq_guestInv
                             (TerminatingProgBoundedOn.of_clock (fun s => clock_storeByte s _ _))

@@ -1,4 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C17
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkLstPush
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.DecodeTransaction
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -122,7 +124,7 @@ def GBody.«process_transaction» : Prop :=
         Disj (l, 24) (memW post l, locN s "esz" * locN s "cap") ∧
         memW post (l + 8) = 0 ∧ memW post (l + 16) = locN s "cap")
     (ofString "lst_new")) →
-  (WorldKeeps BoListArg (fun _ => [])
+  (WorldKeeps R16Shards.WkBal.BoListArgStrong (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetListSlot (ofString "lst_push")) →
@@ -255,7 +257,7 @@ def GBody.«execute_block» : Prop :=
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "compute_state_root")) →
-  (WorldKeeps ((fun s => WorldOK s ∧ locN s "len" < 2 ^ 32)) (fun _ => [])
+  (WorldKeeps ((fun s => WorldOK s ∧ R16Shards.WkBlockTxEnc.DecodeTxReady s)) (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetDecodedTx (ofString "decode_transaction")) →
@@ -315,7 +317,56 @@ theorem «callees_execute_block» : sameNames (progCallees (fnBody Guest.Softwar
 theorem «gbody_execute_block» : GBody.«execute_block» := by sorry
 
 
-/-- The body of `payload_header` alone (AST line 32645, guard `InputReady`, #0 CTR). Its direct callees are
+def InputAtNwd {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : Prop :=
+  InputAt s si ∧ memW s (si + 16) < 2 ^ 32 ∧ memW s (memW s si + 56) < 2 ^ 32
+
+def InputReadyNwd : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => InputAtNwd s (locN s "si")
+
+def RetInputNwd : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S' Nd' => RetInput s r post S' Nd' ∧
+    ∀ v, r = some (.returned v) → ∀ w : BitVec 64, v = .val (.word w) →
+      memW post (w.toNat + 16) < 2 ^ 32 ∧ memW post (memW post w.toNat + 56) < 2 ^ 32
+
+theorem inputAtNwd_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k si : Nat) :
+    InputAtNwd { s with locals := locals, clock := k } si ↔ InputAtNwd s si := by
+  simp only [InputAtNwd, inputAt_with_locals]
+  exact Iff.rfl
+
+theorem localsOnly_inputReadyNwd : LocalsOnly ["si"] InputReadyNwd := by
+  intro F s locals k hl hP
+  have ht := locN_congr s locals k "si" (hl "si" (by simp))
+  show InputAtNwd _ _
+  rw [ht]
+  exact (inputAtNwd_with_locals s locals k _).2 hP
+
+theorem inputReadyNwd_inputReady {F : Type} (s : PanSemStateFiniteExact 64 F) (h : InputReadyNwd s) :
+    InputReady s := h.1
+
+theorem inputReadyNwd_worldOK {F : Type} (s : PanSemStateFiniteExact 64 F) (h : InputReadyNwd s) :
+    WorldOK s := inputReady_worldOK s h.1
+
+theorem inputReadyNwd_guestInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : InputReadyNwd s) :
+    GuestInv s := inputReady_guestInv s h.1
+
+theorem callEntryOn_inputReadyNwd {fname : MlS} {e : List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL}
+    (hl : originalRuntimeCode.lookup fname = some e) (hp : e.1 = [(ofString "si", .one)]) :
+    CallEntryOn InputReadyNwd InputReadyNwd fname [.var .local (ofString "si")] := by
+  obtain ⟨ps, b, r⟩ := e
+  dsimp only at hp
+  subst hp
+  intro F state values body' callee ret' hcode hP hargs hlook
+  have hc := callee_param_one state fname (ofString "si") .one b r (by rw [hcode]; exact hl) values
+    body' callee ret' hargs hlook
+  have hsi : locN (callEntryStateHOLFinite state callee) "si" = locN state "si" := by
+    simp only [locN, callEntryStateHOLFinite, hc]
+  show InputAtNwd (callEntryStateHOLFinite state callee) (locN (callEntryStateHOLFinite state callee) "si")
+  rw [hsi]
+  exact (inputAtNwd_with_locals state callee (state.clock - 1) _).2 hP
+
+/-- The body of `payload_header` alone (AST line 32645, guard `InputReadyNwd`, #0 CTR). Its direct callees are
 exactly `alloc`, `block_rlp_length`, `build_mpt_indexed`, `compute_requests_hash`, `encode_execution_requests`, `encode_withdrawal_rlp`, `keccak256`, `memzero` (`«callees_payload_header»`, checked against the AST). Hypotheses: the bound
 of each of these 8 callees, then the contract of each callee at a guard-carrying
 call site (9: `wk_alloc`, `rt_alloc`, `wk_block_rlp_length`, `wk_build_mpt_indexed`, `wk_encode_withdrawal_rlp`, `dm_encode_withdrawal_rlp`, `wk_keccak256`, `wk_memzero`, `zv_memzero`). Nothing else is assumed. -/
@@ -356,7 +407,7 @@ def GBody.«payload_header» : Prop :=
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "memzero")) →
   (ZeroFills (ofString "memzero")) →
-  TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header»
+  TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header") K.«payload_header»
 
 /-- The direct callees of `payload_header`, read off its AST body (revision 6). -/
 theorem «callees_payload_header» : sameNames (progCallees (fnBody Guest.Software.guestFn_payload_header))

@@ -92,6 +92,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.ComputeStateRoot
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockAuxLeaves
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodyPayloadHeaderExport
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.GbodyMain
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -114,6 +115,15 @@ open R10Shards.P26_P28 in
 open R10Shards.P02 in
 open GuardedBody.R10 in
 open M17 in
+
+private theorem wk_decode_host_input_nwd :
+    WorldKeeps WorldOK
+      (fun s => [(globN s "ssz_offs", if globN s "ssz_offs" = 0 then 0 else 64)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetInputNwd (ofString "decode_host_input") := by
+  sorry
 
 theorem primitives : Primitives where
   «fb__decode_step» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb__decode_step»
@@ -471,7 +481,7 @@ theorem primitives : Primitives where
   «wk_keccak256» := R16Shards.PrimC08Closure.«wk_keccak256»
   «wk_lst_new» := R13Wk06b.«wk_lst_new»
   «rt_lst_new» := Merged.rt_lst_new
-  «wk_lst_push» := «wk_lst_push»
+  «wk_lst_push» := ContractParts.StrongBridges.wk_lst_push_strong
   «dm_memcpy» := EvmFrameSpecs.dm_memcpy
   «ro_min» := Wave8Contracts.M15.«ro_min»
   «rv_min» := Merged.rv_min
@@ -500,7 +510,7 @@ theorem primitives : Primitives where
   «wk_build_block_access_list_rlp» := «wk_build_block_access_list_rlp»
   «wk_build_mpt_indexed» := «wk_build_mpt_indexed»
   «wk_compute_state_root» := «wk_compute_state_root»
-  «wk_decode_transaction» := «wk_decode_transaction»
+  «wk_decode_transaction» := ContractParts.StrongBridges.wk_decode_transaction_strong
   «wk_logs_bloom» := R16Shards.WkBlockTxEnc.«wk_logs_bloom»
   «ww_memzero» := Merged.ww_memzero
   «wk_process_general_purpose_requests» := «wk_process_general_purpose_requests»
@@ -530,7 +540,7 @@ theorem primitives : Primitives where
   «wk_nodedb_build» := R16Shards.TopGbodyWk.«wk_nodedb_build»
   «wk_payload_header» := «wk_payload_header»
   «wk_state_init» := «wk_state_init»
-  «wk_validate_header» := «wk_validate_header»
+  «wk_validate_header» := R16Shards.TopGbodyWk.«wk_validate_header_strong»
   «wk_validate_headers» := «wk_validate_headers»
   «gbody_run_attempt» := «gbody_run_attempt»
   «fb_blake2_init» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_blake2_init»
@@ -554,7 +564,7 @@ theorem primitives : Primitives where
   «wk_blake2_init» := R10Shards.P26_P28.wk_blake2_init
   «wk_bls_precompiles_init» := R10Shards.P26_P28.wk_bls_precompiles_init
   «wk_bn254_init» := R10Shards.P26_P28.wk_bn254_init
-  «wk_decode_host_input» := «wk_decode_host_input»
+  «wk_decode_host_input» := wk_decode_host_input_nwd
   «wk_evm_init» := R10Shards.P26_P28.wk_evm_init
   «wk_fork_init» := R10Shards.P26_P28.wk_fork_init
   «wk_header_init» := R10Shards.P26_P28.wk_header_init
@@ -567,6 +577,6 @@ theorem primitives : Primitives where
   «wk_sha256_init» := R10Shards.P26_P28.wk_sha256_init
   «wk_ssz_init» := R10Shards.P26_P28.wk_ssz_init
   «wk_u256_ws_init» := R10Shards.P26_P28.wk_u256_ws_init
-  «gbody_main» := R10Shards.Fast_GbodyC17ToC21.«gbody_main»
+  «gbody_main» := R16Shards.«gbody_main»
 
 end InitECandidate.Solver.Wave8GuestInv

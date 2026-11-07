@@ -28,7 +28,10 @@ open InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
    (memW s (si + 72), 16 * memW s (si + 80))]
 
 def InputAtStrong {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : Prop :=
-  InputAt s si ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+  InputAt s si ∧
+  memW s (si + 16) < 2 ^ 32 ∧
+  memW s (memW s si + 56) < 2 ^ 32 ∧
+  ∃ S Nd, WorldTypedWith s S Nd ∧
     (∀ i ∈ runAttemptCells s si,
       i.1 % 8 = 0 ∧ Inside i sourceBase (globN s "heap_ptr") ∧ WordsOK s i) ∧
     IvlsDisj (runAttemptCells s si) (worldOwned s S Nd)
@@ -52,6 +55,9 @@ theorem localsOnly_inputReadyStrong : LocalsOnly ["si"] InputReadyStrong := by
 
 theorem inputReadyStrong_inputReady {F : Type} (s : PanSemStateFiniteExact 64 F)
     (h : InputReadyStrong s) : InputReady s := h.1
+
+theorem inputReadyStrong_inputReadyNwd {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : InputReadyStrong s) : InputReadyNwd s := ⟨h.1, h.2.1, h.2.2.1⟩
 
 theorem inputReadyStrong_worldOK {F : Type} (s : PanSemStateFiniteExact 64 F)
     (h : InputReadyStrong s) : WorldOK s := inputReady_worldOK s h.1
@@ -126,7 +132,7 @@ theorem runAttemptCells_eq_of_unhit {F : Type} {s post : PanSemStateFiniteExact 
     (hu : ∀ c ∈ runAttemptCells s si,
       R10Shards.Fast_GbodyC17ToC21.IvlUnhit s post c) :
     runAttemptCells post si = runAttemptCells s si := by
-  obtain ⟨hIA, S, Nd, _, hc, _⟩ := h
+  obtain ⟨hIA, _, _, S, Nd, _, hc, _⟩ := h
   have hs := hc (si, 96) (by simp [runAttemptCells])
   have hp := hc (memW s si, 136) (by simp [runAttemptCells])
   have hlim : globN s "heap_ptr" ≤ 2 ^ 64 := by
@@ -158,20 +164,22 @@ def InputAtStrongWith {F : Type} (s : PanSemStateFiniteExact 64 F)
   R10Shards.Fast_GbodyC17ToC21.InputAtWith s S Nd si ∧
     (∀ i ∈ runAttemptCells s si,
       i.1 % 8 = 0 ∧ Inside i sourceBase (globN s "heap_ptr") ∧ WordsOK s i) ∧
-    IvlsDisj (runAttemptCells s si) (worldOwned s S Nd)
+    IvlsDisj (runAttemptCells s si) (worldOwned s S Nd) ∧
+    memW s (si + 16) < 2 ^ 32 ∧
+    memW s (memW s si + 56) < 2 ^ 32
 
 theorem inputAtStrongWith_strong {F : Type} {s : PanSemStateFiniteExact 64 F}
     {S Nd : List Nat} {si : Nat} (h : InputAtStrongWith s S Nd si) :
     InputAtStrong s si :=
   ⟨(R10Shards.Fast_GbodyC17ToC21.inputAt_iff_with s si).2 ⟨S, Nd, h.1⟩,
-    S, Nd, h.1.2.1, h.2⟩
+    h.2.2.2.1, h.2.2.2.2, S, Nd, h.1.2.1, h.2.1, h.2.2.1⟩
 
 theorem inputAtStrong_iff_with {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) :
     InputAtStrong s si ↔ ∃ S Nd, InputAtStrongWith s S Nd si := by
   constructor
-  · rintro ⟨hIA, S, Nd, hWT, hcs, hd⟩
+  · rintro ⟨hIA, hnvh, hnwd, S, Nd, hWT, hcs, hd⟩
     obtain ⟨hA, _, _, _, hsmall, _, hn, hp, hr⟩ := hIA
-    refine ⟨S, Nd, ⟨hA, hWT, hsmall, ?_, hn, hp, hr⟩, hcs, hd⟩
+    refine ⟨S, Nd, ⟨⟨hA, hWT, hsmall, ?_, hn, hp, hr⟩, hcs, hd, hnvh, hnwd⟩⟩
     intro c hc o ho
     simp only [inputCells, List.mem_cons, List.not_mem_nil, or_false] at hc
     rcases hc with rfl | rfl | rfl | rfl
@@ -219,16 +227,36 @@ theorem worldStep_preserves_inputAtStrongWith
     exact R10Shards.Fast_GbodyC17ToC21.heap_ivl_survives_step
       h.1.1.2 hw.2.1 hog hfr
       (R10Shards.Fast_GbodyC17ToC21.worldOwned_zero_aligned h.1.2.1)
-      hz ha hword.2.1 hin (h.2.2 c hcm) (hc c hcm)
+      hz ha hword.2.1 hin (h.2.2.1 c hcm) (hc c hcm)
   have heq := runAttemptCells_eq_of_unhit (inputAtStrongWith_strong h)
     (fun c hcm => (hs c hcm).2.2)
-  refine ⟨S', Nd', ⟨hIA, ?_, ?_⟩, hsub, (fun c hcm => (hs c hcm).2.2), hQ⟩
+  have hlim : globN s "heap_ptr" ≤ 2 ^ 64 := by
+    have ha := h.1.1.2.2.1
+    have hb : heapLimit ≤ 2 ^ 64 := by decide
+    omega
+  have hsi_rc := h.2.1 (si, 96) (by simp [runAttemptCells])
+  have hpl_rc := h.2.1 (memW s si, 136) (by simp [runAttemptCells])
+  have hsi0_eq : memW post si = memW s si := by
+    simpa using R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit
+      (a := si + 0) (hs (si, 96) (by simp [runAttemptCells])).2.2
+      (by omega) (by have := hsi_rc.2.1.2; omega) ⟨by omega, by omega⟩
+  have hsi16_eq : memW post (si + 16) = memW s (si + 16) :=
+    R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit
+      (hs (si, 96) (by simp [runAttemptCells])).2.2
+      (by have := hsi_rc.1; omega) (by have := hsi_rc.2.1.2; omega) ⟨by omega, by omega⟩
+  have hpl56_eq : memW post (memW s si + 56) = memW s (memW s si + 56) :=
+    R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit
+      (hs (memW s si, 136) (by simp [runAttemptCells])).2.2
+      (by have := hpl_rc.1; omega) (by have := hpl_rc.2.1.2; omega) ⟨by omega, by omega⟩
+  refine ⟨S', Nd', ⟨hIA, ?_, ?_, ?_, ?_⟩, hsub, (fun c hcm => (hs c hcm).2.2), hQ⟩
   · rw [heq]
     intro c hcm
     exact ⟨(h.2.1 c hcm).1, (hs c hcm).1,
       R10Shards.Fast_GbodyC17ToC21.wordsOK_transfer h.1.1.1 hw.1.1 (h.2.1 c hcm).2.2⟩
   · rw [heq]
     exact fun c hcm => (hs c hcm).2.1
+  · rw [hsi16_eq]; exact h.2.2.2.1
+  · rw [hsi0_eq, hpl56_eq]; exact h.2.2.2.2
 
 theorem inputCells_disj_of_runAttemptCells {F : Type}
     {s : PanSemStateFiniteExact 64 F} {si : Nat} {js : List Ivl}
@@ -286,7 +314,7 @@ theorem worldStepIn_preserves_strongAndBlocks
       FrameOutside s post (worldOwned s S Nd ++ R s ++ [freeGap s]) (heapFree s) ∧
       Q s r post S' Nd' := by
   have h264 : heapLimit ≤ 2 ^ 64 := by decide
-  obtain ⟨⟨hAs, hWT, hcells, hdisj_in, hntx63, hPay, hReq⟩, hrc, hrc_disj⟩ := h
+  obtain ⟨⟨hAs, hWT, hcells, hdisj_in, hntx63, hPay, hReq⟩, hrc, hrc_disj, hnvh, hnwd⟩ := h
   obtain ⟨hAp, hhp, _, _, hStep⟩ := hw
   have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hAs.2.2.1
   obtain ⟨S', Nd', hsub, hWT', hog, hfr, hQ⟩ := hStep S Nd hWT hT ht
@@ -377,15 +405,21 @@ theorem worldStepIn_preserves_strongAndBlocks
         R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit hrq_u
           (by have := hrq_w_s.1; omega) (by unfold Inside at hrq_in_s; omega) ⟨by omega, by omega⟩
       rw [hcell_eq]; exact hReq.2 idx hidx
-  have heq := runAttemptCells_eq_of_unhit (inputAtStrongWith_strong ⟨⟨hAs, hWT, hcells, hdisj_in, hntx63, hPay, hReq⟩, hrc, hrc_disj⟩)
+  have heq := runAttemptCells_eq_of_unhit (inputAtStrongWith_strong ⟨⟨hAs, hWT, hcells, hdisj_in, hntx63, hPay, hReq⟩, hrc, hrc_disj, hnvh, hnwd⟩)
     (fun c hcm => (h_rc_surv c hcm).2.2)
-  refine ⟨S', Nd', ⟨hIA', ?_, ?_⟩, ?_, hsub, (fun c hcm => (h_rc_surv c hcm).2.2),
+  have hsi_eq16 : memW post (si + 16) = memW s (si + 16) :=
+    R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit hsi_u (by have := hsi_w_s.1; omega)
+      (by unfold Inside at hsi_in_s; omega) ⟨by omega, by omega⟩
+  have hpl56 : memW post (pl + 56) = memW s (pl + 56) := hpl_word 56 (by omega) (by omega)
+  refine ⟨S', Nd', ⟨hIA', ?_, ?_, ?_, ?_⟩, ?_, hsub, (fun c hcm => (h_rc_surv c hcm).2.2),
     (fun b hbm => (h_bs_surv b hbm).2.2), hog, hfr, hQ⟩
   · rw [heq]
     exact fun c hcm => ⟨(hrc c hcm).1, (h_rc_surv c hcm).1,
       R10Shards.Fast_GbodyC17ToC21.wordsOK_transfer hAs.1 hAp.1 (hrc c hcm).2.2⟩
   · rw [heq]
     exact fun c hcm => (h_rc_surv c hcm).2.1
+  · rw [hsi_eq16]; exact hnvh
+  · rw [hsi_eq0, hpl56]; exact hnwd
   · intro b hbm
     obtain ⟨hb8, hbl8, _, hbw, _⟩ := hbs b hbm
     exact ⟨hb8, hbl8, (h_bs_surv b hbm).1,
@@ -522,9 +556,9 @@ theorem inputAtStrongWith_cons_fresh {F : Type} {s : PanSemStateFiniteExact 64 F
     intro c hcm o ho
     rcases List.mem_append.1 ho with ho | ho
     · exact hc c hcm o ho
-    · exact h.2.2 c hcm o ho
+    · exact h.2.2.1 c hcm o ho
   exact ⟨⟨h.1.1, hWT, h.1.2.2.1,
-    inputCells_disj_of_runAttemptCells hdisj, h.1.2.2.2.2⟩, h.2.1, hdisj⟩
+    inputCells_disj_of_runAttemptCells hdisj, h.1.2.2.2.2⟩, h.2.1, hdisj, h.2.2.2.1, h.2.2.2.2⟩
 
 theorem allBlocksGood_cons_fresh {F : Type} {s : PanSemStateFiniteExact 64 F}
     {S Nd : List Nat} {bs : List Ivl} {t : Nat}
@@ -558,7 +592,7 @@ theorem strongAndBlocks_bufferRegion_conditions {F : Type}
     exact bufferRegion_disj h.1.2.1 gn hg hu j hj
   · intro c hc i hi
     rw [List.mem_singleton.1 hi]
-    exact h.2.2 c hc _ hm
+    exact h.2.2.1 c hc _ hm
   · intro b hbm i hi
     rw [List.mem_singleton.1 hi]
     exact (hb b hbm).2.2.2.2 b (by simp) _ hm
@@ -676,11 +710,11 @@ theorem strongAndBlocks_setGlobal_untracked {F : Type} {s : PanSemStateFiniteExa
   have hic_eq : inputCells post si = inputCells s si := rfl
   have hrc_eq : runAttemptCells post si = runAttemptCells s si := rfl
   refine ⟨⟨⟨hu.1, hu.2.1, ?_, ?_, h.1.2.2.2.2.1, h.1.2.2.2.2.2.1, h.1.2.2.2.2.2.2⟩,
-    ?_, ?_⟩, ?_, hjc_eq⟩
+    ?_, ?_, h.2.2.2.1, h.2.2.2.2⟩, ?_, hjc_eq⟩
   · rw [hic_eq, hhp_eq]; exact h.1.2.2.1
   · rw [hic_eq, hu.2.2]; exact h.1.2.2.2.1
   · rw [hrc_eq, hhp_eq]; exact h.2.1
-  · rw [hrc_eq, hu.2.2]; exact h.2.2
+  · rw [hrc_eq, hu.2.2]; exact h.2.2.1
   · intro b hb
     obtain ⟨b1, b2, bin, bw, bow⟩ := hbs b hb
     refine ⟨b1, b2, ?_, bw, ?_⟩
@@ -924,10 +958,10 @@ theorem strongAndBlocks_setGlobal_be {F : Type} {s : PanSemStateFiniteExact 64 F
     rw [hrc_eq]
     intro c hc o ho
     rcases how_sub o ho with hold | rfl
-    · exact h.2.2 c hc o hold
+    · exact h.2.2.1 c hc o hold
     · exact hw_rc c hc (w.toNat, 120) (List.mem_singleton.2 rfl)
   refine ⟨⟨⟨hAp, hWT_post, ?_, inputCells_disj_of_runAttemptCells hrc_disj_post,
-    h.1.2.2.2.2.1, h.1.2.2.2.2.2.1, h.1.2.2.2.2.2.2⟩, ?_, hrc_disj_post⟩,
+    h.1.2.2.2.2.1, h.1.2.2.2.2.2.1, h.1.2.2.2.2.2.2⟩, ?_, hrc_disj_post, h.2.2.2.1, h.2.2.2.2⟩,
     ?_, hjc_eq, hbe_lu, hw_nz⟩
   · rw [hic_eq, hhp_eq]; exact h.1.2.2.1
   · rw [hrc_eq, hhp_eq]; exact h.2.1
@@ -1131,11 +1165,17 @@ theorem store_in_be_preserves_strongAndBlocks {F : Type} {s : PanSemStateFiniteE
   have hrc_eq : runAttemptCells post si = runAttemptCells s si :=
     runAttemptCells_eq_of_unhit (inputAtStrongWith_strong h) hu_rc
   have hrc_disj : IvlsDisj (runAttemptCells post si) (worldOwned post S Nd) := by
-    rw [hrc_eq, hWT_res.2.2.1]; exact h.2.2
-  refine ⟨⟨hIA', ?_, hrc_disj⟩, ?_, rfl, rfl, hdisj_unhit⟩
+    rw [hrc_eq, hWT_res.2.2.1]; exact h.2.2.1
+  have hsi_eq16 : memW post (si + 16) = memW s (si + 16) :=
+    R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit hsi_u (by have := hsi_w_s.1; omega)
+      (by unfold Inside at hsi_in_s; omega) ⟨by omega, by omega⟩
+  have hpl56 : memW post (pl + 56) = memW s (pl + 56) := hpl_word 56 (by omega) (by omega)
+  refine ⟨⟨hIA', ?_, hrc_disj, ?_, ?_⟩, ?_, rfl, rfl, hdisj_unhit⟩
   · rw [hrc_eq]
     exact fun c hc => ⟨(h.2.1 c hc).1, (h.2.1 c hc).2.1,
       R10Shards.Fast_GbodyC17ToC21.wordsOK_transfer hAs.1 hWT_res.1.1 (h.2.1 c hc).2.2⟩
+  · rw [hsi_eq16]; exact h.2.2.2.1
+  · rw [hsi_eq0, hpl56]; exact h.2.2.2.2
   · intro b hb
     obtain ⟨b1, b2, bin, bw, bow⟩ := hbs b hb
     refine ⟨b1, b2, bin, R10Shards.Fast_GbodyC17ToC21.wordsOK_transfer hAs.1 hWT_res.1.1 bw, ?_⟩
@@ -2495,8 +2535,7 @@ theorem decCallResumeOn_is_valid_versioned_hashes
       show ofString "vvh" ≠ ofString "hdr" by decide]
 
 theorem hoare_validate_header
-    (wvh : WorldKeeps
-      (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+    (wvh : WorldKeeps R16Shards.TopGbodyWk.ValidateHeaderReady
       (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
         (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
         (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
@@ -2553,20 +2592,33 @@ theorem hoare_validate_header
             have hh_loc : locN entry "h" = w_hdr.toNat := by
               simp [entry, locN, callEntryStateHOLFinite, hpc.2.2]
             have hpar_in := (hBs (w_parent.toNat, 248) (by simp)).2.2.1
-            have hhdr_in := (hBs (w_hdr.toNat, 248) (by simp)).2.2.1
-            have hHOK : HeaderOKStrongLocal entry := by
-              unfold HeaderOKStrongLocal HeaderAtStrongLocal; rw [hh_loc]; exact ⟨hHdr, hhdr_in⟩
-            have hPar_entry : HeaderAtStrongLocal entry (locN entry "parent") := by
-              unfold HeaderAtStrongLocal; rw [hpar_loc]; exact ⟨hPar, hpar_in⟩
-            have hstep := FunSpec.at_lookup wvh state hcode _ body callee ret hl
-              ⟨localsFree_worldOK state callee (state.clock - 1) hW, hHOK, hPar_entry⟩
-              (by rw [hrun]; simp)
-            rw [hrun] at hstep; dsimp only at hstep
-            have hws := hstep (Or.inl ⟨v, rfl⟩)
             have hIA_entry : InputAtStrongWith entry S Nd w_si.toNat :=
               (inputAtStrongWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
             have hBs_entry : AllBlocksGood entry S Nd [(w_parent.toNat, 248), (w_hdr.toNat, 248)] :=
               (allBlocksGood_with_locals state callee (state.clock - 1) S Nd _).2 hBs
+            have hHOK : HeaderOK entry := by
+              show HeaderAt entry (locN entry "h")
+              rw [hh_loc]; exact hHdr
+            have hPar_entry : R16Shards.HeaderHashRecover.HeaderAtStrong entry (locN entry "parent") := by
+              unfold R16Shards.HeaderHashRecover.HeaderAtStrong; rw [hpar_loc]; exact ⟨hPar, hpar_in⟩
+            have hPar_disj : ∀ iv ∈ R14Shards.OpHandlersA.untypedGlobalBufIvls entry,
+                Disj (locN entry "parent", 248) iv := by
+              rw [hpar_loc]
+              have how := (hBs_entry (w_parent.toNat, 248) (by simp)).2.2.2.2 (w_parent.toNat, 248) (by simp)
+              intro iv hiv
+              simp only [R14Shards.OpHandlersA.untypedGlobalBufIvls, List.map_cons, List.map_nil,
+                List.mem_cons, List.not_mem_nil, or_false] at hiv
+              rcases hiv with rfl | rfl | rfl | rfl | rfl
+              · exact how (bufferRegion entry ("u256_ws", 640)) (bufferRegion_mem_worldOwned entry S Nd (by decide))
+              · exact how (bufferRegion entry ("sk_buf", 64)) (bufferRegion_mem_worldOwned entry S Nd (by decide))
+              · exact how (bufferRegion entry ("keccak_pad", 136)) (bufferRegion_mem_worldOwned entry S Nd (by decide))
+              · exact how (bufferRegion entry ("keccak_st", 200)) (bufferRegion_mem_worldOwned entry S Nd (by decide))
+              · exact how (bufferRegion entry ("mpt_nib_scratch", 64)) (bufferRegion_mem_worldOwned entry S Nd (by decide))
+            have hstep := FunSpec.at_lookup wvh state hcode _ body callee ret hl
+              ⟨localsFree_worldOK state callee (state.clock - 1) hW, hHOK, hPar_entry, hPar_disj⟩
+              (by rw [hrun]; simp)
+            rw [hrun] at hstep; dsimp only at hstep
+            have hws := hstep (Or.inl ⟨v, rfl⟩)
             have hc1 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry
               ("keccak_pad", 136) (by decide) (by decide) (by decide)
             have hc2 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry
@@ -2601,6 +2653,7 @@ theorem hoare_validate_header
                   · exact hc3.2.2.2 b hb _ (by simp [bufferRegion]))
             have h264 : heapLimit ≤ 2 ^ 64 := by decide
             have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+            have hhdr_in := (hBs (w_hdr.toNat, 248) (by simp)).2.2.1
             have hHdr_post : HeaderAt post w_hdr.toNat :=
               headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hhdr_in; omega)
                 (hu_bs (w_hdr.toNat, 248) (by simp)) hHdr
@@ -2659,7 +2712,7 @@ theorem runAttemptPhaseC1_bounded
       (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes»)
     (hmeq : TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq»)
     (hmz : TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero»)
-    (hph : TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header»)
+    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header") K.«payload_header»)
     (hvh : TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header»)
     (wal : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
       [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
@@ -2695,7 +2748,7 @@ theorem runAttemptPhaseC1_bounded
        ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
       RetHeader (ofString "payload_header"))
     (wvh : WorldKeeps
-      (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+      R16Shards.TopGbodyWk.ValidateHeaderReady
       (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
         (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
         (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
@@ -2707,13 +2760,13 @@ theorem runAttemptPhaseC1_bounded
       ((K.«payload_header» + 1) + (K.«alloc» + 1) + (K.«header_hash» + 1) +
         (K.«memeq» + 1) + (K.«is_valid_versioned_hashes» + 1) + (K.«validate_header» + 1) +
         (K.«alloc» + 1) + (K.«memzero» + 1) + (K.«execute_block» + 1)) := by
-  have hentry_ph : CallEntryOn RunAttemptPostScan InputReady
+  have hentry_ph : CallEntryOn RunAttemptPostScan InputReadyNwd
       (ofString "payload_header") [.var .local (ofString "si")] := by
     have hentry_strong : CallEntryOn InputReadyStrong InputReadyStrong
         (ofString "payload_header") [.var .local (ofString "si")] :=
       callEntryOn_inputReadyStrong lookup_payload_header_fn rfl
     intro F state values body' callee ret' hcode hP hargs hl
-    exact inputReadyStrong_inputReady _
+    exact inputReadyStrong_inputReadyNwd _
       (hentry_strong state values body' callee ret' hcode
         (runAttemptPostScan_inputReadyStrong hP) hargs hl)
   have hc2 : TerminatingProgBoundedOn RunAttemptPreBe runAttemptPhaseC2Prog
@@ -3689,7 +3742,7 @@ theorem runAttemptScanBlock_bounded
       (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes»)
     (hmeq : TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq»)
     (hmz : TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero»)
-    (hph : TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header»)
+    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header") K.«payload_header»)
     (hvh : TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header»)
     (wal : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
       [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
@@ -3725,7 +3778,7 @@ theorem runAttemptScanBlock_bounded
        ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
       RetHeader (ofString "payload_header"))
     (wvh : WorldKeeps
-      (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+      R16Shards.TopGbodyWk.ValidateHeaderReady
       (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
         (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
         (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
@@ -3797,7 +3850,7 @@ theorem runAttemptFullProg_bounded
     (hmeq : TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq»)
     (hmz : TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero»)
     (hnb : TerminatingFunBoundedOn GuestInv (ofString "nodedb_build") K.«nodedb_build»)
-    (hph : TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header»)
+    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header") K.«payload_header»)
     (hsi : TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init»)
     (hvh : TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header»)
     (hvhs : TerminatingFunBoundedOn GuestInv (ofString "validate_headers") K.«validate_headers»)
@@ -3851,7 +3904,7 @@ theorem runAttemptFullProg_bounded
        ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
       RetStateInit (ofString "state_init"))
     (wvh : WorldKeeps
-      (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+      R16Shards.TopGbodyWk.ValidateHeaderReady
       (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
         (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
         (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
@@ -3992,7 +4045,7 @@ def GBody.«run_attempt_strong» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq») →
   (TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero») →
   (TerminatingFunBoundedOn GuestInv (ofString "nodedb_build") K.«nodedb_build») →
-  (TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header») →
+  (TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header") K.«payload_header») →
   (TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init») →
   (TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header») →
   (TerminatingFunBoundedOn GuestInv (ofString "validate_headers") K.«validate_headers») →
@@ -4030,7 +4083,7 @@ def GBody.«run_attempt_strong» : Prop :=
     ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
     [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetStateInit (ofString "state_init")) →
-  (WorldKeeps (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+  (WorldKeeps R16Shards.TopGbodyWk.ValidateHeaderReady
     (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
@@ -4052,7 +4105,7 @@ theorem gbody_run_attempt_strong_of
     (hmeq : TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq»)
     (hmz : TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero»)
     (hnb : TerminatingFunBoundedOn GuestInv (ofString "nodedb_build") K.«nodedb_build»)
-    (hph : TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header»)
+    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header") K.«payload_header»)
     (hsi : TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init»)
     (hvh : TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header»)
     (hvhs : TerminatingFunBoundedOn GuestInv (ofString "validate_headers") K.«validate_headers»)
@@ -4106,7 +4159,7 @@ theorem gbody_run_attempt_strong_of
        ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
       RetStateInit (ofString "state_init"))
     (wvh : WorldKeeps
-      (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+      R16Shards.TopGbodyWk.ValidateHeaderReady
       (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
         (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
         (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])

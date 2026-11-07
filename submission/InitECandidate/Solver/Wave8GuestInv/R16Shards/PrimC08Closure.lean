@@ -34,6 +34,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalRemove
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkRequestsAppend
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.EkWarmStorageKey
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.GbodyMain
 
 /-! Direct standalone aggregator (`PrimC08Closure`) wiring verified `C00`, `C08`, and
 `C09..C21` theorems into `PrimitivesProved.lean` while keeping `ContractParts/C00..C21` frozen. -/
@@ -403,6 +404,6 @@ theorem «gbody_state_init» : GBody.«state_init» :=
   InitECandidate.Solver.Wave8GuestInv.R13Shards.gbody_state_init
 
 theorem «gbody_main» : GBody.«main» :=
-  InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21.«gbody_main»
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.«gbody_main»
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.PrimC08Closure

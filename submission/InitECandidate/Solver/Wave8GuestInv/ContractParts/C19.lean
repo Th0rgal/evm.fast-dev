@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C18
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.HeaderHash
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkHostPayloadHeaders
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -55,7 +56,7 @@ def GBody.«run_attempt» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq») →
   (TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero») →
   (TerminatingFunBoundedOn GuestInv (ofString "nodedb_build") K.«nodedb_build») →
-  (TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header») →
+  (TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header") K.«payload_header») →
   (TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init») →
   (TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header») →
   (TerminatingFunBoundedOn GuestInv (ofString "validate_headers") K.«validate_headers») →
@@ -92,7 +93,7 @@ def GBody.«run_attempt» : Prop :=
     ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
     [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetStateInit (ofString "state_init")) →
-  (WorldKeeps ((fun s => WorldOK s ∧ HeaderOK s ∧ HeaderAt s (locN s "parent"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+  (WorldKeeps R16Shards.TopGbodyWk.ValidateHeaderReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "validate_header")) →
@@ -100,7 +101,7 @@ def GBody.«run_attempt» : Prop :=
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetHeaders (ofString "validate_headers")) →
-  TerminatingFunBoundedOn InputReady (ofString "run_attempt") K.«run_attempt»
+  TerminatingFunBoundedOn InputReadyNwd (ofString "run_attempt") K.«run_attempt»
 
 /-- The direct callees of `run_attempt`, read off its AST body (revision 6). -/
 theorem «callees_run_attempt» : sameNames (progCallees (fnBody Guest.Software.guestFn_run_attempt))
@@ -114,13 +115,13 @@ theorem «lookup_run_attempt» : originalRuntimeCode.lookup (ofString "run_attem
 theorem «gbody_run_attempt» : GBody.«run_attempt» := by sorry
 
 
-/-- The body of `attempt_l1` alone (AST line 33847, guard `InputReady`, loop-free). Its direct callees are
+/-- The body of `attempt_l1` alone (AST line 33847, guard `InputReadyNwd`, loop-free). Its direct callees are
 exactly `run_attempt` (`«callees_attempt_l1»`, checked against the AST). Hypotheses: the bound
 of each of these 1 callees, then the contract of each callee at a guard-carrying
 call site (0: none). Nothing else is assumed. -/
 def GBody.«attempt_l1» : Prop :=
-  (TerminatingFunBoundedOn InputReady (ofString "run_attempt") K.«run_attempt») →
-  TerminatingFunBoundedOn InputReady (ofString "attempt_l1") K.«attempt_l1»
+  (TerminatingFunBoundedOn InputReadyNwd (ofString "run_attempt") K.«run_attempt») →
+  TerminatingFunBoundedOn InputReadyNwd (ofString "attempt_l1") K.«attempt_l1»
 
 /-- The direct callees of `attempt_l1`, read off its AST body (revision 6). -/
 theorem «callees_attempt_l1» : sameNames (progCallees (fnBody Guest.Software.guestFn_attempt_l1))
@@ -137,23 +138,23 @@ theorem «gbody_attempt_l1» : GBody.«attempt_l1» := by
   refine ⟨_, _, _, «lookup_attempt_l1», ?_⟩
   simp only [sourceFunctionEntry, Guest.Software.guestFn_attempt_l1, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
   refine TerminatingProgBoundedOn.mono_bound
-    (TerminatingProgBoundedOn.dec_onLocals (localsOnly_inputReady) _ (by decide) _ _
+    (TerminatingProgBoundedOn.dec_onLocals (localsOnly_inputReadyNwd) _ (by decide) _ _
       (TerminatingProgBoundedOn.seq_guestInv_after
-        (TerminatingProgBoundedOn.callHandle_on h1 inputReady_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _
-          (callEntryOn_inputReady «lookup_run_attempt»
+        (TerminatingProgBoundedOn.callHandle_on h1 inputReadyNwd_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _
+          (callEntryOn_inputReadyNwd «lookup_run_attempt»
             (by simp only [sourceFunctionEntry, Guest.Software.guestFn_run_attempt, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil,
               InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural])))
-        inputReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
+        inputReadyNwd_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
   unfold K.«attempt_l1»; omega
 
 
-/-- The body of `attempt_l2` alone (AST line 33863, guard `InputReady`, loop-free). Its direct callees are
+/-- The body of `attempt_l2` alone (AST line 33863, guard `InputReadyNwd`, loop-free). Its direct callees are
 exactly `attempt_l1` (`«callees_attempt_l2»`, checked against the AST). Hypotheses: the bound
 of each of these 1 callees, then the contract of each callee at a guard-carrying
 call site (0: none). Nothing else is assumed. -/
 def GBody.«attempt_l2» : Prop :=
-  (TerminatingFunBoundedOn InputReady (ofString "attempt_l1") K.«attempt_l1») →
-  TerminatingFunBoundedOn InputReady (ofString "attempt_l2") K.«attempt_l2»
+  (TerminatingFunBoundedOn InputReadyNwd (ofString "attempt_l1") K.«attempt_l1») →
+  TerminatingFunBoundedOn InputReadyNwd (ofString "attempt_l2") K.«attempt_l2»
 
 /-- The direct callees of `attempt_l2`, read off its AST body (revision 6). -/
 theorem «callees_attempt_l2» : sameNames (progCallees (fnBody Guest.Software.guestFn_attempt_l2))
@@ -170,13 +171,13 @@ theorem «gbody_attempt_l2» : GBody.«attempt_l2» := by
   refine ⟨_, _, _, «lookup_attempt_l2», ?_⟩
   simp only [sourceFunctionEntry, Guest.Software.guestFn_attempt_l2, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
   refine TerminatingProgBoundedOn.mono_bound
-    (TerminatingProgBoundedOn.dec_onLocals (localsOnly_inputReady) _ (by decide) _ _
+    (TerminatingProgBoundedOn.dec_onLocals (localsOnly_inputReadyNwd) _ (by decide) _ _
       (TerminatingProgBoundedOn.seq_guestInv_after
-        (TerminatingProgBoundedOn.callHandle_on h1 inputReady_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _
-          (callEntryOn_inputReady «lookup_attempt_l1»
+        (TerminatingProgBoundedOn.callHandle_on h1 inputReadyNwd_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _
+          (callEntryOn_inputReadyNwd «lookup_attempt_l1»
             (by simp only [sourceFunctionEntry, Guest.Software.guestFn_attempt_l1, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil,
               InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural])))
-        inputReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
+        inputReadyNwd_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
   unfold K.«attempt_l2»; omega
 
 
