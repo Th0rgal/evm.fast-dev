@@ -15664,4 +15664,128 @@ theorem epsA_add_sat_ge_g10 :
       omega
   · cases hx
 
+/-! ## Milestone 3 (call-family, part b): op_delegatecall charged suffix -/
+
+/-- The eval of a binary word-op is a word whenever it is defined (the `.op` case of
+`evalHOLExact` either fails or produces `.val (.word _)`). -/
+private theorem eval_op_word_g10 {F : Type} {st : PanSemStateFiniteExact 64 F}
+    {op : BinOp} {args : List (ExpHOL 64)} {v : ValueHOL 64}
+    (hv : @evalHOLExact 64 F _ st.toExact (fun a => Classical.propDecidable (st.memaddrs a))
+      (.op op args) = some v) :
+    ∃ w : BitVec 64, v = .val (.word w) := by
+  unfold evalHOLExact at hv
+  revert hv
+  cases hlist : @evalListHOLExact 64 F _ st.toExact (fun a => Classical.propDecidable (st.memaddrs a)) args with
+  | none => intro h; simp at h
+  | some vs =>
+    intro hv
+    dsimp only at hv
+    split at hv
+    · rename_i hall
+      rcases hw : wordOpHOL op (vs.map valueWord) with _ | w
+      · rw [hw] at hv; simp at hv
+      · rw [hw] at hv; simp at hv
+        exact ⟨w, hv.symm⟩
+    · simp at hv
+
+/-- ccA counterpart of `HandlerRunA.seq_store_ev_off_charged_g10`: a word store to global
+`ev + off` inside a `ChildContinuationA` walk, with the caller supplying the invariant
+preservation for the memory-updated state. -/
+private theorem ccA_store_ev_off_g10 {F : Type} {P Q : PanSemStateFiniteExact 64 F → Prop}
+    {off : Nat} {valExp : ExpHOL 64} {cont : ProgHOL 64}
+    (hoff : off < 280)
+    (hval : ∀ (t : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      P t →
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) valExp = some v →
+      ∃ w : BitVec 64, v = .val (.word w))
+    (hstep : ∀ t (w : BitVec 64),
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) valExp =
+        some (.val (.word w)) →
+      EvmInv t → Group10.HeadMemChainWF t → P t →
+      EvmInv { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w } ∧
+      Group10.HeadMemChainWF { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w } ∧
+      evmChain { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w } = evmChain t ∧
+      evmR { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w } ≤ evmR t ∧
+      Q { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w })
+    (hcont : ChildContinuationA Q cont) :
+    ChildContinuationA P
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) valExp) cont) := by
+  intro t hc hi hw hp hnt
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  rcases hst : evaluateHOLFiniteState t
+      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) valExp) with ⟨r1, t1⟩
+  simp only [hst] at hnt ⊢
+  cases r1 with
+  | some res1 =>
+    have herr := store_some_eq_error_g10 hst
+    subst herr
+    refine ⟨fun hv => absurd hv (by rintro ⟨_, h⟩; cases h),
+      fun he => absurd he (by rintro ⟨_, h⟩; cases h)⟩
+  | none =>
+    dsimp only at hnt ⊢
+    obtain ⟨hb_ev, evw, hevw, hevw_nat⟩ := ev_word_bounds hi
+    obtain ⟨w, hw_ev, ht1_eq⟩ := R14Shards.OpHandlersA.store_global_off_word (t := t) (post := t1)
+      (gname := "ev") (gbase := globN t "ev") (off := off) hevw hevw_nat (by omega)
+      (fun v hv => hval t v hp hv) hst
+    subst ht1_eq
+    obtain ⟨hInv1, hWF1, hch1, hRle, hQ1⟩ := hstep t w hw_ev hi hw hp
+    have hcc := hcont { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + off)) w }
+      hc hInv1 hWF1 hQ1 hnt
+    refine ⟨?_, ?_⟩
+    · intro hv
+      have hR2 := hcc.1 hv
+      exact ⟨hR2.1.1, Nat.le_trans hR2.2 hRle⟩
+    · intro he
+      have hR2 := hcc.2 he
+      rw [hch1] at hR2
+      exact ⟨hR2.1.1, hR2.2.1, Nat.le_trans hR2.2.2 hRle⟩
+
+/-- `op_delegatecall`'s charged region: everything from the `calculate_message_call_gas`
+call (whose bound value feeds the final gas charge, the gas-spent store and `generic_call`)
+through the `return 0`. -/
+def delegatecallChargedSuffix_g10 : ProgHOL 64 :=
+  handlerSuffix_g10 20 (sourceFnBody Guest.Software.guestFn_op_delegatecall)
+
+/-- The full tail of `op_delegatecall`'s charged suffix (everything after the `mcg` call).
+Definitional self-check below validates the 20-step continuation-path strip, the `mcg`
+argument list and this whole tail against the source AST. -/
+def delegatecallChargedSuffixTail_g10 : ProgHOL 64 :=
+  (.seq (.call (some (none, none)) (ofString "charge_gas") [.rfield 0 (.var .local (ofString "mcg"))])
+    (.seq (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 184)])
+        (.op .sub [.load .one (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 184)]),
+          .rfield 1 (.var .local (ofString "mcg"))]))
+      (.seq (.call (some (none, none)) (ofString "extend_memory") [.rfield 1 (.var .local (ofString "x"))])
+        (.dec (ofString "reservoir") .one
+          (.load .one (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 72)]))
+          (.seq (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 72)]) (.const 0#64))
+            (.decCall (ofString "is") .one (ofString "sat_word") [.var .local (ofString "in_start")]
+              (.decCall (ofString "isz") .one (ofString "sat_word") [.var .local (ofString "in_size")]
+                (.decCall (ofString "os") .one (ofString "sat_word") [.var .local (ofString "out_start")]
+                  (.decCall (ofString "osz") .one (ofString "sat_word") [.var .local (ofString "out_size")]
+                    (.decCall (ofString "started") .one (ofString "generic_call")
+                      [.rfield 1 (.var .local (ofString "mcg")), .var .local (ofString "reservoir"),
+                       .load (.comb [.one, .one, .one, .one])
+                         (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 56)]),
+                       .load .one (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 16)]),
+                       .load .one (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 32)]),
+                       .var .local (ofString "code_address"), .const 0#64, .const 0#64,
+                       .var .local (ofString "is"), .var .local (ofString "isz"),
+                       .var .local (ofString "os"), .var .local (ofString "osz"),
+                       .rfield 0 (.var .local (ofString "code")),
+                       .rfield 1 (.var .local (ofString "code")),
+                       .rfield 0 (.var .local (ofString "dl")), .const 0#64]
+                      (.seq (.ite (.cmp .equal (.var .local (ofString "started")) (.const 0#64))
+                          (.call (some (none, none)) (ofString "pc_add") [.const 1#64]) .skip)
+                        (.return (.const 0#64)))))))))))))
+
+/-- Definitional self-check: the charged suffix is the `mcg` call with the expected arguments
+and shape, followed by `delegatecallChargedSuffixTail_g10`. -/
+private example : delegatecallChargedSuffix_g10 =
+    .decCall (ofString "mcg") (.comb [.one, .one]) (ofString "calculate_message_call_gas")
+      [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64],
+       .var .local (ofString "gw"),
+       .load .one (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 64)]),
+       .const 0#64, .const 0#64]
+      delegatecallChargedSuffixTail_g10 := rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
