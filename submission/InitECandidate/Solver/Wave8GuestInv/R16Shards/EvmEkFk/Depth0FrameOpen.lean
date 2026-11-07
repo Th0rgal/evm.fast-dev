@@ -12006,4 +12006,873 @@ theorem frame_new_rich_run {F : Type} (s : PanSemStateFiniteExact 64 F)
   intro a hkeep hfresh
   exact hfo33 a (fun hc => hkeep _ (List.mem_singleton.mpr rfl) hc) hfresh
 
+
+def FrameNewRichB {F : Type} (s : PanSemStateFiniteExact 64 F) (m : BitVec 64)
+    (v : ValueHOL 64) (p : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ e stk l q tb : BitVec 64,
+    v = .val (.word e) ∧
+    ArenaReady p ∧ p.code = originalRuntimeCode ∧ p.memaddrs = s.memaddrs ∧ p.be = s.be ∧
+    (∀ k, k ≠ ofString "scratch_ptr" → k ≠ ofString "heap_ptr" → k ≠ ofString "frame_mem_ptr" →
+      p.globals.lookup k = s.globals.lookup k) ∧
+    globN s "heap_ptr" ≤ globN p "heap_ptr" ∧
+    globN p "frame_mem_ptr" ≤ globN p "scratch_ptr" ∧
+    (FrameOutside s p [(globN p "scratch_ptr", globN s "scratch_ptr" - globN p "scratch_ptr")]
+      (globN s "heap_ptr", globN p "heap_ptr" - globN s "heap_ptr")) ∧
+    e.toNat % 8 = 0 ∧ stk.toNat % 8 = 0 ∧ l.toNat % 8 = 0 ∧ q.toNat % 8 = 0 ∧
+    tb.toNat % 8 = 0 ∧
+    globN p "scratch_ptr" ≤ q.toNat ∧ tb.toNat ≤ q.toNat ∧ q.toNat + 32 ≤ l.toNat ∧
+    l.toNat + 24 ≤ stk.toNat ∧ stk.toNat + 1024 ≤ e.toNat ∧
+    e.toNat + 280 ≤ globN s "scratch_ptr" ∧
+    globN p "frame_mem_ptr" ≤ q.toNat ∧
+    memW p (e.toNat + 24) + 1024 ≤ globN p "frame_mem_ptr" ∧
+    memW p (e.toNat + 24) % 8 = 0 ∧
+    globN p "frame_mem_ptr" ≤ stk.toNat ∧
+    memW p (e.toNat + 8) = stk.toNat ∧ memW p (e.toNat + 232) = 32 ∧
+    memW p (e.toNat + 16) = 0 ∧ memW p (e.toNat + 32) = 0 ∧ memW p (e.toNat + 192) = 0 ∧
+    memW p (e.toNat + 40) = 1024 ∧ memW p (e.toNat + 64) = memW s (m.toNat + 40) ∧
+    memW p (e.toNat + 88) = l.toNat ∧ memW p (l.toNat + 0) = q.toNat ∧
+    memW p (l.toNat + 8) = 0 ∧ memW p (l.toNat + 16) = 4 ∧
+    memW p (e.toNat + 112) = m.toNat ∧ memW p (e.toNat + 136) = tb.toNat ∧
+    memW p (e.toNat + 168) = memW s (m.toNat + 152) ∧
+    memW p (e.toNat + 176) = memW s (m.toNat + 160) ∧
+    memW p (e.toNat + 216) = 0 ∧ memW p (e.toNat + 144) = globN s "evm_empty" ∧
+    memW p (e.toNat + 104) = 1 ∧
+    HtabWF p tb.toNat ∧ hdr p tb.toNat 0 = 20 ∧ hdr p tb.toNat 3 = 0 ∧ tb.toNat ≠ 0 ∧
+    tb.toNat ≠ memW s (m.toNat + 152) ∧ tb.toNat ≠ memW s (m.toNat + 160) ∧
+    (∀ i ∈ htabFootprint p tb.toNat, Allocated p i ∧
+      (Inside i (globN s "heap_ptr") (globN p "heap_ptr") ∨
+        Inside i (globN p "scratch_ptr") (globN s "scratch_ptr"))) ∧
+    (∀ i ∈ htabFootprint p tb.toNat, i.1 + i.2 ≤ q.toNat) ∧
+    scratchStart ≤ memW p (e.toNat + 24)
+
+theorem frameNewRichB_locIns {F : Type} (s : PanSemStateFiniteExact 64 F) (m : BitVec 64) :
+    LocIns (FrameNewRichB (F := F) s m) := by
+  intro v t L h
+  obtain ⟨e, stk, l, q, tb, hv, hAR, hc⟩ := h
+  have key : ∀ w : Nat, HtabWF {t with locals := L} w = HtabWF t w :=
+    fun w => (htabWF_with_locals t L t.clock w).eq
+  refine ⟨e, stk, l, q, tb, hv, ⟨guestInv_congr (s := t) rfl rfl rfl rfl hAR.1, hAR.2⟩, ?_⟩
+  simp only [key]
+  exact hc
+
+
+attribute [local irreducible] Ret in
+theorem frame_new_rich_runB {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (hAR : ArenaReady s) (m : BitVec 64)
+    (hm : s.locals.lookup (ofString "msg") = some (.val (.word m)))
+    (hmlo : m.toNat + 176 ≤ globN s "heap_ptr")
+    (ht152 : Allocated s (memW s (m.toNat + 152), 88))
+    (ht160 : Allocated s (memW s (m.toNat + 160), 88))
+    (hnb : memW s (m.toNat + 120) < 2 ^ 40) :
+    Ret s (sourceFnBody Guest.Software.guestFn_frame_new) (FrameNewRichB s m) := by
+  have hb : sourceFnBody Guest.Software.guestFn_frame_new =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_frame_new).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_frame_new,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  have hΦ := frameNewRichB_locIns s m
+  obtain ⟨sp0, hsp0, gsp0⟩ := glob_of_words s hAR.2 "scratch_ptr" (by decide)
+  obtain ⟨fp0, hfp0, gfp0⟩ := glob_of_words s hAR.2 "frame_mem_ptr" (by decide)
+  have hA := hAR.2
+  have hfs : fp0.toNat ≤ sp0.toNat := by have := hA.2.2.2.1; omega
+  have hse : sp0.toNat ≤ scratchEnd := by have := hA.2.2.2.2.1; omega
+  have hss : scratchStart ≤ fp0.toNat := by have := hA.2.2.1; omega
+  have hsa : sp0.toNat % 8 = 0 := by have := hA.2.2.2.2.2.2.2.1; omega
+  have hfa : fp0.toNat % 8 = 0 := by have := hA.2.2.2.2.2.2.1; omega
+  -- scratch_mark
+  refine Ret.decCallL hΦ fun vals body cal ret v post h1 h2 h3 => ?_
+  obtain ⟨rfl, rfl⟩ := lk0 hcode lookup_scratch_mark (evalList0_inv _ h1) h2
+  obtain ⟨rfl, hg1, hmem1, hc1, hma1⟩ := Ret.apply (scratch_mark_run (callEntryStateHOLFinite s _) sp0 hsp0) h3
+  have hbe1 := FNR.evalBe h3
+  have hG1 := guestInv_post (guestInv_callEntry _ _ hAR.1) h3
+  generalize hS1 : setVarHOLFinite (ofString "stack_mark") (.val (.word sp0))
+    { post with locals := s.locals } = S1
+  have S1g : S1.globals = s.globals := by rw [← hS1]; exact hg1
+  have S1m : S1.memory = s.memory := by rw [← hS1]; exact hmem1
+  have S1c : S1.code = originalRuntimeCode := by rw [← hS1]; exact hc1.trans hcode
+  have S1ma : S1.memaddrs = s.memaddrs := by rw [← hS1]; exact hma1
+  have S1be : S1.be = s.be := by rw [← hS1]; exact hbe1
+  have S1G : GuestInv S1 := by rw [← hS1]; exact guestInv_congr (s := post) rfl rfl rfl rfl hG1
+  have S1l : ∀ x, x ≠ ofString "stack_mark" → S1.locals.lookup x = s.locals.lookup x := by
+    intro x hx; rw [← hS1]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hx]
+  have S1sm : S1.locals.lookup (ofString "stack_mark") = some (.val (.word sp0)) := by
+    rw [← hS1]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  clear hS1 hg1 hmem1 hc1 hma1 hbe1 hG1 h1 h2 h3
+  -- frame_mem_mark
+  refine Ret.decCallL hΦ fun vals body cal ret v post h1 h2 h3 => ?_
+  obtain ⟨rfl, rfl⟩ := lk0 S1c lookup_frame_mem_mark (evalList0_inv _ h1) h2
+  obtain ⟨rfl, hg2, hmem2, hc2, hma2⟩ := Ret.apply
+    (frame_mem_mark_run (callEntryStateHOLFinite S1 _) fp0
+      (by rw [show (callEntryStateHOLFinite S1 HolFiniteMapExact.empty).globals = S1.globals from rfl, S1g]; exact hfp0)) h3
+  have hbe2 := FNR.evalBe h3
+  have hG2 := guestInv_post (guestInv_callEntry _ _ S1G) h3
+  generalize hS2 : setVarHOLFinite (ofString "mem_mark") (.val (.word fp0))
+    { post with locals := S1.locals } = S2
+  have S2g : S2.globals = s.globals := by rw [← hS2]; exact hg2.trans S1g
+  have S2m : S2.memory = s.memory := by rw [← hS2]; exact hmem2.trans S1m
+  have S2c : S2.code = originalRuntimeCode := by rw [← hS2]; exact hc2.trans S1c
+  have S2ma : S2.memaddrs = s.memaddrs := by rw [← hS2]; exact hma2.trans S1ma
+  have S2be : S2.be = s.be := by rw [← hS2]; exact hbe2.trans S1be
+  have S2G : GuestInv S2 := by rw [← hS2]; exact guestInv_congr (s := post) rfl rfl rfl rfl hG2
+  have S2msg : S2.locals.lookup (ofString "msg") = some (.val (.word m)) := by
+    rw [← hS2]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    rw [S1l _ (by decide)]; exact hm
+  have S2sm : S2.locals.lookup (ofString "stack_mark") = some (.val (.word sp0)) := by
+    rw [← hS2]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]; exact S1sm
+  have S2mm : S2.locals.lookup (ofString "mem_mark") = some (.val (.word fp0)) := by
+    rw [← hS2]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  clear hS2 hg2 hmem2 hc2 hma2 hbe2 hG2 h1 h2 h3 S1l S1sm S1g S1m S1c S1ma S1be S1G
+  -- e := scratch_alloc(280)
+  apply Ret.mono (Φ := FrameNewRichB s m) ?_ (fun v t h => h)
+  refine HtabC00Ports.decCall_scratch_alloc S2c 280 (by simp [ev, evalHOLExact]) sp0 fp0
+    (by rw [S2g]; exact hsp0) (by rw [S2g]; exact hfp0) ?_
+  intro hc1 hc2
+  refine Ret.mono (Φ := FrameNewRichB s m) ?_ (fun v t h => hΦ v t _ h)
+  obtain ⟨ea, efp, esp, eadd, -⟩ := hb_scratch_alloc_arith sp0 fp0 280 hfs hsa hc1 hc2
+  generalize hE : (sp0 - 280) &&& ((0 : BitVec 64) - 8) = e at *
+  have e280 : e.toNat + 280 ≤ sp0.toNat := by
+    have : (280 : BitVec 64).toNat = 280 := rfl
+    omega
+  generalize hS3 : setVarHOLFinite (ofString "e") (.val (.word e))
+    { S2 with globals := S2.globals.update (ofString "scratch_ptr", .val (.word e)),
+              clock := S2.clock - 1 } = S3
+  have S3g : S3.globals = s.globals.update (ofString "scratch_ptr", .val (.word e)) := by
+    rw [← hS3, ← S2g]; rfl
+  have S3m : S3.memory = s.memory := by rw [← hS3]; exact S2m
+  have S3c : S3.code = originalRuntimeCode := by rw [← hS3]; exact S2c
+  have S3ma : S3.memaddrs = s.memaddrs := by rw [← hS3]; exact S2ma
+  have S3be : S3.be = s.be := by rw [← hS3]; exact S2be
+  have S3G : GuestInv S3 := by rw [← hS3]; exact guestInv_congr (s := S2) rfl rfl rfl rfl S2G
+  have S3sp : S3.globals.lookup (ofString "scratch_ptr") = some (.val (.word e)) := by
+    rw [S3g]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have S3fp : S3.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word fp0)) := by
+    rw [S3g]; simp [HolFiniteMapExact.lookup_update, FUPDATE]; exact hfp0
+  have S3e : S3.locals.lookup (ofString "e") = some (.val (.word e)) := by
+    rw [← hS3]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have S3msg : S3.locals.lookup (ofString "msg") = some (.val (.word m)) := by
+    rw [← hS3]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]; exact S2msg
+  have S3sm : S3.locals.lookup (ofString "stack_mark") = some (.val (.word sp0)) := by
+    rw [← hS3]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]; exact S2sm
+  have S3mm : S3.locals.lookup (ofString "mem_mark") = some (.val (.word fp0)) := by
+    rw [← hS3]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]; exact S2mm
+  have S3AR : ArenaReady S3 :=
+    arenaReady_of_sp_fmp S3G hA (fun k h1 _ => by rw [S3g]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm h1])
+      e fp0 S3sp S3fp hss efp (by omega) hfa ea
+  clear hS3 S2g S2m S2c S2ma S2be S2G S2msg S2sm S2mm
+  -- memzero(e, 280)
+  refine Ret.seq_call00 fun vals body cal ret v post h1 h2 h3 => ?_
+  have hv : vals = [.val (.word e), .val (.word 280)] := by
+    obtain ⟨v1, v2, rfl, he1, he2⟩ := evalList2_inv _ _ _ h1
+    simp [ev, evalHOLExact, S3e] at he1 he2
+    rw [← he1, ← he2]; rfl
+  obtain ⟨rfl, rfl⟩ := lk2 S3c (by decide) lookup_memzero e 280 hv h2
+  obtain ⟨hz, hfr⟩ := memzero_call_zero S3 S3c S3AR e 280 v post h3
+  obtain ⟨fc, fm, -, -, -, fg, -, -, fout, -⟩ := hfr
+  have fbe := FNR.evalBe h3
+  generalize hS4 : { post with locals := S3.locals } = S4
+  have S4g : S4.globals = S3.globals := by rw [← hS4]; exact fg
+  have S4c : S4.code = originalRuntimeCode := by rw [← hS4]; exact fc.trans S3c
+  have S4ma : S4.memaddrs = s.memaddrs := by rw [← hS4]; exact fm.trans S3ma
+  have S4be : S4.be = s.be := by rw [← hS4]; exact fbe.trans S3be
+  have S4G : GuestInv S4 := by
+    rw [← hS4]; exact guestInv_congr (s := post) rfl rfl rfl rfl (guestInv_post (guestInv_callEntry _ _ S3G) h3)
+  have S4l : S4.locals = S3.locals := by rw [← hS4]
+  have S4z : ∀ a, e.toNat ≤ a → a + 8 ≤ e.toNat + 280 → a % 8 = 0 → memW S4 a = 0 := by
+    intro a h1 h2 h3; rw [← hS4]; exact hz a h1 (by simpa using h2) h3
+  have S4out : ∀ a : BitVec 64, ¬ CellHits a.toNat (e.toNat, 280) → S4.memory a = s.memory a := by
+    intro a ha; rw [← hS4]; exact (fout a (by simpa using ha) (by simp [CellHits])).trans (congrArg (fun f => f a) S3m)
+  have S4AR : ArenaReady S4 := ⟨S4G, arenaOK_congr (s := S3) S4g S3AR.2⟩
+  have hsz : e.toNat + 280 < 2 ^ 64 := by have := scratchEnd_lt64; omega
+  have S4w : ∀ j, j < 280 → j % 8 = 0 → memW S4 (e.toNat + j) = 0 :=
+    fun j hj h8 => S4z _ (by omega) (by omega) (by omega)
+  have S4sp : globN S4 "scratch_ptr" = e.toNat := by unfold globN; rw [S4g, S3sp]
+  have S4fp : globN S4 "frame_mem_ptr" = fp0.toNat := by unfold globN; rw [S4g, S3fp]
+  have S4hp : globN S4 "heap_ptr" = globN s "heap_ptr" := by
+    unfold globN; rw [S4g, S3g]
+    simp (config := {decide := true}) [HolFiniteMapExact.lookup_update, FUPDATE]
+  have FNR4 : FNR s S4 m e := by
+    refine ⟨S4c, S4ma, S4be, S4AR, by omega, by omega, by omega, by omega, ea,
+      by omega, hmlo, ?_, ?_, by rw [S4l]; exact S3msg, by rw [S4l]; exact S3e⟩
+    · intro k hk1 _ _; rw [S4g, S3g]
+      simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hk1]
+    · intro a ha1 _
+      apply S4out a
+      unfold CellHits at ha1 ⊢
+      omega
+  have I4 : FNRL s S4 m e (fvOf e.toNat (fun _ => 0))
+      [e.toNat + 16, e.toNat + 32, e.toNat + 192] := by
+    refine ⟨FNR4, fun a ha => ?_⟩
+    simp only [List.mem_cons, List.mem_nil_iff, or_false] at ha
+    rcases ha with rfl | rfl | rfl
+    · exact ⟨by omega, by omega, by omega, S4w 16 (by omega) (by omega)⟩
+    · exact ⟨by omega, by omega, by omega, S4w 32 (by omega) (by omega)⟩
+    · exact ⟨by omega, by omega, by omega, S4w 192 (by omega) (by omega)⟩
+  clear hS4 h1 h2 h3 hz fc fm fbe fg fout hv S4z S4out S4w
+  -- stk := scratch_alloc(32*32)
+  refine I4.scratchAlloc _ (by decide) (by decide) 1024
+    (by rw [show (1024 : BitVec 64) = 32 * 32 from rfl]; simp [ev, evalHOLExact, evalListHOLExact, panOpHOL, valueIsWord, valueWord])
+    hΦ fun t5 stk I5 h5stk h5l hstka h5sp hstk_e => ?_
+  have hnu5 : ∀ (k : Nat), k ∉ ([16, 32, 192] : List Nat) →
+      ∀ a ∈ [e.toNat + 16, e.toNat + 32, e.toNat + 192], a ≠ e.toNat + k := by
+    intro k hk a ha; simp at hk ha; rcases ha with rfl | rfl | rfl <;> omega
+  refine I5.storeStepU 208 (by omega) (hnu5 208 (by decide))
+    (fun v hv => ev_var_word _ _ sp0 (by rw [h5l _ (by decide), S4l]; exact S3sm) v hv)
+    fun t6 I6 h6l h6g _ => ?_
+  refine I6.storeFinal 8 (by omega) (by omega) stk (hnu5 8 (by decide))
+    (by rw [OpHandlersB.HeadMemBridge.ev_loc, h6l, h5stk])
+    fun t7 I7 h7l h7g _ => ?_
+  refine I7.storeFinal 232 (by omega) (by omega) 32
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl <;> omega)
+    (OpHandlersB.HeadMemBridge.ev_const _ _)
+    fun t8 I8 h8l h8g _ => ?_
+  -- mem := frame_mem_alloc(1024)
+  refine I8.frameMemAlloc hΦ fun t9 p hp I9_fp I9_sp I9 h9mem h9l => ?_
+  have hpa : p.toNat % 8 = 0 := by
+    have := I8.1.2.2.2.1.2.2.2.2.2.2.2.1; omega
+  have hp_fmp9 : p.toNat + 1024 = globN t9 "frame_mem_ptr" := by omega
+  have hfmp9_stk : globN t9 "frame_mem_ptr" ≤ stk.toNat := by
+    have := I9.1.2.2.2.2.1
+    rw [I9_sp, h8g, h7g, h6g, h5sp] at this
+    exact this
+  refine I9.storeStepU 224 (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl <;> omega)
+    (fun v hv => ev_var_word _ _ fp0 (by rw [h9l _ (by decide), h8l, h7l, h6l, h5l _ (by decide), S4l]; exact S3mm) v hv)
+    fun t10 I10 h10l h10g _ => ?_
+  refine I10.storeFinal 24 (by omega) (by omega) p
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl <;> omega)
+    (by rw [OpHandlersB.HeadMemBridge.ev_loc, h10l, h9mem])
+    fun t11 I11 h11l h11g _ => ?_
+  refine I11.storeFinal 40 (by omega) (by omega) 1024
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (OpHandlersB.HeadMemBridge.ev_const _ _)
+    fun t12 I12 h12l h12g _ => ?_
+  have hldw : ∀ (t' : PanSemStateFiniteExact 64 F) (k : BitVec 64),
+      ∀ v, ev t' (.load .one (.op .add [.var .local (ofString "msg"), .const k])) = some v →
+        ∃ w, v = .val (.word w) := fun t' _ => ev_load_isWord t' _
+  refine I12.storeStepU 48 (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (hldw _ _) fun t13 I13 _ h13g _ => ?_
+  refine I13.storeStepU 56 (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (hldw _ _) fun t14 I14 _ h14g _ => ?_
+  refine I14.storeFinalLd 64 40 (by omega) (by omega) (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    fun t15 I15 _ h15g _ => ?_
+  refine I15.storeStepU 72 (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (hldw _ _) fun t16 I16 _ h16g _ => ?_
+  -- jd := compute_jumpdests
+  have hnb16 : memW t16 (m.toNat + 120) < 2 ^ 40 := by rw [I16.1.mem120]; exact hnb
+  refine I16.computeJumpdests hnb16 hΦ fun t17 jd I17 h17jd _ h17sp h17fp => ?_
+  refine I17.storeStepU 80 (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (fun v hv => ev_var_word _ _ jd h17jd v hv) fun t18 I18 _ h18g _ => ?_
+  -- logs := lst_new_scratch(8, 4)
+  refine I18.lstNewScratch hΦ fun t19 lg q I19 h19 _ hlga hlg_sp hqa hq_lg hfmp_q h19sp h19fp hc0 hc8 hc16 => ?_
+  have hlg_stk : lg.toNat + 24 ≤ stk.toNat := by
+    have : globN t18 "scratch_ptr" ≤ stk.toNat := by
+      have := h17sp; rw [h18g]; rw [h16g, h15g, h14g, h13g, h12g, h11g, h10g, I9_sp, h8g, h7g, h6g, h5sp] at this; exact this
+    omega
+  have hlg_e : lg.toNat + 24 ≤ e.toNat := by omega
+  have hlt_e : e.toNat + 280 < 2 ^ 64 := I19.1.facts.1
+  have hlogs19 : LogsOK t19 lg q := ⟨hc0, hc8, hc16⟩
+  refine I19.storeFinal 88 (by omega) (by omega) lg
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (by rw [OpHandlersB.HeadMemBridge.ev_loc, h19])
+    fun t20 I20 _ h20g ⟨_, hm20⟩ => ?_
+  have hlogs20 : LogsOK t20 lg q := hlogs19.storeAbs hlg_e (by omega) hlt_e hm20
+  refine I20.storeFinal 104 (by omega) (by omega) 1
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (OpHandlersB.HeadMemBridge.ev_const _ _)
+    fun t21 I21 _ h21g ⟨_, hm21⟩ => ?_
+  have hlogs21 : LogsOK t21 lg q := hlogs20.storeAbs hlg_e (by omega) hlt_e hm21
+  refine I21.storeFinal 112 (by omega) (by omega) m
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (by rw [OpHandlersB.HeadMemBridge.ev_loc, I21.1.2.2.2.2.2.2.2.2.2.2.2.2.2.1])
+    fun t22 I22 _ h22g ⟨_, hm22⟩ => ?_
+  have hlogs22 : LogsOK t22 lg q := hlogs21.storeAbs hlg_e (by omega) hlt_e hm22
+  -- del := htab_new_scratch(20, 4)
+  refine I22.htabNewScratch hΦ fun t23 dl I23 hTb22 h23 _ h23fp h23sp h23fo => ?_
+  have hsp22_q : globN t22 "scratch_ptr" = q.toNat := by
+    rw [h22g, h21g, h20g, h19sp]
+  have hss_q : scratchStart ≤ q.toNat := by
+    have := I19.1.2.2.2.1.2.2.2.1; omega
+  have hhlim22 : globN t22 "heap_ptr" ≤ heapLimit := I22.1.2.2.2.1.2.2.1
+  have hhlim23 : globN t23 "heap_ptr" ≤ heapLimit := I23.1.2.2.2.1.2.2.1
+  have hdl_q : dl.toNat ≤ q.toNat := by
+    have h88 : dl.toNat + 88 ≤ e.toNat := hTb22.2.2.2.2.1 (dl.toNat, 88) (by simp [htabFootprint])
+    obtain ⟨_, hz⟩ := hTb22.2.2.2.2.2 (dl.toNat, 88) (by simp [htabFootprint])
+    rcases hz with ⟨_, hh2⟩ | ⟨_, hs2⟩
+    · have hsc : heapLimit = scratchStart := rfl
+      omega
+    · rw [hsp22_q] at hs2; omega
+  have hlogs23 : LogsOK t23 lg q := by
+    have hcell : ∀ k : Nat, k < 24 → memW t23 (lg.toNat + k) = memW t22 (lg.toNat + k) := by
+      intro k hk
+      refine memW_of _ (h23fo _ ?_ ?_)
+      · rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt _ (by omega), hsp22_q]
+        unfold CellHits; dsimp only; omega
+      · rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt _ (by omega)]
+        have hsc : heapLimit = scratchStart := rfl
+        unfold CellHits; dsimp only; omega
+    exact ⟨(hcell 0 (by omega)).trans hlogs22.1,
+      (hcell 8 (by omega)).trans hlogs22.2.1,
+      (hcell 16 (by omega)).trans hlogs22.2.2⟩
+  have hdl_ne152 : dl.toNat ≠ memW s (m.toNat + 152) := TbOK.ne_table hTb22 I23.1 I22.1 ht152
+  have hdl_ne160 : dl.toNat ≠ memW s (m.toNat + 160) := TbOK.ne_table hTb22 I23.1 I22.1 ht160
+  have hTb23 : TbOK s t23 dl.toNat e := TbOK.of_step hTb22 I22.1
+  refine I23.storeFinal 136 (by omega) (by omega) dl
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (by rw [OpHandlersB.HeadMemBridge.ev_loc, h23])
+    fun t24 I24 _ h24g ⟨_, hm24⟩ => ?_
+  have hlogs24 : LogsOK t24 lg q := hlogs23.storeAbs hlg_e (by omega) hlt_e hm24
+  have hTb24 : TbOK s t24 dl.toNat e := hTb23.storeAbs I23.1.2.2.2.1.1 I24.1.2.2.2.1.1 (by omega) hlt_e hm24 h24g
+  refine I24.storeFinalLd 168 152 (by omega) (by omega) (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    fun t25 I25 _ h25g ⟨_, hm25⟩ => ?_
+  have hlogs25 : LogsOK t25 lg q := hlogs24.storeAbs hlg_e (by omega) hlt_e hm25
+  have hTb25 : TbOK s t25 dl.toNat e := hTb24.storeAbs I24.1.2.2.2.1.1 I25.1.2.2.2.1.1 (by omega) hlt_e hm25 h25g
+  refine I25.storeFinalLd 176 160 (by omega) (by omega) (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    fun t26 I26 _ h26g ⟨_, hm26⟩ => ?_
+  have hlogs26 : LogsOK t26 lg q := hlogs25.storeAbs hlg_e (by omega) hlt_e hm26
+  have hTb26 : TbOK s t26 dl.toNat e := hTb25.storeAbs I25.1.2.2.2.1.1 I26.1.2.2.2.1.1 (by omega) hlt_e hm26 h26g
+  -- acc_n := htab_count(...) ×2
+  refine I26.htabCountDec _ hΦ fun t27 a1 I27 h27 _ h27g h27m => ?_
+  have hlogs27 : LogsOK t27 lg q := hlogs26.congrMem h27m
+  have hTb27 : TbOK s t27 dl.toNat e := hTb26.congr I26.1.2.2.2.1.1 I27.1.2.2.2.1.1 h27m h27g
+  refine I27.storeStepU 264 (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (fun v hv => ev_var_word _ _ a1 h27 v hv) fun t28 I28 _ h28g ⟨_, hm28⟩ => ?_
+  have hlogs28 : LogsOK t28 lg q := hlogs27.storeAbs hlg_e (by omega) hlt_e hm28
+  have hTb28 : TbOK s t28 dl.toNat e := hTb27.storeAbs I27.1.2.2.2.1.1 I28.1.2.2.2.1.1 (by omega) hlt_e hm28 h28g
+  refine I28.htabCountAssign _ fun t29 a2 I29 h29 _ h29g h29m => ?_
+  have hlogs29 : LogsOK t29 lg q := hlogs28.congrMem h29m
+  have hTb29 : TbOK s t29 dl.toNat e := hTb28.congr I28.1.2.2.2.1.1 I29.1.2.2.2.1.1 h29m h29g
+  refine I29.storeStepU 272 (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (fun v hv => ev_var_word _ _ a2 h29 v hv) fun t30 I30 _ h30g ⟨_, hm30⟩ => ?_
+  have hlogs30 : LogsOK t30 lg q := hlogs29.storeAbs hlg_e (by omega) hlt_e hm30
+  have hTb30 : TbOK s t30 dl.toNat e := hTb29.storeAbs I29.1.2.2.2.1.1 I30.1.2.2.2.1.1 (by omega) hlt_e hm30 h30g
+  obtain ⟨ev_emp, hev_emp, gev_emp⟩ := glob_of_words s hA "evm_empty" (by decide)
+  have hev30 : ∀ t' : PanSemStateFiniteExact 64 F, FNR s t' m e →
+      ev t' (.var .global (ofString "evm_empty")) = some (.val (.word ev_emp)) := by
+    intro t' hfr'
+    rw [OpHandlersB.HeadMemBridge.ev_glob, hfr'.2.2.2.2.2.2.2.2.2.2.2.1 _ (by decide) (by decide) (by decide), hev_emp]
+  refine I30.storeStepU 120 (by omega)
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (fun v hv => ⟨ev_emp, by rw [hev30 _ I30.1] at hv; exact (Option.some.inj hv).symm⟩)
+    fun t31 I31 _ h31g ⟨_, hm31⟩ => ?_
+  have hlogs31 : LogsOK t31 lg q := hlogs30.storeAbs hlg_e (by omega) hlt_e hm31
+  have hTb31 : TbOK s t31 dl.toNat e := hTb30.storeAbs I30.1.2.2.2.1.1 I31.1.2.2.2.1.1 (by omega) hlt_e hm31 h31g
+  refine I31.storeFinal 144 (by omega) (by omega) ev_emp
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (hev30 _ I31.1)
+    fun t32 I32 _ h32g ⟨_, hm32⟩ => ?_
+  have hlogs32 : LogsOK t32 lg q := hlogs31.storeAbs hlg_e (by omega) hlt_e hm32
+  have hTb32 : TbOK s t32 dl.toNat e := hTb31.storeAbs I31.1.2.2.2.1.1 I32.1.2.2.2.1.1 (by omega) hlt_e hm32 h32g
+  refine I32.storeFinal 216 (by omega) (by omega) 0
+    (by intro a ha; simp at ha; rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+    (OpHandlersB.HeadMemBridge.ev_const _ _)
+    fun t33 I33 _ h33g ⟨_, hm33⟩ => ?_
+  have hlogs33 : LogsOK t33 lg q := hlogs32.storeAbs hlg_e (by omega) hlt_e hm33
+  have hTb33 : TbOK s t33 dl.toNat e := hTb32.storeAbs I32.1.2.2.2.1.1 I33.1.2.2.2.1.1 (by omega) hlt_e hm33 h33g
+  -- return e
+  refine Ret.ret fun val hval => ?_
+  rw [OpHandlersB.HeadMemBridge.ev_loc, I33.1.2.2.2.2.2.2.2.2.2.2.2.2.2.2] at hval
+  cases hval
+  obtain ⟨h33c, h33ma, h33be, h33AR, hfmp_sp33, _, he280, _, hea, hhp33, _, hk33, hfo33, _, _⟩ := I33.1
+  have hsp33_q : globN t33 "scratch_ptr" ≤ q.toNat := by
+    rw [h33g, h32g, h31g, h30g, h29g, h28g, h27g, h26g, h25g, h24g]
+    omega
+  have hfmp33_19 : globN t33 "frame_mem_ptr" = globN t19 "frame_mem_ptr" := by
+    rw [h33g, h32g, h31g, h30g, h29g, h28g, h27g, h26g, h25g, h24g, h23fp, h22g, h21g, h20g]
+  have hfmp19_9 : globN t19 "frame_mem_ptr" = globN t9 "frame_mem_ptr" := by
+    rw [h19fp, h18g, h17fp, h16g, h15g, h14g, h13g, h12g, h11g, h10g]
+  have hfmp33_eq : globN t33 "frame_mem_ptr" = globN t9 "frame_mem_ptr" := hfmp33_19.trans hfmp19_9
+  have hc24 : memW t33 (e.toNat + 24) = p.toNat := by
+    simpa [gU] using I33.at_cell 24 (by simp)
+  have hc8 : memW t33 (e.toNat + 8) = stk.toNat := by
+    simpa [gU] using I33.at_cell 8 (by simp)
+  have hc232 : memW t33 (e.toNat + 232) = 32 := by
+    simpa [gU] using I33.at_cell 232 (by simp)
+  have hc16 : memW t33 (e.toNat + 16) = 0 := by
+    simpa [gU] using I33.at_cell 16 (by simp)
+  have hc32 : memW t33 (e.toNat + 32) = 0 := by
+    simpa [gU] using I33.at_cell 32 (by simp)
+  have hc192 : memW t33 (e.toNat + 192) = 0 := by
+    simpa [gU] using I33.at_cell 192 (by simp)
+  have hc40 : memW t33 (e.toNat + 40) = 1024 := by
+    simpa [gU] using I33.at_cell 40 (by simp)
+  have hc64 : memW t33 (e.toNat + 64) = memW s (m.toNat + 40) := by
+    simpa [gU] using I33.at_cell 64 (by simp)
+  have hc88 : memW t33 (e.toNat + 88) = lg.toNat := by
+    simpa [gU] using I33.at_cell 88 (by simp)
+  have hc112 : memW t33 (e.toNat + 112) = m.toNat := by
+    simpa [gU] using I33.at_cell 112 (by simp)
+  have hc136 : memW t33 (e.toNat + 136) = dl.toNat := by
+    simpa [gU] using I33.at_cell 136 (by simp)
+  have hc168 : memW t33 (e.toNat + 168) = memW s (m.toNat + 152) := by
+    simpa [gU] using I33.at_cell 168 (by simp)
+  have hc176 : memW t33 (e.toNat + 176) = memW s (m.toNat + 160) := by
+    simpa [gU] using I33.at_cell 176 (by simp)
+  have hc216 : memW t33 (e.toNat + 216) = 0 := by
+    simpa [gU] using I33.at_cell 216 (by simp)
+  have hc144 : memW t33 (e.toNat + 144) = globN s "evm_empty" := by
+    rw [gev_emp]; simpa [gU] using I33.at_cell 144 (by simp)
+  have hc104 : memW t33 (e.toNat + 104) = 1 := by
+    simpa [gU] using I33.at_cell 104 (by simp)
+  refine ⟨e, stk, lg, q, dl, rfl, arenaReady_locals _ _ h33AR, h33c, h33ma, h33be, hk33,
+    hhp33, hfmp_sp33, ?_, hea, hstka, hlga, hqa, hTb33.1, hsp33_q, hdl_q, hq_lg, hlg_stk,
+    by rw [S4sp] at hstk_e; exact hstk_e, he280,
+    by show globN t33 "frame_mem_ptr" ≤ q.toNat; rw [hfmp33_19]; exact hfmp_q,
+    by show memW t33 (e.toNat + 24) + 1024 ≤ globN t33 "frame_mem_ptr"; rw [hc24, hfmp33_eq]; omega,
+    by show memW t33 (e.toNat + 24) % 8 = 0; rw [hc24]; exact hpa,
+    by show globN t33 "frame_mem_ptr" ≤ stk.toNat; rw [hfmp33_eq]; exact hfmp9_stk,
+    hc8, hc232, hc16, hc32, hc192, hc40, hc64, hc88, hlogs33.1, hlogs33.2.1, hlogs33.2.2,
+    hc112, hc136, hc168, hc176, hc216, hc144, hc104,
+    (htabWF_with_locals t33 _ t33.clock dl.toNat).mpr hTb33.2.1,
+    hTb33.2.2.1, hTb33.2.2.2.1, hTb33.ne_zero h33AR.2, hdl_ne152, hdl_ne160, hTb33.2.2.2.2.2,
+    by
+      intro i hi
+      rw [show htabFootprint (emptyLocalsHOLFinite t33) dl.toNat = htabFootprint t33 dl.toNat from rfl] at hi
+      obtain ⟨_, hz⟩ := hTb22.2.2.2.2.2 i (by
+        have hhdr : ∀ tA tB : PanSemStateFiniteExact 64 F,
+            (∀ j ≤ 10, hdr tA dl.toNat j = hdr tB dl.toNat j) →
+            htabFootprint tA dl.toNat = htabFootprint tB dl.toNat := by
+          intro tA tB hh; unfold htabFootprint
+          rw [hh 4 (by omega), hh 10 (by omega), hh 1 (by omega), hh 5 (by omega), hh 6 (by omega)]
+        have hfp23_33 : htabFootprint t33 dl.toNat = htabFootprint t23 dl.toNat := by
+          have h88_23 : dl.toNat + 88 ≤ e.toNat := hTb23.2.2.2.2.1 (dl.toNat, 88) (by simp [htabFootprint])
+          apply hhdr; intro j hj
+          have hst : ∀ (tX tY : PanSemStateFiniteExact 64 F) (k : Nat), k < 280 →
+              (∃ w', tY.memory = updW tX.memory (e + BitVec.ofNat 64 k) w') →
+              hdr tY dl.toNat j = hdr tX dl.toNat j := by
+            intro tX tY k hk ⟨w', hmem⟩
+            exact (memW_of (dl.toNat + 8 * j) (congrArg (fun f => f (BitVec.ofNat 64 (dl.toNat + 8 * j))) hmem)).trans
+              (memW_store_below (t := tX) (e := e) (k := k) (w := w') (dl.toNat + 8 * j) (by omega) hk hlt_e)
+          rw [hst t32 t33 216 (by omega) ⟨_, hm33⟩, hst t31 t32 144 (by omega) ⟨_, hm32⟩,
+            hst t30 t31 120 (by omega) ⟨_, hm31⟩, hst t29 t30 272 (by omega) ⟨_, hm30⟩,
+            show hdr t29 dl.toNat j = hdr t28 dl.toNat j from memW_of _ (h29m _),
+            hst t27 t28 264 (by omega) ⟨_, hm28⟩,
+            show hdr t27 dl.toNat j = hdr t26 dl.toNat j from memW_of _ (h27m _),
+            hst t25 t26 176 (by omega) ⟨_, hm26⟩,
+            hst t24 t25 168 (by omega) ⟨_, hm25⟩, hst t23 t24 136 (by omega) ⟨_, hm24⟩]
+        rwa [hfp23_33] at hi)
+      rcases hz with ⟨_, hh2⟩ | ⟨_, hs2⟩
+      · have hsc : heapLimit = scratchStart := rfl; omega
+      · rw [hsp22_q] at hs2; omega,
+    by show scratchStart ≤ memW t33 (e.toNat + 24); rw [hc24, hp]; exact I8.1.2.2.2.1.2.2.2.1⟩
+  intro a hkeep hfresh
+  exact hfo33 a (fun hc => hkeep _ (List.mem_singleton.mpr rfl) hc) hfresh
+
+
+def FrameOpenRichPost {F : Type} (s : PanSemStateFiniteExact 64 F) (m : BitVec 64)
+    (_ : ValueHOL 64) (p : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ e rec stk l q tb : BitVec 64,
+    ArenaReady p ∧ p.code = originalRuntimeCode ∧ p.memaddrs = s.memaddrs ∧ p.be = s.be ∧
+    globN p "ev" = e.toNat ∧ globN p "cur_cont" = rec.toNat ∧ globN p "scratch_ptr" = rec.toNat ∧
+    (∀ k, k ≠ ofString "scratch_ptr" → k ≠ ofString "heap_ptr" → k ≠ ofString "frame_mem_ptr" →
+      k ≠ ofString "ev" → k ≠ ofString "cur_cont" →
+      p.globals.lookup k = s.globals.lookup k) ∧
+    globN s "heap_ptr" ≤ globN p "heap_ptr" ∧
+    globN p "frame_mem_ptr" ≤ rec.toNat ∧
+    FrameOutside s p [(rec.toNat, globN s "scratch_ptr" - rec.toNat)]
+      (globN s "heap_ptr", globN p "heap_ptr" - globN s "heap_ptr") ∧
+    e.toNat % 8 = 0 ∧ rec.toNat % 8 = 0 ∧ stk.toNat % 8 = 0 ∧ l.toNat % 8 = 0 ∧
+    q.toNat % 8 = 0 ∧ tb.toNat % 8 = 0 ∧
+    rec.toNat + 104 ≤ q.toNat ∧ tb.toNat ≤ q.toNat ∧ q.toNat + 32 ≤ l.toNat ∧
+    l.toNat + 24 ≤ stk.toNat ∧ stk.toNat + 1024 ≤ e.toNat ∧
+    e.toNat + 280 ≤ globN s "scratch_ptr" ∧
+    scratchStart ≤ memW p (e.toNat + 24) ∧
+    memW p (e.toNat + 24) + 1024 ≤ globN p "frame_mem_ptr" ∧
+    memW p (e.toNat + 24) % 8 = 0 ∧
+    memW p (rec.toNat + 16) = 0 ∧
+    memW p (e.toNat + 8) = stk.toNat ∧ memW p (e.toNat + 232) = 32 ∧
+    memW p (e.toNat + 16) = 0 ∧ memW p (e.toNat + 32) = 0 ∧ memW p (e.toNat + 192) = 0 ∧
+    memW p (e.toNat + 40) = 1024 ∧ memW p (e.toNat + 64) = memW s (m.toNat + 40) ∧
+    memW p (e.toNat + 88) = l.toNat ∧ memW p (l.toNat + 0) = q.toNat ∧
+    memW p (l.toNat + 8) = 0 ∧ memW p (l.toNat + 16) = 4 ∧
+    memW p (e.toNat + 112) = m.toNat ∧ memW p (e.toNat + 136) = tb.toNat ∧
+    memW p (e.toNat + 168) = memW s (m.toNat + 152) ∧
+    memW p (e.toNat + 176) = memW s (m.toNat + 160) ∧
+    memW p (e.toNat + 216) = 0 ∧ memW p (e.toNat + 144) = globN s "evm_empty" ∧
+    memW p (e.toNat + 104) = 1 ∧
+    HtabWF p tb.toNat ∧ hdr p tb.toNat 0 = 20 ∧ hdr p tb.toNat 3 = 0 ∧ tb.toNat ≠ 0 ∧
+    tb.toNat ≠ memW s (m.toNat + 152) ∧ tb.toNat ≠ memW s (m.toNat + 160) ∧
+    (∀ i ∈ htabFootprint p tb.toNat, Allocated p i ∧
+      (Inside i (globN s "heap_ptr") (globN p "heap_ptr") ∨
+        Inside i (rec.toNat + 104) q.toNat))
+
+theorem frameOpenRichPost_locIns {F : Type} (s : PanSemStateFiniteExact 64 F) (m : BitVec 64) :
+    LocIns (FrameOpenRichPost (F := F) s m) := by
+  intro v t L h
+  obtain ⟨e, rec, stk, l, q, tb, hAR, hc⟩ := h
+  have key : ∀ w : Nat, HtabWF {t with locals := L} w = HtabWF t w :=
+    fun w => (htabWF_with_locals t L t.clock w).eq
+  refine ⟨e, rec, stk, l, q, tb, ⟨guestInv_congr (s := t) rfl rfl rfl rfl hAR.1, hAR.2⟩, ?_⟩
+  simp only [key]
+  exact hc
+
+theorem frame_open_rich_run {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (hAR : ArenaReady s) (m k : BitVec 64)
+    (hm : s.locals.lookup (ofString "msg") = some (.val (.word m)))
+    (hk : s.locals.lookup (ofString "kind") = some (.val (.word k))) (hk0 : k.toNat = 0)
+    (hmlo : m.toNat + 176 ≤ globN s "heap_ptr") (hnb : memW s (m.toNat + 120) < 2 ^ 40)
+    (h152 : Allocated s (memW s (m.toNat + 152), 88))
+    (h160 : Allocated s (memW s (m.toNat + 160), 88)) :
+    Ret s (sourceFnBody Guest.Software.guestFn_frame_open) (FrameOpenRichPost s m) := by
+  have hb : sourceFnBody Guest.Software.guestFn_frame_open =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_frame_open).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_frame_open,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.dec fun pv hpv => ?_
+  refine Ret.mono (Φ := FrameOpenRichPost s m) ?_ (fun v t h => frameOpenRichPost_locIns s m v t _ h)
+  generalize hS1 : setVarHOLFinite (ofString "parent") pv s = S1
+  have S1c : S1.code = originalRuntimeCode := by rw [← hS1]; exact hcode
+  have S1G : GuestInv S1 := by rw [← hS1]; exact guestInv_congr (s := s) rfl rfl rfl rfl hAR.1
+  have S1g : S1.globals = s.globals := by rw [← hS1]; rfl
+  have S1m : S1.memory = s.memory := by rw [← hS1]; rfl
+  have S1ma : S1.memaddrs = s.memaddrs := by rw [← hS1]; rfl
+  have S1be : S1.be = s.be := by rw [← hS1]; rfl
+  have S1msg : S1.locals.lookup (ofString "msg") = some (.val (.word m)) := by
+    rw [← hS1]; rw [setVar_lookup_ne _ _ _ _ (by decide)]; exact hm
+  have S1k : S1.locals.lookup (ofString "kind") = some (.val (.word k)) := by
+    rw [← hS1]; rw [setVar_lookup_ne _ _ _ _ (by decide)]; exact hk
+  have S1p : S1.locals.lookup (ofString "parent") = some pv := by
+    rw [← hS1]; exact setVar_lookup_eq _ _ _
+  obtain ⟨evw, hevw, -⟩ := glob_of_words s hAR.2 "ev" (by decide)
+  rw [ev_glob, hevw] at hpv
+  cases hpv
+  clear hS1
+  refine Ret.decCallL (frameOpenRichPost_locIns s m) fun vals body cal ret v post h1 h2 h3 => ?_
+  have hv : vals = [.val (.word m)] := by
+    obtain ⟨v1, rfl, he1⟩ := evalList1_inv _ _ h1
+    rw [ev_loc, S1msg] at he1; rw [← Option.some.inj he1]
+  obtain ⟨rfl, rfl⟩ := lk1 S1c lookup_frame_new m hv h2
+  let ce := callEntryStateHOLFinite S1 (HolFiniteMapExact.empty.update (ofString "msg", .val (.word m)))
+  have hceg : ce.globals = s.globals := S1g
+  have hcem : ce.memory = s.memory := S1m
+  have hcema : ce.memaddrs = s.memaddrs := S1ma
+  have hcebe : ce.be = s.be := S1be
+  have hce_gn : ∀ n, globN ce n = globN s n := fun n => by unfold globN; rw [hceg]
+  have hce_mw : ∀ a, memW ce a = memW s a := fun a => by unfold memW; rw [hcem]
+  have h152_ce : Allocated ce (memW ce (m.toNat + 152), 88) := by
+    unfold Allocated Inside at h152 ⊢; rw [hce_mw, hce_gn, hce_gn]; exact h152
+  have h160_ce : Allocated ce (memW ce (m.toNat + 160), 88) := by
+    unfold Allocated Inside at h160 ⊢; rw [hce_mw, hce_gn, hce_gn]; exact h160
+  obtain ⟨e, stk, lg, q0, tb, rfl, hAR2, hpcode, hpma, hpbe, hpgk, hphp, hpfmp_sp, hpfo,
+      hea, hstka, hlga, hq0a, htba, hsp_q0, htb_q0, hq0_lg, hlg_stk, hstk_e, he280,
+      hfmp_q0, hm24_fmp, hm24a, _, hm8, hm232, hm16, hm32, hm192, hm40, hm64, hm88,
+      hml0, hml8, hml16, hm112, hm136, hm168, hm176, hm216, hm144, hm104,
+      hTbWF, hTb0, hTb3, hTbNe0, hTbNe152, hTbNe160, hTbAlloc, hTbHi, hm24_lo⟩ := Ret.apply
+    (frame_new_rich_runB ce S1c
+      ⟨guestInv_callEntry _ _ S1G, arenaOK_congr (s := s) hceg hAR.2⟩ m
+      (by simp [ce, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+      (by rw [hce_gn]; exact hmlo)
+      h152_ce h160_ce
+      (by rw [hce_mw]; exact hnb)) h3
+  rw [hcema] at hpma
+  rw [hcebe] at hpbe
+  rw [hce_gn] at hphp he280 hm144
+  simp only [hce_mw] at hm64 hm168 hm176 hTbNe152 hTbNe160
+  generalize hT2 : setVarHOLFinite (ofString "child") (.val (.word e))
+    { post with locals := S1.locals } = T2
+  have T2AR : ArenaReady T2 := by rw [← hT2]; exact arenaReady_setVar _ _ post _ hAR2
+  have T2c : T2.code = originalRuntimeCode := T2AR.1.1
+  have T2g : T2.globals = post.globals := by rw [← hT2]; rfl
+  have T2m : T2.memory = post.memory := by rw [← hT2]; rfl
+  have T2ma : T2.memaddrs = s.memaddrs := by rw [← hT2]; exact hpma
+  have T2be : T2.be = s.be := by rw [← hT2]; exact hpbe
+  have T2child : T2.locals.lookup (ofString "child") = some (.val (.word e)) := by
+    rw [← hT2]; exact setVar_lookup_eq _ _ _
+  have T2l : ∀ y, y ≠ ofString "child" → T2.locals.lookup y = S1.locals.lookup y := by
+    intro y hy; rw [← hT2]; exact setVar_lookup_ne _ _ _ _ hy
+  clear hT2 h1 h2 h3 hv
+  have hA := T2AR.2
+  obtain ⟨sp, hsp, gsp⟩ := glob_of_words T2 hA "scratch_ptr" (by decide)
+  obtain ⟨fp, hfp, gfp⟩ := glob_of_words T2 hA "frame_mem_ptr" (by decide)
+  have hsp_eq : sp.toNat = globN post "scratch_ptr" := by rw [← gsp, globN_congr T2g]
+  have hfp_eq : fp.toNat = globN post "frame_mem_ptr" := by rw [← gfp, globN_congr T2g]
+  have hfs : fp.toNat ≤ sp.toNat := by have := hA.2.2.2.1; omega
+  have hse : sp.toNat ≤ scratchEnd := by have := hA.2.2.2.2.1; omega
+  have hss : scratchStart ≤ fp.toNat := by have := hA.2.2.1; omega
+  have hsa : sp.toNat % 8 = 0 := by have := hA.2.2.2.2.2.2.2.1; omega
+  have hfa : fp.toNat % 8 = 0 := by have := hA.2.2.2.2.2.2.1; omega
+  apply Ret.mono (Φ := FrameOpenRichPost s m) ?_ (fun v t h => h)
+  refine HtabC00Ports.decCall_scratch_alloc T2c 104 (by simp [ev, evalHOLExact]) sp fp hsp hfp ?_
+  intro hc1 hc2
+  refine Ret.mono (Φ := FrameOpenRichPost s m) ?_ (fun v t h => frameOpenRichPost_locIns s m v t _ h)
+  obtain ⟨reca, recfp, recsp, -, recadd⟩ := hb_scratch_alloc_arith sp fp 104 hfs hsa hc1 hc2
+  generalize hRec : (sp - 104) &&& ((0 : BitVec 64) - 8) = rec at *
+  have rec104_sp : rec.toNat + 104 ≤ globN post "scratch_ptr" := by
+    have : (104 : BitVec 64).toNat = 104 := rfl
+    omega
+  generalize hT3 : setVarHOLFinite (ofString "rec") (.val (.word rec))
+    { T2 with globals := T2.globals.update (ofString "scratch_ptr", .val (.word rec)),
+              clock := T2.clock - 1 } = T3
+  have T3g : T3.globals = T2.globals.update (ofString "scratch_ptr", .val (.word rec)) := by
+    rw [← hT3]; rfl
+  have T3m : T3.memory = post.memory := by rw [← hT3]; exact T2m
+  have T3ma : T3.memaddrs = s.memaddrs := by rw [← hT3]; exact T2ma
+  have T3be : T3.be = s.be := by rw [← hT3]; exact T2be
+  have T3c : T3.code = originalRuntimeCode := by rw [← hT3]; exact T2c
+  have T3G : GuestInv T3 := by rw [← hT3]; exact guestInv_congr (s := T2) rfl rfl rfl rfl T2AR.1
+  have T3sp : T3.globals.lookup (ofString "scratch_ptr") = some (.val (.word rec)) := by
+    rw [T3g]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have T3fp : T3.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word fp)) := by
+    rw [T3g]; simp [HolFiniteMapExact.lookup_update, FUPDATE]; exact hfp
+  have T3rec : T3.locals.lookup (ofString "rec") = some (.val (.word rec)) := by
+    rw [← hT3]; exact setVar_lookup_eq _ _ _
+  have T3l : ∀ y, y ≠ ofString "rec" → T3.locals.lookup y = T2.locals.lookup y := by
+    intro y hy; rw [← hT3]; exact setVar_lookup_ne _ _ _ _ hy
+  have T3AR : ArenaReady T3 :=
+    arenaReady_of_sp_fmp T3G hA (fun k h1 _ => by rw [T3g]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm h1])
+      rec fp T3sp T3fp hss recfp (by omega) hfa reca
+  clear hT3
+  refine Ret.seq_call00 fun vals body cal ret v post4 h1 h2 h3 => ?_
+  have hv : vals = [.val (.word rec), .val (.word 104)] := by
+    obtain ⟨v1, v2, rfl, he1, he2⟩ := evalList2_inv _ _ _ h1
+    simp [ev, evalHOLExact, T3rec] at he1 he2
+    rw [← he1, ← he2]; rfl
+  obtain ⟨rfl, rfl⟩ := lk2 T3c (by decide) lookup_memzero rec 104 hv h2
+  obtain ⟨-, hfr⟩ := memzero_call_zero T3 T3c T3AR rec 104 v post4 h3
+  obtain ⟨fc, fm, -, -, -, fg, -, -, fout, -⟩ := hfr
+  have fbe := FNR.evalBe h3
+  generalize hT4 : { post4 with locals := T3.locals } = T4
+  have T4g : T4.globals = T3.globals := by rw [← hT4]; exact fg
+  have T4c : T4.code = originalRuntimeCode := by rw [← hT4]; exact fc.trans T3c
+  have T4ma : T4.memaddrs = s.memaddrs := by rw [← hT4]; exact fm.trans T3ma
+  have T4be : T4.be = s.be := by rw [← hT4]; exact fbe.trans T3be
+  have T4G : GuestInv T4 := by
+    rw [← hT4]; exact guestInv_congr (s := post4) rfl rfl rfl rfl (guestInv_post (guestInv_callEntry _ _ T3G) h3)
+  have T4l : T4.locals = T3.locals := by rw [← hT4]
+  have hsz : e.toNat + 280 < 2 ^ 64 := by have := scratchEnd_lt64; have := hAR.2.2.2.2.2.1; omega
+  have T4out : ∀ a : BitVec 64, ¬ CellHits a.toNat (rec.toNat, 104) → T4.memory a = post.memory a := by
+    intro a ha; rw [← hT4]
+    exact (fout a (by simpa using ha) (by simp [CellHits])).trans (congrArg (fun f => f a) T3m)
+  clear hT4 h1 h2 h3 hv fc fm fg fout fbe
+  have hqx : rec.toNat + 104 < 2 ^ 64 := by have := scratchEnd_lt64; omega
+  have hwg : ∀ (X : PanSemStateFiniteExact 64 F) (n : String), ArenaOK X → n ∈ guestGlobalNames →
+      ∀ v, ev X (.var .global (ofString n)) = some v → ∃ w, v = .val (.word w) := by
+    intro X n hX hn v hv
+    obtain ⟨w, hw, -⟩ := glob_of_words X hX n hn
+    rw [ev_glob, hw] at hv; exact ⟨w, (Option.some.inj hv).symm⟩
+  refine Ret.seq_storeWv (rec + 0) (ev_addr T4 (ofString "rec") rec 0 (by rw [T4l]; exact T3rec))
+    (fun v hv => by
+      refine ⟨evw, ?_⟩
+      rw [ev_loc, T4l, T3l _ (by decide), T2l _ (by decide), S1p] at hv
+      exact (Option.some.inj hv).symm) ?_
+  intro w5 _ _
+  let T5 : PanSemStateFiniteExact 64 F := { T4 with memory := updW T4.memory (rec + 0) w5 }
+  refine Ret.seq_storeWv (rec + 8) (ev_addr T5 (ofString "rec") rec 8 (by show T4.locals.lookup _ = _; rw [T4l]; exact T3rec))
+    (hwg T5 "cur_cont" (arenaOK_congr (s := T3) T4g T3AR.2) (by decide)) ?_
+  intro w6 _ _
+  let T6 : PanSemStateFiniteExact 64 F := { T5 with memory := updW T5.memory (rec + 8) w6 }
+  refine Ret.seq_storeWv (rec + 16) (ev_addr T6 (ofString "rec") rec 16 (by show T4.locals.lookup _ = _; rw [T4l]; exact T3rec))
+    (fun v hv => by
+      refine ⟨k, ?_⟩
+      rw [ev_loc, show T6.locals = T4.locals from rfl, T4l, T3l _ (by decide), T2l _ (by decide), S1k] at hv
+      exact (Option.some.inj hv).symm) ?_
+  intro w7 hv7 _
+  have hw7 : w7 = k := by
+    rw [ev_loc, show T6.locals = T4.locals from rfl, T4l, T3l _ (by decide), T2l _ (by decide), S1k] at hv7
+    simp only [Option.some.injEq, ValueHOL.val.injEq, HolWordLab.word.injEq] at hv7
+    exact hv7.symm
+  subst w7
+  let T7 : PanSemStateFiniteExact 64 F := { T6 with memory := updW T6.memory (rec + 16) k }
+  refine Ret.seq_storeWv (rec + 40) (ev_addr T7 (ofString "rec") rec 40 (by show T4.locals.lookup _ = _; rw [T4l]; exact T3rec))
+    (fun v hv => by
+      refine ⟨m, ?_⟩
+      rw [ev_loc, show T7.locals = T4.locals from rfl, T4l, T3l _ (by decide), T2l _ (by decide), S1msg] at hv
+      exact (Option.some.inj hv).symm) ?_
+  intro w8 _ _
+  let T8 : PanSemStateFiniteExact 64 F := { T7 with memory := updW T7.memory (rec + 40) w8 }
+  refine Ret.seq_assignGlobal fun ev1 hev1 _ => ?_
+  rw [ev_loc, show T8.locals = T4.locals from rfl, T4l, T3l _ (by decide), T2child] at hev1
+  cases hev1
+  refine Ret.seq_assignGlobal fun ev2 hev2 _ => ?_
+  have hev2' : ev2 = .val (.word rec) := by
+    simp only [ev_loc, setKvarHOLFinite, setGlobalHOLFinite] at hev2
+    rw [show T8.locals = T4.locals from rfl, T4l, T3rec] at hev2
+    exact (Option.some.inj hev2).symm
+  subst hev2'
+  refine Ret.ret fun _ _ => ?_
+  let Pf := emptyLocalsHOLFinite (setKvarHOLFinite .global (ofString "cur_cont") (.val (.word rec))
+      (setKvarHOLFinite .global (ofString "ev") (.val (.word e)) T8))
+  have T8GI : GuestInv T8 := guestInv_congr (s := T4) rfl rfl rfl rfl T4G
+  have PfGI : GuestInv Pf := guestInv_congr (s := T8) rfl rfl rfl rfl T8GI
+  have Pf_ev_lk : Pf.globals.lookup (ofString "ev") = some (.val (.word e)) := by
+    simp (config := {decide := true}) [Pf, emptyLocalsHOLFinite, setKvarHOLFinite, setGlobalHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE]
+  have Pf_cc_lk : Pf.globals.lookup (ofString "cur_cont") = some (.val (.word rec)) := by
+    simp (config := {decide := true}) [Pf, emptyLocalsHOLFinite, setKvarHOLFinite, setGlobalHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE]
+  have Pf_other_lk : ∀ n, n ≠ ofString "ev" → n ≠ ofString "cur_cont" →
+      Pf.globals.lookup n = T3.globals.lookup n := by
+    intro n h1 h2
+    simp [Pf, emptyLocalsHOLFinite, setKvarHOLFinite, setGlobalHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm h1, Ne.symm h2]
+    exact congrArg (fun g => g.lookup n) T4g
+  have Pf_gn_other : ∀ name, ofString name ≠ ofString "ev" → ofString name ≠ ofString "cur_cont" →
+      globN Pf name = globN T3 name := by
+    intro name h1 h2; unfold globN; rw [Pf_other_lk _ h1 h2]
+  have Pf_ev : globN Pf "ev" = e.toNat := by unfold globN; rw [Pf_ev_lk]
+  have Pf_cc : globN Pf "cur_cont" = rec.toNat := by unfold globN; rw [Pf_cc_lk]
+  have Pf_sp : globN Pf "scratch_ptr" = rec.toNat := by
+    rw [Pf_gn_other "scratch_ptr" (by decide) (by decide)]; unfold globN; rw [T3sp]
+  have Pf_fmp : globN Pf "frame_mem_ptr" = globN post "frame_mem_ptr" := by
+    rw [Pf_gn_other "frame_mem_ptr" (by decide) (by decide)]; unfold globN; rw [T3fp]; exact hfp_eq
+  have Pf_hp : globN Pf "heap_ptr" = globN post "heap_ptr" := by
+    rw [Pf_gn_other "heap_ptr" (by decide) (by decide)]
+    unfold globN; rw [T3g]; simp (config := {decide := true}) [HolFiniteMapExact.lookup_update, FUPDATE]
+    rw [T2g]
+  have Pf_emp : globN Pf "evm_empty" = globN s "evm_empty" := by
+    rw [Pf_gn_other "evm_empty" (by decide) (by decide)]
+    unfold globN; rw [T3g]; simp (config := {decide := true}) [HolFiniteMapExact.lookup_update, FUPDATE]
+    rw [T2g, hpgk _ (by decide) (by decide) (by decide), hceg]
+  have PfAR : ArenaReady Pf := by
+    refine ⟨PfGI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    · rw [Pf_hp]; exact hAR2.2.1
+    · rw [Pf_hp]; exact hAR2.2.2.1
+    · rw [Pf_fmp, ← hfp_eq]; exact hss
+    · rw [Pf_fmp, Pf_sp, ← hfp_eq]; exact recfp
+    · rw [Pf_sp]; omega
+    · rw [Pf_hp]; exact hAR2.2.2.2.2.2.2.1
+    · rw [Pf_fmp, ← hfp_eq]; exact hfa
+    · rw [Pf_sp]; exact reca
+    · refine globalsWord_frame ["ev", "cur_cont"] (fun n hnm => ?_) (fun n _ hn => ?_) T3AR.2.2.2.2.2.2.2.2.2
+      · simp only [List.map, List.mem_cons, List.not_mem_nil, or_false, not_or] at hnm
+        exact (Pf_other_lk n hnm.1 hnm.2).symm
+      · simp only [List.map, List.mem_cons, List.not_mem_nil, or_false] at hn
+        rcases hn with hn | hn
+        · exact ⟨e, by unfold GlobalWord; rw [hn]; exact Pf_ev_lk⟩
+        · exact ⟨rec, by unfold GlobalWord; rw [hn]; exact Pf_cc_lk⟩
+  have hm_out : ∀ a : BitVec 64, ¬ CellHits a.toNat (rec.toNat, 104) → Pf.memory a = post.memory a := by
+    intro a ha
+    have hne : ∀ off : Nat, off + 8 ≤ 104 → a ≠ rec + BitVec.ofNat 64 off := by
+      intro off hoff heq; subst heq
+      rw [toNat_add_ofNat rec off (by omega)] at ha
+      apply ha; unfold CellHits; dsimp only; omega
+    have h87 : T8.memory a = T7.memory a := updW_ne _ _ _ _ (hne 40 (by omega))
+    have h76 : T7.memory a = T6.memory a := updW_ne _ _ _ _ (hne 16 (by omega))
+    have h65 : T6.memory a = T5.memory a := updW_ne _ _ _ _ (hne 8 (by omega))
+    have h54 : T5.memory a = T4.memory a := updW_ne _ _ _ _ (hne 0 (by omega))
+    change T8.memory a = post.memory a
+    rw [h87, h76, h65, h54]
+    exact T4out a ha
+  have hm_above : ∀ n, rec.toNat + 104 ≤ n → n < 2 ^ 64 → memW Pf n = memW post n := by
+    intro n hn1 hn2
+    apply memW_of
+    apply hm_out
+    rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt n hn2]
+    unfold CellHits; dsimp only; omega
+  have h16 : memW Pf (rec.toNat + 16) = 0 := by
+    have hneq40 : BitVec.ofNat 64 (rec.toNat + 16) ≠ rec + BitVec.ofNat 64 40 := by
+      intro heq
+      have hc := congrArg BitVec.toNat heq
+      rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt _ (by omega), toNat_add_ofNat rec 40 (by omega)] at hc
+      omega
+    have h87 : T8.memory (BitVec.ofNat 64 (rec.toNat + 16)) = T7.memory (BitVec.ofNat 64 (rec.toNat + 16)) :=
+      updW_ne _ _ _ _ hneq40
+    have h7eq : T7.memory (BitVec.ofNat 64 (rec.toNat + 16)) = .word k := by
+      change updW T6.memory (rec + 16) k (BitVec.ofNat 64 (rec.toNat + 16)) = .word k
+      rw [HtabC00Ports.ofNat_add_toNat]; exact updW_eq _ _ _
+    have h8eq : Pf.memory (BitVec.ofNat 64 (rec.toNat + 16)) = .word k := h87.trans h7eq
+    unfold memW; rw [h8eq]; exact hk0
+  have hq0_hi : q0.toNat + 32 < 2 ^ 64 := by omega
+  have hlg_hi : lg.toNat + 24 < 2 ^ 64 := by omega
+  have htb_hdr : ∀ j ≤ 10, hdr Pf tb.toNat j = hdr post tb.toNat j := by
+    intro j hj
+    have h88 : (tb.toNat, 88) ∈ htabFootprint post tb.toNat := by simp [htabFootprint]
+    have htb_le : tb.toNat + 88 ≤ q0.toNat := hTbHi _ h88
+    obtain ⟨_, hz⟩ := hTbAlloc _ h88
+    have hlo : rec.toNat + 104 ≤ tb.toNat + 8 * j ∨ tb.toNat + 8 * j + 8 ≤ rec.toNat := by
+      rcases hz with ⟨_, hh2⟩ | ⟨hs1, _⟩
+      · right; have hsc : heapLimit = scratchStart := rfl; have := hAR2.2.2.1; omega
+      · left; omega
+    apply memW_of; apply hm_out
+    have hlt64 : tb.toNat + 8 * j < 2 ^ 64 := by omega
+    rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt _ hlt64]
+    unfold CellHits; dsimp only; omega
+  have htb_fp : htabFootprint Pf tb.toNat = htabFootprint post tb.toNat := by
+    unfold htabFootprint
+    rw [htb_hdr 4 (by omega), htb_hdr 10 (by omega), htb_hdr 1 (by omega),
+      htb_hdr 5 (by omega), htb_hdr 6 (by omega)]
+  have hTbWF_Pf : HtabWF Pf tb.toNat := by
+    refine R13Shards.htabWF_congr_unhit hAR2.1 PfGI hTbWF ?_
+    intro i hi a _ hci
+    apply hm_out a
+    obtain ⟨_, hz⟩ := hTbAlloc i hi
+    have hiq := hTbHi i hi
+    unfold CellHits at hci ⊢; dsimp only at hci ⊢
+    rcases hz with ⟨_, hh2⟩ | ⟨hs1, _⟩
+    · have hsc : heapLimit = scratchStart := rfl; have := hAR2.2.2.1; omega
+    · omega
+  refine ⟨e, rec, stk, lg, q0, tb, PfAR, T4c, T4ma, T4be, Pf_ev, Pf_cc, Pf_sp, ?_,
+    by rw [Pf_hp]; exact hphp, by rw [Pf_fmp, ← hfp_eq]; exact recfp, ?_,
+    hea, reca, hstka, hlga, hq0a, htba, by omega, htb_q0, hq0_lg, hlg_stk, hstk_e, he280,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm24_lo,
+    by rw [hm_above _ (by omega) (by omega), Pf_fmp]; exact hm24_fmp,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm24a,
+    h16,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm8,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm232,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm16,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm32,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm192,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm40,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm64,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm88,
+    by rw [hm_above _ (by omega) (by omega)]; exact hml0,
+    by rw [hm_above _ (by omega) (by omega)]; exact hml8,
+    by rw [hm_above _ (by omega) (by omega)]; exact hml16,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm112,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm136,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm168,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm176,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm216,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm144,
+    by rw [hm_above _ (by omega) (by omega)]; exact hm104,
+    hTbWF_Pf, by rw [htb_hdr 0 (by omega)]; exact hTb0,
+    by rw [htb_hdr 3 (by omega)]; exact hTb3, hTbNe0, hTbNe152, hTbNe160, ?_⟩
+  · intro gk h1 h2 h3 h4 h5
+    rw [Pf_other_lk gk h4 h5, T3g]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm h1]
+    rw [T2g, hpgk gk h1 h2 h3, hceg]
+  · intro a hkeep hfresh
+    by_cases hhit : CellHits a.toNat (rec.toNat, 104)
+    · exfalso; apply hkeep (rec.toNat, globN s "scratch_ptr" - rec.toNat) (List.mem_singleton.mpr rfl)
+      unfold CellHits at hhit ⊢; dsimp only at hhit ⊢; omega
+    · rw [hm_out a hhit, ← hcem]
+      apply hpfo a
+      · intro i hi hci
+        rw [List.mem_singleton] at hi; subst hi
+        apply hkeep (rec.toNat, globN s "scratch_ptr" - rec.toNat) (List.mem_singleton.mpr rfl)
+        rw [hce_gn, ← hsp_eq] at hci
+        unfold CellHits at hhit hci ⊢; dsimp only at hci ⊢; omega
+      · rw [Pf_hp] at hfresh; rw [hce_gn]; exact hfresh
+  · intro i hi
+    rw [htb_fp] at hi
+    obtain ⟨hal, hz⟩ := hTbAlloc i hi
+    have hiq := hTbHi i hi
+    refine ⟨?_, ?_⟩
+    · rcases hal with h1 | h2
+      · exact Or.inl ⟨h1.1, by rw [Pf_hp]; exact h1.2⟩
+      · exact Or.inr ⟨by rw [Pf_sp]; have := h2.1; omega, h2.2⟩
+    · rcases hz with h1 | h2
+      · exact Or.inl ⟨by rw [← hce_gn]; exact h1.1, by rw [Pf_hp]; exact h1.2⟩
+      · exact Or.inr ⟨by have := h2.1; omega, hiq⟩
+
 end FrameOpenRich
