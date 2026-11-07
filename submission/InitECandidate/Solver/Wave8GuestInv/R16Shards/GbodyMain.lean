@@ -521,7 +521,7 @@ theorem resumeOn_alloc32_inputReady
     by change memW post (memW post w_si.toNat + 56) < 2 ^ 32; rw [hsi0_eq, hpl56_eq]; exact hnwd0⟩
 
 theorem hoare_htr_inputReady
-    (whtr : WorldKeeps WorldOK
+    (whtr : WorldKeeps R16Shards.TopGbodyWk.HtrNewPayloadReady
       (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
       ["heap_ptr"]
       [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
@@ -568,15 +568,26 @@ theorem hoare_htr_inputReady
               [.val (.word w_si), .val (.word w_rt)] body callee ret
               (by simpa [evalAt, evalHOLExact] using hlu_si)
               (by simpa [evalAt, evalHOLExact] using hlu_rt) hargs hl
+            have hsi_loc : locN (callEntryStateHOLFinite state callee) "si" = w_si.toNat := by
+              simp [locN, callEntryStateHOLFinite, hpc.2.1]
             have hout_loc : locN (callEntryStateHOLFinite state callee) "out" = w_rt.toNat := by
               simp [locN, callEntryStateHOLFinite, hpc.2.2]
-            have hW_state : WorldOK state := ⟨hIA.1, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.2.1⟩⟩
-            have hstep := FunSpec.at_lookup whtr state hcode _ body callee ret hl
-              (localsFree_worldOK state callee (state.clock - 1) hW_state) (by rw [hb]; simp)
-            rw [hb] at hstep; dsimp only at hstep
-            have hws := hstep (Or.inl ⟨v, rfl⟩)
             have hIA_entry : InputAtWith (callEntryStateHOLFinite state callee) S Nd w_si.toNat :=
               (inputAtWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+            have hReady_entry : R16Shards.TopGbodyWk.HtrNewPayloadReady (callEntryStateHOLFinite state callee) := by
+              refine ⟨?_, ?_, ?_, ?_⟩
+              · rw [hsi_loc]
+                exact (inputAt_iff_with _ _).2 ⟨S, Nd, hIA_entry⟩
+              · rw [hsi_loc, hout_loc]
+                exact hdisj_ic_rt
+              · rw [hsi_loc]
+                exact hnvh0
+              · rw [hsi_loc]
+                exact hnwd0
+            have hstep := FunSpec.at_lookup whtr state hcode _ body callee ret hl
+              hReady_entry (by rw [hb]; simp)
+            rw [hb] at hstep; dsimp only at hstep
+            have hws := hstep (Or.inl ⟨v, rfl⟩)
             have hhz : ∀ j ∈ [(locN (callEntryStateHOLFinite state callee) "out", 32),
                 bufferRegion (callEntryStateHOLFinite state callee) ("ssz_len_chunk", 32)],
                 j.2 = 0 → j.1 % 8 = 0 := by

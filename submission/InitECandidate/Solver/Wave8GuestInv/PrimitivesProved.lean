@@ -568,7 +568,7 @@ theorem primitives : Primitives where
   «wk_evm_init» := R10Shards.P26_P28.wk_evm_init
   «wk_fork_init» := R10Shards.P26_P28.wk_fork_init
   «wk_header_init» := R10Shards.P26_P28.wk_header_init
-  «wk_htr_new_payload_request» := «wk_htr_new_payload_request»
+  «wk_htr_new_payload_request» := R16Shards.TopGbodyWk.«wk_htr_new_payload_request_strong»
   «wk_keccak_init» := R10Shards.P26_P28.wk_keccak_init
   «mem_init_world» := R16Shards.PrimC08Closure.mem_init_world
   «wk_mpt_init» := R10Shards.P26_P28.wk_mpt_init

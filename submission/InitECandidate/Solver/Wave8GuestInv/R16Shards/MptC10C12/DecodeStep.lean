@@ -3103,7 +3103,7 @@ theorem «ww__decode_step» :
       rw [evalListHOLFinite_eq_toExact] at hargs_sa
       simpa [evalListHOLExact, evalHOLExact] using hargs_sa.symm
     subst hvals_sa
-    obtain ⟨fp_sa, fb_sa, rs_sa, hlook_sa0, hspec_sa0⟩ := rt_scratch_alloc
+    obtain ⟨fp_sa, fb_sa, rs_sa, hlook_sa0, hspec_sa0⟩ := Wave8Contracts.M26.rt_scratch_alloc
     have hsame_b := lookupCodeHOLFinite_installed_body u0.code.lookup _ fp_sa fb_sa fbody_sa
       rs_sa retShape_sa _ callee (by rw [hsf_u0.1.1.code]; exact hlook_sa0) hl_sa
     have hsame_r := lookupCodeHOLFinite_installed_return u0 _ fp_sa fb_sa fbody_sa
@@ -3974,7 +3974,7 @@ theorem «sp__decode_step» :
       rw [evalListHOLFinite_eq_toExact] at hargs_sa
       simpa [evalListHOLExact, evalHOLExact] using hargs_sa.symm
     subst hvals_sa
-    obtain ⟨fp_sa, fb_sa, rs_sa, hlook_sa0, hspec_sa0⟩ := rt_scratch_alloc
+    obtain ⟨fp_sa, fb_sa, rs_sa, hlook_sa0, hspec_sa0⟩ := Wave8Contracts.M26.rt_scratch_alloc
     have hsame_b := lookupCodeHOLFinite_installed_body u0.code.lookup _ fp_sa fb_sa fbody_sa
       rs_sa retShape_sa _ callee (by rw [hsf_u0.1.1.code]; exact hlook_sa0) hl_sa
     have hsame_r := lookupCodeHOLFinite_installed_return u0 _ fp_sa fb_sa fbody_sa

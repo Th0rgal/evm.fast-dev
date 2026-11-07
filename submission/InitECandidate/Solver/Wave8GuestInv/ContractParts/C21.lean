@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C20
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.HostPayloadHeaderGuards
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -147,7 +148,7 @@ def GBody.«main» : Prop :=
     ["hdr_zero8", "heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "header_init")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
+  (WorldKeeps R16Shards.TopGbodyWk.HtrNewPayloadReady (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "htr_new_payload_request")) →

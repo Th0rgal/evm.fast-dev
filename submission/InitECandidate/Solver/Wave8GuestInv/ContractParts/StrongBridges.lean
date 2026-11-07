@@ -8,6 +8,10 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group08
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FramePrologueException
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FramePrologueCallees
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodySysTxExecBlock
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkHostPayloadHeaders
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.Depth0FrameOpen
 
 /-! Closed strengthened contracts for the cutover rehearsal. Callers must establish
 the stated entry guards before these bridges can replace weaker primitive fields. -/
@@ -175,5 +179,88 @@ theorem gbody_run_attempt_strong : R16Shards.TopGbodyWk.GBody.run_attempt_strong
 contracts. These premises must be established before replacing the primitive field. -/
 theorem gbody_execute_block_strong : R16Shards.TopGbodyWk.GBody.execute_block_strong :=
   R16Shards.TopGbodyWk.gbody_execute_block_strong
+
+theorem mk_mpt_root_strong :
+    R16Shards.MptC10C12.MptKeepsStrong R16Shards.MptC10C12.MptObjReadyStrong
+      (fun s => [(locN s "out", 32),
+                 (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]),
+       ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_root") :=
+  R16Shards.MptC10C12.«mk_mpt_root_strong»
+
+theorem mk_mpt_set_strong :
+    R16Shards.MptC10C12.MptKeepsStrong R16Shards.MptC10C12.MptSetReadyStrong
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]),
+       ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_set") :=
+  R16Shards.MptC10C12.«mk_mpt_set_strong»
+
+theorem wk_mpt_from_witness_strong :
+    WorldKeeps R16Shards.EvmEkFk.StorageCreateFinish.MptFromWitnessReady (fun _ => [])
+      ["heap_ptr", "scratch_ptr"] EvmBase.stdKeep RetMptObj (ofString "mpt_from_witness") :=
+  R16Shards.EvmEkFk.«wk_mpt_from_witness_strong»
+
+theorem decode_witness_to_mpt_spec :
+    R16Shards.EvmEkFk.StorageCreateFinish.DecodeWitnessToMptSpec
+      @R16Shards.EvmEkFk.StorageCreateFinish.NodeDbSlicesBounded :=
+  R16Shards.EvmEkFk.StorageCreateFinish.decode_witness_to_mpt_spec
+
+theorem mpt_from_witness_preserves_witnessDbOK :
+    FunSpec (fun s => R16Shards.EvmEkFk.StorageCreateFinish.MptFromWitnessReady s ∧
+        R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
+      (fun s r post => Resumes r →
+        WorldStep (fun _ => []) ["heap_ptr", "scratch_ptr"] EvmBase.stdKeep RetMptObj s r post ∧
+        globN post "scratch_ptr" = globN s "scratch_ptr" ∧
+        R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK post)
+      (ofString "mpt_from_witness") :=
+  R16Shards.EvmEkFk.StorageCreateFinish.mpt_from_witness_preserves_witnessDbOK
+
+theorem wk_nodedb_build_strong :
+    WorldKeeps R16Shards.TopGbodyWk.NodeDbBuildReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetNodeDb (ofString "nodedb_build") :=
+  R16Shards.TopGbodyWk.«wk_nodedb_build_strong»
+
+theorem wk_nodedb_build_nodedb_bounded :
+    WorldKeeps R16Shards.TopGbodyWk.NodeDbSlicesReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      R16Shards.TopGbodyWk.RetNodeDbBounded (ofString "nodedb_build") :=
+  R16Shards.TopGbodyWk.«wk_nodedb_build_nodedb_bounded»
+
+theorem fk_frame_open_bounded :
+    KeepsOn R16Shards.OpHandlersB.HeadMemBridge.FrameOpenReadyB EvmMsgReady
+      (ofString "frame_open") :=
+  R16Shards.EvmEkFk.fk_frame_open_bounded
+
+theorem fk_frame_open_codeStrong :
+    KeepsOn R16Shards.EvmEkFk.FrameOpenReadyCodeStrong R16Shards.EvmEkFk.EvmMsgReadyCodeStrong
+      (ofString "frame_open") :=
+  R16Shards.EvmEkFk.fk_frame_open_codeStrong
+
+theorem frame_open_headMemChainWF_B' :
+    KeepsOn R16Shards.OpHandlersB.HeadMemBridge.FrameOpenReadyB
+      R16Shards.OpHandlersB.HeadMemBridge.HeadMemChainWF (ofString "frame_open") :=
+  R16Shards.OpHandlersB.HeadMemBridge.frame_open_headMemChainWF_B'
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
