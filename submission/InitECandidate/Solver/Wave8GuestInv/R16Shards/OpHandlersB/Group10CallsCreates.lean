@@ -14037,6 +14037,7 @@ private def DelCostPost_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
     (EvmInv post ∧ Group10.HeadMemChainWF post) ∧
       evmChain post = evmChain s0 ∧ evmR post ≤ evmR s0 ∧
       (evmR post = evmR s0 ∧
+        memW post (globN s0 "ev" + 32) = memW s0 (globN s0 "ev" + 32) ∧
         ∃ d0 d1 d2 : BitVec 64,
           v = .rStruct [.val (.word d0), .val (.word d1), .val (.word d2)] ∧
           (d0 = 0#64 → d2 = 0#64) ∧
@@ -14047,6 +14048,34 @@ private def DelCostPost_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
 private theorem evmR_congr_g10 {F : Type} {s t : PanSemStateFiniteExact 64 F}
     (hm : t.memory = s.memory) (hg : t.globals = s.globals) : evmR t = evmR s :=
   (evm_congr hm hg).2.1
+
+/-- `memW` only depends on the whole memory map. -/
+private theorem memW_eq_of_memory_g10 {F : Type} {t u : PanSemStateFiniteExact 64 F} {a : Nat}
+    (h : t.memory = u.memory) : memW t a = memW u a := by
+  unfold memW; rw [h]
+
+/-- `memW` only depends on the single memory cell at the address. -/
+private theorem memW_eq_of_cell_g10 {F : Type} {t u : PanSemStateFiniteExact 64 F} {a : Nat}
+    (h : t.memory (BitVec.ofNat 64 a) = u.memory (BitVec.ofNat 64 a)) :
+    memW t a = memW u a := by
+  unfold memW; rw [h]
+
+/-- The head of a preserved EVM chain pins the frame address `ev`. -/
+private theorem globN_ev_of_chain_g10 {F : Type} {t u : PanSemStateFiniteExact 64 F}
+    (hch : evmChain t = evmChain u) : globN t "ev" = globN u "ev" := by
+  have hc1 : evmChain t = (globN t "ev", globN t "cur_cont") ::
+      (if memW t (globN t "cur_cont" + 16) = 0 then []
+       else evmChainFrom t maxChain (memW t (globN t "cur_cont"))
+         (memW t (globN t "cur_cont" + 8))) := by
+    simp only [evmChain, evmChainFrom]
+  have hs1 : evmChain u = (globN u "ev", globN u "cur_cont") ::
+      (if memW u (globN u "cur_cont" + 16) = 0 then []
+       else evmChainFrom u maxChain (memW u (globN u "cur_cont"))
+         (memW u (globN u "cur_cont" + 8))) := by
+    simp only [evmChain, evmChainFrom]
+  rw [hc1, hs1] at hch
+  injection hch with hhead_eq _
+  exact (Prod.mk.inj hhead_eq).1
 
 private theorem delCostPost_congr_lc_g10 {F : Type}
     {s0 post post' : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
@@ -14060,9 +14089,11 @@ private theorem delCostPost_congr_lc_g10 {F : Type}
     rw [hlc]; exact localsFree_evmInv post _ _ hi
   constructor
   · intro v hv
-    obtain ⟨⟨hi, hw⟩, hch0, hRle, hReq, hstruct⟩ := h.1 v hv
+    obtain ⟨⟨hi, hw⟩, hch0, hRle, hReq, hmem, hstruct⟩ := h.1 v hv
+    have hmemW' : memW post' (globN s0 "ev" + 32) = memW post (globN s0 "ev" + 32) :=
+      memW_eq_of_memory_g10 hm
     exact ⟨⟨hInv hi, (Group10.headMemChainWF_congr hm hg).2 hw⟩,
-      hch.trans hch0, by rw [hR]; exact hRle, hR.trans hReq, hstruct⟩
+      hch.trans hch0, by rw [hR]; exact hRle, hR.trans hReq, hmemW'.trans hmem, hstruct⟩
   · intro he
     obtain ⟨⟨hi, hw⟩, hch0, hRle⟩ := h.2 he
     exact ⟨⟨hInv hi, (Group10.headMemChainWF_congr hm hg).2 hw⟩,
@@ -14188,6 +14219,7 @@ private theorem delCost_return3_g10 {F : Type}
     {s0 t : PanSemStateFiniteExact 64 F} {e : ExpHOL 64} {d0 d1 d2 : BitVec 64}
     (hi : EvmInv t) (hw : Group10.HeadMemChainWF t)
     (hch0 : evmChain t = evmChain s0) (hR0 : evmR t = evmR s0)
+    (hmem0 : memW t (globN s0 "ev" + 32) = memW s0 (globN s0 "ev" + 32))
     (hev : @evalHOLExact 64 F _ t.toExact (fun x => Classical.propDecidable (t.memaddrs x)) e =
       some (.rStruct [.val (.word d0), .val (.word d1), .val (.word d2)]))
     (hd0 : d0 = 0#64 → d2 = 0#64) (hd1 : d0 ≠ 0#64 → 0 < d2.toNat) :
@@ -14201,16 +14233,19 @@ private theorem delCost_return3_g10 {F : Type}
   rw [if_pos hsz]; dsimp only
   have hc_el := evm_congr (s := t) (t := t.emptyLocalsHOLFinite) rfl rfl
   have hch_el : evmChain t.emptyLocalsHOLFinite = evmChain t := evmChain_congr rfl rfl
+  have hmemW_el : memW t.emptyLocalsHOLFinite (globN s0 "ev" + 32) = memW t (globN s0 "ev" + 32) :=
+    memW_eq_of_cell_g10 (a := globN s0 "ev" + 32) rfl
   refine ⟨fun v hv => ?_, by rintro ⟨_, h⟩; cases h⟩
   injection hv with hv'; injection hv' with hv''
-  exact ⟨⟨localsFree_evmInv t _ _ hi, Group10.headMemChainWF_locals t _ _ hw⟩,
+  refine ⟨⟨localsFree_evmInv t _ _ hi, Group10.headMemChainWF_locals t _ _ hw⟩,
     hch_el.trans hch0, le_of_eq (hc_el.2.1.trans hR0), hc_el.2.1.trans hR0,
-    d0, d1, d2, hv''.symm, hd0, hd1⟩
+    hmemW_el.trans hmem0, d0, d1, d2, hv''.symm, hd0, hd1⟩
 
 private theorem delCost_tail_after_da_g10 {F : Type}
     {s0 s3 : PanSemStateFiniteExact 64 F} {hp_w c0 c1 : BitVec 64}
     (hc3 : s3.code = originalRuntimeCode) (hi3 : EvmInv s3) (hw3 : Group10.HeadMemChainWF s3)
     (hch3 : evmChain s3 = evmChain s0) (hR3 : evmR s3 = evmR s0)
+    (hmem3 : memW s3 (globN s0 "ev" + 32) = memW s0 (globN s0 "ev" + 32))
     (hp_al : hp_w.toNat % 8 = 0)
     (hp_lim : hp_w.toNat + 24 ≤ InitECandidate.Solver.HeapPotential.cMax.toNat)
     (hav3 : Wave8Contracts.M23.EvmAvoids (fun _ => [(hp_w.toNat, 24)]) s3)
@@ -14331,6 +14366,27 @@ private theorem delCost_tail_after_da_g10 {F : Type}
         have hc_lo : globN s3 "scratch_ptr" ≤ ec.2 := (hfw_ec.1 (ec.2, 104) (by simp)).1.1
         exact ⟨Or.inr (Or.inr (Or.inr (Or.inr (by dsimp [Disj] at *; omega)))),
                Or.inr (Or.inr (Or.inr (Or.inr (by dsimp [Disj] at *; omega))))⟩
+    have hmemW4 : memW s4 (globN s0 "ev" + 32) = memW s3 (globN s0 "ev" + 32) := by
+      have hhead_mem : (globN s3 "ev", globN s3 "cur_cont") ∈ evmChain s3 := by
+        simp [evmChain, evmChainFrom]
+      have hFW0 := hi3.2.choose_spec.2.2.2.2.1 _ hhead_mem
+      have hb_ev3 := (frameWF_bounds hi3.1.2 hFW0).1
+      dsimp only at hb_ev3
+      have hss_le : globN s3 "scratch_ptr" ≤ globN s3 "ev" :=
+        (hFW0.1 (globN s3 "ev", 280) (by simp)).1.1
+      have hss_fp : scratchStart ≤ globN s3 "frame_mem_ptr" := hi3.1.2.2.2.1
+      have hfp_sp : globN s3 "frame_mem_ptr" ≤ globN s3 "scratch_ptr" := hi3.1.2.2.2.2.1
+      have hlim : heapLimit = scratchStart := rfl
+      have hcf := heff4.cell_frame (BitVec.ofNat 64 (globN s3 "ev" + 32)) (by
+        intro i hi
+        rcases List.mem_singleton.mp hi with rfl
+        unfold CellHits
+        rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+        have h1 := hp_lim_hl
+        omega)
+      have hadd := globN_ev_of_chain_g10 hch3
+      rw [← hadd]
+      exact memW_eq_of_cell_g10 hcf
     have hs4_da : s4.locals.lookup (ofString "da") = some (.val (.word hp_w)) := by
       rw [hloc4]; exact hs3_da
     refine delCost_decCall_step_g10 hc4 hi4 hw4 hch4 hR4 epsA_is_warm_address
@@ -14350,6 +14406,8 @@ private theorem delCost_tail_after_da_g10 {F : Type}
     have hs5_da : s5.locals.lookup (ofString "da") = some (.val (.word hp_w)) := by
       simp [s5, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
         show ofString "warm" ≠ ofString "da" by decide, hs4_da]
+    have hmemW5 : memW s5 (globN s0 "ev" + 32) = memW s4 (globN s0 "ev" + 32) :=
+      (memW_eq_of_memory_g10 (t := s5) (u := cp5) (by rfl)).trans (memW_eq_of_memory_g10 hm_cp5)
     change (evaluateHOLFiniteState s5 _).1 ≠ some .timeOut at hnt5
     change DelCostPost_g10 s0 (evaluateHOLFiniteState s5 _).1 (evaluateHOLFiniteState s5 _).2
     rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hnt5 ⊢
@@ -14362,7 +14420,7 @@ private theorem delCost_tail_after_da_g10 {F : Type}
     · subst hww0
       simp only [↓reduceIte, show (0#64 : BitVec 64) = 0 by decide] at hnt5 ⊢
       rw [evaluateHOLFiniteState_skip] at hnt5 ⊢
-      exact delCost_return3_g10 hi5 hw5 hch5 hR5
+      exact delCost_return3_g10 hi5 hw5 hch5 hR5 (hmemW5.trans (hmemW4.trans hmem3))
         (d0 := 1#64) (d1 := hp_w) (d2 := 3000#64)
         (by simp [evalHOLExact, evalListHOLExact, hs5_da])
         (fun h => absurd h (by decide)) (fun _ => by decide)
@@ -14387,7 +14445,7 @@ private theorem delCost_tail_after_da_g10 {F : Type}
         (.return (.rstruct [.const 1#64, .var .local (ofString "da"), .const 100#64])) with ⟨r_ret, p_ret⟩
       rw [hr_ret] at hrw; obtain ⟨rfl, rfl⟩ := hrw; dsimp only
       have hd := delCost_return3_g10 (s0 := s0) (d0 := 1#64) (d1 := hp_w) (d2 := 100#64)
-        hi5 hw5 hch5 hR5
+        hi5 hw5 hch5 hR5 (hmemW5.trans (hmemW4.trans hmem3))
         (e := .rstruct [.const 1#64, .var .local (ofString "da"), .const 100#64])
         (by simp [evalHOLExact, evalListHOLExact, hs5_da])
         (fun h => absurd h (by decide)) (fun _ => by decide)
@@ -14438,6 +14496,7 @@ theorem epsA_calculate_delegation_cost_g10 (hW : WorldAccountSpecsA) :
     EvmPreservingSpecA (fun _ => True)
       (fun s v post =>
         evmR post = evmR s ∧
+        memW post (globN s "ev" + 32) = memW s (globN s "ev" + 32) ∧
         ∃ d0 d1 d2 : BitVec 64,
           v = .rStruct [.val (.word d0), .val (.word d1), .val (.word d2)] ∧
           (d0 = 0#64 → d2 = 0#64) ∧
@@ -14563,6 +14622,7 @@ theorem epsA_calculate_delegation_cost_g10 (hW : WorldAccountSpecsA) :
       rw [hbody_eval] at h_ast; exact h_ast
     refine delCost_decCall_step_g10 hc hi hw rfl rfl hW.epsA_ext_code_of
       (fun _ _ _ => trivial) (fun _ cal1 _ _ vcode cp1 _ _ hc_cp1 hsh_code hi_cp1 hw_cp1 hch_cp1 ⟨_, hR_cp1⟩ hnt1 => ?_) hnt_ast
+    obtain ⟨hR_cp1e, hmem_cp1⟩ := hR_cp1
     obtain ⟨c0, c1, rfl⟩ := comb2_value_of_shape_g10 hsh_code
     let s1 := setVarHOLFinite (ofString "code") (.rStruct [.val (.word c0), .val (.word c1)]) { cp1 with locals := s.locals }
     have hc1 : s1.code = originalRuntimeCode := hc_cp1
@@ -14571,7 +14631,15 @@ theorem epsA_calculate_delegation_cost_g10 (hW : WorldAccountSpecsA) :
     have hch1 : evmChain s1 = evmChain s :=
       (evmChain_congr (s := cp1) (t := s1) rfl rfl).trans (hch_cp1.trans (evmChain_congr (s := s) (t := callEntryStateHOLFinite s cal1) rfl rfl))
     have hR1 : evmR s1 = evmR s :=
-      (evmR_congr_g10 (s := cp1) (t := s1) rfl rfl).trans (hR_cp1.1.trans (evmR_congr_g10 (s := s) (t := callEntryStateHOLFinite s cal1) rfl rfl))
+      (evmR_congr_g10 (s := cp1) (t := s1) rfl rfl).trans (hR_cp1e.trans (evmR_congr_g10 (s := s) (t := callEntryStateHOLFinite s cal1) rfl rfl))
+    have hmem1 : memW s1 (globN s "ev" + 32) = memW s (globN s "ev" + 32) := by
+      have hce : (callEntryStateHOLFinite s cal1).memory (BitVec.ofNat 64 (globN s "ev" + 32))
+          = s.memory (BitVec.ofNat 64 (globN s "ev" + 32)) := rfl
+      have hpt : s1.memory (BitVec.ofNat 64 (globN s "ev" + 32))
+          = cp1.memory (BitVec.ofNat 64 (globN s "ev" + 32)) := rfl
+      have haddr : globN (callEntryStateHOLFinite s cal1) "ev" = globN s "ev" := rfl
+      rw [haddr] at hmem_cp1
+      exact (memW_eq_of_cell_g10 hpt).trans (hmem_cp1.trans (memW_eq_of_cell_g10 hce))
     have hs1_code : s1.locals.lookup (ofString "code") = some (.rStruct [.val (.word c0), .val (.word c1)]) := by
       simp [s1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
     have hs1_addr : s1.locals.lookup (ofString "addr") = some (.val (.word addrw)) := by
@@ -14592,6 +14660,13 @@ theorem epsA_calculate_delegation_cost_g10 (hW : WorldAccountSpecsA) :
       (evmChain_congr (s := cp2) (t := s2) rfl rfl).trans ((evmChain_congr hm_cp2 hg_cp2).trans hch1)
     have hR2 : evmR s2 = evmR s :=
       (evmR_congr_g10 (s := cp2) (t := s2) rfl rfl).trans ((evmR_congr_g10 hm_cp2 hg_cp2).trans hR1)
+    have hmem2 : memW s2 (globN s "ev" + 32) = memW s (globN s "ev" + 32) := by
+      have hm2pt : cp2.memory (BitVec.ofNat 64 (globN s "ev" + 32))
+          = s1.memory (BitVec.ofNat 64 (globN s "ev" + 32)) := by
+        rw [hm_cp2]
+      have hpt : s2.memory (BitVec.ofNat 64 (globN s "ev" + 32))
+          = cp2.memory (BitVec.ofNat 64 (globN s "ev" + 32)) := rfl
+      exact (memW_eq_of_cell_g10 hpt).trans ((memW_eq_of_cell_g10 hm2pt).trans hmem1)
     have hs2_v : s2.locals.lookup (ofString "v") = some (.val (.word vw)) := by
       simp [s2, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
     have hs2_code : s2.locals.lookup (ofString "code") = some (.rStruct [.val (.word c0), .val (.word c1)]) := by
@@ -14631,7 +14706,7 @@ theorem epsA_calculate_delegation_cost_g10 (hW : WorldAccountSpecsA) :
         (.return (.rstruct [.const 0#64, .var .local (ofString "addr"), .const 0#64])) with ⟨r_ret, p_ret⟩
       rw [hr_ret] at hrw; obtain ⟨rfl, rfl⟩ := hrw; dsimp only
       have hd := delCost_return3_g10 (s0 := s) (d0 := 0#64) (d1 := addrw) (d2 := 0#64)
-        hi2 hw2 hch2 hR2
+        hi2 hw2 hch2 hR2 hmem2
         (e := .rstruct [.const 0#64, .var .local (ofString "addr"), .const 0#64])
         (by simp [evalHOLExact, evalListHOLExact, hs2_addr])
         (fun _ => rfl) (fun h => absurd rfl h)
@@ -14642,7 +14717,7 @@ theorem epsA_calculate_delegation_cost_g10 (hW : WorldAccountSpecsA) :
       simp only [h0eq, ↓reduceIte, evaluateHOLFiniteState_skip] at hnt2 ⊢
       refine delCost_decCall_step_g10 hc2 hi2 hw2 hch2 hR2 epsA_alloc_avoids_g10
         (fun _ _ _ => trivial) (fun vals3 cal3 _ _ vda cp3 hargs3 hl3 hc_cp3 _ hi_cp3 hw_cp3 hch_cp3 hQ3 hnt3 => ?_) hnt2
-      obtain ⟨_, hR_cp3, hp_w, rfl, _, hp_al, hp_lo, hp_hi, hav_cp3⟩ := hQ3
+      obtain ⟨hm_cp3, hR_cp3, hp_w, rfl, _, hp_al, hp_lo, hp_hi, hav_cp3⟩ := hQ3
       have hvals3 : vals3 = [.val (.word 24#64)] := by
         simp [evalListHOLFinite, evalListHOLExact, evalHOLExact] at hargs3
         exact hargs3.symm
@@ -14660,6 +14735,16 @@ theorem epsA_calculate_delegation_cost_g10 (hW : WorldAccountSpecsA) :
         (evmChain_congr (s := cp3) (t := s3) rfl rfl).trans (hch_cp3.trans ((evmChain_congr (s := s2) (t := callEntryStateHOLFinite s2 cal3) rfl rfl).trans hch2))
       have hR3 : evmR s3 = evmR s :=
         (evmR_congr_g10 (s := cp3) (t := s3) rfl rfl).trans (hR_cp3.trans ((evmR_congr_g10 (s := s2) (t := callEntryStateHOLFinite s2 cal3) rfl rfl).trans hR2))
+      have hmem3 : memW s3 (globN s "ev" + 32) = memW s (globN s "ev" + 32) := by
+        have hce3 : (callEntryStateHOLFinite s2 cal3).memory (BitVec.ofNat 64 (globN s "ev" + 32))
+            = s2.memory (BitVec.ofNat 64 (globN s "ev" + 32)) := rfl
+        have hm3pt : cp3.memory (BitVec.ofNat 64 (globN s "ev" + 32))
+            = s2.memory (BitVec.ofNat 64 (globN s "ev" + 32)) := by
+          rw [hm_cp3]
+          exact hce3
+        have hpt : s3.memory (BitVec.ofNat 64 (globN s "ev" + 32))
+            = cp3.memory (BitVec.ofNat 64 (globN s "ev" + 32)) := rfl
+        exact (memW_eq_of_cell_g10 hpt).trans ((memW_eq_of_cell_g10 hm3pt).trans hmem2)
       have hav3 : Wave8Contracts.M23.EvmAvoids (fun _ => [(hp_w.toNat, 24)]) s3 :=
         evmAvoids_const_lc_g10 [(hp_w.toNat, 24)] cp3 s3.locals cp3.clock hav_cp3
       have hs3_da : s3.locals.lookup (ofString "da") = some (.val (.word hp_w)) := by
@@ -14667,7 +14752,7 @@ theorem epsA_calculate_delegation_cost_g10 (hW : WorldAccountSpecsA) :
       have hs3_code : s3.locals.lookup (ofString "code") = some (.rStruct [.val (.word c0), .val (.word c1)]) := by
         simp [s3, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
           show ofString "da" ≠ ofString "code" by decide, hs2_code]
-      exact delCost_tail_after_da_g10 hc3 hi3 hw3 hch3 hR3 hp_al (le_trans hp_lo hp_hi) hav3 hs3_da hs3_code hnt3
+      exact delCost_tail_after_da_g10 hc3 hi3 hw3 hch3 hR3 hmem3 hp_al (le_trans hp_lo hp_hi) hav3 hs3_da hs3_code hnt3
   exact hres
 
 /-! ### op_call: head gas-restore store preserves `EvmInv`
