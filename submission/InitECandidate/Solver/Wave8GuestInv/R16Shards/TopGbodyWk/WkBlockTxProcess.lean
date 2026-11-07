@@ -24,6 +24,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2Strong
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PayloadWorldHelpers
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyMptInsert.RlpWord
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockAuxLeaves
 
 /-!
 # R16k Shard `WkBlockTxProcess`: Block & Transaction Execution `wk_*` Contracts
@@ -11776,6 +11777,49 @@ private theorem validBufList_ptxIncorpBufs : ValidBufList ptxIncorpBufs := by
   · exact ⟨200, by decide, by decide, le_rfl⟩
   · exact ⟨64, by decide, by decide, le_rfl⟩
   · exact ⟨64, by decide, by decide, by decide⟩
+
+/-! ### `incorporate_tx_into_block` from the decode witness
+
+The only semantic dependency of the phase-5 incorporate step is the
+`decode_witness_to_mpt` spec (`idx_start_storage` → `ws_storage_trie`):
+`merge_tx_into_block` is unconditional (`wkSc_merge_tx_into_block`), and
+`update_builder_from_tx` follows from `idx_start_storage`'s world step. The
+mask delivered here is the exact `ptxIncorp*` mask the phase-5 wiring consumes,
+so `hinc` can be discharged by this theorem modulo the witness hypotheses. -/
+
+theorem ptxIncorpKeeps_of_decode_witness
+    {ExtraGuard : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat → Prop}
+    (hdw : WkBalStateInit.DecodeWitnessToMptSpec @ExtraGuard)
+    (hdb : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      WorldOK s → globN s "ws" ≠ 0 → ExtraGuard s (memW s (globN s "ws"))) :
+    WorldKeepsSc WorldOK (bufRegions ptxIncorpBufs) ptxIncorpGlobals ptxIncorpKeep NoExtra
+      (ofString "incorporate_tx_into_block") := by
+  have hidx : WorldKeepsSc WorldOK (bufRegions builderBufs) ["heap_ptr", "scratch_ptr"]
+      stdKeep NoExtra (ofString "idx_start_storage") :=
+    wkSc_idx_start_storage_of_decode_witness hdw hdb
+  have hbuilder : WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "update_builder_from_tx") := by
+    obtain ⟨ps, body, ret, hl, hb⟩ := wkSc_update_builder_from_tx_of_idx_storage hidx
+    refine ⟨ps, body, ret, hl, ?_⟩
+    intro F s hc hW hex hnt hres
+    refine worldStepSc_mono_mask (B1 := builderBufs)
+      (gw1 := ["heap_ptr", "scratch_ptr"]) (keep1 := stdKeep)
+      (by intro p hp
+          simp only [builderBufs, withdrawalBufs, List.mem_cons, List.not_mem_nil,
+            or_false] at hp ⊢
+          rcases hp with rfl | rfl | rfl | rfl | rfl <;> simp)
+      (by intro g hg
+          simp only [withdrawalGlobals, List.mem_cons, List.not_mem_nil, or_false] at hg ⊢
+          rcases hg with rfl | rfl | rfl <;> simp)
+      ?_ (hb s hc hW hex hnt hres)
+    intro rec hr k hk
+    simp only [withdrawalKeep, List.mem_cons, List.not_mem_nil, or_false] at hr
+    rcases hr with rfl | rfl | rfl | rfl
+    · exact ⟨[0, 8, 16, 24, 32], by simp [stdKeep], hk⟩
+    · exact ⟨[0, 8, 16, 24, 32, 40, 48, 56, 64, 72], by simp [stdKeep], hk⟩
+    · cases hk
+    · exact ⟨[0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80], by simp [stdKeep], hk⟩
+  exact wkSc_incorporate_tx_into_block_of_steps hbuilder wkSc_merge_tx_into_block
 
 private theorem ptxIncorpBufs_sub_ptx : ∀ p ∈ ptxIncorpBufs, p ∈ ptxBufs ∧ p.1 ∉ ptxGlobals := by
   intro p hp
