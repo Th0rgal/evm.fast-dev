@@ -15005,6 +15005,28 @@ private theorem heapByteEff_memzero {F : Type}
   obtain ⟨_, heff_mz, _, _⟩ := hm hnone
   exact heff.trans heff_mz
 
+/-- Like `heapByteEff_memzero`, but also returns that locals are unchanged. -/
+private theorem heapByteEff_memzero_locals {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {dst n : ExpHOL 64} {dw nw : BitVec 64}
+    (heff : WkBlockTxEnc.HeapByteEff s0 s Rl gw)
+    (hcode : s.code = originalRuntimeCode) (hAR : ArenaReady s)
+    (hd : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) dst =
+      some (.val (.word dw)))
+    (hn : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) n =
+      some (.val (.word nw)))
+    (hsub : 0 < nw.toNat →
+      ∃ ivl ∈ Rl, ivl.1 ≤ dw.toNat ∧ dw.toNat + nw.toNat ≤ ivl.1 + ivl.2)
+    (hnt : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "memzero") [dst, n])).1 ≠ some .timeOut)
+    (hnone : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "memzero") [dst, n])).1 = none) :
+    let out := evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memzero") [dst, n])
+    WkBlockTxEnc.HeapByteEff s0 out.2 Rl gw ∧ out.2.locals = s.locals := by
+  obtain ⟨hm, _⟩ := WkBlockTxEnc.eval_call_memzero_heap s dst n dw nw Rl gw hcode hAR hd hn hsub hnt
+  obtain ⟨_, heff_mz, hloc, _⟩ := hm hnone
+  exact ⟨heff.trans heff_mz, hloc⟩
+
 /-- Threads a prior `HeapByteEff` through a `keccak256` call: the output region, plus the
 (possibly empty) `keccak_pad`/`keccak_st` scratch regions, must be covered by `Rl`. -/
 private theorem heapByteEff_keccak256 {F : Type}
