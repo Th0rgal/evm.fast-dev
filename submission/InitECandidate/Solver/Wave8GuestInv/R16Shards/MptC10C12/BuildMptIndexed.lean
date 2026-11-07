@@ -6617,8 +6617,10 @@ theorem bmi_body_bound_entry
       (decCallResume_mpt_new_bmi2 wk_new rt_new)
       (bmi_dec_i_bound (fun _s h => bmi_entry_bridge 0 h) htail))
 
-/-- The full `GBody.«build_mpt_indexed»` witness (amended with `hbmi_entry`). -/
-theorem bmi_gbody
+/-- Export under the ecosystem's expected name: the full `GBody.«build_mpt_indexed»`
+witness (C11's 11 hypotheses) plus the `hbmi_entry` bridge from the `WorldOK` contract
+guard to the `BmiEntry` entry guard (`BuildMptIndexedReady` + world-owned disjointness). -/
+theorem gbody_build_mpt_indexed
     (fb_mark : TerminatingFunBoundedOn GuestInv (ofString "heap_mark") K.«heap_mark»)
     (fb_release : TerminatingFunBoundedOn GuestInv (ofString "heap_release") K.«heap_release»)
     (fb_new : TerminatingFunBoundedOn GuestInv (ofString "mpt_new") K.«mpt_new»)
