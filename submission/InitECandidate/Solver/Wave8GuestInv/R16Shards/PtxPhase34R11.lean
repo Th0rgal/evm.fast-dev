@@ -21723,6 +21723,15 @@ theorem PtxCallees.toCutover (h : PtxCallees) : PtxCalleesCutover where
 
 namespace PtxP34
 open PtxP1
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8GuestInv.R10Shards.P26_P28
+
+private theorem wk_lst_push_strong_c02 :
+    WorldKeeps WkBal.BoListArgStrong (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetListSlot (ofString "lst_push") :=
+  WkBal.wk_lst_push_strong
 
 theorem alloc_return_nonzero_cutover (h : PtxCalleesCutover) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
@@ -21932,7 +21941,7 @@ theorem lst_push_slot_result_strong {F : Type}
       Inside (w.toNat, 8) (memW post (locN (callEntryStateHOLFinite s callee) "l"))
         (memW post (locN (callEntryStateHOLFinite s callee) "l") +
           8 * memW post (locN (callEntryStateHOLFinite s callee) "l" + 16)) := by
-  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl harg (by rw [hr]; simp)
+  have hw := funSpec_at_lookup wk_lst_push_strong_c02 s hc vs body callee ret hl harg (by rw [hr]; simp)
   rw [hr] at hw
   have hs := hw (Or.inl ⟨v, rfl⟩)
   obtain ⟨S, hW⟩ := harg.1.1.2
@@ -21959,7 +21968,7 @@ theorem lst_push_bo40_slot_result_strong {F : Type}
   have harg := lst_push_bo40_arg s vs body callee ret hc hp ha hl
   have hstrong : WkBal.BoListArgStrong (callEntryStateHOLFinite s callee) :=
     ⟨harg.1, by rw [harg.2]; exact hb.1⟩
-  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl hstrong (by rw [hr]; simp)
+  have hw := funSpec_at_lookup wk_lst_push_strong_c02 s hc vs body callee ret hl hstrong (by rw [hr]; simp)
   rw [hr] at hw
   have hs := hw (Or.inl ⟨v, rfl⟩)
   have hbo : globN post "bo" = globN s "bo" :=
@@ -21989,7 +21998,7 @@ theorem lst_push_bo72_slot_result_strong {F : Type}
   have harg := lst_push_bo72_arg s vs body callee ret hc hp ha hl
   have hstrong : WkBal.BoListArgStrong (callEntryStateHOLFinite s callee) :=
     (lst_push_bo72_arg_backing s vs body callee ret hc hp hb ha hl).2
-  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl hstrong (by rw [hr]; simp)
+  have hw := funSpec_at_lookup wk_lst_push_strong_c02 s hc vs body callee ret hl hstrong (by rw [hr]; simp)
   rw [hr] at hw
   have hs := hw (Or.inl ⟨v, rfl⟩)
   have hbo : globN post "bo" = globN s "bo" :=
@@ -22013,7 +22022,7 @@ theorem lst_push_logPointers_resume_strong {F : Type}
     (hp : Phase4LogPointersReady s) (hn : locN s "logs" ≠ 0)
     (harg : WkBal.BoListArgStrong (callEntryStateHOLFinite s callee)) :
     Phase4LogPointersReady (setVarHOLFinite (ofString "slot") v {post with locals := s.locals}) := by
-  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl harg (by rw [hr]; simp)
+  have hw := funSpec_at_lookup wk_lst_push_strong_c02 s hc vs body callee ret hl harg (by rw [hr]; simp)
   rw [hr] at hw
   have hs := hw (Or.inl ⟨v, rfl⟩)
   have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
@@ -22056,7 +22065,7 @@ theorem resume_lst_push_logSlot_backing_cutover (h : PtxCalleesCutover) :
   have hn := funSpec_at_lookup (lst_push_backing_nonzero_strong_cutover h) s hc vs body callee ret hl
     hstrong (by rw [hr]; simp)
   rw [hr] at hn
-  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl hstrong.2
+  have hw := funSpec_at_lookup wk_lst_push_strong_c02 s hc vs body callee ret hl hstrong.2
     (by rw [hr]; simp)
   rw [hr] at hw
   have hs := hw (Or.inl ⟨v, rfl⟩)
@@ -22108,7 +22117,7 @@ theorem resume_lst_push_typed_logSlot_backing_of_other_header_cutover (h : PtxCa
   have harg := lst_push_bo40_arg s vs body callee ret hc hW ha hl
   have hstrong : WkBal.BoListArgStrong (callEntryStateHOLFinite s callee) :=
     ⟨harg.1, by rw [harg.2]; exact hp.2.1⟩
-  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl hstrong
+  have hw := funSpec_at_lookup wk_lst_push_strong_c02 s hc vs body callee ret hl hstrong
     (by rw [hr]; simp)
   rw [hr] at hw
   have hs := hw (Or.inl ⟨v, rfl⟩)
@@ -22416,8 +22425,8 @@ theorem resume_lst_push_owned_receiptSlot_backing_cutover (h : PtxCalleesCutover
   intro F s vs body callee ret v post hc hp ha hl hr
   have harg := lst_push_bo72_arg s vs body callee ret hc hp.1.1.1 ha hl
   have hstrong_r16 := lst_push_bo72_arg_backing s vs body callee ret hc hp.1.1.1 hp.2 ha hl
-  have hw := funSpec_at_lookup WkBal.wk_lst_push_strong s hc vs body callee ret hl hstrong_r16.2
-    (by rw [hr]; simp)
+  have hw := funSpec_at_lookup wk_lst_push_strong_c02 s hc vs body callee ret hl
+    hstrong_r16.2 (by rw [hr]; simp)
   rw [hr] at hw
   have hs := hw (Or.inl ⟨v, rfl⟩)
   have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
@@ -22480,6 +22489,9 @@ end PtxP34
 
 namespace PtxP34
 open PtxP1
+open WkBlockTxEnc
+open private WkBlockTxEnc.lookupCode_four_words WkBlockTxEnc.receiptKeccakIvls
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 theorem phase4Totals_backing_cut_cutover (h : PtxCalleesCutover) {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
