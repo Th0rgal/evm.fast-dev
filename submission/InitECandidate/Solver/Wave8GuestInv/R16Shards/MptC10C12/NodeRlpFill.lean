@@ -25,15 +25,64 @@ open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
 
 /-- `keccak_pad` (136 B) and `keccak_st` (200 B) are allocated (when nonzero) and disjoint
-from `Nd`'s node records and paths. Propagated from `MptObjReady` in `mpt_root`. -/
+from `Nd`'s node records and paths. Propagated from `MptObjReadyStrong` in `mpt_root`. -/
 def KeccakBufsSafe {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) : Prop :=
   ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
     ((bufferRegion s gs).2 = 0 ∨ Allocated s (bufferRegion s gs)) ∧
       ∀ o ∈ nodeExtents s Nd, Disj o (bufferRegion s gs)
 
-/-- Strengthened `NodeRlpReady` carrying `KeccakBufsSafe` for the witnessing `Nd`. -/
+/-- Scratch gap up to caller scratch ceiling `sp0`: `[frame_mem_ptr, sp0)`. -/
+def freeGapTo {F : Type} (sp0 : Nat) (s : PanSemStateFiniteExact 64 F) : Ivl :=
+  (globN s "frame_mem_ptr", sp0 - globN s "frame_mem_ptr")
+
+/-- Minimal 1-byte value-pointer non-aliasing condition for `Nd` wrt scratch ceiling `sp0`:
+any leaf (`k = 1`, `vlen = 1`) or branch (`k = 3`, `vlen = 1`) in `Nd` whose 1-byte value pointer
+`vp` lies in `ordinaryDomain` does not alias `[heap_ptr, heapLimit)`, `[frame_mem_ptr, sp0)`,
+`nodeCacheIvls Nd`, or `keccakBufIvls s`. At `mpt_root` entry `sp0 = globN s "scratch_ptr"`,
+so `freeGapTo sp0 s = freeGap s`. -/
+def NodeValuesSafe {F : Type} (sp0 : Nat) (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) : Prop :=
+  ∀ n ∈ Nd,
+    (memW s n = 1 → memW s (n + 56) = 1 →
+      ordinaryDomain (panByteAlignHOL (BitVec.ofNat 64 (memW s (n + 48)))) →
+      (∀ m ∈ Nd, ¬ InIvl (memW s (n + 48)) (m + 8, 24)) ∧
+      (∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+        0 < (bufferRegion s gs).2 → ¬ InIvl (memW s (n + 48)) (bufferRegion s gs)) ∧
+      ¬ InIvl (memW s (n + 48)) (freeGapTo sp0 s) ∧
+      ¬ InIvl (memW s (n + 48)) (heapFree s)) ∧
+    (memW s n = 3 → memW s (n + 168) = 1 →
+      ordinaryDomain (panByteAlignHOL (BitVec.ofNat 64 (memW s (n + 160)))) →
+      (∀ m ∈ Nd, ¬ InIvl (memW s (n + 160)) (m + 8, 24)) ∧
+      (∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+        0 < (bufferRegion s gs).2 → ¬ InIvl (memW s (n + 160)) (bufferRegion s gs)) ∧
+      ¬ InIvl (memW s (n + 160)) (freeGapTo sp0 s) ∧
+      ¬ InIvl (memW s (n + 160)) (heapFree s))
+
+/-- Entry-level 1-byte value-pointer invariant for `Nd`: `NodeValuesSafe` specialized to
+`sp0 = globN s "scratch_ptr"` (where `freeGapTo sp0 s = freeGap s`). -/
+def NodeHeapValuePtrOK {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) : Prop :=
+  NodeValuesSafe (globN s "scratch_ptr") s Nd
+
+def MptObjInWithStrong {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nm : List Nat) (m : Nat) : Prop :=
+  MptObjInWith s S Nm m ∧ NodeHeapValuePtrOK s Nm
+
+def MptObjInStrong {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
+  ∃ Nm, MptObjInWithStrong s S Nm (locN s "m")
+
+def MptObjAvoidsStrong (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ MptObjInStrong s S ∧ (∀ i ∈ R s,
+    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j) ∧
+    AvoidsTries s S ((locN s "m", 16) :: R s) ∧
+    ∃ Nm Nd, MptObjInWithStrong s S Nm (locN s "m") ∧ TriesTypedWith s S Nd ∧
+      ∀ o ∈ (locN s "m", 16) :: R s ++ nodeExtents s Nm, ∀ j ∈ nodeExtents s Nd, Disj o j
+
+def MptObjReadyStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => MptObjAvoidsStrong (fun _ => []) s
+
+/-- Strengthened `NodeRlpReady` carrying `KeccakBufsSafe` and `NodeHeapValuePtrOK` for `Nd`. -/
 def NodeRlpReadyK : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "node") ∧ KeccakBufsSafe s Nd
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "node") ∧
+    KeccakBufsSafe s Nd ∧ NodeHeapValuePtrOK s Nd
 
 /-- The non-null node guard exported by `node_rlp` and `node_hash`. -/
 def NodeRlpReadyNonNull : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -82,14 +131,14 @@ private theorem keccakBufsSafe_of_grows {F : Type}
 
 private theorem strong_to_nodeRlpReady {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : NodeRlpReadyStrong s) : NodeRlpReady s := by
-  obtain ⟨Nd, hNd, hr, _⟩ := h.1.2
+  obtain ⟨Nd, hNd, hr, _, _⟩ := h.1.2
   exact ⟨h.1.1, Nd, hNd, hr⟩
 
 private theorem strong_node_member {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : NodeRlpReadyStrong s) :
-    ∃ Nd, NodeHeap s Nd ∧ locN s "node" ∈ Nd ∧ KeccakBufsSafe s Nd := by
-  obtain ⟨Nd, hNd, hr, hk⟩ := h.1.2
-  exact ⟨Nd, hNd, hr.resolve_left h.2.1, hk⟩
+    ∃ Nd, NodeHeap s Nd ∧ locN s "node" ∈ Nd ∧ KeccakBufsSafe s Nd ∧ NodeHeapValuePtrOK s Nd := by
+  obtain ⟨Nd, hNd, hr, hk, hv⟩ := h.1.2
+  exact ⟨Nd, hNd, hr.resolve_left h.2.1, hk, hv⟩
 
 private theorem scratch48_progress {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hf : FreshScratch s post p 48)
@@ -370,6 +419,105 @@ private theorem nodeHeap_of_heapByteEff_disj {F : Type} {s post : PanSemStateFin
     · exact Or.inl he0
     · exact hdisj e he (Nat.pos_of_ne_zero he0) o ho
   exact nodeHeap_of_heapByteEff_cache hAs hN heff' hextra_disj hrlp_len
+
+private theorem nodeValuesSafe_with_locals {F : Type} (sp0 : Nat) (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) {Nd : List Nat}
+    (h : NodeValuesSafe sp0 s Nd) :
+    NodeValuesSafe sp0 { s with locals := locals, clock := k } Nd := h
+
+private theorem nodeValuesSafe_of_heapByteEff {F : Type}
+    {sp0 : Nat} {s post : PanSemStateFiniteExact 64 F} {Nd : List Nat}
+    {extra : List Ivl} {gw : List String}
+    (hAs : ArenaReady s) (hN : NodeHeap s Nd) (hsafe : KeccakBufsSafe s Nd)
+    (hkp_out : ofString "keccak_pad" ∉ gw.map ofString)
+    (hks_out : ofString "keccak_st" ∉ gw.map ofString)
+    (heff : R16Shards.WkBlockTxEnc.HeapByteEff s post
+      (nodeCacheIvls Nd ++ keccakBufIvls s ++ extra) gw)
+    (hextra_disj : ∀ e ∈ extra, 0 < e.2 → ∀ o ∈ nodeExtents s Nd, Disj e o)
+    (hvs : NodeValuesSafe sp0 s Nd) :
+    NodeValuesSafe sp0 post Nd := by
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hkc_all := keccakBufIvls_disj_of_safe hsafe
+  have hbuf_eq : ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion post gs = bufferRegion s gs := by
+    intro gs hgs
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hgs
+    rcases hgs with rfl | rfl
+    · unfold bufferRegion globN
+      rw [← heff.globals (ofString "keccak_pad") hkp_out]
+    · unfold bufferRegion globN
+      rw [← heff.globals (ofString "keccak_st") hks_out]
+  have hw_noncache : ∀ n ∈ Nd, ∀ off : Nat, off % 8 = 0 →
+      off + 8 ≤ nodeSize (memW s n) → (off = 0 ∨ 32 ≤ off) →
+      memW post (n + off) = memW s (n + off) := by
+    intro n hn off hoff8 hoff_lt hoff_out
+    obtain ⟨_, hal_n, hin_n, hw_n, _⟩ := hN.1 n hn
+    have hn8 : n % 8 = 0 := hw_n.1
+    have hal_off : Allocated s (n + off, 8) := by
+      rcases hal_n with ⟨h1, h2⟩ | ⟨h1, h2⟩
+      · exact Or.inl ⟨by dsimp [nodeIvl] at h1; omega, by dsimp [nodeIvl] at h2; omega⟩
+      · exact Or.inr ⟨by dsimp [nodeIvl] at h1; omega, by dsimp [nodeIvl] at h2; omega⟩
+    have ha_lt : n + off < 2 ^ 64 := by have := hin_n.2; dsimp [nodeIvl] at this; omega
+    apply memW_eq_of_heapByteEff_disj hAs heff (by omega) hal_off ha_lt
+    intro iv hiv hpos
+    rcases List.mem_append.1 hiv with hiv1 | hex
+    · rcases List.mem_append.1 hiv1 with hc | hkc
+      · obtain ⟨m, hm, rfl⟩ := List.mem_map.1 hc
+        by_cases hnm : n = m
+        · subst hnm
+          rcases hoff_out with rfl | h32
+          · exact Or.inr (Or.inr (Or.inl (by dsimp; omega)))
+          · exact Or.inr (Or.inr (Or.inr (by dsimp; omega)))
+        · have hdj := hN.2 n hn m hm hnm
+          have hsz_m := nodeSize_ge32 (memW s m)
+          dsimp [Disj, nodeIvl] at hdj ⊢
+          rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+      · have ho_mem : nodeIvl s n ∈ nodeExtents s Nd := by
+          unfold nodeExtents; exact List.mem_flatMap.2 ⟨n, hn, List.mem_cons_self⟩
+        have hdj := hkc_all iv hkc (nodeIvl s n) ho_mem
+        dsimp [Disj, nodeIvl] at hdj ⊢
+        rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+    · have ho_mem : nodeIvl s n ∈ nodeExtents s Nd := by
+        unfold nodeExtents; exact List.mem_flatMap.2 ⟨n, hn, List.mem_cons_self⟩
+      have hdj := hextra_disj iv hex hpos (nodeIvl s n) ho_mem
+      dsimp [Disj, nodeIvl] at hdj ⊢
+      rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+  have hfg_eq : freeGapTo sp0 post = freeGapTo sp0 s := by
+    simp [freeGapTo, heff.fp_eq]
+  have hhf_sub : ∀ b, InIvl b (heapFree post) → InIvl b (heapFree s) := by
+    intro b hb
+    dsimp [InIvl, heapFree] at hb ⊢
+    have hhp := heff.hp_le
+    omega
+  intro n hn
+  have hsz0 := nodeSize_ge32 (memW s n)
+  have hk_eq : memW post n = memW s n := hw_noncache n hn 0 (by decide) (by omega) (Or.inl rfl)
+  obtain ⟨h1, h3⟩ := hvs n hn
+  refine ⟨?_, ?_⟩
+  · intro hk1 hv1 hdom
+    have hk1_s : memW s n = 1 := hk_eq ▸ hk1
+    have hsz1 : nodeSize (memW s n) = 64 := by simp [nodeSize, hk1_s]
+    have h48 := hw_noncache n hn 48 (by decide) (by omega) (Or.inr (by decide))
+    have h56 := hw_noncache n hn 56 (by decide) (by omega) (Or.inr (by decide))
+    rw [h48] at hdom ⊢
+    rw [hfg_eq]
+    obtain ⟨hnc_no, hkc_no, hfg_no, hhf_no⟩ := h1 hk1_s (h56 ▸ hv1) hdom
+    refine ⟨hnc_no, ?_, hfg_no, fun h => hhf_no (hhf_sub _ h)⟩
+    intro gs hgs hpos
+    rw [hbuf_eq gs hgs] at hpos ⊢
+    exact hkc_no gs hgs hpos
+  · intro hk3 hv1 hdom
+    have hk3_s : memW s n = 3 := hk_eq ▸ hk3
+    have hsz3 : nodeSize (memW s n) = 176 := by simp [nodeSize, hk3_s]
+    have h160 := hw_noncache n hn 160 (by decide) (by omega) (Or.inr (by decide))
+    have h168 := hw_noncache n hn 168 (by decide) (by omega) (Or.inr (by decide))
+    rw [h160] at hdom ⊢
+    rw [hfg_eq]
+    obtain ⟨hnc_no, hkc_no, hfg_no, hhf_no⟩ := h3 hk3_s (h168 ▸ hv1) hdom
+    refine ⟨hnc_no, ?_, hfg_no, fun h => hhf_no (hhf_sub _ h)⟩
+    intro gs hgs hpos
+    rw [hbuf_eq gs hgs] at hpos ⊢
+    exact hkc_no gs hgs hpos
 
 private theorem eval_load_memW_of_wordsOK {F : Type} {s : PanSemStateFiniteExact 64 F}
     {base : BitVec 64} {off len : Nat}
@@ -862,18 +1010,19 @@ private theorem dec_guard {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
     · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
 
 private def RootReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "root") ∧ KeccakBufsSafe s Nd
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "root") ∧
+    KeccakBufsSafe s Nd ∧ NodeHeapValuePtrOK s Nd
 
 private def RootCallReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => RootReady s ∧ locN s "root" ≠ 0
 
 private theorem root_init {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64)
-    (hs : MptObjReady s)
+    (hs : MptObjReadyStrong s)
     (hv : evalAt s (.load .one (.op .add [.var .local (ofString "m"), .const 0])) = some v) :
     RootReady (setVarHOLFinite (ofString "root") v s) := by
   obtain ⟨w, rfl, hw⟩ := evalAt_loadL s "m" 0 v hv
-  obtain ⟨ha, S, hS, ⟨Nd, hm⟩, _rest⟩ := hs
-  refine ⟨localsFree_arenaReady s _ _ ha, Nd, hm.2.2.2.2.1, ?_, ?_⟩
+  obtain ⟨ha, S, hS, ⟨Nd, hm, hvp⟩, _rest⟩ := hs
+  refine ⟨localsFree_arenaReady s _ _ ha, Nd, hm.2.2.2.2.1, ?_, ?_, hvp⟩
   · rw [locN_setVar_same, hw]
     simpa using hm.2.2.2.2.2.1
   · intro gs hgs
@@ -911,11 +1060,11 @@ private theorem root_entry :
 
 end NodeRlpFillProof
 
-/-- Strengthened `mpt_root`; the original external `MptObjReady` conclusion is unchanged. -/
+/-- Strengthened `mpt_root` under `MptObjReadyStrong`. -/
 theorem gbody_mpt_root_strong
     (hm : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»)
     (hn : TerminatingFunBoundedOn NodeRlpReadyNonNull (ofString "node_hash") K.«node_hash») :
-    TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root» := by
+    TerminatingFunBoundedOn MptObjReadyStrong (ofString "mpt_root") K.«mpt_root» := by
   refine ⟨_, _, _, NodeRlpFillProof.lookup_root, ?_⟩
   simp only [sourceFunctionEntry, Guest.Software.guestFn_mpt_root,
     InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
@@ -5970,8 +6119,7 @@ private def ValidRlpFrame {F : Type} (s : PanSemStateFiniteExact 64 F)
     (∀ o ∈ nodeExtents s Nd, Disj (memW s (fr + 24), memW s (fr + 32)) o) ∧
     (∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
       Disj (memW s (fr + 24), memW s (fr + 32)) (bufferRegion s gs)) ∧
-    rlpBytesLenPure (memB s (memW s (fr + 24))) (memW s (fr + 32)) +
-      rlpBytesLenPure 128 (memW s (memW s (fr + 8) + 56)) ≤ memW s (fr + 40) + 1 ∧
+    leafPayloadExact s fr (memW s (fr + 8)) ∧
     (0 < memW s (memW s (fr + 8) + 56) →
       s.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW s (memW s (fr + 8) + 48)))))) ∧
   (memW s (memW s (fr + 8)) = 2 →
@@ -5984,10 +6132,22 @@ private def ValidRlpFrame {F : Type} (s : PanSemStateFiniteExact 64 F)
     memW s (fr + 40) = rlpBytesLenPure (memB s (memW s (fr + 24))) (memW s (fr + 32))) ∧
   (∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)], Disj (fr, 48) (bufferRegion s gs))
 
+private theorem memW_lt_two_pow_64 {F : Type} (s : PanSemStateFiniteExact 64 F) (a : Nat) :
+    memW s a < 2 ^ 64 := by
+  unfold memW
+  cases s.memory (BitVec.ofNat 64 a) with
+  | word w => exact w.isLt
+
+private theorem rlpBytesLenPure_congr_ne_one {fb gb n : Nat} (hne : n ≠ 1) :
+    rlpBytesLenPure fb n = rlpBytesLenPure gb n := by
+  unfold rlpBytesLenPure
+  rw [if_neg (by omega), if_neg (by omega)]
+
 private theorem validRlpFrame_of_heapByteEff_disj {F : Type}
-    {s post : PanSemStateFiniteExact 64 F} {Nd : List Nat} {fr : Nat}
+    {sp0 : Nat} {s post : PanSemStateFiniteExact 64 F} {Nd : List Nat} {fr : Nat}
     {Rl : List Ivl} {gw : List String}
     (hAs : ArenaReady s) (_hN : NodeHeap s Nd)
+    (hvs : NodeValuesSafe sp0 s Nd)
     (hext_eq : nodeExtents post Nd = nodeExtents s Nd)
     (hbuf_eq : ∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
       bufferRegion post gs = bufferRegion s gs)
@@ -5999,6 +6159,9 @@ private theorem validRlpFrame_of_heapByteEff_disj {F : Type}
     (hcb_disj_Rl : ∀ iv ∈ Rl, 0 < iv.2 →
       (memW s (memW s (fr + 8)) = 1 ∨ memW s (memW s (fr + 8)) = 2) →
       Disj iv (memW s (fr + 24), memW s (fr + 32)))
+    (hvp_disj_Rl : memW s (memW s (fr + 8)) = 1 → memW s (memW s (fr + 8) + 56) = 1 →
+      ∀ iv ∈ Rl, 0 < iv.2 → ¬ InIvl (memW s (memW s (fr + 8) + 48)) iv)
+    (hfg_sp0 : globN s "scratch_ptr" ≤ sp0)
     (hv : ValidRlpFrame s Nd fr) :
     ValidRlpFrame post Nd fr := by
   obtain ⟨hfr8, hfr_in, hfr_W, hnd_in, hk1, hk3, hidx, hpay, hk3_pay, hk1_pay, hk2_pay, hfr_kb⟩ := hv
@@ -6069,11 +6232,31 @@ private theorem validRlpFrame_of_heapByteEff_disj {F : Type}
       ⟨by rw [hw24]; exact hcb_in.1, by rw [hw24, hw32]; exact hcb_in.2.trans heff.hp_le⟩,
       fun o ho => by rw [hext_eq] at ho; rw [hw24, hw32]; exact hcb_disj o ho,
       fun gs hgs => by rw [hbuf_eq gs hgs, hw24, hw32]; exact hcb_kb gs hgs,
-      by rw [hw40, hw24, hw32, hn56_eq, hcb_b]; exact hpay_lo, ?_⟩
-    intro hpos
-    rw [hn56_eq] at hpos
-    rw [hn48_eq]
-    exact heff.memaddrs.symm ▸ hdom1 hpos
+      ?_, ?_⟩
+    · unfold leafPayloadExact at hpay_lo ⊢
+      rw [hw40, hw24, hw32, hn48_eq, hn56_eq, hcb_b]
+      by_cases hv1 : memW s (memW s (fr + 8) + 56) = 1
+      · have hpos1 : 0 < memW s (memW s (fr + 8) + 56) := by omega
+        have hdom_ord : ordinaryDomain (panByteAlignHOL (BitVec.ofNat 64 (memW s (memW s (fr + 8) + 48)))) := by
+          rw [← hAs.1.memaddrs]; exact hdom1 hpos1
+        obtain ⟨_, _, hfg_no, hhf_no⟩ := (hvs _ hnd_in).1 h1s hv1 hdom_ord
+        have hvp_lt : memW s (memW s (fr + 8) + 48) < 2 ^ 64 :=
+          memW_lt_two_pow_64 s (memW s (fr + 8) + 48)
+        have hvp_b : memB post (memW s (memW s (fr + 8) + 48)) = memB s (memW s (memW s (fr + 8) + 48)) := by
+          by_contra hne
+          rcases heff.byte_frame (memW s (memW s (fr + 8) + 48)) hvp_lt hne with
+            ⟨iv, hiv, hb1, hb2⟩ | ⟨hfg1, hfg2⟩ | ⟨hhf1, hhf2⟩
+          · exact hvp_disj_Rl h1s hv1 iv hiv (by omega) ⟨hb1, hb2⟩
+          · apply hfg_no
+            dsimp [InIvl, freeGapTo]; dsimp [freeGap] at hfg1 hfg2
+            omega
+          · exact hhf_no ⟨hhf1, hhf2⟩
+        rw [hvp_b]; exact hpay_lo
+      · rw [rlpBytesLenPure_congr_ne_one hv1]; exact hpay_lo
+    · intro hpos
+      rw [hn56_eq] at hpos
+      rw [hn48_eq]
+      exact heff.memaddrs.symm ▸ hdom1 hpos
   · intro h2
     have h2s : memW s (memW s (fr + 8)) = 2 := hk_eq ▸ h2
     obtain ⟨hcl1, hcl_hi, hcb_in, hcb_disj, hcb_kb, hpay2⟩ := hk2_pay h2s
@@ -6246,13 +6429,15 @@ decreasing_by
       | omega
 
 private theorem eval__node_rlp_begin_returned {F : Type}
-    (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (frw nodew : BitVec 64)
+    (sp0 : Nat) (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (frw nodew : BitVec 64)
     (v : ValueHOL 64)
     (hc : s.code = originalRuntimeCode)
     (hAR : ArenaReady s) (hN : NodeHeap s Nd) (hKS : KeccakBufsSafe s Nd)
+    (hvs : NodeValuesSafe sp0 s Nd)
     (hfr_loc : s.locals.lookup (ofString "fr") = some (.val (.word frw)))
     (hnode_loc : s.locals.lookup (ofString "node") = some (.val (.word nodew)))
     (hfr_in : Inside (frw.toNat, 48) (globN s "scratch_ptr") scratchEnd)
+    (hfr_sp0 : frw.toNat + 48 ≤ sp0)
     (hfr_W : WordsOK s (frw.toNat, 48))
     (hfr_kb : ∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
       Disj (frw.toNat, 48) (bufferRegion s gs))
@@ -6464,8 +6649,11 @@ private theorem eval__node_rlp_begin_returned {F : Type}
             (∀ o ∈ nodeExtents s Nd, Disj (cbufw.toNat, clenw.toNat) o) ∧
             (∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
               Disj (cbufw.toNat, clenw.toNat) (bufferRegion s gs)) ∧
-            rlpBytesLenPure (memB s1 cbufw.toNat) clenw.toNat +
-              rlpBytesLenPure 128 (memW s (nodew.toNat + 56)) ≤ payw.toNat + 1 ∧
+            payw.toNat =
+              rlpBytesLenPure (memB s1 cbufw.toNat) clenw.toNat +
+                rlpBytesLenPure
+                  (if 0 < memW s (nodew.toNat + 56) then memB s1 (memW s (nodew.toNat + 48)) else 0)
+                  (memW s (nodew.toNat + 56)) ∧
             (0 < memW s (nodew.toNat + 56) →
               s.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW s (nodew.toNat + 48)))))) ∧
           (memW s nodew.toNat = 2 →
@@ -6977,15 +7165,11 @@ private theorem eval__node_rlp_begin_returned {F : Type}
               exact heff_el.hp_le.trans (hhp_sa5 ▸ heff_vl.hp_le)
             refine ⟨hcl1, by rw [← hnlen_nat]; exact hcl_bound,
               ⟨hcb_in_sa4.1, hcb_in_sa4.2.trans hhp_le⟩, hcb_disj_nd, hcb_disj_kb, ?_, ?_⟩
-            · rw [hpay_nat, hel_eq, hcb_b_s1, hvenc_eq, ← hvl_nat]
-              have h128_le : rlpBytesLenPure 128 vlw.toNat ≤
-                  rlpBytesLenPure (if 0 < vlw.toNat then memB sa5 vpw.toNat else 0) vlw.toNat + 1 := by
-                by_cases hv1 : vlw.toNat = 1
-                · rw [hv1]; unfold rlpBytesLenPure rlpHeaderLenPure; split_ifs <;> omega
-                · unfold rlpBytesLenPure
-                  rw [if_neg (by omega), if_neg (by omega)]
-                  omega
-              omega
+            · have hv_b_s1 : memB s1 vpw.toNat = memB sa5 vpw.toNat := by
+                have hm_s1_sa5 : s1.memory = sa5.memory ∧ s1.be = sa5.be := by
+                  rw [hstate_s1]; exact ⟨hmid_vl_m, heff_vl.be⟩
+                unfold memB; rw [hm_s1_sa5.1, hm_s1_sa5.2]
+              rw [hpay_nat, hel_eq, hcb_b_s1, hvenc_eq, ← hvl_nat, ← hvp_nat, hv_b_s1]
             · intro hpos
               rw [← hvl_nat] at hpos
               have hbv_vp : BitVec.ofNat 64 (memW s (nodew.toNat + 48)) = vpw := by
@@ -7273,8 +7457,40 @@ private theorem eval__node_rlp_begin_returned {F : Type}
         fun o ho => by rw [hN_post.2] at ho; rw [hw24_p, hw32_p]; exact hcb_disj o ho,
         fun gs hgs => by rw [hbuf_post_eq gs hgs, hw24_p, hw32_p]; exact hcb_kb gs hgs,
         ?_, ?_⟩
-      · rw [hw40_p, hw24_p, hw32_p, hw8_p, hn56_eq, hcb_b]
-        exact hpay1
+      · unfold leafPayloadExact
+        rw [hw40_p, hw24_p, hw32_p, hw8_p, hn48_eq, hn56_eq, hcb_b]
+        by_cases hv1 : memW s (nodew.toNat + 56) = 1
+        · have hpos1 : 0 < memW s (nodew.toNat + 56) := by omega
+          have hdom_ord : ordinaryDomain (panByteAlignHOL (BitVec.ofNat 64 (memW s (nodew.toNat + 48)))) := by
+            rw [← hAR.1.memaddrs]; exact hdom1 hpos1
+          obtain ⟨_, _, hfg_no, hhf_no⟩ := (hvs nodew.toNat hnode_in).1 h1s hv1 hdom_ord
+          have hvp_lt : memW s (nodew.toNat + 48) < 2 ^ 64 :=
+            memW_lt_two_pow_64 s (nodew.toNat + 48)
+          have hvp_b : memB postSt (memW s (nodew.toNat + 48)) = memB s1 (memW s (nodew.toNat + 48)) := by
+            by_contra hne
+            rcases heff_s1_post.byte_frame (memW s (nodew.toNat + 48)) hvp_lt hne with
+              ⟨iv, hiv, hb1, hb2⟩ | ⟨hfg1, hfg2⟩ | ⟨hhf1, hhf2⟩
+            · simp only [List.mem_singleton] at hiv; subst hiv
+              apply hfg_no
+              have hfp_le_sp : globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" := hAR.2.2.2.2.1
+              have hfr_lo : globN s "scratch_ptr" ≤ frw.toNat := hfr_in.1
+              dsimp [InIvl, freeGapTo]; dsimp only at hb1 hb2
+              omega
+            · apply hfg_no
+              have hfp_eq1 : globN s1 "frame_mem_ptr" = globN s "frame_mem_ptr" := heff_s1.fp_eq
+              have hsp_eq1 : globN s1 "scratch_ptr" = globN s "scratch_ptr" := by
+                unfold globN; rw [← heff_s1.globals (ofString "scratch_ptr") (by decide)]
+              have hsp_le_sp0 : globN s "scratch_ptr" ≤ sp0 := by
+                have hfr_lo : globN s "scratch_ptr" ≤ frw.toNat := hfr_in.1
+                omega
+              dsimp [InIvl, freeGapTo]; dsimp [freeGap] at hfg1 hfg2
+              omega
+            · apply hhf_no
+              have hhp_le1 : globN s "heap_ptr" ≤ globN s1 "heap_ptr" := heff_s1.hp_le
+              dsimp [InIvl, heapFree] at hhf1 hhf2 ⊢
+              omega
+          rw [hvp_b]; exact hpay1
+        · rw [rlpBytesLenPure_congr_ne_one hv1]; exact hpay1
       · intro hpos
         rw [hw8_p, hn56_eq] at hpos
         rw [hw8_p, hn48_eq]
@@ -7293,15 +7509,16 @@ private theorem eval__node_rlp_begin_returned {F : Type}
         by rw [hw40_p, hw24_p, hw32_p, hcb_b, hpay2]⟩
 
 private theorem eval_call__node_rlp_begin_none {F : Type}
-    (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (frExp nodeExp : ExpHOL 64)
+    (sp0 : Nat) (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (frExp nodeExp : ExpHOL 64)
     (frw nodew : BitVec 64)
     (hc : s.code = originalRuntimeCode) (hAR : ArenaReady s) (hN : NodeHeap s Nd)
-    (hKS : KeccakBufsSafe s Nd)
+    (hKS : KeccakBufsSafe s Nd) (hvs : NodeValuesSafe sp0 s Nd)
     (hfr_ev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) frExp =
       some (.val (.word frw)))
     (hnode_ev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) nodeExp =
       some (.val (.word nodew)))
     (hfr_in : Inside (frw.toNat, 48) (globN s "scratch_ptr") scratchEnd)
+    (hfr_sp0 : frw.toNat + 48 ≤ sp0)
     (hfr_W : WordsOK s (frw.toNat, 48))
     (hfr_kb : ∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
       Disj (frw.toNat, 48) (bufferRegion s gs))
@@ -7352,8 +7569,8 @@ private theorem eval_call__node_rlp_begin_none {F : Type}
       cases rc' with
       | returned vc =>
         obtain ⟨rfl, heff_ent, hN_sc, hext_sc, hKS_sc, hnd_w, hv_sc⟩ :=
-          eval__node_rlp_begin_returned ent Nd frw nodew vc hc hent_AR hN hKS
-            hent_fr hent_node hfr_in hfr_W hfr_kb hnode_in hk1 hfr8_eq hfr16_le (by rw [hcal])
+          eval__node_rlp_begin_returned sp0 ent Nd frw nodew vc hc hent_AR hN hKS hvs
+            hent_fr hent_node hfr_in hfr_sp0 hfr_W hfr_kb hnode_in hk1 hfr8_eq hfr16_le (by rw [hcal])
         rw [hcal] at heff_ent hN_sc hext_sc hKS_sc hnd_w hv_sc
         dsimp only at heff_ent hN_sc hext_sc hKS_sc hnd_w hv_sc
         have hsh : shapeEqHOL (shapeOfHOLExact (.val (.word 0) : ValueHOL 64)) .one = true := by
@@ -8151,8 +8368,8 @@ private theorem finishPayloadLen_pos {F : Type} (s : PanSemStateFiniteExact 64 F
     · rw [if_neg h3]
       have h1 : memW s (memW s (fr + 8)) = 1 := by omega
       obtain ⟨_, _, _, _, _, hpay1, _⟩ := hleaf h1
+      unfold leafPayloadExact at hpay1
       have hb1 := (rlpBytesLenPure_bounds (memB s (memW s (fr + 24))) (memW s (fr + 32))).1
-      have hb2 := (rlpBytesLenPure_bounds 128 (memW s (memW s (fr + 8) + 56))).1
       omega
 
 private def finishWriteLen {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -8208,10 +8425,7 @@ private theorem finishWriteLen_le_payload_add_one {F : Type}
       simp [finishWriteLen, finishPayloadLen, h3, h2, h1, hpay]
     · have h1 : memW s (memW s (fr + 8)) = 1 := by omega
       obtain ⟨_, _, _, _, _, hpay, _⟩ := hleaf h1
-      have hb := rlpBytesLenPure_le_high
-        (if 0 < memW s (memW s (fr + 8) + 56) then
-          memB s (memW s (memW s (fr + 8) + 48)) else 0)
-        (memW s (memW s (fr + 8) + 56))
+      unfold leafPayloadExact at hpay
       have hne3 : (1 : Nat) ≠ 3 := by decide
       have hne2 : (1 : Nat) ≠ 2 := by decide
       simp only [finishWriteLen, finishPayloadLen, h1, hne3, hne2, ↓reduceIte]
@@ -8291,12 +8505,10 @@ private theorem allocated_disj_heapLimit_word {F : Type}
 
 private theorem finishWriteLen_eq_payload {F : Type}
     (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (fr : Nat)
-    (hfr : ValidRlpFrame s Nd fr)
-    (hleaf : memW s (memW s (fr + 8)) = 1 →
-      leafPayloadExact s fr (memW s (fr + 8))) :
+    (hfr : ValidRlpFrame s Nd fr) :
     finishWriteLen s fr (memW s (fr + 8)) =
       finishPayloadLen s fr (memW s (fr + 8)) := by
-  obtain ⟨_, _, _, _, hk1, hk3, _, _, hbranch, _, hext, _⟩ := hfr
+  obtain ⟨_, _, _, _, hk1, hk3, _, _, hbranch, hleaf, hext, _⟩ := hfr
   by_cases h3 : memW s (memW s (fr + 8)) = 3
   · have h2 : memW s (memW s (fr + 8)) ≠ 2 := by omega
     simp [finishWriteLen, finishPayloadLen, h3, h2, hbranch h3]
@@ -8305,21 +8517,19 @@ private theorem finishWriteLen_eq_payload {F : Type}
       have h1 : memW s (memW s (fr + 8)) ≠ 1 := by omega
       simp [finishWriteLen, finishPayloadLen, h3, h2, h1, hpay]
     · have h1 : memW s (memW s (fr + 8)) = 1 := by omega
-      have hpay := hleaf h1
+      obtain ⟨_, _, _, _, _, hpay, _⟩ := hleaf h1
       unfold leafPayloadExact at hpay
       simp [finishWriteLen, finishPayloadLen, h3, h2, h1, hpay]
 
 private theorem finishWriteLen_fits_alloc {F : Type}
     (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (fr buf q : Nat)
     (hfr : ValidRlpFrame s Nd fr)
-    (hleaf : memW s (memW s (fr + 8)) = 1 →
-      leafPayloadExact s fr (memW s (fr + 8)))
     (halloc : buf + rlpHeaderLenPure (finishPayloadLen s fr (memW s (fr + 8))) +
       finishPayloadLen s fr (memW s (fr + 8)) ≤ q)
     (hq : q ≤ heapLimit) :
     buf + rlpHeaderLenPure (finishPayloadLen s fr (memW s (fr + 8))) +
       finishWriteLen s fr (memW s (fr + 8)) ≤ heapLimit := by
-  rw [finishWriteLen_eq_payload s Nd fr hfr hleaf]
+  rw [finishWriteLen_eq_payload s Nd fr hfr]
   exact halloc.trans hq
 
 private theorem nodeExtents_allocated {F : Type}
@@ -8375,7 +8585,10 @@ private theorem eval__node_rlp_finish_loads {F : Type}
         (sourceFnBody Guest.Software.guestFn__node_rlp_finish)
       let inner := evaluateHOLFiniteState entry finishAfterLoads
       outer.1 = inner.1 ∧ outer.2.memory = inner.2.memory ∧
-        outer.2.globals = inner.2.globals ∧ outer.2.be = inner.2.be := by
+        outer.2.globals = inner.2.globals ∧ outer.2.be = inner.2.be ∧
+        outer.2.memaddrs = inner.2.memaddrs ∧ outer.2.code = inner.2.code ∧
+        outer.2.shMemaddrs = inner.2.shMemaddrs ∧ outer.2.baseAddr = inner.2.baseAddr ∧
+        outer.2.structs = inner.2.structs := by
   have hn : nodew.toNat ∈ Nd := hnode ▸ hfr.2.2.2.1
   obtain ⟨_, _, hin, hw, _⟩ := hN.1 _ hn
   have hlimit : heapLimit < 2 ^ 64 := by decide
@@ -8451,7 +8664,7 @@ private theorem eval__node_rlp_finish_loads {F : Type}
   rw [he1]; dsimp only
   rw [he2]; dsimp only
   rw [he3]; dsimp only
-  exact ⟨rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private def finishExtLenCont : ProgHOL 64 :=
   .assign .local (ofString "payload")
@@ -10568,16 +10781,18 @@ private theorem eval_finWrite_none {F : Type}
       offw.toNat + branchRefsLenSum s nodew.toNat 16 +
         rlpBytesLenPure (if 0 < memW s (nodew.toNat + 168) then memB s (memW s (nodew.toNat + 160)) else 0)
           (memW s (nodew.toNat + 168)) ≤ bufLen)
-    (hclen60 : clenw.toNat < 2 ^ 60)
-    (hval_disj : memW s nodew.toNat = 1 → ∀ j < memW s (nodew.toNat + 56),
-      Allocated s (memW s (nodew.toNat + 48) + j, 1) ∧
-      Disj (memW s (nodew.toNat + 48) + j, 1) (bufw.toNat, bufLen) ∧
-      (∀ iv ∈ keccakBufIvls s, Disj (memW s (nodew.toNat + 48) + j, 1) iv))
-    (hval3_disj : memW s nodew.toNat = 3 → 0 < memW s (nodew.toNat + 168) →
-      Allocated s (memW s (nodew.toNat + 160), 1) ∧
-      Disj (memW s (nodew.toNat + 160), 1) (bufw.toNat, bufLen) ∧
-      (∀ n ∈ Nd, Disj (memW s (nodew.toNat + 160), 1) (n + 24, 8)) ∧
-      (∀ iv ∈ keccakBufIvls s, Disj (memW s (nodew.toNat + 160), 1) iv))
+    (hclen60 : (memW s nodew.toNat = 1 ∨ memW s nodew.toNat = 2) → clenw.toNat < 2 ^ 60)
+    (hval1_no : memW s nodew.toNat = 1 → memW s (nodew.toNat + 56) = 1 →
+      ¬ InIvl (memW s (nodew.toNat + 48)) (bufw.toNat, bufLen) ∧
+      (∀ iv ∈ keccakBufIvls s, ¬ InIvl (memW s (nodew.toNat + 48)) iv) ∧
+      ¬ InIvl (memW s (nodew.toNat + 48)) (freeGap s) ∧
+      ¬ InIvl (memW s (nodew.toNat + 48)) (heapFree s))
+    (hval3_no : memW s nodew.toNat = 3 → memW s (nodew.toNat + 168) = 1 →
+      ¬ InIvl (memW s (nodew.toNat + 160)) (bufw.toNat, bufLen) ∧
+      (∀ n ∈ Nd, ¬ InIvl (memW s (nodew.toNat + 160)) (n + 24, 8)) ∧
+      (∀ iv ∈ keccakBufIvls s, ¬ InIvl (memW s (nodew.toNat + 160)) iv) ∧
+      ¬ InIvl (memW s (nodew.toNat + 160)) (freeGap s) ∧
+      ¬ InIvl (memW s (nodew.toNat + 160)) (heapFree s))
     (hnone : (evaluateHOLFiniteState s finDispatch).1 = none) :
     let post := (evaluateHOLFiniteState s finDispatch).2
     ∃ offF : BitVec 64,
@@ -10768,26 +10983,26 @@ private theorem eval_finWrite_none {F : Type}
         rlpBytesLenPure
           (if 0 < memW s (nodew.toNat + 168) then memB s (memW s (nodew.toNat + 160)) else 0)
           (memW s (nodew.toNat + 168)) := by
-      rcases Nat.eq_zero_or_pos v168.toNat with hz | hpos
-      · have hzero : memW s (nodew.toNat + 168) = 0 := by rw [← hv168s]; exact hz
-        rw [hz, if_neg (show ¬((0 : Nat) < 0) by decide), hzero,
-          if_neg (show ¬((0 : Nat) < 0) by decide)]
-      · have hpos_s : 0 < memW s (nodew.toNat + 168) := by rw [← hv168s]; exact hpos
-        obtain ⟨hval_al, hval_buf, hval_nd24, hval_kec⟩ := hval3_disj hkmem3 hpos_s
-        rw [← hv160s] at hval_al hval_buf hval_nd24 hval_kec
-        have hlt_v160 : v160.toNat < 2 ^ 64 := v160.isLt
-        have hmemB_v160 : memB sL v160.toNat = memB s v160.toNat := by
-          refine memB_eq_of_heapByteEff_disj hAR heff_sL hval_al hlt_v160 ?_
-          intro iv hiv _
-          rcases List.mem_append.1 hiv with hiv | hiv
-          · simp only [List.mem_cons, List.not_mem_nil, or_false] at hiv
-            rcases hiv with rfl
-            exact disj_comm hval_buf
+      rw [hv160s, hv168s]
+      by_cases hv1 : memW s (nodew.toNat + 168) = 1
+      · obtain ⟨hno_buf, hno_nd24, hno_kec, hno_fg, hno_hf⟩ := hval3_no hkmem3 hv1
+        have hlt_v160 : memW s (nodew.toNat + 160) < 2 ^ 64 :=
+          memW_lt_two_pow_64 s (nodew.toNat + 160)
+        have hmemB_v160 : memB sL (memW s (nodew.toNat + 160)) = memB s (memW s (nodew.toNat + 160)) := by
+          by_contra hne
+          rcases heff_sL.byte_frame (memW s (nodew.toNat + 160)) hlt_v160 hne with
+            ⟨iv, hiv, hb1, hb2⟩ | ⟨hfg1, hfg2⟩ | ⟨hhf1, hhf2⟩
           · rcases List.mem_append.1 hiv with hiv | hiv
-            · obtain ⟨m, hm, rfl⟩ := List.mem_map.1 hiv
-              exact disj_comm (hval_nd24 m hm)
-            · exact disj_comm (hval_kec iv hiv)
-        rw [hmemB_v160, hv160s, hv168s]
+            · simp only [List.mem_cons, List.not_mem_nil, or_false] at hiv; subst hiv
+              exact hno_buf ⟨hb1, hb2⟩
+            · rcases List.mem_append.1 hiv with hiv | hiv
+              · obtain ⟨m, hm, rfl⟩ := List.mem_map.1 hiv
+                exact hno_nd24 m hm ⟨hb1, hb2⟩
+              · exact hno_kec iv hiv ⟨hb1, hb2⟩
+          · exact hno_fg ⟨hfg1, hfg2⟩
+          · exact hno_hf ⟨hhf1, hhf2⟩
+        rw [hmemB_v160]
+      · exact rlpBytesLenPure_congr_ne_one hv1
     obtain ⟨w5v, sB5, hw5, hdst_lt5, hsB5_gl, hsB5_lc, heff_w5, hcont_nt5, hdc5⟩ :=
       eval_decCall_rlp_encode_bytes_len_exact sL "w5"
         (.op .add [.var .local (ofString "buf"), .var .local (ofString "off")])
@@ -11091,7 +11306,7 @@ private theorem eval_finWrite_none {F : Type}
                .op .add [.var .local (ofString "buf"), .var .local (ofString "off")]]
               (.assign .local (ofString "off")
                 (.op .add [.var .local (ofString "off"), .var .local (ofString "w3")])))))
-        ([(bufw.toNat, bufLen)] ++ keccakBufIvls s) ["heap_ptr"] hc hAR hdstE hsrcE hnE hclen60
+        ([(bufw.toNat, bufLen)] ++ keccakBufIvls s) ["heap_ptr"] hc hAR hdstE hsrcE hnE (hclen60 hk12)
         ⟨(bufw.toNat, bufLen), by simp, by simp only [hdst0]; omega,
           by rw [hdst0, rlpBytesLenPure_if_zero_lt]; omega⟩
         (by rw [hnone]; decide) (Or.inr hnone)
@@ -11336,38 +11551,26 @@ private theorem eval_finWrite_none {F : Type}
           rlpBytesLenPure
             (if 0 < memW s (nodew.toNat + 56) then memB s (memW s (nodew.toNat + 48)) else 0)
             (memW s (nodew.toNat + 56)) := by
-        rcases Nat.eq_zero_or_pos v60.toNat with hz | hpos
-        · have hzero : memW s (nodew.toNat + 56) = 0 := by rw [← hv60s]; omega
-          rw [hz, if_neg (show ¬((0 : Nat) < 0) by decide), hzero,
-            if_neg (show ¬((0 : Nat) < 0) by decide)]
-        · have heff_sA0 : R16Shards.WkBlockTxEnc.HeapByteEff s sA
+        rw [hv48s, hv60s]
+        by_cases hv1 : memW s (nodew.toNat + 56) = 1
+        · obtain ⟨hno_buf, hno_kec, hno_fg, hno_hf⟩ := hval1_no hkmem hv1
+          have heff_sA0 : R16Shards.WkBlockTxEnc.HeapByteEff s sA
               ([(bufw.toNat, bufLen)] ++ keccakBufIvls s) ["heap_ptr"] :=
             heff_w.locals_clock _ _
-          have hval0 : Allocated s (v48.toNat, 1) ∧
-              Disj (v48.toNat, 1) (bufw.toNat, bufLen) ∧
-              (∀ iv ∈ keccakBufIvls s, Disj (v48.toNat, 1) iv) := by
-            have h0 := hval_disj hkmem 0 (by rw [← hv60s]; omega)
-            rw [← hv48s, Nat.add_zero] at h0
-            exact h0
-          have hlt_v48 : v48.toNat < 2 ^ 64 := by
-            rcases hval0.1 with h1 | h1
-            · dsimp [Inside] at h1
-              have h2 := hAR.2.2.1
-              have := hlim
-              omega
-            · dsimp [Inside] at h1
-              have h2 := hAR.2.2.2.2.2.1
-              rw [scratchEnd_val] at h2
-              omega
-          have hmemB_v48 : memB sA v48.toNat = memB s v48.toNat := by
-            refine memB_eq_of_heapByteEff_disj hAR heff_sA0 hval0.1 hlt_v48 ?_
-            intro iv hiv hpos'
-            rcases List.mem_append.1 hiv with hiv | hiv
-            · simp only [List.mem_cons, List.not_mem_nil, or_false] at hiv
-              rcases hiv with rfl
-              exact disj_comm hval0.2.1
-            · exact disj_comm (hval0.2.2 iv hiv)
-          rw [hmemB_v48, hv48s, hv60s]
+          have hlt_v48 : memW s (nodew.toNat + 48) < 2 ^ 64 :=
+            memW_lt_two_pow_64 s (nodew.toNat + 48)
+          have hmemB_v48 : memB sA (memW s (nodew.toNat + 48)) = memB s (memW s (nodew.toNat + 48)) := by
+            by_contra hne
+            rcases heff_sA0.byte_frame (memW s (nodew.toNat + 48)) hlt_v48 hne with
+              ⟨iv, hiv, hb1, hb2⟩ | ⟨hfg1, hfg2⟩ | ⟨hhf1, hhf2⟩
+            · rcases List.mem_append.1 hiv with hiv | hiv
+              · simp only [List.mem_cons, List.not_mem_nil, or_false] at hiv; subst hiv
+                exact hno_buf ⟨hb1, hb2⟩
+              · exact hno_kec iv hiv ⟨hb1, hb2⟩
+            · exact hno_fg ⟨hfg1, hfg2⟩
+            · exact hno_hf ⟨hhf1, hhf2⟩
+          rw [hmemB_v48]
+        · exact rlpBytesLenPure_congr_ne_one hv1
       have hfit1'S : offw.toNat + wl.toNat +
           rlpBytesLenPure
             (if 0 < memW s (nodew.toNat + 56) then memB s (memW s (nodew.toNat + 48)) else 0)
@@ -12356,6 +12559,1162 @@ private theorem eval_finWrite_none {F : Type}
         rw [if_pos (by decide)]
       · exact (hpost_loc "hl" (by decide) (by decide) (by decide) (by decide)).trans hhl
       · exact absurd hite_none hright.1
+
+private theorem eval_finRest_returned {F : Type}
+    (sp0 : Nat) (st : PanSemStateFiniteExact 64 F) (Nd : List Nat)
+    (nodew frw kw payv cbufw clenw : BitVec 64) (rv : ValueHOL 64)
+    (hc : st.code = originalRuntimeCode)
+    (hAR : ArenaReady st) (hN : NodeHeap st Nd) (hKS : KeccakBufsSafe st Nd)
+    (hvs : NodeValuesSafe sp0 st Nd)
+    (hsp_le_sp0 : globN st "scratch_ptr" ≤ sp0)
+    (hnode_in : nodew.toNat ∈ Nd)
+    (hk123 : 1 ≤ memW st nodew.toNat ∧ memW st nodew.toNat ≤ 3)
+    (hkw_nat : kw.toNat = memW st nodew.toNat)
+    (hpay_pos : 1 ≤ payv.toNat)
+    (hpay_lt : payv.toNat < 2 ^ 42)
+    (hpay_eq_write : payv.toNat = finishWriteLen st frw.toNat nodew.toNat)
+    (hcb_eq : cbufw.toNat = memW st (frw.toNat + 24))
+    (hcl_eq : clenw.toNat = memW st (frw.toNat + 32))
+    (hclen60 : (memW st nodew.toNat = 1 ∨ memW st nodew.toNat = 2) → clenw.toNat < 2 ^ 60)
+    (hcb_in : (memW st nodew.toNat = 1 ∨ memW st nodew.toNat = 2) →
+      1 ≤ clenw.toNat ∧ Inside (cbufw.toNat, clenw.toNat) sourceBase (globN st "heap_ptr"))
+    (hdom1 : memW st nodew.toNat = 1 → 0 < memW st (nodew.toNat + 56) →
+      st.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW st (nodew.toNat + 48)))))
+    (hdom3 : memW st nodew.toNat = 3 → 0 < memW st (nodew.toNat + 168) →
+      st.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW st (nodew.toNat + 160)))))
+    (hln : st.locals.lookup (ofString "node") = some (.val (.word nodew)))
+    (hlf : st.locals.lookup (ofString "fr") = some (.val (.word frw)))
+    (hlk : st.locals.lookup (ofString "k") = some (.val (.word kw)))
+    (hlp : st.locals.lookup (ofString "payload") = some (.val (.word payv)))
+    (hlcb : st.locals.lookup (ofString "cbuf") = some (.val (.word cbufw)))
+    (hlcl : st.locals.lookup (ofString "clen") = some (.val (.word clenw)))
+    (hret : (evaluateHOLFiniteState st finRest).1 = some (.returned rv)) :
+    let post := (evaluateHOLFiniteState st finRest).2
+    rv = .val (.word 0) ∧
+    ∃ (hlBv offF : BitVec 64),
+      hlBv.toNat = rlpHeaderLenPure payv.toNat ∧
+      1 ≤ hlBv.toNat ∧ hlBv.toNat ≤ 9 ∧
+      offF.toNat = hlBv.toNat + payv.toNat ∧
+      globN st "heap_ptr" + (hlBv.toNat + payv.toNat) ≤ heapLimit ∧
+      (∀ o ∈ nodeExtents st Nd, Disj (globN st "heap_ptr", hlBv.toNat + payv.toNat) o) ∧
+      R16Shards.WkBlockTxEnc.HeapByteEff st post
+        ((globN st "heap_ptr", hlBv.toNat + payv.toNat) ::
+          (nodeCacheIvls Nd ++ keccakBufIvls st)) ["heap_ptr"] ∧
+      globN st "heap_ptr" < globN post "heap_ptr" ∧
+      NodeHeap post Nd ∧
+      nodeExtents post Nd = nodeExtents st Nd ∧
+      KeccakBufsSafe post Nd ∧
+      memW post (nodew.toNat + 8) = globN st "heap_ptr" ∧
+      memW post (nodew.toNat + 16) = offF.toNat ∧
+      (∀ n ∈ Nd, n ≠ nodew.toNat → memW post (n + 8) = memW st (n + 8) ∧
+        memW post (n + 16) = memW st (n + 16)) ∧
+      (∀ n ∈ Nd, memW post n = memW st n ∧
+        (1 ≤ memW st n → memW post (n + 40) = memW st (n + 40)) ∧
+        (memW st n = 1 → memW post (n + 48) = memW st (n + 48) ∧
+          memW post (n + 56) = memW st (n + 56))) := by
+  intro post; dsimp only [post]
+  rw [finRest] at hret ⊢
+  obtain ⟨hlBv, s1, hhl_eq, hhl1, hhl9, hs1_g, hs1_m, hs1_be, hs1_ma, hs1_l,
+    heff1, hnt1, hdc1⟩ :=
+    eval_decCall_rlp_list_header_len_exact' st "hl" (.var .local (ofString "payload"))
+      payv finHlCont [] ["heap_ptr"] hc hAR
+      (by simp [evalHOLExact, hlp]) (Or.inr ⟨rv, hret⟩)
+  rw [hdc1] at hret ⊢
+  dsimp only at hret ⊢
+  have hs1_AR : ArenaReady s1 := heff1.arena
+  have hs1_c : s1.code = originalRuntimeCode := hs1_AR.1.code
+  have hs1_ln : s1.locals.lookup (ofString "node") = some (.val (.word nodew)) := by
+    rw [hs1_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hln,
+      show ofString "hl" ≠ ofString "node" by decide]
+  have hs1_lf : s1.locals.lookup (ofString "fr") = some (.val (.word frw)) := by
+    rw [hs1_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hlf,
+      show ofString "hl" ≠ ofString "fr" by decide]
+  have hs1_lk : s1.locals.lookup (ofString "k") = some (.val (.word kw)) := by
+    rw [hs1_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hlk,
+      show ofString "hl" ≠ ofString "k" by decide]
+  have hs1_lp : s1.locals.lookup (ofString "payload") = some (.val (.word payv)) := by
+    rw [hs1_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hlp,
+      show ofString "hl" ≠ ofString "payload" by decide]
+  have hs1_lcb : s1.locals.lookup (ofString "cbuf") = some (.val (.word cbufw)) := by
+    rw [hs1_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hlcb,
+      show ofString "hl" ≠ ofString "cbuf" by decide]
+  have hs1_lcl : s1.locals.lookup (ofString "clen") = some (.val (.word clenw)) := by
+    rw [hs1_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hlcl,
+      show ofString "hl" ≠ ofString "clen" by decide]
+  have hs1_lhl : s1.locals.lookup (ofString "hl") = some (.val (.word hlBv)) := by
+    rw [hs1_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have hsum_nat : (hlBv + payv).toNat = hlBv.toNat + payv.toNat := by
+    rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by omega)]
+  rw [finHlCont] at hret ⊢
+  obtain ⟨bufw, q, s2, hbuf_eq, hbuf8, hq_eq, hbuf_le_q, hq_lim, hs2_hp,
+    hs2_g, hs2_m, hs2_be, hs2_l, heff2, hnt2, hdc2⟩ :=
+    eval_decCall_alloc_exact' s1 "buf"
+      (.op .add [.var .local (ofString "hl"), .var .local (ofString "payload")])
+      (hlBv + payv) finAllocCont [] ["heap_ptr"] hs1_c hs1_AR (List.Mem.head _)
+      (by simp [evalHOLExact, evalListHOLExact, hs1_lhl, hs1_lp,
+        wordOpHOL, wordOp, valueIsWord, valueWord])
+      (Or.inr ⟨rv, hret⟩)
+  rw [hdc2] at hret ⊢
+  dsimp only at hret ⊢
+  have hs1_hp : globN s1 "heap_ptr" = globN st "heap_ptr" := by simp [globN, hs1_g]
+  have hbuf_st : bufw.toNat = globN st "heap_ptr" := hbuf_eq.trans hs1_hp
+  set bufLen := hlBv.toNat + payv.toNat
+  have hbuf_lim : bufw.toNat + bufLen ≤ heapLimit := by
+    rw [hbuf_eq]; rw [hsum_nat] at hbuf_le_q; exact hbuf_le_q.trans hq_lim
+  have htot40 : bufLen < 2 ^ 40 := by
+    have hlim40 : heapLimit < 2 ^ 40 := by decide
+    omega
+  have hbuf_disj : ∀ o ∈ nodeExtents st Nd, Disj (globN st "heap_ptr", bufLen) o := by
+    intro o ho
+    by_cases hz : o.2 = 0
+    · exact Or.inr (Or.inl hz)
+    · rcases nodeExtents_allocated st Nd hN o ho hz with ⟨_, hhi⟩ | ⟨hlo, _⟩
+      · exact Or.inr (Or.inr (Or.inr (by dsimp only at hhi ⊢; omega)))
+      · have hss : heapLimit ≤ scratchStart := by decide
+        have := hAR.2.2.2.1; have := hAR.2.2.2.2.1
+        exact Or.inr (Or.inr (Or.inl (by dsimp only at hlo ⊢; omega)))
+  have hs2_AR : ArenaReady s2 := heff2.arena
+  have hs2_c : s2.code = originalRuntimeCode := hs2_AR.1.code
+  have hs2_ln : s2.locals.lookup (ofString "node") = some (.val (.word nodew)) := by
+    rw [hs2_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hs1_ln,
+      show ofString "buf" ≠ ofString "node" by decide]
+  have hs2_lf : s2.locals.lookup (ofString "fr") = some (.val (.word frw)) := by
+    rw [hs2_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hs1_lf,
+      show ofString "buf" ≠ ofString "fr" by decide]
+  have hs2_lk : s2.locals.lookup (ofString "k") = some (.val (.word kw)) := by
+    rw [hs2_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hs1_lk,
+      show ofString "buf" ≠ ofString "k" by decide]
+  have hs2_lp : s2.locals.lookup (ofString "payload") = some (.val (.word payv)) := by
+    rw [hs2_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hs1_lp,
+      show ofString "buf" ≠ ofString "payload" by decide]
+  have hs2_lcb : s2.locals.lookup (ofString "cbuf") = some (.val (.word cbufw)) := by
+    rw [hs2_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hs1_lcb,
+      show ofString "buf" ≠ ofString "cbuf" by decide]
+  have hs2_lcl : s2.locals.lookup (ofString "clen") = some (.val (.word clenw)) := by
+    rw [hs2_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hs1_lcl,
+      show ofString "buf" ≠ ofString "clen" by decide]
+  have hs2_lhl : s2.locals.lookup (ofString "hl") = some (.val (.word hlBv)) := by
+    rw [hs2_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hs1_lhl,
+      show ofString "buf" ≠ ofString "hl" by decide]
+  have hs2_lb : s2.locals.lookup (ofString "buf") = some (.val (.word bufw)) := by
+    rw [hs2_l]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  -- Evaluate finAllocCont = .seq (rlp_encode_list_header(buf, payload)) finCallCont
+  rw [finAllocCont, evaluateHOLFiniteState_seq_line780] at hret ⊢
+  rcases hhdr : evaluateHOLFiniteState s2
+      (.call (some (none, none)) (ofString "rlp_encode_list_header")
+        [.var .local (ofString "buf"), .var .local (ofString "payload")]) with ⟨rhdr, s3⟩
+  simp only [hhdr] at hret ⊢
+  have hhdr_none : rhdr = none := by
+    cases rhdr with
+    | none => rfl
+    | some o =>
+      cases o with
+      | returned vr =>
+        exfalso
+        refine bareCall_ne_returned s2 (.var .local (ofString "buf"))
+          (.var .local (ofString "payload")) vr ⟨[.val (.word bufw), .val (.word payv)],
+            sourceFnBody Guest.Software.guestFn_rlp_encode_list_header,
+            (HolFiniteMapExact.empty.update (ofString "dst", ValueHOL.val (.word bufw))).update
+              (ofString "payload_len", ValueHOL.val (.word payv)),
+            .one, ?_, ?_⟩ (by rw [hhdr])
+        · simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hs2_lb, hs2_lp]
+        · exact pan_two_word_lookup s2.code.lookup (ofString "rlp_encode_list_header")
+            (ofString "dst") (ofString "payload_len")
+            (sourceFnBody Guest.Software.guestFn_rlp_encode_list_header) bufw payv
+            (by decide) (by rw [hs2_c]; exact WkBlockTxEnc.lookup_rlp_encode_list_header)
+      | _ => simp at hret
+  subst hhdr_none
+  dsimp only at hret ⊢
+  obtain ⟨s3', hs3_ev, hs3_l, hs3_g, hs3_be, hs3_ma, heff3_bre⟩ :=
+    eval_call_none_rlp_encode_list_header s2
+      (.var .local (ofString "buf")) (.var .local (ofString "payload"))
+      bufw payv [(bufw.toNat, bufLen)] hs2_c hs2_AR
+      (by simp [evalHOLExact, hs2_lb]) (by simp [evalHOLExact, hs2_lp])
+      ⟨(bufw.toNat, bufLen), List.Mem.head _, le_rfl, by dsimp [bufLen]; omega⟩
+      (by rw [hhdr])
+  rw [hhdr] at hs3_ev
+  injection hs3_ev with _ hs3_eq
+  subst hs3_eq
+  have heff3 : R16Shards.WkBlockTxEnc.HeapByteEff s2 s3 [(bufw.toNat, bufLen)] ["heap_ptr"] :=
+    R16Shards.WkBlockTxEnc.HeapByteEff.of_m11_bre hs2_AR heff3_bre
+  -- Unfold finCallCont = .dec "off" .one (.var .local "hl") finWrite
+  rw [finCallCont, evaluateHOLFiniteState_dec_total] at hret ⊢
+  have hs3_lhl : s3.locals.lookup (ofString "hl") = some (.val (.word hlBv)) := by
+    rw [hs3_l]; exact hs2_lhl
+  have hev_hl : @evalHOLExact 64 F _ s3.toExact (fun a => Classical.propDecidable (s3.memaddrs a))
+      (.var .local (ofString "hl")) = some (.val (.word hlBv)) := by
+    simp [evalHOLExact, hs3_lhl]
+  have hsh_hl : shapeEqHOL .one (shapeOfHOLExact (.val (.word hlBv) : ValueHOL 64)) = true := by
+    simp [shapeEqHOL, shapeOfHOLExact]
+  dsimp only at hret ⊢
+  rw [hev_hl] at hret ⊢; dsimp only at hret ⊢
+  rw [if_pos hsh_hl] at hret ⊢
+  set s4 := setVarHOLFinite (ofString "off") (.val (.word hlBv)) s3
+  have heff_st_s4 : R16Shards.WkBlockTxEnc.HeapByteEff st s4 [(bufw.toNat, bufLen)] ["heap_ptr"] := by
+    have h12 : R16Shards.WkBlockTxEnc.HeapByteEff st s2 [(bufw.toNat, bufLen)] ["heap_ptr"] :=
+      (heff1.trans heff2).mono (fun _ h => by simp at h) (fun _ h => h)
+    exact (h12.trans heff3).locals_clock s4.locals s4.clock
+  have hs4_AR : ArenaReady s4 := heff_st_s4.arena
+  have hs4_c : s4.code = originalRuntimeCode := hs4_AR.1.code
+  have hbuf_disj' : ∀ e ∈ ([(bufw.toNat, bufLen)] : List Ivl), 0 < e.2 →
+      ∀ o ∈ nodeExtents st Nd, Disj e o := by
+    intro e he _ o ho
+    simp only [List.mem_singleton] at he; subst he
+    rw [hbuf_st]; exact hbuf_disj o ho
+  obtain ⟨hs4_N, hs4_ext⟩ :=
+    nodeHeap_of_heapByteEff_disj hAR hN heff_st_s4 hbuf_disj'
+  have hs4_kc_eq : ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion s4 gs = bufferRegion st gs := by
+    intro gs hgs
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hgs
+    rcases hgs with rfl | rfl
+    · unfold bufferRegion globN
+      rw [← heff_st_s4.globals (ofString "keccak_pad") (by decide)]
+    · unfold bufferRegion globN
+      rw [← heff_st_s4.globals (ofString "keccak_st") (by decide)]
+  have hs4_kcIvls : keccakBufIvls s4 = keccakBufIvls st := by
+    simp only [keccakBufIvls, hs4_kc_eq ("keccak_pad", 136) (by decide),
+      hs4_kc_eq ("keccak_st", 200) (by decide)]
+  have hs4_KS : KeccakBufsSafe s4 Nd :=
+    keccakBufsSafe_of_grows hKS ⟨heff_st_s4.hp_le, heff_st_s4.sp_le⟩ hs4_kc_eq hs4_ext
+  have hs4_nd_w : ∀ n ∈ Nd, ∀ off : Nat, off % 8 = 0 → off + 8 ≤ nodeSize (memW st n) →
+      memW s4 (n + off) = memW st (n + off) := by
+    intro n hn off hoff8 hoff_lt
+    obtain ⟨_, hal_n, hin_n, hw_n, _⟩ := hN.1 n hn
+    have hn8 : n % 8 = 0 := hw_n.1
+    have h264 : heapLimit ≤ 2 ^ 64 := by decide
+    have hal_off : Allocated st (n + off, 8) := by
+      rcases hal_n with ⟨h1, h2⟩ | ⟨h1, h2⟩
+      · exact Or.inl ⟨by dsimp [nodeIvl] at h1; omega, by dsimp [nodeIvl] at h2; omega⟩
+      · exact Or.inr ⟨by dsimp [nodeIvl] at h1; omega, by dsimp [nodeIvl] at h2; omega⟩
+    have ha_lt : n + off < 2 ^ 64 := by have := hin_n.2; dsimp [nodeIvl] at this; omega
+    apply memW_eq_of_heapByteEff_disj hAR heff_st_s4 (by omega) hal_off ha_lt
+    intro iv hiv _
+    simp only [List.mem_singleton] at hiv; subst hiv
+    have ho_mem : nodeIvl st n ∈ nodeExtents st Nd := by
+      unfold nodeExtents; exact List.mem_flatMap.2 ⟨n, hn, List.mem_cons_self⟩
+    have hdj := hbuf_disj (nodeIvl st n) ho_mem
+    rw [← hbuf_st] at hdj
+    dsimp [Disj, nodeIvl] at hdj ⊢
+    rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+  have hs4_k : memW s4 nodew.toNat = memW st nodew.toNat := by
+    have hsz := nodeSize_ge32 (memW st nodew.toNat)
+    simpa using hs4_nd_w nodew.toNat hnode_in 0 (by decide) (by omega)
+  have hs4_ln : s4.locals.lookup (ofString "node") = some (.val (.word nodew)) := by
+    simp [s4, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs3_l, hs2_ln,
+      show ofString "off" ≠ ofString "node" by decide]
+  have hs4_lf : s4.locals.lookup (ofString "fr") = some (.val (.word frw)) := by
+    simp [s4, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs3_l, hs2_lf,
+      show ofString "off" ≠ ofString "fr" by decide]
+  have hs4_lk : s4.locals.lookup (ofString "k") = some (.val (.word kw)) := by
+    simp [s4, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs3_l, hs2_lk,
+      show ofString "off" ≠ ofString "k" by decide]
+  have hs4_lp : s4.locals.lookup (ofString "payload") = some (.val (.word payv)) := by
+    simp [s4, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs3_l, hs2_lp,
+      show ofString "off" ≠ ofString "payload" by decide]
+  have hs4_lcb : s4.locals.lookup (ofString "cbuf") = some (.val (.word cbufw)) := by
+    simp [s4, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs3_l, hs2_lcb,
+      show ofString "off" ≠ ofString "cbuf" by decide]
+  have hs4_lcl : s4.locals.lookup (ofString "clen") = some (.val (.word clenw)) := by
+    simp [s4, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs3_l, hs2_lcl,
+      show ofString "off" ≠ ofString "clen" by decide]
+  have hs4_lb : s4.locals.lookup (ofString "buf") = some (.val (.word bufw)) := by
+    simp [s4, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs3_l, hs2_lb,
+      show ofString "off" ≠ ofString "buf" by decide]
+  have hs4_lo : s4.locals.lookup (ofString "off") = some (.val (.word hlBv)) := by
+    simp [s4, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hs4_lhl : s4.locals.lookup (ofString "hl") = some (.val (.word hlBv)) := by
+    simp [s4, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs3_l, hs2_lhl,
+      show ofString "off" ≠ ofString "hl" by decide]
+  -- Preserve cbuf first byte (when k = 1 or 2) and value bytes across st -> s4
+  have hs4_cb_b : (memW st nodew.toNat = 1 ∨ memW st nodew.toNat = 2) →
+      memB s4 cbufw.toNat = memB st cbufw.toNat := by
+    intro hk12
+    obtain ⟨hcl1, hcb_lo, hcb_hi⟩ := hcb_in hk12
+    dsimp only at hcb_lo hcb_hi
+    have hlt64 : cbufw.toNat < 2 ^ 64 := cbufw.isLt
+    by_contra hne
+    rcases heff_st_s4.byte_frame cbufw.toNat hlt64 hne with
+      ⟨iv, hiv, hb1, hb2⟩ | ⟨hfg1, hfg2⟩ | ⟨hhf1, hhf2⟩
+    · simp only [List.mem_singleton] at hiv; subst hiv
+      rw [hbuf_st] at hb1; omega
+    · have := hAR.2.2.2.1; have : heapLimit ≤ scratchStart := by decide
+      dsimp [freeGap] at hfg1 hfg2; omega
+    · dsimp [heapFree] at hhf1 hhf2; omega
+  have hs4_nrb : ∀ m, RootIn Nd m → nodeRefBytes s4 m = nodeRefBytes st m := by
+    intro m hm
+    unfold nodeRefBytes
+    by_cases hm0 : m = 0
+    · simp [hm0]
+    · have hm_nd : m ∈ Nd := by
+        rcases hm with h | h
+        · exact absurd h hm0
+        · exact h
+      have hsz_m := nodeSize_ge32 (memW st m)
+      have hw0 : memW s4 m = memW st m := by
+        simpa using hs4_nd_w m hm_nd 0 (by decide) (by omega)
+      have hw16 : memW s4 (m + 16) = memW st (m + 16) :=
+        hs4_nd_w m hm_nd 16 (by decide) (by omega)
+      simp [hm0, hw0, hw16]
+  have hs4_val1_no : memW s4 nodew.toNat = 1 → memW s4 (nodew.toNat + 56) = 1 →
+      ¬ InIvl (memW s4 (nodew.toNat + 48)) (bufw.toNat, bufLen) ∧
+      (∀ iv ∈ keccakBufIvls s4, ¬ InIvl (memW s4 (nodew.toNat + 48)) iv) ∧
+      ¬ InIvl (memW s4 (nodew.toNat + 48)) (freeGap s4) ∧
+      ¬ InIvl (memW s4 (nodew.toNat + 48)) (heapFree s4) := by
+    intro hk1_s4 hv1_s4
+    have hk1 : memW st nodew.toNat = 1 := hs4_k ▸ hk1_s4
+    have hns64 : nodeSize (memW st nodew.toNat) = 64 := by rw [hk1]; decide
+    have hw48 := hs4_nd_w nodew.toNat hnode_in 48 (by decide) (by omega)
+    have hw56 := hs4_nd_w nodew.toNat hnode_in 56 (by decide) (by omega)
+    rw [hw48]
+    have hv1 : memW st (nodew.toNat + 56) = 1 := hw56 ▸ hv1_s4
+    have hdom_ord : ordinaryDomain (panByteAlignHOL (BitVec.ofNat 64 (memW st (nodew.toNat + 48)))) := by
+      rw [← hAR.1.memaddrs]; exact hdom1 hk1 (by omega)
+    obtain ⟨_, hkc_no, hfg_no, hhf_no⟩ := (hvs nodew.toNat hnode_in).1 hk1 hv1 hdom_ord
+    refine ⟨?_, ?_, ?_, ?_⟩
+    · intro ⟨h1, h2⟩
+      exact hhf_no ⟨by dsimp [heapFree]; rw [← hbuf_st]; exact h1,
+        by dsimp [heapFree]; omega⟩
+    · intro iv hiv
+      rw [hs4_kcIvls] at hiv
+      simp only [keccakBufIvls, List.mem_cons, List.not_mem_nil, or_false] at hiv
+      rcases hiv with rfl | rfl
+      · intro hin
+        exact hkc_no ("keccak_pad", 136) (by decide) (by dsimp [InIvl] at hin; omega) hin
+      · intro hin
+        exact hkc_no ("keccak_st", 200) (by decide) (by dsimp [InIvl] at hin; omega) hin
+    · intro ⟨h1, h2⟩
+      dsimp [freeGap] at h1 h2
+      rw [heff_st_s4.fp_eq] at h1 h2
+      have hsp4 := heff_st_s4.sp_le
+      exact hfg_no ⟨by dsimp [freeGapTo]; omega, by dsimp [freeGapTo]; omega⟩
+    · intro ⟨h1, h2⟩
+      dsimp [heapFree] at h1 h2
+      have hhp4 := heff_st_s4.hp_le
+      exact hhf_no ⟨by dsimp [heapFree]; omega, by dsimp [heapFree]; omega⟩
+  have hs4_val3_no : memW s4 nodew.toNat = 3 → memW s4 (nodew.toNat + 168) = 1 →
+      ¬ InIvl (memW s4 (nodew.toNat + 160)) (bufw.toNat, bufLen) ∧
+      (∀ n ∈ Nd, ¬ InIvl (memW s4 (nodew.toNat + 160)) (n + 24, 8)) ∧
+      (∀ iv ∈ keccakBufIvls s4, ¬ InIvl (memW s4 (nodew.toNat + 160)) iv) ∧
+      ¬ InIvl (memW s4 (nodew.toNat + 160)) (freeGap s4) ∧
+      ¬ InIvl (memW s4 (nodew.toNat + 160)) (heapFree s4) := by
+    intro hk3_s4 hv1_s4
+    have hk3 : memW st nodew.toNat = 3 := hs4_k ▸ hk3_s4
+    have hns176 : nodeSize (memW st nodew.toNat) = 176 := by rw [hk3]; decide
+    have hw160 := hs4_nd_w nodew.toNat hnode_in 160 (by decide) (by omega)
+    have hw168 := hs4_nd_w nodew.toNat hnode_in 168 (by decide) (by omega)
+    rw [hw160]
+    have hv1 : memW st (nodew.toNat + 168) = 1 := hw168 ▸ hv1_s4
+    have hdom_ord : ordinaryDomain (panByteAlignHOL (BitVec.ofNat 64 (memW st (nodew.toNat + 160)))) := by
+      rw [← hAR.1.memaddrs]; exact hdom3 hk3 (by omega)
+    obtain ⟨hnc_no, hkc_no, hfg_no, hhf_no⟩ := (hvs nodew.toNat hnode_in).2 hk3 hv1 hdom_ord
+    refine ⟨?_, ?_, ?_, ?_, ?_⟩
+    · intro ⟨h1, h2⟩
+      exact hhf_no ⟨by dsimp [heapFree]; rw [← hbuf_st]; exact h1,
+        by dsimp [heapFree]; omega⟩
+    · intro n hn ⟨h1, h2⟩
+      exact hnc_no n hn ⟨by dsimp at h1 ⊢; omega, by dsimp at h2 ⊢; omega⟩
+    · intro iv hiv
+      rw [hs4_kcIvls] at hiv
+      simp only [keccakBufIvls, List.mem_cons, List.not_mem_nil, or_false] at hiv
+      rcases hiv with rfl | rfl
+      · intro hin
+        exact hkc_no ("keccak_pad", 136) (by decide) (by dsimp [InIvl] at hin; omega) hin
+      · intro hin
+        exact hkc_no ("keccak_st", 200) (by decide) (by dsimp [InIvl] at hin; omega) hin
+    · intro ⟨h1, h2⟩
+      dsimp [freeGap] at h1 h2
+      rw [heff_st_s4.fp_eq] at h1 h2
+      have hsp4 := heff_st_s4.sp_le
+      exact hfg_no ⟨by dsimp [freeGapTo]; omega, by dsimp [freeGapTo]; omega⟩
+    · intro ⟨h1, h2⟩
+      dsimp [heapFree] at h1 h2
+      have hhp4 := heff_st_s4.hp_le
+      exact hhf_no ⟨by dsimp [heapFree]; omega, by dsimp [heapFree]; omega⟩
+  have hs4_rlp_val1 : memW st nodew.toNat = 1 →
+      rlpBytesLenPure
+        (if 0 < memW s4 (nodew.toNat + 56) then memB s4 (memW s4 (nodew.toNat + 48)) else 0)
+        (memW s4 (nodew.toNat + 56)) =
+      rlpBytesLenPure
+        (if 0 < memW st (nodew.toNat + 56) then memB st (memW st (nodew.toNat + 48)) else 0)
+        (memW st (nodew.toNat + 56)) := by
+    intro hk1
+    have hns64 : nodeSize (memW st nodew.toNat) = 64 := by rw [hk1]; decide
+    have hw48 := hs4_nd_w nodew.toNat hnode_in 48 (by decide) (by omega)
+    have hw56 := hs4_nd_w nodew.toNat hnode_in 56 (by decide) (by omega)
+    rw [hw48, hw56]
+    by_cases hv1 : memW st (nodew.toNat + 56) = 1
+    · have hdom_ord : ordinaryDomain (panByteAlignHOL (BitVec.ofNat 64 (memW st (nodew.toNat + 48)))) := by
+        rw [← hAR.1.memaddrs]; exact hdom1 hk1 (by omega)
+      obtain ⟨_, _, hfg_no, hhf_no⟩ := (hvs nodew.toNat hnode_in).1 hk1 hv1 hdom_ord
+      have hlt64 := memW_lt_two_pow_64 st (nodew.toNat + 48)
+      have hmb : memB s4 (memW st (nodew.toNat + 48)) = memB st (memW st (nodew.toNat + 48)) := by
+        by_contra hne
+        rcases heff_st_s4.byte_frame _ hlt64 hne with
+          ⟨iv, hiv, hb1, hb2⟩ | ⟨hfg1, hfg2⟩ | ⟨hhf1, hhf2⟩
+        · simp only [List.mem_singleton] at hiv; subst hiv
+          exact hhf_no ⟨by dsimp [heapFree]; rw [← hbuf_st]; exact hb1,
+            by dsimp [heapFree]; omega⟩
+        · dsimp [freeGap] at hfg1 hfg2
+          exact hfg_no ⟨by dsimp [freeGapTo]; omega, by dsimp [freeGapTo]; omega⟩
+        · exact hhf_no ⟨hhf1, hhf2⟩
+      rw [hmb]
+    · exact rlpBytesLenPure_congr_ne_one hv1
+  have hs4_rlp_val3 : memW st nodew.toNat = 3 →
+      rlpBytesLenPure
+        (if 0 < memW s4 (nodew.toNat + 168) then memB s4 (memW s4 (nodew.toNat + 160)) else 0)
+        (memW s4 (nodew.toNat + 168)) =
+      rlpBytesLenPure
+        (if 0 < memW st (nodew.toNat + 168) then memB st (memW st (nodew.toNat + 160)) else 0)
+        (memW st (nodew.toNat + 168)) := by
+    intro hk3
+    have hns176 : nodeSize (memW st nodew.toNat) = 176 := by rw [hk3]; decide
+    have hw160 := hs4_nd_w nodew.toNat hnode_in 160 (by decide) (by omega)
+    have hw168 := hs4_nd_w nodew.toNat hnode_in 168 (by decide) (by omega)
+    rw [hw160, hw168]
+    by_cases hv1 : memW st (nodew.toNat + 168) = 1
+    · have hdom_ord : ordinaryDomain (panByteAlignHOL (BitVec.ofNat 64 (memW st (nodew.toNat + 160)))) := by
+        rw [← hAR.1.memaddrs]; exact hdom3 hk3 (by omega)
+      obtain ⟨_, _, hfg_no, hhf_no⟩ := (hvs nodew.toNat hnode_in).2 hk3 hv1 hdom_ord
+      have hlt64 := memW_lt_two_pow_64 st (nodew.toNat + 160)
+      have hmb : memB s4 (memW st (nodew.toNat + 160)) = memB st (memW st (nodew.toNat + 160)) := by
+        by_contra hne
+        rcases heff_st_s4.byte_frame _ hlt64 hne with
+          ⟨iv, hiv, hb1, hb2⟩ | ⟨hfg1, hfg2⟩ | ⟨hhf1, hhf2⟩
+        · simp only [List.mem_singleton] at hiv; subst hiv
+          exact hhf_no ⟨by dsimp [heapFree]; rw [← hbuf_st]; exact hb1,
+            by dsimp [heapFree]; omega⟩
+        · dsimp [freeGap] at hfg1 hfg2
+          exact hfg_no ⟨by dsimp [freeGapTo]; omega, by dsimp [freeGapTo]; omega⟩
+        · exact hhf_no ⟨hhf1, hhf2⟩
+      rw [hmb]
+    · exact rlpBytesLenPure_congr_ne_one hv1
+  have hs4_br_eq : memW st nodew.toNat = 3 →
+      branchRefsLenSum s4 nodew.toNat 16 = branchRefsLenSum st nodew.toNat 16 := by
+    intro hk3
+    have hns176 : nodeSize (memW st nodew.toNat) = 176 := by rw [hk3]; decide
+    refine branchRefsLenSum_congr ((hN.1 nodew.toNat hnode_in).2.2.2.2.2.1 hk3) ?_ hs4_nrb 16 (le_refl _)
+    intro i hi
+    have : nodew.toNat + 32 + 8 * i = nodew.toNat + (32 + 8 * i) := by omega
+    rw [this]
+    exact hs4_nd_w nodew.toNat hnode_in (32 + 8 * i) (by omega) (by omega)
+  have hfit1_s4 : memW s4 nodew.toNat = 1 →
+      hlBv.toNat + rlpBytesLenPure (memB s4 cbufw.toNat) clenw.toNat +
+        rlpBytesLenPure (if 0 < memW s4 (nodew.toNat + 56) then memB s4 (memW s4 (nodew.toNat + 48)) else 0)
+          (memW s4 (nodew.toNat + 56)) ≤ bufLen := by
+    intro hk1_s4
+    have hk1 : memW st nodew.toNat = 1 := hs4_k ▸ hk1_s4
+    rw [hs4_cb_b (Or.inl hk1), hs4_rlp_val1 hk1, hcb_eq, hcl_eq]
+    have hp1 : payv.toNat = rlpBytesLenPure (memB st (memW st (frw.toNat + 24))) (memW st (frw.toNat + 32)) +
+        rlpBytesLenPure (if 0 < memW st (nodew.toNat + 56) then memB st (memW st (nodew.toNat + 48)) else 0)
+          (memW st (nodew.toNat + 56)) := by
+      rw [hpay_eq_write]; simp [finishWriteLen, hk1]
+    dsimp [bufLen]; omega
+  have hfit2_s4 : memW s4 nodew.toNat = 2 →
+      hlBv.toNat + rlpBytesLenPure (memB s4 cbufw.toNat) clenw.toNat +
+        nodeRefBytes s4 (memW s4 (nodew.toNat + 48)) ≤ bufLen := by
+    intro hk2_s4
+    have hk2 : memW st nodew.toNat = 2 := hs4_k ▸ hk2_s4
+    have hns56 : nodeSize (memW st nodew.toNat) = 56 := by rw [hk2]; decide
+    have hw48 := hs4_nd_w nodew.toNat hnode_in 48 (by decide) (by omega)
+    rw [hs4_cb_b (Or.inr hk2), hw48, hs4_nrb _ ((hN.1 nodew.toNat hnode_in).2.2.2.2.1 hk2),
+      hcb_eq, hcl_eq]
+    have hp2 : payv.toNat = rlpBytesLenPure (memB st (memW st (frw.toNat + 24))) (memW st (frw.toNat + 32)) +
+        nodeRefBytes st (memW st (nodew.toNat + 48)) := by
+      rw [hpay_eq_write]; simp [finishWriteLen, hk2]
+    dsimp [bufLen]; omega
+  have hfit3_s4 : memW s4 nodew.toNat = 3 →
+      hlBv.toNat + branchRefsLenSum s4 nodew.toNat 16 +
+        rlpBytesLenPure (if 0 < memW s4 (nodew.toNat + 168) then memB s4 (memW s4 (nodew.toNat + 160)) else 0)
+          (memW s4 (nodew.toNat + 168)) ≤ bufLen := by
+    intro hk3_s4
+    have hk3 : memW st nodew.toNat = 3 := hs4_k ▸ hk3_s4
+    rw [hs4_br_eq hk3, hs4_rlp_val3 hk3]
+    have hp3 : payv.toNat = branchRefsLenSum st nodew.toNat 16 +
+        rlpBytesLenPure (if 0 < memW st (nodew.toNat + 168) then memB st (memW st (nodew.toNat + 160)) else 0)
+          (memW st (nodew.toNat + 168)) := by
+      rw [hpay_eq_write]; simp [finishWriteLen, hk3]
+    dsimp [bufLen]; omega
+  -- Split finWrite = .seq finDispatch (stores + return 0)
+  have hfw_eq : finWrite = .seq finDispatch
+      (.seq (.store (.op .add [.var .local (ofString "node"), .const 8])
+          (.var .local (ofString "buf")))
+        (.seq (.store (.op .add [.var .local (ofString "node"), .const 16])
+            (.var .local (ofString "off")))
+          (.return (.const 0)))) := rfl
+  rw [hfw_eq, evaluateHOLFiniteState_seq_line780] at hret ⊢
+  rcases hdisp : evaluateHOLFiniteState s4 finDispatch with ⟨rdisp, sM⟩
+  simp only [hdisp] at hret ⊢
+  have hrdisp_none : rdisp = none := by
+    cases rdisp with
+    | none => rfl
+    | some o =>
+      cases o with
+      | returned vr =>
+        exact False.elim (evaluate_noReturnLocal finDispatch (by decide) s4 vr (by rw [hdisp]))
+      | _ => simp at hret
+  subst hrdisp_none
+  dsimp only at hret ⊢
+  obtain ⟨offF, hoffF_s4, hoffF_lt, heff_disp, hs4_hp_le, hsM_N, hsM_ext, hsM_KS,
+    hsM_nd_w, hsM_ln, hsM_lf, hsM_lk, hsM_lp, hsM_lcb, hsM_lcl, hsM_lb, hsM_lo, hsM_lhl⟩ :=
+    eval_finWrite_none s4 Nd nodew frw kw payv cbufw clenw hlBv bufw hlBv bufLen
+      hs4_c hs4_AR hs4_N hs4_KS hnode_in (hs4_k ▸ hk123) (hkw_nat.trans hs4_k.symm)
+      hs4_ln hs4_lf hs4_lk hs4_lp hs4_lcb hs4_lcl hs4_lb hs4_lo hs4_lhl hbuf_lim
+      (fun o ho => by rw [hs4_ext] at ho; rw [hbuf_st]; exact hbuf_disj o ho)
+      hfit1_s4 hfit2_s4 hfit3_s4 (fun h12 => hclen60 (hs4_k ▸ h12)) hs4_val1_no hs4_val3_no (by rw [hdisp])
+  rw [hdisp] at heff_disp hs4_hp_le hsM_N hsM_ext hsM_KS hsM_nd_w
+  rw [hdisp] at hsM_ln hsM_lf hsM_lk hsM_lp hsM_lcb hsM_lcl hsM_lb hsM_lo hsM_lhl
+  dsimp only at heff_disp hs4_hp_le hsM_N hsM_ext hsM_KS hsM_nd_w
+  dsimp only at hsM_ln hsM_lf hsM_lk hsM_lp hsM_lcb hsM_lcl hsM_lb hsM_lo hsM_lhl
+  have hoffF_nat : offF.toNat = hlBv.toNat + payv.toNat := by
+    rw [hoffF_s4, hs4_k]
+    by_cases hk1 : memW st nodew.toNat = 1
+    · rw [if_pos hk1, hs4_cb_b (Or.inl hk1), hs4_rlp_val1 hk1, hcb_eq, hcl_eq, hpay_eq_write]
+      simp [finishWriteLen, hk1]
+    · rw [if_neg hk1]
+      by_cases hk2 : memW st nodew.toNat = 2
+      · have hns56 : nodeSize (memW st nodew.toNat) = 56 := by rw [hk2]; decide
+        have hw48 := hs4_nd_w nodew.toNat hnode_in 48 (by decide) (by omega)
+        rw [if_pos hk2, hs4_cb_b (Or.inr hk2), hw48,
+          hs4_nrb _ ((hN.1 nodew.toNat hnode_in).2.2.2.2.1 hk2), hcb_eq, hcl_eq, hpay_eq_write]
+        simp [finishWriteLen, hk2]
+      · have hk3 : memW st nodew.toNat = 3 := by omega
+        rw [if_neg hk2, hs4_br_eq hk3, hs4_rlp_val3 hk3, hpay_eq_write]
+        simp [finishWriteLen, hk3]
+  -- Deduce rv = .val (.word 0) from the two stores + return 0
+  have hrv0 : rv = .val (.word 0) := by
+    have htail_ev := hret
+    rw [evaluateHOLFiniteState_seq_line780] at htail_ev
+    rcases hest1 : evaluateHOLFiniteState sM
+      (.store (.op .add [.var .local (ofString "node"), .const 8])
+        (.var .local (ofString "buf"))) with ⟨ro1, st1⟩
+    simp only [hest1] at htail_ev
+    cases ro1 with
+    | some o =>
+      cases o with
+      | returned vr =>
+        exact False.elim (evaluate_noReturnLocal
+          (.store (.op .add [.var .local (ofString "node"), .const 8])
+            (.var .local (ofString "buf"))) (by decide) sM vr (by rw [hest1]))
+      | _ => simp at htail_ev
+    | none =>
+      dsimp only at htail_ev
+      rw [evaluateHOLFiniteState_seq_line780] at htail_ev
+      rcases hest2 : evaluateHOLFiniteState st1
+        (.store (.op .add [.var .local (ofString "node"), .const 16])
+          (.var .local (ofString "off"))) with ⟨ro2, st2⟩
+      simp only [hest2] at htail_ev
+      cases ro2 with
+      | some o =>
+        cases o with
+        | returned vr =>
+          exact False.elim (evaluate_noReturnLocal
+            (.store (.op .add [.var .local (ofString "node"), .const 16])
+              (.var .local (ofString "off"))) (by decide) st1 vr (by rw [hest2]))
+        | _ => simp at htail_ev
+      | none =>
+        dsimp only at htail_ev
+        rw [evaluateHOLFiniteState_return] at htail_ev
+        have hc0 : @evalHOLExact 64 F _ st2.toExact
+            (fun a => Classical.propDecidable (st2.memaddrs a)) (.const 0) =
+            some (.val (.word 0)) := rfl
+        rw [hc0] at htail_ev; dsimp only at htail_ev
+        split at htail_ev
+        · simp at htail_ev; exact htail_ev.symm
+        · simp at htail_ev
+  subst hrv0
+  have hsM_kc_eq : ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion sM gs = bufferRegion s4 gs := by
+    intro gs hgs
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hgs
+    rcases hgs with rfl | rfl
+    · unfold bufferRegion globN
+      rw [← heff_disp.globals (ofString "keccak_pad") (by decide)]
+    · unfold bufferRegion globN
+      rw [← heff_disp.globals (ofString "keccak_st") (by decide)]
+  have hsM_kcIvls : keccakBufIvls sM = keccakBufIvls s4 := by
+    simp only [keccakBufIvls, hsM_kc_eq ("keccak_pad", 136) (by decide),
+      hsM_kc_eq ("keccak_st", 200) (by decide)]
+  have heffB : R16Shards.WkBlockTxEnc.HeapByteEff st sM
+      (Nd.map (fun n => (n + 24, 8)) ++
+        ([(globN st "heap_ptr", hlBv.toNat + payv.toNat)] ++ keccakBufIvls sM))
+      ["heap_ptr"] := by
+    have heff_st_s4' : R16Shards.WkBlockTxEnc.HeapByteEff st s4
+        (Nd.map (fun n => (n + 24, 8)) ++
+          ([(globN st "heap_ptr", hlBv.toNat + payv.toNat)] ++ keccakBufIvls sM))
+        ["heap_ptr"] := by
+      refine heff_st_s4.mono (fun i hi _ => ?_) (fun _ h => h)
+      simp only [List.mem_singleton] at hi; subst hi
+      rw [hbuf_st]
+      exact Or.inl ⟨(globN st "heap_ptr", bufLen),
+        List.mem_append_right _ (List.Mem.head _), le_rfl, le_rfl⟩
+    have heff_disp' : R16Shards.WkBlockTxEnc.HeapByteEff s4 sM
+        (Nd.map (fun n => (n + 24, 8)) ++
+          ([(globN st "heap_ptr", hlBv.toNat + payv.toNat)] ++ keccakBufIvls sM))
+        ["heap_ptr"] := by
+      refine heff_disp.mono (fun i hi _ => ?_) (fun _ h => h)
+      rcases List.mem_append.1 hi with h12 | hkc
+      · rcases List.mem_append.1 h12 with hm24 | hbuf_m
+        · exact Or.inl ⟨i, List.mem_append_left _ hm24, le_rfl, le_rfl⟩
+        · simp only [List.mem_singleton] at hbuf_m; subst hbuf_m
+          rw [hbuf_st]
+          exact Or.inl ⟨(globN st "heap_ptr", bufLen),
+            List.mem_append_right _ (List.Mem.head _), le_rfl, le_rfl⟩
+      · rw [← hsM_kcIvls] at hkc
+        exact Or.inl ⟨i, List.mem_append_right _ (List.Mem.tail _ hkc), le_rfl, le_rfl⟩
+    exact heff_st_s4'.trans heff_disp'
+  have hW_M : ∀ n ∈ Nd, ∀ off : Nat, off % 8 = 0 → off + 8 ≤ nodeSize (memW st n) →
+      off ≠ 24 → memW sM (n + off) = memW st (n + off) := by
+    intro n hn off hoff8 hoff_lt hoff24
+    have hsz0 := nodeSize_ge32 (memW st n)
+    have hk_eq_n : memW s4 n = memW st n := by
+      simpa using hs4_nd_w n hn 0 (by decide) (by omega)
+    exact (hsM_nd_w n hn off hoff8 (by rw [hk_eq_n]; exact hoff_lt) hoff24).trans
+      (hs4_nd_w n hn off hoff8 hoff_lt)
+  have hM_hp : globN st "heap_ptr" < globN sM "heap_ptr" := by
+    have hs4_hp_eq : globN s4 "heap_ptr" = q.toNat := by
+      have : globN s4 "heap_ptr" = globN s3 "heap_ptr" := rfl
+      rw [this]; unfold globN; rw [hs3_g]; exact hs2_hp
+    have : globN st "heap_ptr" + (hlBv.toNat + payv.toNat) ≤ q.toNat := by
+      rw [← hs1_hp]; change globN s1 "heap_ptr" + bufLen ≤ q.toNat
+      rw [← hsum_nat]; exact hbuf_le_q
+    omega
+  set tailProg : ProgHOL 64 := (.seq (.store (.op .add [.var .local (ofString "node"), .const 8])
+          (.var .local (ofString "buf")))
+        (.seq (.store (.op .add [.var .local (ofString "node"), .const 16])
+            (.var .local (ofString "off")))
+          (.return (.const 0))))
+  let Lv := HolFiniteMapExact.resVarEq
+    (HolFiniteMapExact.resVarEq
+      (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState sM tailProg).2.locals
+        (ofString "off", s3.locals.lookup (ofString "off")))
+      (ofString "buf", s1.locals.lookup (ofString "buf")))
+    (ofString "hl", st.locals.lookup (ofString "hl"))
+  obtain ⟨offF', hoffF'_nat, heff_fin, hhp_lt, hN_fin, hext_fin, hKS_fin,
+    h8_fin, h16_fin, hother_fin, hword_fin⟩ :=
+    finRest_tail_close st Nd nodew bufw payv hlBv hhl1 htot40 hAR hN hKS
+      hnode_in hbuf_st hbuf_disj sM heffB hW_M hsM_ln hsM_lb
+      ⟨offF, hsM_lo, hoffF_nat⟩ hM_hp hret
+      { (evaluateHOLFiniteState sM tailProg).2 with locals := Lv } Lv rfl
+  refine ⟨rfl, hlBv, offF', hhl_eq, hhl1, hhl9, hoffF'_nat, ?_, hbuf_disj,
+    heff_fin, hhp_lt, hN_fin, hext_fin, hKS_fin, h8_fin, h16_fin, hother_fin, hword_fin⟩
+  rw [← hbuf_st]; exact hbuf_lim
+
+private theorem eval__node_rlp_finish_returned {F : Type}
+    (sp0 : Nat) (s : PanSemStateFiniteExact 64 F) (Nd : List Nat)
+    (frw nodew : BitVec 64) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode)
+    (hAR : ArenaReady s) (hN : NodeHeap s Nd) (hKS : KeccakBufsSafe s Nd)
+    (hvs : NodeValuesSafe sp0 s Nd)
+    (hsp_le_sp0 : globN s "scratch_ptr" ≤ sp0)
+    (hfr : ValidRlpFrame s Nd frw.toNat)
+    (hnode : memW s (frw.toNat + 8) = nodew.toNat)
+    (hfr_loc : s.locals.lookup (ofString "fr") = some (.val (.word frw)))
+    (hnode_loc : s.locals.lookup (ofString "node") = some (.val (.word nodew)))
+    (hret : (evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn__node_rlp_finish)).1 = some (.returned rv)) :
+    let post := (evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn__node_rlp_finish)).2
+    rv = .val (.word 0) ∧
+    ∃ totLen : Nat,
+      1 ≤ totLen ∧
+      globN s "heap_ptr" + totLen ≤ heapLimit ∧
+      (∀ o ∈ nodeExtents s Nd, Disj (globN s "heap_ptr", totLen) o) ∧
+      R16Shards.WkBlockTxEnc.HeapByteEff s post
+        ((globN s "heap_ptr", totLen) :: (nodeCacheIvls Nd ++ keccakBufIvls s)) ["heap_ptr"] ∧
+      globN s "heap_ptr" < globN post "heap_ptr" ∧
+      NodeHeap post Nd ∧
+      nodeExtents post Nd = nodeExtents s Nd ∧
+      KeccakBufsSafe post Nd ∧
+      NodeValuesSafe sp0 post Nd ∧
+      memW post (nodew.toNat + 8) = globN s "heap_ptr" ∧
+      memW post (nodew.toNat + 16) = totLen ∧
+      (∀ n ∈ Nd, n ≠ nodew.toNat → memW post (n + 8) = memW s (n + 8) ∧
+        memW post (n + 16) = memW s (n + 16)) ∧
+      (∀ n ∈ Nd, memW post n = memW s n ∧
+        (1 ≤ memW s n → memW post (n + 40) = memW s (n + 40)) ∧
+        (memW s n = 1 → memW post (n + 48) = memW s (n + 48) ∧
+          memW post (n + 56) = memW s (n + 56))) := by
+  intro post; dsimp only [post]
+  obtain ⟨kw, payw, cbufw, clenw, hkw_nat, hpay_nat, hcb_nat, hcl_nat,
+    hloads_1, hloads_m, hloads_g, hloads_be, hloads_ma, hloads_c,
+    hloads_sh, hloads_ba, hloads_str⟩ :=
+    eval__node_rlp_finish_loads s Nd frw nodew hN hfr hnode hfr_loc hnode_loc
+  set entry := setVarHOLFinite (ofString "clen") (.val (.word clenw))
+    (setVarHOLFinite (ofString "cbuf") (.val (.word cbufw))
+      (setVarHOLFinite (ofString "payload") (.val (.word payw))
+        (setVarHOLFinite (ofString "k") (.val (.word kw)) s)))
+  rw [hloads_1, finishAfterLoads_eq_finLoadsRest, finLoadsRest] at hret
+  have hent_AR : ArenaReady entry := localsFree_arenaReady s entry.locals entry.clock hAR
+  have hent_c : entry.code = originalRuntimeCode := hc
+  have hent_N : NodeHeap entry Nd := hN
+  have hent_KS : KeccakBufsSafe entry Nd := hKS
+  have hent_ln : entry.locals.lookup (ofString "node") = some (.val (.word nodew)) := by
+    simp [entry, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hnode_loc,
+      show ofString "clen" ≠ ofString "node" by decide,
+      show ofString "cbuf" ≠ ofString "node" by decide,
+      show ofString "payload" ≠ ofString "node" by decide,
+      show ofString "k" ≠ ofString "node" by decide]
+  have hent_lf : entry.locals.lookup (ofString "fr") = some (.val (.word frw)) := by
+    simp [entry, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hfr_loc,
+      show ofString "clen" ≠ ofString "fr" by decide,
+      show ofString "cbuf" ≠ ofString "fr" by decide,
+      show ofString "payload" ≠ ofString "fr" by decide,
+      show ofString "k" ≠ ofString "fr" by decide]
+  have hent_lk : entry.locals.lookup (ofString "k") = some (.val (.word kw)) := by
+    simp [entry, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "clen" ≠ ofString "k" by decide,
+      show ofString "cbuf" ≠ ofString "k" by decide,
+      show ofString "payload" ≠ ofString "k" by decide]
+  have hent_lp : entry.locals.lookup (ofString "payload") = some (.val (.word payw)) := by
+    simp [entry, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "clen" ≠ ofString "payload" by decide,
+      show ofString "cbuf" ≠ ofString "payload" by decide]
+  have hent_lcb : entry.locals.lookup (ofString "cbuf") = some (.val (.word cbufw)) := by
+    simp [entry, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "clen" ≠ ofString "cbuf" by decide]
+  have hent_lcl : entry.locals.lookup (ofString "clen") = some (.val (.word clenw)) := by
+    simp [entry, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  -- Step 1: evaluate ite (k == 2)
+  set ite2 := ProgHOL.ite (.cmp .equal (.var .local (ofString "k")) (.const 2))
+    (.decCall (ofString "rl") .one (ofString "node_ref_len")
+      [.load .one (.op .add [.var .local (ofString "node"), .const 48])]
+      finishExtLenCont)
+    .skip
+  set ite3 := ProgHOL.ite (.cmp .equal (.var .local (ofString "k")) (.const 3))
+    (.dec (ofString "i") .one (.const 0) finishBranchLenCont)
+    .skip
+  rw [evaluateHOLFiniteState_seq_line780] at hret
+  rcases hev_ite2 : evaluateHOLFiniteState entry ite2 with ⟨r_ite2, sA⟩
+  rw [hev_ite2] at hret
+  have hrite2_none : r_ite2 = none := by
+    cases r_ite2 with
+    | none => rfl
+    | some o =>
+      cases o with
+      | returned vr =>
+        exact False.elim (evaluate_noReturnLocal ite2 (by decide) entry vr (by rw [hev_ite2]))
+      | _ => simp at hret
+  subst hrite2_none
+  dsimp only at hret
+  rw [evaluateHOLFiniteState_seq_line780] at hret
+  rcases hev_ite3 : evaluateHOLFiniteState sA ite3 with ⟨r_ite3, st⟩
+  rw [hev_ite3] at hret
+  have hrite3_none : r_ite3 = none := by
+    cases r_ite3 with
+    | none => rfl
+    | some o =>
+      cases o with
+      | returned vr =>
+        exact False.elim (evaluate_noReturnLocal ite3 (by decide) sA vr (by rw [hev_ite3]))
+      | _ => simp at hret
+  subst hrite3_none
+  dsimp only at hret
+  -- Characterize entry -> sA -> st
+  have hnode_in : nodew.toNat ∈ Nd := hnode ▸ hfr.2.2.2.1
+  have hk123 : 1 ≤ memW s nodew.toNat ∧ memW s nodew.toNat ≤ 3 :=
+    ⟨hnode ▸ hfr.2.2.2.2.1, hnode ▸ hfr.2.2.2.2.2.1⟩
+  have hcnd2 : @evalHOLExact 64 F _ entry.toExact
+      (fun a => Classical.propDecidable (entry.memaddrs a))
+      (.cmp .equal (.var .local (ofString "k")) (.const 2)) =
+      some (.val (.word (if kw = (2 : BitVec 64) then 1 else 0))) := by
+    simp [evalHOLExact, hent_lk, Compiler.Encoders.Asm.wordCmpHOL]
+  have hsA_char : ∃ payA : BitVec 64,
+      payA.toNat = (if memW s nodew.toNat = 2 then
+          memW s (frw.toNat + 40) + nodeRefBytes s (memW s (nodew.toNat + 48))
+        else memW s (frw.toNat + 40)) ∧
+      sA.globals = s.globals ∧ sA.memory = s.memory ∧ sA.be = s.be ∧
+      HeapByteEff entry sA [] ["heap_ptr"] ∧
+      sA.locals.lookup (ofString "node") = some (.val (.word nodew)) ∧
+      sA.locals.lookup (ofString "fr") = some (.val (.word frw)) ∧
+      sA.locals.lookup (ofString "k") = some (.val (.word kw)) ∧
+      sA.locals.lookup (ofString "payload") = some (.val (.word payA)) ∧
+      sA.locals.lookup (ofString "cbuf") = some (.val (.word cbufw)) ∧
+      sA.locals.lookup (ofString "clen") = some (.val (.word clenw)) := by
+    have hite2_ev := hev_ite2
+    dsimp only [ite2] at hite2_ev
+    rw [evaluateHOLFiniteState_ite, hcnd2] at hite2_ev
+    dsimp only at hite2_ev
+    by_cases hkw2 : kw = (2 : BitVec 64)
+    · rw [if_pos hkw2, if_neg (by decide)] at hite2_ev
+      have hk2 : memW s nodew.toNat = 2 := by
+        have : kw.toNat = 2 := by simp [hkw2]
+        omega
+      obtain ⟨payA, hpayA_eq, hg, hm, hbe, heffA, hlnA, hlfA, hlkA, hlpA, hlcbA, hlclA⟩ :=
+        eval_finishExtLen_none entry Nd nodew frw kw payw cbufw clenw
+          hent_c hent_AR hent_N hnode_in hk2
+          hent_ln hent_lf hent_lk hent_lp hent_lcb hent_lcl
+          (by rw [hpay_nat]; exact hfr.2.2.2.2.2.2.2.1)
+          (by rw [hite2_ev])
+      rw [hite2_ev] at hg hm hbe heffA hlnA hlfA hlkA hlpA hlcbA hlclA
+      dsimp only at hg hm hbe heffA hlnA hlfA hlkA hlpA hlcbA hlclA
+      exact ⟨payA, by rw [if_pos hk2, hpayA_eq, hpay_nat]; rfl,
+        hg, hm, hbe, heffA, hlnA, hlfA, hlkA, hlpA, hlcbA, hlclA⟩
+    · rw [if_neg hkw2] at hite2_ev
+      simp only [↓reduceIte, evaluateHOLFiniteState_skip] at hite2_ev
+      injection hite2_ev with _ hsA_eq
+      subst hsA_eq
+      have hk_ne2 : memW s nodew.toNat ≠ 2 := by
+        intro hk2; apply hkw2; apply BitVec.eq_of_toNat_eq; rw [hkw_nat, hk2]; rfl
+      exact ⟨payw, by rw [if_neg hk_ne2, hpay_nat], rfl, rfl, rfl,
+        HeapByteEff.refl hent_AR [] ["heap_ptr"],
+        hent_ln, hent_lf, hent_lk, hent_lp, hent_lcb, hent_lcl⟩
+  obtain ⟨payA, hpayA_nat, hsA_g, hsA_m, hsA_be, heff_sA,
+    hsA_ln, hsA_lf, hsA_lk, hsA_lp, hsA_lcb, hsA_lcl⟩ := hsA_char
+  have hsA_AR : ArenaReady sA := heff_sA.arena
+  have hsA_c : sA.code = originalRuntimeCode := hsA_AR.1.code
+  have hsA_N : NodeHeap sA Nd := by
+    have hext := nodeHeap_of_heapByteEff_disj hent_AR hent_N heff_sA (fun _ h => by simp at h)
+    exact hext.1
+  have hsA_memW : memW sA = memW s := by ext a; unfold memW; rw [hsA_m]
+  have hsA_memB : memB sA = memB s := by ext a; unfold memB; rw [hsA_m, hsA_be]
+  have hcnd3 : @evalHOLExact 64 F _ sA.toExact
+      (fun a => Classical.propDecidable (sA.memaddrs a))
+      (.cmp .equal (.var .local (ofString "k")) (.const 3)) =
+      some (.val (.word (if kw = (3 : BitVec 64) then 1 else 0))) := by
+    simp [evalHOLExact, hsA_lk, Compiler.Encoders.Asm.wordCmpHOL]
+  have hst_char : ∃ payv : BitVec 64,
+      payv.toNat = finishPayloadLen s frw.toNat nodew.toNat ∧
+      (memW s nodew.toNat = 3 → 0 < memW s (nodew.toNat + 168) →
+        s.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW s (nodew.toNat + 160))))) ∧
+      st.globals = s.globals ∧ st.memory = s.memory ∧ st.be = s.be ∧
+      HeapByteEff entry st [] ["heap_ptr"] ∧
+      st.locals.lookup (ofString "node") = some (.val (.word nodew)) ∧
+      st.locals.lookup (ofString "fr") = some (.val (.word frw)) ∧
+      st.locals.lookup (ofString "k") = some (.val (.word kw)) ∧
+      st.locals.lookup (ofString "payload") = some (.val (.word payv)) ∧
+      st.locals.lookup (ofString "cbuf") = some (.val (.word cbufw)) ∧
+      st.locals.lookup (ofString "clen") = some (.val (.word clenw)) := by
+    have hite3_ev := hev_ite3
+    dsimp only [ite3] at hite3_ev
+    rw [evaluateHOLFiniteState_ite, hcnd3] at hite3_ev
+    dsimp only at hite3_ev
+    by_cases hkw3 : kw = (3 : BitVec 64)
+    · rw [if_pos hkw3, if_neg (by decide)] at hite3_ev
+      have hk3 : memW s nodew.toNat = 3 := by
+        have : kw.toNat = 3 := by simp [hkw3]
+        omega
+      have hk3_ne2 : memW s nodew.toNat ≠ 2 := by omega
+      have hpayA0 : payA.toNat = 0 := by
+        rw [hpayA_nat, if_neg hk3_ne2]
+        exact hfr.2.2.2.2.2.2.2.2.1 (hnode.symm ▸ hk3)
+      obtain ⟨payv, hpayv_eq, hdom3_sA, hg, hm, hbe, heff3, hln3, hlf3, hlk3, hlp3, hlcb3, hlcl3⟩ :=
+        eval_finishBranchLen_none sA Nd nodew frw kw payA cbufw clenw
+          hsA_c hsA_AR hsA_N hnode_in (by rw [hsA_memW]; exact hk3)
+          hsA_ln hsA_lf hsA_lk hsA_lp hsA_lcb hsA_lcl hpayA0
+          (by rw [hite3_ev])
+      rw [hite3_ev] at hg hm hbe heff3 hln3 hlf3 hlk3 hlp3 hlcb3 hlcl3
+      dsimp only at hg hm hbe heff3 hln3 hlf3 hlk3 hlp3 hlcb3 hlcl3
+      have hbr_sA : branchRefsLenSum sA nodew.toNat 16 = branchRefsLenSum s nodew.toNat 16 := by
+        refine branchRefsLenSum_congr ((hN.1 nodew.toNat hnode_in).2.2.2.2.2.1 hk3)
+          (fun _ _ => by rw [hsA_memW])
+          (fun m _ => by unfold nodeRefBytes; rw [hsA_memW]) 16 (le_refl _)
+      have hpayv_fin : payv.toNat = finishPayloadLen s frw.toNat nodew.toNat := by
+        unfold finishPayloadLen
+        rw [if_neg hk3_ne2, if_pos hk3, hpayv_eq, hpayA0, hbr_sA, hsA_memW, hsA_memB]
+        have hp0 := hfr.2.2.2.2.2.2.2.2.1 (hnode.symm ▸ hk3)
+        omega
+      have hdom3_s : memW s nodew.toNat = 3 → 0 < memW s (nodew.toNat + 168) →
+          s.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW s (nodew.toNat + 160)))) := by
+        intro _ hpos
+        change entry.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW s (nodew.toNat + 160))))
+        rw [← heff_sA.memaddrs]
+        rw [hsA_memW] at hdom3_sA
+        exact hdom3_sA hpos
+      exact ⟨payv, hpayv_fin, hdom3_s, hg.trans hsA_g, hm.trans hsA_m, hbe.trans hsA_be,
+        heff_sA.trans heff3, hln3, hlf3, hlk3, hlp3, hlcb3, hlcl3⟩
+    · rw [if_neg hkw3] at hite3_ev
+      simp only [↓reduceIte, evaluateHOLFiniteState_skip] at hite3_ev
+      injection hite3_ev with _ hst_eq
+      subst hst_eq
+      have hk_ne3 : memW s nodew.toNat ≠ 3 := by
+        intro hk3; apply hkw3; apply BitVec.eq_of_toNat_eq; rw [hkw_nat, hk3]; rfl
+      have hpayA_fin : payA.toNat = finishPayloadLen s frw.toNat nodew.toNat := by
+        unfold finishPayloadLen
+        by_cases hk2 : memW s nodew.toNat = 2
+        · rw [if_pos hk2, hpayA_nat, if_pos hk2]
+        · rw [if_neg hk2, if_neg hk_ne3, hpayA_nat, if_neg hk2]
+      exact ⟨payA, hpayA_fin, fun hk3 => absurd hk3 hk_ne3, hsA_g, hsA_m, hsA_be,
+        heff_sA, hsA_ln, hsA_lf, hsA_lk, hsA_lp, hsA_lcb, hsA_lcl⟩
+  obtain ⟨payv, hpayv_nat, hdom3_s, hst_g, hst_m, hst_be, heff_st,
+    hst_ln, hst_lf, hst_lk, hst_lp, hst_lcb, hst_lcl⟩ := hst_char
+  have hst_AR : ArenaReady st := heff_st.arena
+  have hst_c : st.code = originalRuntimeCode := hst_AR.1.code
+  have hst_ma : st.memaddrs = s.memaddrs := heff_st.memaddrs
+  have hst_memW : memW st = memW s := by ext a; unfold memW; rw [hst_m]
+  have hst_memB : memB st = memB s := by ext a; unfold memB; rw [hst_m, hst_be]
+  have hst_globN : ∀ nm, globN st nm = globN s nm := fun nm => by simp [globN, hst_g]
+  obtain ⟨hst_N, hst_ext⟩ :=
+    nodeHeap_of_heapByteEff_disj hent_AR hent_N heff_st (fun _ h => by simp at h)
+  have hst_kc_eq : ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion st gs = bufferRegion s gs := by
+    intro gs _
+    unfold bufferRegion; rw [hst_globN]
+  have hst_kcIvls : keccakBufIvls st = keccakBufIvls s := by
+    simp only [keccakBufIvls, hst_kc_eq ("keccak_pad", 136) (by decide),
+      hst_kc_eq ("keccak_st", 200) (by decide)]
+  have hst_KS : KeccakBufsSafe st Nd :=
+    keccakBufsSafe_of_grows hKS ⟨by rw [hst_globN], by rw [hst_globN]⟩ hst_kc_eq hst_ext
+  have hst_vs : NodeValuesSafe sp0 st Nd := by
+    have heff_s_st : HeapByteEff s st
+        (nodeCacheIvls Nd ++ keccakBufIvls s ++ []) ["heap_ptr"] :=
+      ((HeapByteEff.refl hAR _ ["heap_ptr"]).locals_clock entry.locals entry.clock).trans
+        (heff_st.mono (fun _ h => by simp at h) (fun _ h => h))
+    exact nodeValuesSafe_of_heapByteEff hAR hN hKS (by decide) (by decide) heff_s_st
+      (fun _ h => by simp at h) hvs
+  have hpay_pos : 1 ≤ payv.toNat := by
+    rw [hpayv_nat, ← hnode]; exact finishPayloadLen_pos s Nd frw.toNat hfr
+  have hpay_lt : payv.toNat < 2 ^ 42 := by
+    rw [hpayv_nat, ← hnode]; exact finishPayloadLen_lt s Nd frw.toNat hN hfr
+  have hfw_st_eq : finishWriteLen st frw.toNat nodew.toNat =
+      finishWriteLen s frw.toNat nodew.toNat := by
+    unfold finishWriteLen
+    have hbr_st : memW s nodew.toNat = 3 →
+        branchRefsLenSum st nodew.toNat 16 = branchRefsLenSum s nodew.toNat 16 := fun hk3 =>
+      branchRefsLenSum_congr ((hN.1 nodew.toNat hnode_in).2.2.2.2.2.1 hk3)
+        (fun _ _ => by rw [hst_memW])
+        (fun m _ => by unfold nodeRefBytes; rw [hst_memW]) 16 (le_refl _)
+    have hnrb_st : nodeRefBytes st (memW s (nodew.toNat + 48)) =
+        nodeRefBytes s (memW s (nodew.toNat + 48)) := by
+      unfold nodeRefBytes; rw [hst_memW]
+    by_cases hk3 : memW s nodew.toNat = 3
+    · simp [hst_memW, hst_memB, hk3, hbr_st hk3]
+    · simp [hst_memW, hst_memB, hk3, hnrb_st]
+  have hpay_eq_write : payv.toNat = finishWriteLen st frw.toNat nodew.toNat := by
+    rw [hfw_st_eq, hpayv_nat, ← hnode, (finishWriteLen_eq_payload s Nd frw.toNat hfr).symm]
+  have hclen60 : (memW st nodew.toNat = 1 ∨ memW st nodew.toNat = 2) → clenw.toNat < 2 ^ 60 := by
+    rw [hst_memW, hcl_nat]
+    have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hAR.2.2.1
+    have hlim60 : heapLimit < 2 ^ 60 := by decide
+    rintro (hk1 | hk2)
+    · have hin := (hfr.2.2.2.2.2.2.2.2.2.1 (hnode.symm ▸ hk1)).2.2.1
+      dsimp [Inside] at hin; omega
+    · have hin := (hfr.2.2.2.2.2.2.2.2.2.2.1 (hnode.symm ▸ hk2)).2.2.1
+      dsimp [Inside] at hin; omega
+  have hcb_in_st : (memW st nodew.toNat = 1 ∨ memW st nodew.toNat = 2) →
+      1 ≤ clenw.toNat ∧ Inside (cbufw.toNat, clenw.toNat) sourceBase (globN st "heap_ptr") := by
+    rw [hst_memW, hcb_nat, hcl_nat, hst_globN]
+    rintro (hk1 | hk2)
+    · have hl := hfr.2.2.2.2.2.2.2.2.2.1 (hnode.symm ▸ hk1)
+      exact ⟨hl.1, hl.2.2.1⟩
+    · have he := hfr.2.2.2.2.2.2.2.2.2.2.1 (hnode.symm ▸ hk2)
+      exact ⟨he.1, he.2.2.1⟩
+  have hdom1_st : memW st nodew.toNat = 1 → 0 < memW st (nodew.toNat + 56) →
+      st.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW st (nodew.toNat + 48)))) := by
+    rw [hst_memW, hst_ma]
+    intro hk1 hpos
+    have hl := (hfr.2.2.2.2.2.2.2.2.2.1 (hnode.symm ▸ hk1)).2.2.2.2.2.2
+    rw [hnode] at hl
+    exact hl hpos
+  have hdom3_st : memW st nodew.toNat = 3 → 0 < memW st (nodew.toNat + 168) →
+      st.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW st (nodew.toNat + 160)))) := by
+    rw [hst_memW, hst_ma]
+    exact hdom3_s
+  obtain ⟨hrv0, hlBv, offF, hhl_eq, hhl1, hhl9, hoffF_nat, hbuf_lim, hbuf_disj,
+    heff_fin, hhp_lt, hN_fin, hext_fin, hKS_fin, h8_fin, h16_fin, hother_fin, hword_fin⟩ :=
+    eval_finRest_returned sp0 st Nd nodew frw kw payv cbufw clenw rv
+      hst_c hst_AR hst_N hst_KS hst_vs (by rw [hst_globN]; exact hsp_le_sp0)
+      hnode_in (by rw [hst_memW]; exact hk123) (by rw [hst_memW]; exact hkw_nat)
+      hpay_pos hpay_lt hpay_eq_write
+      (by rw [hst_memW]; exact hcb_nat) (by rw [hst_memW]; exact hcl_nat)
+      hclen60 hcb_in_st hdom1_st hdom3_st
+      hst_ln hst_lf hst_lk hst_lp hst_lcb hst_lcl hret
+  set postFin := (evaluateHOLFiniteState st finRest).2
+  have hinner_2 : (evaluateHOLFiniteState entry finishAfterLoads).2 = postFin := by
+    rw [finishAfterLoads_eq_finLoadsRest, finLoadsRest, evaluateHOLFiniteState_seq_line780,
+      hev_ite2]; dsimp only
+    rw [evaluateHOLFiniteState_seq_line780, hev_ite3]
+  let outer2 := (evaluateHOLFiniteState s
+    (sourceFnBody Guest.Software.guestFn__node_rlp_finish)).2
+  have hom : outer2.memory = postFin.memory := hloads_m.trans (congrArg (·.memory) hinner_2)
+  have hog : outer2.globals = postFin.globals := hloads_g.trans (congrArg (·.globals) hinner_2)
+  have hob : outer2.be = postFin.be := hloads_be.trans (congrArg (·.be) hinner_2)
+  have homa : outer2.memaddrs = postFin.memaddrs := hloads_ma.trans (congrArg (·.memaddrs) hinner_2)
+  have hoc : outer2.code = postFin.code := hloads_c.trans (congrArg (·.code) hinner_2)
+  have hosh : outer2.shMemaddrs = postFin.shMemaddrs := hloads_sh.trans (congrArg (·.shMemaddrs) hinner_2)
+  have hoba : outer2.baseAddr = postFin.baseAddr := hloads_ba.trans (congrArg (·.baseAddr) hinner_2)
+  have homW : memW outer2 = memW postFin := by ext a; unfold memW; rw [hom]
+  have homB : memB outer2 = memB postFin := by ext a; unfold memB; rw [hom, hob]
+  have hogN : ∀ nm, globN outer2 nm = globN postFin nm := fun nm => by simp [globN, hog]
+  have hoAR : ArenaReady outer2 :=
+    ⟨guestInv_congr hoc homa hosh hoba heff_fin.arena.1,
+     arenaOK_congr_globals hog heff_fin.arena.2⟩
+  set totLen := hlBv.toNat + payv.toNat
+  have hdisj_s : ∀ o ∈ nodeExtents s Nd, Disj (globN s "heap_ptr", totLen) o := by
+    intro o ho
+    change o ∈ nodeExtents entry Nd at ho
+    rw [← hst_ext] at ho
+    simpa [hst_globN] using hbuf_disj o ho
+  have heff_s_outer : R16Shards.WkBlockTxEnc.HeapByteEff s outer2
+      ((globN s "heap_ptr", totLen) :: (nodeCacheIvls Nd ++ keccakBufIvls s)) ["heap_ptr"] := by
+    have heff_s_st : R16Shards.WkBlockTxEnc.HeapByteEff s st
+        ((globN s "heap_ptr", totLen) :: (nodeCacheIvls Nd ++ keccakBufIvls s)) ["heap_ptr"] :=
+      ((HeapByteEff.refl hAR _ ["heap_ptr"]).locals_clock entry.locals entry.clock).trans
+        (heff_st.mono (fun _ h => by simp at h) (fun _ h => h))
+    have heff_st_pf : R16Shards.WkBlockTxEnc.HeapByteEff st postFin
+        ((globN s "heap_ptr", totLen) :: (nodeCacheIvls Nd ++ keccakBufIvls s)) ["heap_ptr"] := by
+      simpa [hst_globN, hst_kcIvls] using heff_fin
+    have heff_s_pf := heff_s_st.trans heff_st_pf
+    refine ⟨hoAR, homa.trans heff_s_pf.memaddrs,
+      by rw [hogN]; exact heff_s_pf.hp_le,
+      by rw [hogN]; exact heff_s_pf.fp_eq,
+      by rw [hogN]; exact heff_s_pf.sp_le,
+      hob.trans heff_s_pf.be,
+      fun k hk => (heff_s_pf.globals k hk).trans (congrArg (fun g => g.lookup k) hog.symm),
+      fun a hne => heff_s_pf.out_dom a (hom ▸ hne),
+      fun a hne => heff_s_pf.cell_frame a (hom ▸ hne),
+      fun b hb hne => heff_s_pf.byte_frame b hb (homB ▸ hne)⟩
+  have hother_s : ∀ n ∈ Nd, n ≠ nodew.toNat → memW outer2 (n + 8) = memW s (n + 8) ∧
+      memW outer2 (n + 16) = memW s (n + 16) := by
+    intro n hn hne
+    rw [homW, ← hst_memW]
+    exact hother_fin n hn hne
+  have h8_s : memW outer2 (nodew.toNat + 8) = globN s "heap_ptr" := by
+    rw [homW, h8_fin, hst_globN]
+  have h16_s : memW outer2 (nodew.toNat + 16) = totLen := by
+    rw [homW, h16_fin, hoffF_nat]
+  have hword_s : ∀ n ∈ Nd, memW outer2 n = memW s n ∧
+      (1 ≤ memW s n → memW outer2 (n + 40) = memW s (n + 40)) ∧
+      (memW s n = 1 → memW outer2 (n + 48) = memW s (n + 48) ∧
+        memW outer2 (n + 56) = memW s (n + 56)) := by
+    intro n hn
+    rw [homW, ← hst_memW]
+    exact hword_fin n hn
+  have htot40 : totLen < 2 ^ 40 := by
+    have hlim40 : heapLimit < 2 ^ 40 := by decide
+    have := hbuf_lim
+    omega
+  obtain ⟨hoN, hoext⟩ : NodeHeap outer2 Nd ∧ nodeExtents outer2 Nd = nodeExtents s Nd := by
+    have heff_cache : R16Shards.WkBlockTxEnc.HeapByteEff s outer2
+        (nodeCacheIvls Nd ++ ((globN s "heap_ptr", totLen) :: keccakBufIvls s)) ["heap_ptr"] := by
+      refine heff_s_outer.mono (fun i hi _ => ?_) (fun _ h => h)
+      rcases List.mem_cons.1 hi with rfl | hr
+      · exact Or.inl ⟨(globN s "heap_ptr", totLen),
+          List.mem_append_right _ (List.Mem.head _), le_rfl, le_rfl⟩
+      · rcases List.mem_append.1 hr with hc | hkc
+        · exact Or.inl ⟨i, List.mem_append_left _ hc, le_rfl, le_rfl⟩
+        · exact Or.inl ⟨i, List.mem_append_right _ (List.Mem.tail _ hkc), le_rfl, le_rfl⟩
+    refine nodeHeap_of_heapByteEff_cache hAR hN heff_cache ?_ ?_
+    · intro e he o ho
+      rcases List.mem_cons.1 he with rfl | hkc
+      · exact hdisj_s o ho
+      · exact keccakBufIvls_disj_of_safe hKS e hkc o ho
+    · intro n hn
+      by_cases hnn : n = nodew.toNat
+      · subst hnn; rw [h16_s]; exact htot40
+      · rw [(hother_s n hn hnn).2]; exact (hN.1 n hn).2.2.2.2.2.2.2.1
+  have hoKS : KeccakBufsSafe outer2 Nd := by
+    have hkc_eq : ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+        bufferRegion outer2 gs = bufferRegion s gs := by
+      intro gs hgs
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hgs
+      rcases hgs with rfl | rfl
+      · unfold bufferRegion globN
+        rw [← heff_s_outer.globals (ofString "keccak_pad") (by decide)]
+      · unfold bufferRegion globN
+        rw [← heff_s_outer.globals (ofString "keccak_st") (by decide)]
+    exact keccakBufsSafe_of_grows hKS ⟨heff_s_outer.hp_le, heff_s_outer.sp_le⟩ hkc_eq hoext
+  have hoVS : NodeValuesSafe sp0 outer2 Nd := by
+    have heff_vs : R16Shards.WkBlockTxEnc.HeapByteEff s outer2
+        (nodeCacheIvls Nd ++ keccakBufIvls s ++ [(globN s "heap_ptr", totLen)]) ["heap_ptr"] := by
+      refine heff_s_outer.mono (fun i hi _ => ?_) (fun _ h => h)
+      rcases List.mem_cons.1 hi with rfl | hr
+      · exact Or.inl ⟨(globN s "heap_ptr", totLen),
+          List.mem_append_right _ (List.Mem.head _), le_rfl, le_rfl⟩
+      · exact Or.inl ⟨i, List.mem_append_left _ hr, le_rfl, le_rfl⟩
+    refine nodeValuesSafe_of_heapByteEff hAR hN hKS (by decide) (by decide) heff_vs ?_ hvs
+    intro e he _ o ho
+    simp only [List.mem_singleton] at he; subst he
+    exact hdisj_s o ho
+  refine ⟨hrv0, totLen, by dsimp [totLen]; omega, by rw [← hst_globN]; exact hbuf_lim,
+    hdisj_s, heff_s_outer, ?_, hoN, hoext, hoKS, hoVS, h8_s, h16_s, hother_s, hword_s⟩
+  rw [hogN, ← hst_globN]; exact hhp_lt
+
+private theorem eval_call__node_rlp_finish_none {F : Type}
+    (sp0 : Nat) (s : PanSemStateFiniteExact 64 F) (Nd : List Nat)
+    (frExp nodeExp : ExpHOL 64) (frw nodew : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hAR : ArenaReady s) (hN : NodeHeap s Nd) (hKS : KeccakBufsSafe s Nd)
+    (hvs : NodeValuesSafe sp0 s Nd)
+    (hsp_le_sp0 : globN s "scratch_ptr" ≤ sp0)
+    (hfr_ev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) frExp =
+      some (.val (.word frw)))
+    (hnode_ev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) nodeExp =
+      some (.val (.word nodew)))
+    (hfr : ValidRlpFrame s Nd frw.toNat)
+    (hnode : memW s (frw.toNat + 8) = nodew.toNat)
+    (hnone : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "_node_rlp_finish") [frExp, nodeExp])).1 = none) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "_node_rlp_finish") [frExp, nodeExp])).2
+    post.locals = s.locals ∧
+    ∃ totLen : Nat,
+      1 ≤ totLen ∧
+      globN s "heap_ptr" + totLen ≤ heapLimit ∧
+      (∀ o ∈ nodeExtents s Nd, Disj (globN s "heap_ptr", totLen) o) ∧
+      R16Shards.WkBlockTxEnc.HeapByteEff s post
+        ((globN s "heap_ptr", totLen) :: (nodeCacheIvls Nd ++ keccakBufIvls s)) ["heap_ptr"] ∧
+      globN s "heap_ptr" < globN post "heap_ptr" ∧
+      NodeHeap post Nd ∧
+      nodeExtents post Nd = nodeExtents s Nd ∧
+      KeccakBufsSafe post Nd ∧
+      NodeValuesSafe sp0 post Nd ∧
+      memW post (nodew.toNat + 8) = globN s "heap_ptr" ∧
+      memW post (nodew.toNat + 16) = totLen ∧
+      (∀ n ∈ Nd, n ≠ nodew.toNat → memW post (n + 8) = memW s (n + 8) ∧
+        memW post (n + 16) = memW s (n + 16)) ∧
+      (∀ n ∈ Nd, memW post n = memW s n ∧
+        (1 ≤ memW s n → memW post (n + 40) = memW s (n + 40)) ∧
+        (memW s n = 1 → memW post (n + 48) = memW s (n + 48) ∧
+          memW post (n + 56) = memW s (n + 56))) := by
+  intro post; dsimp only [post]
+  rw [evaluateHOLFiniteState_call] at hnone ⊢
+  have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [frExp, nodeExp] = some [.val (.word frw), .val (.word nodew)] := by
+    simp [evalListHOLFinite, evalListHOLExact, hfr_ev, hnode_ev]
+  have hlk := pan_two_word_lookup s.code.lookup (ofString "_node_rlp_finish")
+    (ofString "fr") (ofString "node")
+    (sourceFnBody Guest.Software.guestFn__node_rlp_finish) frw nodew
+    (by decide) (by rw [hc]; exact lookup__node_rlp_finish)
+  simp only [ha, hlk] at hnone ⊢
+  by_cases hcz : s.clock = 0
+  · simp [hcz] at hnone
+  · simp only [hcz, ↓reduceIte] at hnone ⊢
+    set cmap := (HolFiniteMapExact.empty.update (ofString "fr", ValueHOL.val (.word frw))).update
+      (ofString "node", ValueHOL.val (.word nodew))
+    set ent := callEntryStateHOLFinite s cmap
+    have hent_fr : ent.locals.lookup (ofString "fr") = some (.val (.word frw)) := by
+      simp [ent, cmap, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "node" ≠ ofString "fr" by decide]
+    have hent_node : ent.locals.lookup (ofString "node") = some (.val (.word nodew)) := by
+      simp [ent, cmap, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    have hent_AR : ArenaReady ent := localsFree_arenaReady s _ _ hAR
+    rcases hcal : evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn__node_rlp_finish) with ⟨rc, sc⟩
+    simp only [hcal] at hnone ⊢
+    cases rc with
+    | none => simp at hnone
+    | some rc' =>
+      cases rc' with
+      | returned vc =>
+        obtain ⟨rfl, totLen, htot1, hbuf_lim, hdisj, heff_ent, hhp_lt,
+          hN_sc, hext_sc, hKS_sc, hVS_sc, h8_sc, h16_sc, hother_sc, hword_sc⟩ :=
+          eval__node_rlp_finish_returned sp0 ent Nd frw nodew vc
+            hc hent_AR hN hKS (nodeValuesSafe_with_locals sp0 s _ _ hvs)
+            hsp_le_sp0 hfr hnode hent_fr hent_node (by rw [hcal])
+        rw [hcal] at heff_ent hhp_lt hN_sc hext_sc hKS_sc hVS_sc h8_sc h16_sc hother_sc hword_sc
+        dsimp only at heff_ent hhp_lt hN_sc hext_sc hKS_sc hVS_sc h8_sc h16_sc hother_sc hword_sc
+        have hsh : shapeEqHOL (shapeOfHOLExact (.val (.word 0) : ValueHOL 64)) .one = true := by
+          simp [shapeOfHOLExact, shapeEqHOL]
+        dsimp only; rw [if_pos hsh]; dsimp only
+        have heff0 : R16Shards.WkBlockTxEnc.HeapByteEff s ent
+            ((globN s "heap_ptr", totLen) :: (nodeCacheIvls Nd ++ keccakBufIvls s)) ["heap_ptr"] :=
+          (HeapByteEff.refl hAR _ ["heap_ptr"]).locals_clock ent.locals ent.clock
+        have heff_out : R16Shards.WkBlockTxEnc.HeapByteEff s { sc with locals := s.locals }
+            ((globN s "heap_ptr", totLen) :: (nodeCacheIvls Nd ++ keccakBufIvls s)) ["heap_ptr"] :=
+          (heff0.trans heff_ent).locals_clock s.locals sc.clock
+        exact ⟨rfl, totLen, htot1, hbuf_lim, hdisj, heff_out, hhp_lt,
+          hN_sc, hext_sc, hKS_sc, hVS_sc, h8_sc, h16_sc, hother_sc, hword_sc⟩
+      | _ => simp at hnone
 end NodeRlpFillProof
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
