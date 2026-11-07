@@ -15772,4 +15772,121 @@ theorem fcKind2ErrTail_set_retdata_step {F : Type}
     rw [evaluateHOLFiniteState_seq_line780]
     dsimp only
     rw [hf]
+
+/-- Single-struct-parameter lookup helper (stack_push style): a code entry
+with one parameter of shape `comb [one, one, one, one]` looked up with a
+four-word `rStruct` argument yields the body, the one-binding locals map
+and the `.one` return shape. -/
+private theorem pan_rstruct_lookup {width : Nat} [NeZero width]
+    (code : MlS → Option (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
+    (name first : MlS) (body : ProgHOL width)
+    (w0 w1 w2 w3 : BitVec width)
+    (lookup : code name = some ([(first, .comb [.one, .one, .one, .one])], body, .one)) :
+    PanSemStateFiniteExact.lookupCodeHOLFinite code name
+        [.rStruct [.val (.word w0), .val (.word w1), .val (.word w2), .val (.word w3)]] =
+      some (body, HolFiniteMapExact.empty.update (first,
+        .rStruct [.val (.word w0), .val (.word w1), .val (.word w2), .val (.word w3)]), .one) := by
+  have raw : lookupCodeHOLExact code name
+      [.rStruct [.val (.word w0), .val (.word w1), .val (.word w2), .val (.word w3)]] =
+      some (body, (fun key => if key = first then
+        some (.rStruct [.val (.word w0), .val (.word w1), .val (.word w2), .val (.word w3)])
+        else none), .one) := by
+    simp [lookupCodeHOLExact, lookup, shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL]
+  unfold PanSemStateFiniteExact.lookupCodeHOLFinite
+  split
+  · rename_i missing
+    rw [raw] at missing
+    cases missing
+  · rename_i foundBody foundLocals foundShape found
+    have equal := Option.some.inj (found.symm.trans raw)
+    obtain ⟨rfl, rest⟩ := Prod.mk.inj equal
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj rest
+    apply congrArg (fun locals => some (foundBody, locals, ShapeHOL.one))
+    apply HolFiniteMapExact.ext
+    funext key
+    by_cases one : key = first
+    · subst key
+      simp [HolFiniteMapExact.lookup_update, FUPDATE, HolFiniteMapExact.empty, FEMPTY]
+    · simp [HolFiniteMapExact.lookup_update, FUPDATE, HolFiniteMapExact.empty, FEMPTY, one, Ne.symm one]
+
+/-- Rung 23: the `stack_push [rstruct [0, 0, 0, 0]]` call closing the kind-2
+error branch of `fcBranches`.  With `ev` in the globals and the frame words
+`ev+16` (sp), `ev+232` (cap), `ev+8` (stk) in memory (cell `ev+8` a valid
+memaddr), room on the stack (`sp + 1 ≤ cap ≤ 1024`), the call never
+returns; when it finishes quietly the branch post state `m4` keeps every
+non-memory field of `u` and writes the four zero words of the pushed
+record at `stk + sp*32 .. + 24` and the new stack pointer at `ev+16`. -/
+theorem fcKind2ErrTail_stack_push_step {F : Type}
+    (u : PanSemStateFiniteExact 64 F) (e sp cap stk : BitVec 64)
+    (hcode : u.code = originalRuntimeCode)
+    (he : u.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hsp : u.memory (e + 16) = .word sp)
+    (hcap : u.memory (e + 232) = .word cap)
+    (hstk : u.memory (e + 8) = .word stk)
+    (hd8 : u.memaddrs (e + 8))
+    (hroom : sp.toNat + 1 ≤ cap.toNat)
+    (hcap_le : cap.toNat ≤ 1024)
+    (hnt : (evaluateHOLFiniteState u
+        (.call (some (none, none)) (ofString "stack_push")
+          [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])).1 ≠
+      some .timeOut) :
+    (∀ w, (evaluateHOLFiniteState u
+        (.call (some (none, none)) (ofString "stack_push")
+          [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])).1 ≠
+      some (.returned w)) ∧
+    ((evaluateHOLFiniteState u
+        (.call (some (none, none)) (ofString "stack_push")
+          [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])).1 = none →
+      ∃ m4, m4 = (evaluateHOLFiniteState u
+          (.call (some (none, none)) (ofString "stack_push")
+            [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])).2 ∧
+        m4.code = u.code ∧
+        m4.memaddrs = u.memaddrs ∧
+        m4.shMemaddrs = u.shMemaddrs ∧
+        m4.baseAddr = u.baseAddr ∧
+        m4.be = u.be ∧
+        m4.globals = u.globals ∧
+        m4.memory = Wave8M19.Htab.updW
+            (updW4 u.memory (stk + sp * 32) 0#64 0#64 0#64 0#64) (e + 16) (sp + 1)) := by
+  classical
+  obtain ⟨hnret, hnone_facts, _⟩ :=
+    call0_outcome_fc (fname := ofString "stack_push")
+      (args := [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]]) hnt
+  refine ⟨hnret, ?_⟩
+  · intro hfin
+    obtain ⟨values, body, callee, ret, v, cpost, hargs, hl, hrun, hpost⟩ := hnone_facts hfin
+    have hargs2 : evalListHOLFinite u
+        (h := fun a => Classical.propDecidable (u.memaddrs a))
+        [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]] =
+      some [.rStruct [.val (.word 0#64), .val (.word 0#64),
+        .val (.word 0#64), .val (.word 0#64)]] := by
+      simp [evalListHOLFinite, evalListHOLExact, evalHOLExact]
+    have hv := Option.some.inj (hargs2.symm.trans hargs)
+    subst hv
+    have hlook := pan_rstruct_lookup u.code.lookup (ofString "stack_push")
+      (ofString "v") (sourceFnBody Guest.Software.guestFn_stack_push) 0#64 0#64 0#64 0#64
+      (by rw [hcode]; exact InitECandidate.Solver.Wave8GuestInv.R14Shards.OpHandlersA.lookup_stack_push)
+    rw [hlook] at hl
+    injection hl with hl1
+    injection hl1 with hl2 hl3
+    injection hl3 with hl4 hl5
+    subst hl2; subst hl4; subst hl5
+    set callee' : HolFiniteMapExact MlS (ValueHOL 64) :=
+      HolFiniteMapExact.empty.update (ofString "v",
+        .rStruct [.val (.word 0#64), .val (.word 0#64), .val (.word 0#64), .val (.word 0#64)]) with hcallee
+    set entry : PanSemStateFiniteExact 64 F := callEntryStateHOLFinite u callee' with hentry
+    have hv' : entry.locals.lookup (ofString "v") =
+        some (.rStruct [.val (.word 0#64), .val (.word 0#64),
+          .val (.word 0#64), .val (.word 0#64)]) := by
+      simp [hentry, hcallee, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    have he_e : entry.globals.lookup (ofString "ev") = some (.val (.word e)) := he
+    have hsp_e : entry.memory (e + 16) = .word sp := hsp
+    have hcap_e : entry.memory (e + 232) = .word cap := hcap
+    have hstk_e : entry.memory (e + 8) = .word stk := hstk
+    have hd8_e : entry.memaddrs (e + 8) := hd8
+    have hspush := stack_push_run entry e sp cap stk 0#64 0#64 0#64 0#64
+      he_e hv' hsp_e hcap_e hstk_e hd8_e hroom hcap_le v (congrArg Prod.fst hrun)
+    rw [congrArg Prod.snd hrun] at hspush
+    exact ⟨{ cpost with locals := u.locals }, hpost.symm, hspush.1, hspush.2.1, hspush.2.2.1,
+      hspush.2.2.2.1, hspush.2.2.2.2.1, hspush.2.2.2.2.2⟩
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
