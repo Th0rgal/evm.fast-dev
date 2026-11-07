@@ -10403,11 +10403,12 @@ def FrameNewRich {F : Type} (s : PanSemStateFiniteExact 64 F) (m : BitVec 64)
       (globN s "heap_ptr", globN p "heap_ptr" - globN s "heap_ptr")) ∧
     e.toNat % 8 = 0 ∧ stk.toNat % 8 = 0 ∧ l.toNat % 8 = 0 ∧ q.toNat % 8 = 0 ∧
     tb.toNat % 8 = 0 ∧
-    globN p "scratch_ptr" ≤ tb.toNat ∧ tb.toNat ≤ q.toNat ∧ q.toNat + 32 ≤ l.toNat ∧
+    globN p "scratch_ptr" ≤ q.toNat ∧ tb.toNat ≤ q.toNat ∧ q.toNat + 32 ≤ l.toNat ∧
     l.toNat + 24 ≤ stk.toNat ∧ stk.toNat + 1024 ≤ e.toNat ∧
     e.toNat + 280 ≤ globN s "scratch_ptr" ∧
-    globN p "frame_mem_ptr" ≤ q.toNat ∧ globN p "frame_mem_ptr" ≤ tb.toNat ∧
+    globN p "frame_mem_ptr" ≤ q.toNat ∧
     memW p (e.toNat + 24) + 1024 ≤ globN p "frame_mem_ptr" ∧
+    memW p (e.toNat + 24) % 8 = 0 ∧
     globN p "frame_mem_ptr" ≤ stk.toNat ∧
     memW p (e.toNat + 8) = stk.toNat ∧ memW p (e.toNat + 232) = 32 ∧
     memW p (e.toNat + 16) = 0 ∧ memW p (e.toNat + 32) = 0 ∧ memW p (e.toNat + 192) = 0 ∧
@@ -10719,6 +10720,50 @@ theorem TbOK.congr {F : Type} {s t t' : PanSemStateFiniteExact 64 F} {tb : Nat} 
     · simp only [hgl]
       exact hzo
 
+/-- Transport of the frozen table facts across an abstract record store whose memory is a
+single-cell update at `e + k` (the `FNRL.storeFinal` continuation states). -/
+theorem TbOK.storeAbs {F : Type} {s t t' : PanSemStateFiniteExact 64 F} {tb : Nat} {e : BitVec 64}
+    {k : Nat} {w' : BitVec 64} (h : TbOK s t tb e) (hG : GuestInv t) (hG' : GuestInv t')
+    (hk : k < 280) (hlt : e.toNat + 280 < 2 ^ 64)
+    (hmem : t'.memory = updW t.memory (e + BitVec.ofNat 64 k) w')
+    (hgl : ∀ n, globN t' n = globN t n) : TbOK s t' tb e :=
+  TbOK.congr (TbOK.store h hG k w' hk hlt)
+    (guestInv_congr (s := t) rfl rfl rfl rfl hG) hG'
+    (fun a => congrArg (fun f => f a) hmem) (fun n => hgl n)
+
+/-- The fresh deletion table cannot alias a message-resident sub-table `memW s (m + mk)`:
+the latter is allocated in the entry arena (heap below the entry `heap_ptr`, scratch at or
+above the entry `scratch_ptr`), while the former either lives in memory grown since `t22`
+or, being entirely below `e`, far below the entry `scratch_ptr`. -/
+theorem TbOK.ne_table {F : Type} {s t22 t23 : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {tb mk : Nat} (hTb : TbOK t22 t23 tb e) (hI : FNR s t23 m e) (hI22 : FNR s t22 m e)
+    (hT : Allocated s (memW s (m.toNat + mk), 88)) : tb ≠ memW s (m.toNat + mk) := by
+  intro hcon
+  obtain ⟨-, -, -, -, hfp, hlast⟩ := hTb
+  have hi : (tb, 88) ∈ htabFootprint t23 tb := by simp [htabFootprint]
+  have h5 : tb + 88 ≤ e.toNat := hfp _ hi
+  obtain ⟨-, hzo⟩ := hlast _ hi
+  obtain ⟨-, -, -, ⟨-, hA23⟩, -, -, h7, -, -, hhp3, -, -, -, -, -⟩ := hI
+  obtain ⟨-, -, -, -, -, -, -, -, -, hhp22, -, -, -, -, -⟩ := hI22
+  have hlim : heapLimit = scratchStart := rfl
+  have hA231 := hA23.2.1
+  have hA232 := hA23.2.2.1
+  have hA233 := hA23.2.2.2.1
+  unfold Allocated at hT
+  rcases hT with hTheap | hTscr
+  · have hlo := hTheap.1
+    have hhi := hTheap.2
+    rcases hzo with hzoheap | hzosc
+    · have hz1 := hzoheap.1
+      have hz2 := hzoheap.2
+      omega
+    · have hz1 := hzosc.1
+      have hz2 := hzosc.2
+      omega
+  · have hlo := hTscr.1
+    have hhi := hTscr.2
+    omega
+
 /-- A store whose address lies inside a kept interval preserves the write frame. -/
 theorem frameOutside_store {F : Type} {s t : PanSemStateFiniteExact 64 F} {keep : List Ivl}
     {fresh : Ivl} (h : FrameOutside s t keep fresh) {X w : BitVec 64}
@@ -10886,7 +10931,8 @@ theorem FNRL.frameMemAlloc {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e :
     {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep) {cont : ProgHOL 64}
     {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop} (hΦ : LocIns Φ)
     (hb : ∀ (t' : PanSemStateFiniteExact 64 F) (p : BitVec 64), p.toNat = globN t "frame_mem_ptr" →
-      globN t' "frame_mem_ptr" = globN t "frame_mem_ptr" + 1024 → FNRL s t' m e fv keep →
+      globN t' "frame_mem_ptr" = globN t "frame_mem_ptr" + 1024 →
+      globN t' "scratch_ptr" = globN t "scratch_ptr" → FNRL s t' m e fv keep →
       t'.locals.lookup (ofString "mem") = some (.val (.word p)) →
       (∀ y, y ≠ ofString "mem" → t'.locals.lookup y = t.locals.lookup y) → Ret t' cont Φ) :
     Ret t (.decCall (ofString "mem") .one (ofString "frame_mem_alloc")
@@ -10935,7 +10981,8 @@ theorem FNRL.frameMemAlloc {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e :
     intro y hy; rw [← hT]; exact setVar_lookup_ne _ _ _ _ hy
   have Tme : T.memaddrs = t.memaddrs := by rw [← hT, hpost]; rfl
   have Tbe : T.be = t.be := by rw [← hT, hpost]; rfl
-  refine hb T fp gfp.symm ?_ ?_ hxl hyl
+  have hgsT0 : globN T "scratch_ptr" = sp.toNat := by unfold globN; rw [hsq]
+  refine hb T fp gfp.symm ?_ (hgsT0.trans gsp.symm) ?_ hxl hyl
   · have hfqT : globN T "frame_mem_ptr" = q.toNat := by unfold globN; rw [hfq]
     rw [hfqT, hq, gfp]
   · have hgsT : globN T "scratch_ptr" = sp.toNat := by unfold globN; rw [hsq]
@@ -11284,6 +11331,7 @@ theorem FNRL.htabNewScratch {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e 
       t'.locals.lookup (ofString "del") = some (.val (.word w)) →
       (∀ y, y ≠ ofString "del" → t'.locals.lookup y = t.locals.lookup y) →
       globN t' "frame_mem_ptr" = globN t "frame_mem_ptr" →
+      globN t' "scratch_ptr" ≤ globN t "scratch_ptr" →
       (∀ a : BitVec 64, ¬ CellHits a.toNat
           (globN t' "scratch_ptr", globN t "scratch_ptr" - globN t' "scratch_ptr") →
         ¬ CellHits a.toNat (globN t "heap_ptr", globN t' "heap_ptr" - globN t "heap_ptr") →
@@ -11326,7 +11374,8 @@ theorem FNRL.htabNewScratch {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e 
     unfold globN
     rw [← hkeep (ofString "frame_mem_ptr") (by decide)]
     rfl
-  refine hb T w ?_ ?_ hxl hyl ((hGl "frame_mem_ptr").trans hfmpp) ?_
+  refine hb T w ?_ ?_ hxl hyl ((hGl "frame_mem_ptr").trans hfmpp)
+    (by rw [hGl "scratch_ptr"]; exact hgrow.2) ?_
   · have hgsT : globN T "scratch_ptr" = globN post "scratch_ptr" := hGl _
     have hghT : globN T "heap_ptr" = globN post "heap_ptr" := hGl _
     have hme0 := FNR.evalMem h3
