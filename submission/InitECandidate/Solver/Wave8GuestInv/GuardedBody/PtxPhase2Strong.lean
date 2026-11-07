@@ -20457,4 +20457,266 @@ theorem phase2_msgPrefix_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
   obtain ⟨h1, h2⟩ := hmain s hc hp hnt
   exact ⟨by omega, h2⟩
 
+/-! ## Segment B part 1½: `TxBacking` exit (`msg_new` tight frame)
+
+`msg_new` allocates 176 zeroed bytes and returns the fresh pointer. Its
+`WorldKeeps` contract keeps only first-level words, which cannot express the
+second-level list-header preservation that `TxBacking` needs. This section
+replays the alloc+memzero skeleton instead, producing the tight write frame
+`(heap_ptr, growth)`, and packages it as a `FunSpec` so the `DecCallResumeOn`
+machinery can consume it directly. -/
+
+/-- Phase 2's local shapes imply the master's Phase 4 local shapes. -/
+theorem phase2_localShapes4_of_2 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : PtxPhase2LocalShapes s) : R16Shards.PtxPhase4LocalShapes s := by
+  refine ⟨fun name hn => h.scalar name (by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl | rfl | rfl | rfl <;> simp), ?_, ?_⟩
+  · obtain ⟨a, b, c, d, hp⟩ := h.price
+    exact ⟨_, hp, by simp [shapeOfHOLExact]⟩
+  · obtain ⟨a, b, c, hp⟩ := h.intrinsic
+    exact ⟨_, hp, by simp [shapeOfHOLExact]⟩
+
+/-- The `msg_new` frame: fresh 176-byte block on a grown heap, caller `bo`
+preserved, and the only memory writes are the zeroed bytes of the fresh block
+itself (a `FrameOutside` over the exact growth interval). -/
+theorem phase2_msg_new_fresh_heap {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall (ofString "m") .one (ofString "alloc") [.const 176]
+        (.seq (.call (some (none, none)) (ofString "memzero")
+            [.var .local (ofString "m"), .const 176])
+          (.return (.var .local (ofString "m")))))).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "m") .one (ofString "alloc") [.const 176]
+        (.seq (.call (some (none, none)) (ofString "memzero")
+            [.var .local (ofString "m"), .const 176])
+          (.return (.var .local (ofString "m")))))).1) :
+    let post := (evaluateHOLFiniteState s
+      (.decCall (ofString "m") .one (ofString "alloc") [.const 176]
+        (.seq (.call (some (none, none)) (ofString "memzero")
+            [.var .local (ofString "m"), .const 176])
+          (.return (.var .local (ofString "m")))))).2
+    ArenaOK post ∧ globN post "bo" = globN s "bo" ∧
+    globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    FrameOutside s post [(globN s "scratch_ptr", 0)]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
+  dsimp only
+  set post := (evaluateHOLFiniteState s
+    (.decCall (ofString "m") .one (ofString "alloc") [.const 176]
+      (.seq (.call (some (none, none)) (ofString "memzero")
+          [.var .local (ofString "m"), .const 176])
+        (.return (.var .local (ofString "m")))))).2 with hpost_def
+  obtain ⟨hp, n, q, mid, hnexp, hhp_nat, hhp_al, hq_eq, hle, hq_hi, hq_al, hmid_hp,
+      hmid_glob, hmid_mem, hmid_loc, heff, hnt', hres1, heq'⟩ :=
+    R16Shards.WkBlockTxEnc.eval_decCall_alloc_resumes s "m" (.const 176)
+      (.seq (.call (some (none, none)) (ofString "memzero")
+          [.var .local (ofString "m"), .const 176])
+        (.return (.var .local (ofString "m"))))
+      [] ["heap_ptr"] hcode hW.1 (by simp) hnt hres
+  have hn176 : n = 176 := by simp [evalHOLExact] at hnexp; exact hnexp.symm
+  subst hn176
+  have h176_val : (176 : BitVec 64).toNat = 176 := by decide
+  rw [h176_val] at hq_eq
+  have hmid_ar : ArenaReady mid := heff.arena
+  have hmid_code : mid.code = originalRuntimeCode := hmid_ar.1.1
+  have hmid_G : GuestInv mid := hmid_ar.1
+  have hm_loc : mid.locals.lookup (ofString "m") = some (.val (.word hp)) := by
+    rw [hmid_loc]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  rw [evaluateHOLFiniteState_seq_line780] at hres1
+  rcases hmzCall : evaluateHOLFiniteState mid
+      (.call (some (none, none)) (ofString "memzero")
+        [.var .local (ofString "m"), .const 176]) with ⟨rmz, pmz⟩
+  rw [hmzCall] at hres1
+  have hargs_mz : evalListHOLFinite mid (h := fun a => Classical.propDecidable (mid.memaddrs a))
+      [.var .local (ofString "m"), .const 176] =
+      some [.val (.word hp), .val (.word 176)] := by
+    rw [evalListHOLFinite_eq_toExact]
+    simp [evalListHOLExact, evalHOLExact, hm_loc]
+  have hmzCall' := hmzCall
+  rw [evaluateHOLFiniteState_call, hargs_mz] at hmzCall'
+  dsimp only at hmzCall'
+  have hl_mz := GuestTrapAndLookup.pan_two_word_lookup mid.code.lookup (ofString "memzero")
+    (ofString "dst") (ofString "n") (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_memzero)
+    hp 176 (by decide)
+    (by rw [hmid_code]; exact InitECandidate.Solver.Wave8Contracts.M27.lookup_memzero)
+  rw [hl_mz] at hmzCall'; dsimp only at hmzCall'
+  split at hmzCall'
+  · injection hmzCall' with hr_eq _
+    subst hr_eq
+    rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+  · let mzEntry := callEntryStateHOLFinite mid
+      ((HolFiniteMapExact.empty.update (ofString "dst", .val (.word hp))).update
+        (ofString "n", .val (.word 176)))
+    have hmz_G : GuestInv mzEntry := guestInv_callEntry mid _ hmid_G
+    have hmz_dst : locN mzEntry "dst" = hp.toNat := by
+      simp [locN, mzEntry, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "n" ≠ ofString "dst" by decide]
+    have hmz_n : locN mzEntry "n" = 176 := by
+      simp [locN, mzEntry, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    rcases hmzBody : evaluateHOLFiniteState mzEntry
+        (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_memzero) with ⟨rb, smz⟩
+    have hmzBody' : evaluateHOLFiniteState
+        (callEntryStateHOLFinite mid
+          ((HolFiniteMapExact.empty.update (ofString "dst", .val (.word hp))).update
+            (ofString "n", .val (.word 176))))
+        (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_memzero) = (rb, smz) := hmzBody
+    rw [hmzBody'] at hmzCall'
+    have hrb_res : Resumes rb := by
+      cases rb with
+      | none =>
+        dsimp only at hmzCall'
+        injection hmzCall' with hr_eq _
+        subst hr_eq
+        rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+      | some r =>
+        cases r with
+        | returned v => exact Or.inl ⟨v, rfl⟩
+        | exception eid ev =>
+          dsimp only at hmzCall'; injection hmzCall' with hr_eq _
+          subst hr_eq
+          rcases hres1 with ⟨_, h⟩ | ⟨e', v', h, hne⟩
+          · simp at h
+          · simp at h; obtain ⟨rfl, rfl⟩ := h; exact Or.inr ⟨eid, ev, rfl, hne⟩
+        | _ =>
+          dsimp only at hmzCall'
+          injection hmzCall' with hr_eq _
+          subst hr_eq
+          rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+    have hframe := InitECandidate.Solver.Wave8Contracts.M08.memzero_body_frame mzEntry hmid_code hmz_G
+      (by rw [hmzBody]; exact hrb_res)
+    rw [hmzBody, hmz_dst, hmz_n] at hframe
+    dsimp only [InitECandidate.Solver.Wave8Contracts.M08.RegionWriteFrame] at hframe
+    obtain ⟨hc_mz, hma_mz, hsh_mz, hba_mz, hbe_mz, hg_mz, hfr_mz, hby_mz, hdwr_mz⟩ := hframe
+    have hg_mz' : smz.globals = mid.globals := hg_mz
+    have hfr_mz' : FrameOutside mid smz [(hp.toNat, 176)] (0, 0) := hfr_mz
+    have hpmz : pmz.memory = smz.memory ∧ pmz.globals = smz.globals := by
+      cases rb with
+      | none =>
+        dsimp only at hmzCall'
+        injection hmzCall' with hr_eq _
+        subst hr_eq
+        rcases hres1 with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+      | some r =>
+        cases r with
+        | returned v =>
+          dsimp only at hmzCall'; split at hmzCall'
+          · injection hmzCall' with _ hp_eq; subst hp_eq; exact ⟨rfl, rfl⟩
+          · injection hmzCall' with _ hp_eq; subst hp_eq; exact ⟨rfl, rfl⟩
+        | _ =>
+          dsimp only at hmzCall'; injection hmzCall' with _ hp_eq; subst hp_eq
+          exact ⟨rfl, rfl⟩
+    have hinner : (evaluateHOLFiniteState mid
+        (.seq (.call (some (none, none)) (ofString "memzero")
+            [.var .local (ofString "m"), .const 176])
+          (.return (.var .local (ofString "m"))))).2.memory = smz.memory ∧
+        (evaluateHOLFiniteState mid
+          (.seq (.call (some (none, none)) (ofString "memzero")
+              [.var .local (ofString "m"), .const 176])
+            (.return (.var .local (ofString "m"))))).2.globals = smz.globals := by
+      rw [evaluateHOLFiniteState_seq_line780, hmzCall]
+      cases rmz with
+      | some _ => exact hpmz
+      | none =>
+        have hpmz_x : pmz.locals.lookup (ofString "m") = some (.val (.word hp)) := by
+          cases rb with
+          | none => simp at hmzCall'
+          | some r =>
+            cases r with
+            | returned v =>
+              dsimp only at hmzCall'; split at hmzCall'
+              · injection hmzCall' with _ hp_eq; subst hp_eq; exact hm_loc
+              · simp at hmzCall'
+            | _ => simp at hmzCall'
+        dsimp only
+        rw [evaluateHOLFiniteState_return]
+        simp only [evalHOLExact, hpmz_x, shapeOfHOLExact, sizeOfShapeWithContextHOL,
+          Nat.reduceLeDiff, ↓reduceIte, emptyLocalsHOLFinite]
+        exact hpmz
+    have hpost_mem : post.memory = (evaluateHOLFiniteState mid
+        (.seq (.call (some (none, none)) (ofString "memzero")
+            [.var .local (ofString "m"), .const 176])
+          (.return (.var .local (ofString "m"))))).2.memory := by
+      rw [hpost_def, heq']
+    have hpost_glob : post.globals = (evaluateHOLFiniteState mid
+        (.seq (.call (some (none, none)) (ofString "memzero")
+            [.var .local (ofString "m"), .const 176])
+          (.return (.var .local (ofString "m"))))).2.globals := by
+      rw [hpost_def, heq']
+    have hAok : ArenaOK post :=
+      arenaOK_congr (by rw [hpost_glob, hinner.2, hg_mz']) hmid_ar.2
+    have hpg : post.globals = s.globals.update (ofString "heap_ptr", .val (.word q)) := by
+      rw [hpost_glob, hinner.2, hg_mz', hmid_glob]
+    have hpost_hp : globN post "heap_ptr" = q.toNat := by
+      unfold globN; rw [hpg]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+    have hbo : globN post "bo" = globN s "bo" := by
+      unfold globN; rw [hpg]
+      simp [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "heap_ptr" ≠ ofString "bo" by decide]
+    have hgrow : globN s "heap_ptr" ≤ globN post "heap_ptr" := by
+      rw [hpost_hp, ← hhp_nat]; omega
+    refine ⟨hAok, hbo, hgrow, ?_⟩
+    intro a _ hgf
+    have hint2 : 176 = globN post "heap_ptr" - globN s "heap_ptr" := by
+      rw [hpost_hp, ← hhp_nat]
+      omega
+    rw [← hint2, ← hhp_nat] at hgf
+    have h1 : smz.memory a = mid.memory a :=
+      hfr_mz' a (fun i hi => by
+          simp only [List.mem_singleton] at hi; subst hi; exact hgf)
+        (by unfold CellHits; omega)
+    rw [hpost_mem, hinner.1]
+    exact h1.trans (congrFun hmid_mem a)
+
+/-- The `msg_new` frame as a `FunSpec`: the spec body is the source function,
+and the proof is the skeleton replay above. -/
+theorem phase2_msg_new_backing_spec :
+    FunSpec WorldOK
+      (fun st r post =>
+        Resumes r →
+        ArenaOK post ∧ globN post "bo" = globN st "bo" ∧
+        globN st "heap_ptr" ≤ globN post "heap_ptr" ∧
+        FrameOutside st post [(globN st "scratch_ptr", 0)]
+          (globN st "heap_ptr", globN post "heap_ptr" - globN st "heap_ptr"))
+      (ofString "msg_new") := by
+  have hlook : originalRuntimeCode.lookup (ofString "msg_new") =
+      some (sourceFunctionEntry Guest.Software.guestFn_msg_new).2 :=
+    originalRuntimeCode_lookup_of_guestAst_getElem 465 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_msg_new) rfl
+  exact ⟨_, _, _, hlook, fun {F} st hcode hW _ hnt hres =>
+    phase2_msg_new_fresh_heap st hcode hW hnt hres⟩
+
+/-- Message allocation carries both nonzero block-output backing pointers. -/
+theorem phase2_msg_new_txBacking :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) R16Shards.TxBacking
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup phase2_msg_new_backing_spec s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  obtain ⟨hAok, hbo, hgrow, hframe⟩ := hh (Or.inl ⟨v, rfl⟩)
+  have hAok : ArenaOK post := hAok
+  have hbo : globN post "bo" = globN s "bo" := hbo
+  have hgrow : globN s "heap_ptr" ≤ globN post "heap_ptr" := hgrow
+  have hframe : FrameOutside s post [(globN s "scratch_ptr", 0)]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := hframe
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  have hf : ∀ i ∈ fixedObjects s, i.2 ≠ 0 → Allocated s i ∧ WordsOK s i := fun i hi hn =>
+    (hw.2.2.1.1 i hi).resolve_left hn
+  have hbo_mem : (globN s "bo", 88) ∈ fixedObjects s := by
+    simpa [hp.2.1.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+  have hl_mem : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [fixedObjects, blockOutObjects, hp.2.1.bo_nz, hp.2.1.bo40]
+    · simp [fixedObjects, blockOutObjects, hp.2.1.bo_nz, hp.2.1.bo72]
+  have htx := R16Shards.PtxP34.txBacking_fresh_heap (s := s) (post := post) hp.1.1.2 hAok hp.2.2 hbo hgrow
+    (hf _ hbo_mem (by simp)).1 (hf _ hbo_mem (by simp)).2.1
+    (fun k hk => ⟨(hf _ (hl_mem k hk) (by simp)).1, (hf _ (hl_mem k hk) (by simp)).2.1⟩)
+    hframe
+  exact htx
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
