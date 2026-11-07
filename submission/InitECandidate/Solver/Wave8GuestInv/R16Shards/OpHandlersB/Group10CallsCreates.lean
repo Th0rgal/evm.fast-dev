@@ -15150,4 +15150,81 @@ theorem evmInv_of_head_gas_store_g10 {F : Type}
     rw [htab_hdr_eq hcell haS htb 0 (by omega)]; exact ⟨haS, hkl⟩
   · exact hgas
 
+/-! ### op_call: exact gas-accounting spec for `charge_gas`
+
+`epsA_charge_gas_any` hides the charged amount; the op_call walk needs it to track the
+regular-gas word through `charge_gas(need)`, `charge_gas(dl_cost)`, and
+`charge_gas(mcg.0)` up to the failure-path restore. -/
+
+theorem epsA_charge_gas_exact_g10 :
+    EvmPreservingSpecA (fun _ => True)
+      (fun entry _ post => ∃ amtV : BitVec 64,
+        entry.locals.lookup (ofString "amount") = some (.val (.word amtV)) ∧
+        post.globals = entry.globals ∧ evmR post + amtV.toNat = evmR entry)
+      (ofString "charge_gas") := by
+  refine ⟨_, _, _, M21.lookup_charge_gas, ?_⟩
+  intro F s _ hInv hWF _ ⟨vals, hl⟩ _
+  have hlen1 : ∃ v0, vals = [v0] := by
+    have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
+      originalRuntimeCode.lookup (ofString "charge_gas") vals _ _ _ hl
+    simp only [Flapjack.lookupCodeHOLExact, M21.lookup_charge_gas] at hx
+    rcases vals with _ | ⟨v0, _ | _⟩ <;> simp at hx
+    exact ⟨v0, rfl⟩
+  obtain ⟨v0, rfl⟩ := hlen1
+  obtain ⟨_, _, amtw, rfl, hamt⟩ := one_word_arg_lookup M21.lookup_charge_gas hl
+  have hcg := charge_gas_body_exactA s hInv hWF hamt
+  dsimp only at hcg ⊢
+  refine ⟨fun v hv => ?_, fun herr => ?_⟩
+  · obtain ⟨hIW, hg, hch, hR⟩ := hcg.1 v hv
+    refine ⟨hIW, hch, ?_, ⟨amtw, hamt, hg, hR⟩⟩
+    change _ + _ = _ at hR
+    omega
+  · obtain ⟨hIW, _, hch, hR⟩ := hcg.2 herr
+    exact ⟨hIW, hch, le_of_eq hR⟩
+
+/-- Store to the head frame's regular-gas word `ev+64` where the new value may EXCEED the old
+one (op_call's failure-path restore of `charge_gas(need) - stipend`).  The caller supplies all
+post-state facts via `hstep`: `EvmInv` (via `evmInv_of_head_gas_store_g10`), the chain, the
+head-memory well-formedness, the target predicate, and the new r-bound against `s0`. -/
+theorem HandlerRunA.seq_store_ev64_charged_g10 {F : Type} {s0 : PanSemStateFiniteExact 64 F}
+    {P Q : PanSemStateFiniteExact 64 F → Prop} {valExp : ExpHOL 64} {cont : ProgHOL 64}
+    (hval : ∀ (t : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      P t →
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) valExp = some v →
+      ∃ w : BitVec 64, v = .val (.word w))
+    (hstep : ∀ t (w : BitVec 64),
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) valExp =
+        some (.val (.word w)) →
+      EvmInv t → Group10.HeadMemChainWF t → P t → evmR t < evmR s0 →
+      EvmInv { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + 64)) w } ∧
+      Group10.HeadMemChainWF { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + 64)) w } ∧
+      evmChain { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + 64)) w } = evmChain t ∧
+      Q { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + 64)) w } ∧
+      evmR { t with memory := R14Shards.OpHandlersA.updW t.memory (BitVec.ofNat 64 (globN t "ev" + 64)) w } < evmR s0)
+    (hcont : HandlerRunA s0 Q true cont) :
+    HandlerRunA s0 P true
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 64]) valExp) cont) := by
+  intro t hc hInv hWF hlen hR hP hnt
+  have hR_lt : evmR t < evmR s0 := by simpa using hR
+  obtain ⟨hb_ev, evw, hevw, hevw_nat⟩ := ev_word_bounds hInv
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  rcases hst : evaluateHOLFiniteState t
+      (.store (.op .add [.var .global (ofString "ev"), .const 64]) valExp) with ⟨r1, t1⟩
+  simp only [hst] at hnt ⊢
+  cases r1 with
+  | some res1 =>
+    have herr := store_some_eq_error_g10 hst
+    subst herr
+    exact opDispatchPostA_error s0 t1
+  | none =>
+    dsimp only at hnt ⊢
+    obtain ⟨w, hw_ev, ht1_eq⟩ := R14Shards.OpHandlersA.store_global_off_word (t := t) (post := t1)
+      (gname := "ev") (gbase := globN t "ev") (off := 64) hevw hevw_nat (by omega)
+      (fun v hv => hval t v hP hv) hst
+    subst ht1_eq
+    obtain ⟨hInv1, hWF1, hch1, hQ1, hR1⟩ := hstep t w hw_ev hInv hWF hP hR_lt
+    refine hcont _ ?_ hInv1 hWF1 ?_ hR1 hQ1 hnt
+    · exact hc
+    · rw [hch1]; exact hlen
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
