@@ -12461,7 +12461,7 @@ private theorem shaNcrCallees_good :
         some (body, callee, rs) →
       noCatchableRaise shaNcrCallees body = true := by
   intro f hf values body callee rs hfound
-  obtain ⟨_, _, hinst⟩ := lookupCode_installed hfound
+  obtain ⟨_, _, hinst⟩ := InitECandidate.Solver.GuestGlobalKeep.lookupCode_installed hfound
   simp only [shaNcrCallees, Bool.or_eq_true, beq_iff_eq] at hf
   rcases hf with (((((((((((rfl | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl)
   · rw [lookup_trap_with_local] at hinst
