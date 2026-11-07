@@ -10199,6 +10199,324 @@ private theorem finishWriteLoop_ne_returned {F : Type} :
     · simp only [hlt, ↓reduceIte] at hret
       simp at hret
 
+
+/-! ## Cycle 2b: `_node_rlp_finish` rest-tail (`finRest`) evaluation -/
+
+/-! ### Shared closing block for the `finRest` branches
+
+Given the state `sM` just before the two final stores (with the byte-effect
+covering the node hash slots plus the freshly allocated rlp buffer plus the
+keccak scratch buffers), this thread the two stores and the `return 0` into the
+full `finRest` post-state and produces every component of the `finRest`
+conclusion bundle. -/
+
+private theorem finRest_tail_close {F : Type}
+    (st : PanSemStateFiniteExact 64 F) (Nd : List Nat) (nodew bufw payv : BitVec 64)
+    (hlBv : BitVec 64)
+    (hhl1 : 1 ≤ hlBv.toNat)
+    (htot40 : hlBv.toNat + payv.toNat < 2 ^ 40)
+    (hAR : ArenaReady st) (hN : NodeHeap st Nd) (hKS : KeccakBufsSafe st Nd)
+    (hnode_in : nodew.toNat ∈ Nd)
+    (hbufw0 : bufw.toNat = globN st "heap_ptr")
+    (hbuf_disj : ∀ o ∈ nodeExtents st Nd,
+      Disj (globN st "heap_ptr", hlBv.toNat + payv.toNat) o)
+    (sM : PanSemStateFiniteExact 64 F)
+    (heffB : R16Shards.WkBlockTxEnc.HeapByteEff st sM
+      (Nd.map (fun n => (n + 24, 8)) ++
+        ([(globN st "heap_ptr", hlBv.toNat + payv.toNat)] ++ keccakBufIvls sM))
+      ["heap_ptr"])
+    (hW_M : ∀ n ∈ Nd, ∀ off : Nat, off % 8 = 0 → off + 8 ≤ nodeSize (memW st n) →
+      off ≠ 24 → memW sM (n + off) = memW st (n + off))
+    (hM_ln : sM.locals.lookup (ofString "node") = some (.val (.word nodew)))
+    (hM_lb : sM.locals.lookup (ofString "buf") = some (.val (.word bufw)))
+    (hoffF : ∃ offF : BitVec 64, sM.locals.lookup (ofString "off") = some (.val (.word offF)) ∧
+      offF.toNat = hlBv.toNat + payv.toNat)
+    (hM_hp : globN st "heap_ptr" < globN sM "heap_ptr")
+    (hret2 : (evaluateHOLFiniteState sM
+      (.seq (.store (.op .add [.var .local (ofString "node"), .const 8])
+          (.var .local (ofString "buf")))
+        (.seq (.store (.op .add [.var .local (ofString "node"), .const 16])
+            (.var .local (ofString "off")))
+          (.return (.const 0))))).1 = some (.returned (.val (.word 0))))
+    (post : PanSemStateFiniteExact 64 F)
+    (Lv : HolFiniteMapExact MlS (ValueHOL 64))
+    (hpost : post = {(evaluateHOLFiniteState sM
+      (.seq (.store (.op .add [.var .local (ofString "node"), .const 8])
+          (.var .local (ofString "buf")))
+        (.seq (.store (.op .add [.var .local (ofString "node"), .const 16])
+            (.var .local (ofString "off")))
+          (.return (.const 0))))).2 with locals := Lv}) :
+    ∃ offF : BitVec 64,
+      offF.toNat = hlBv.toNat + payv.toNat ∧
+      R16Shards.WkBlockTxEnc.HeapByteEff st post
+        ((globN st "heap_ptr", hlBv.toNat + payv.toNat) ::
+          (nodeCacheIvls Nd ++ keccakBufIvls st)) ["heap_ptr"] ∧
+      globN st "heap_ptr" < globN post "heap_ptr" ∧
+      NodeHeap post Nd ∧
+      nodeExtents post Nd = nodeExtents st Nd ∧
+      KeccakBufsSafe post Nd ∧
+      memW post (nodew.toNat + 8) = globN st "heap_ptr" ∧
+      memW post (nodew.toNat + 16) = offF.toNat ∧
+      (∀ n ∈ Nd, n ≠ nodew.toNat → memW post (n + 8) = memW st (n + 8) ∧
+        memW post (n + 16) = memW st (n + 16)) ∧
+      (∀ n ∈ Nd, memW post n = memW st n ∧
+        (1 ≤ memW st n → memW post (n + 40) = memW st (n + 40)) ∧
+        (memW st n = 1 → memW post (n + 48) = memW st (n + 48) ∧
+          memW post (n + 56) = memW st (n + 56))) := by
+  obtain ⟨offF, hM_loff, hoffF_nat⟩ := hoffF
+  obtain ⟨hk_le3, halloc_nd, hin_nd, hw_nd, _, _, _, _, _, _⟩ := hN.1 nodew.toNat hnode_in
+  have hns32 := nodeSize_ge32 (memW st nodew.toNat)
+  have hlim_he : heapLimit ≤ heapEnd := by
+    rw [R16Shards.WkBlockTxEnc.heapEnd_val]; decide
+  have hhp_lim : globN st "heap_ptr" ≤ heapLimit := hAR.2.2.1
+  have hQpos : 0 < hlBv.toNat + payv.toNat := by omega
+  have hnode_hi : nodew.toNat + nodeSize (memW st nodew.toNat) ≤ heapLimit := by
+    have h2 := hin_nd.2
+    simp only [Inside, nodeIvl] at h2
+    omega
+  have hkeq : ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion sM gs = bufferRegion st gs := by
+    intro gs hgs
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hgs
+    rcases hgs with rfl | rfl
+    · unfold bufferRegion globN
+      rw [← heffB.globals (ofString "keccak_pad") (by decide)]
+    · unfold bufferRegion globN
+      rw [← heffB.globals (ofString "keccak_st") (by decide)]
+  have hnv64 : nodew.toNat < 2 ^ 64 := nodew.isLt
+  -- no node record overlaps the two stored words
+  have haway : ∀ n ∈ Nd, ∀ off : Nat, off ≠ 8 → off ≠ 16 → off < nodeSize (memW st n) →
+      n + off ≠ nodew.toNat + 8 ∧ n + off ≠ nodew.toNat + 16 := by
+    intro n hn off hoff8 hoff16 hoff_sz
+    by_cases hne : n = nodew.toNat
+    · subst hne; omega
+    · have hdisj := hN.2 n hn nodew.toNat hnode_in hne
+      have h1 := nodeSize_ge32 (memW st n)
+      have h2 := hns32
+      dsimp [nodeIvl] at hdisj
+      rcases hdisj with h0 | h0 | h0 | h0 <;> omega
+  -- concrete evals of the store operands
+  have hdst1 : @evalHOLExact 64 F _ sM.toExact
+      (fun a => Classical.propDecidable (sM.memaddrs a))
+      (.op .add [.var .local (ofString "node"), .const 8]) =
+      some (.val (.word (nodew + BitVec.ofNat 64 8))) := by
+    simp [evalHOLExact, evalListHOLExact, hM_ln, wordOpHOL, wordOp, valueIsWord, valueWord,
+      BitVec.add_zero]
+  have hval1 : @evalHOLExact 64 F _ sM.toExact
+      (fun a => Classical.propDecidable (sM.memaddrs a))
+      (.var .local (ofString "buf")) = some (.val (.word bufw)) := by
+    simp [evalHOLExact, hM_lb]
+  -- WordsOK for the 24-byte node header prefix at sM
+  have hW_M_nd : WordsOK sM (nodew.toNat, nodeSize (memW st nodew.toNat)) :=
+    P3MptSet.wordsOK_transfer hAR.1 heffB.arena.1 hw_nd
+  have hW1 : WordsOK sM (nodew.toNat, 24) := by
+    refine ⟨hW_M_nd.1, show 24 % 8 = 0 by decide, ?_⟩
+    intro k hk
+    refine hW_M_nd.2.2 k ?_
+    have := hns32
+    omega
+  have hhi1 : nodew.toNat + 24 ≤ heapEnd := by omega
+  have hin1 : ∃ i ∈ ((globN st "heap_ptr", hlBv.toNat + payv.toNat) ::
+      (nodeCacheIvls Nd ++ keccakBufIvls st)),
+      i.1 ≤ nodew.toNat + 8 ∧ nodew.toNat + 8 + 8 ≤ i.1 + i.2 :=
+    ⟨(nodew.toNat + 8, 24), by
+      simp only [List.mem_cons, nodeCacheIvls, List.mem_append, List.mem_map]
+      exact Or.inr (Or.inl ⟨nodew.toNat, hnode_in, rfl⟩), by omega, by omega⟩
+  have hin2 : ∃ i ∈ ((globN st "heap_ptr", hlBv.toNat + payv.toNat) ::
+      (nodeCacheIvls Nd ++ keccakBufIvls st)),
+      i.1 ≤ nodew.toNat + 16 ∧ nodew.toNat + 16 + 8 ≤ i.1 + i.2 :=
+    ⟨(nodew.toNat + 8, 24), by
+      simp only [List.mem_cons, nodeCacheIvls, List.mem_append, List.mem_map]
+      exact Or.inr (Or.inl ⟨nodew.toNat, hnode_in, rfl⟩), by omega, by omega⟩
+  -- thread the tail evaluation through both stores and the return
+  rw [evaluateHOLFiniteState_seq_line780] at hret2 hpost
+  have hst1 := eval_store_memW_at (s := sM) (base := nodew) (w := bufw) (off := 8) (len := 24)
+    (Rl := (globN st "heap_ptr", hlBv.toNat + payv.toNat) ::
+      (nodeCacheIvls Nd ++ keccakBufIvls st)) (gw := ["heap_ptr"])
+    heffB.arena hW1 (by decide) (by decide) hhi1 hin1 hdst1 hval1
+  dsimp only at hst1
+  obtain ⟨hst1_n, hst1_l, hst1_g, hst1_w8, hst1_mem, hst1_eff⟩ := hst1
+  rcases hev1 : evaluateHOLFiniteState sM
+    (.store (.op .add [.var .local (ofString "node"), .const 8])
+      (.var .local (ofString "buf"))) with ⟨o1, sS1⟩
+  rw [hev1] at hret2 hpost hst1_n hst1_l hst1_g hst1_w8 hst1_mem hst1_eff
+  dsimp only at hret2 hpost hst1_n hst1_l hst1_g hst1_w8 hst1_mem hst1_eff
+  subst hst1_n
+  simp only at hret2 hpost
+  rw [evaluateHOLFiniteState_seq_line780] at hret2 hpost
+  have hAR_S1 : ArenaReady sS1 := hst1_eff.arena
+  have hW2 : WordsOK sS1 (nodew.toNat, 24) :=
+    P3MptSet.wordsOK_transfer heffB.arena.1 hAR_S1.1 hW1
+  have hS1_ln : sS1.locals.lookup (ofString "node") = some (.val (.word nodew)) := by
+    rw [hst1_l]; exact hM_ln
+  have hS1_loff : sS1.locals.lookup (ofString "off") = some (.val (.word offF)) := by
+    rw [hst1_l]; exact hM_loff
+  have hdst2' : @evalHOLExact 64 F _ sS1.toExact
+      (fun a => Classical.propDecidable (sS1.memaddrs a))
+      (.op .add [.var .local (ofString "node"), .const 16]) =
+      some (.val (.word (nodew + BitVec.ofNat 64 16))) := by
+    simp [evalHOLExact, evalListHOLExact, hS1_ln, wordOpHOL, wordOp, valueIsWord, valueWord,
+      BitVec.add_zero]
+  have hval2' : @evalHOLExact 64 F _ sS1.toExact
+      (fun a => Classical.propDecidable (sS1.memaddrs a))
+      (.var .local (ofString "off")) = some (.val (.word offF)) := by
+    simp [evalHOLExact, hS1_loff]
+  have hst2 := eval_store_memW_at (s := sS1) (base := nodew) (w := offF) (off := 16)
+    (len := 24) (Rl := (globN st "heap_ptr", hlBv.toNat + payv.toNat) ::
+      (nodeCacheIvls Nd ++ keccakBufIvls st)) (gw := ["heap_ptr"])
+    hAR_S1 hW2 (by decide) (by decide) hhi1 hin2 hdst2' hval2'
+  dsimp only at hst2
+  obtain ⟨hst2_n, hst2_l, hst2_g, hst2_w16, hst2_mem, hst2_eff⟩ := hst2
+  rcases hev2 : evaluateHOLFiniteState sS1
+    (.store (.op .add [.var .local (ofString "node"), .const 16])
+      (.var .local (ofString "off"))) with ⟨o2, sS2⟩
+  rw [hev2] at hret2 hpost hst2_n hst2_l hst2_g hst2_w16 hst2_mem hst2_eff
+  dsimp only at hret2 hpost hst2_n hst2_l hst2_g hst2_w16 hst2_mem hst2_eff
+  subst hst2_n
+  simp only at hret2 hpost
+  rw [evaluateHOLFiniteState_return] at hret2 hpost
+  have hret0 : @evalHOLExact 64 F _ sS2.toExact
+      (fun a => Classical.propDecidable (sS2.memaddrs a)) (.const 0) =
+      some (.val (.word 0)) := rfl
+  rw [hret0] at hret2 hpost
+  dsimp only at hret2 hpost
+  have hsz0 : sizeOfShapeWithContextHOL sS2.structs
+      (shapeOfHOLExact (.val (.word 0) : ValueHOL 64)) ≤ 32 := by
+    simp [shapeOfHOLExact, sizeOfShapeWithContextHOL]
+  rw [if_pos hsz0] at hret2 hpost
+  dsimp only at hret2 hpost
+  have hlim264 : heapLimit < 2 ^ 64 := by decide
+  have hkeep3 : ∀ X : Nat, X < 2 ^ 64 → X ≠ nodew.toNat + 8 → X ≠ nodew.toNat + 16 →
+      memW post X = memW sM X := by
+    intro X hX h8 h16
+    rw [hpost]
+    change memW sS2 X = memW sM X
+    exact memW_eq_of_cell_eq ((hst2_mem X hX h16).trans (hst1_mem X hX h8))
+  have heff_stores : R16Shards.WkBlockTxEnc.HeapByteEff sM sS2
+      ((globN st "heap_ptr", hlBv.toNat + payv.toNat) ::
+        (nodeCacheIvls Nd ++ keccakBufIvls st)) ["heap_ptr"] :=
+    hst1_eff.trans hst2_eff
+  have heff_mono : R16Shards.WkBlockTxEnc.HeapByteEff st sM
+      ((globN st "heap_ptr", hlBv.toNat + payv.toNat) ::
+        (nodeCacheIvls Nd ++ keccakBufIvls st)) ["heap_ptr"] := by
+    refine heffB.mono (fun i hi _ => ?_) (fun _ hg => hg)
+    rcases List.mem_append.1 hi with hm24 | hrest
+    · obtain ⟨n, hnN, rfl⟩ := List.mem_map.1 hm24
+      refine Or.inl ⟨(n + 8, 24), ?_, by dsimp; omega, by dsimp; omega⟩
+      exact List.Mem.tail _ (List.mem_append_left _ (List.mem_map.2 ⟨n, hnN, rfl⟩))
+    · rcases List.mem_append.1 hrest with hbuf_mem | hkc_mem
+      · simp only [List.mem_singleton] at hbuf_mem
+        subst hbuf_mem
+        exact Or.inl ⟨(globN st "heap_ptr", hlBv.toNat + payv.toNat), List.Mem.head _,
+          le_rfl, le_rfl⟩
+      · simp only [keccakBufIvls, List.mem_cons, List.not_mem_nil, or_false] at hkc_mem
+        rcases hkc_mem with rfl | rfl
+        · rw [hkeq ("keccak_pad", 136) (by decide)]
+          exact Or.inl ⟨bufferRegion st ("keccak_pad", 136),
+            List.Mem.tail _ (List.mem_append_right _ (List.Mem.head _)), le_rfl, le_rfl⟩
+        · rw [hkeq ("keccak_st", 200) (by decide)]
+          exact Or.inl ⟨bufferRegion st ("keccak_st", 200),
+            List.Mem.tail _ (List.mem_append_right _ (List.Mem.tail _ (List.Mem.head _))),
+            le_rfl, le_rfl⟩
+  have heff_final : R16Shards.WkBlockTxEnc.HeapByteEff st post
+      ((globN st "heap_ptr", hlBv.toNat + payv.toNat) ::
+        (nodeCacheIvls Nd ++ keccakBufIvls st)) ["heap_ptr"] := by
+    rw [hpost]
+    exact (heff_mono.trans heff_stores).locals_clock Lv _
+  have heff_cache_post : R16Shards.WkBlockTxEnc.HeapByteEff st post
+      (nodeCacheIvls Nd ++
+        ((globN st "heap_ptr", hlBv.toNat + payv.toNat) :: keccakBufIvls st)) ["heap_ptr"] := by
+    refine heff_final.mono (fun i hi _ => ?_) (fun _ hg => hg)
+    rcases List.mem_cons.1 hi with rfl | hrest
+    · exact Or.inl ⟨(globN st "heap_ptr", hlBv.toNat + payv.toNat),
+        List.mem_append_right _ (List.Mem.head _), le_rfl, le_rfl⟩
+    · rcases List.mem_append.1 hrest with hc | hkc
+      · exact Or.inl ⟨i, List.mem_append_left _ hc, le_rfl, le_rfl⟩
+      · exact Or.inl ⟨i, List.mem_append_right _ (List.Mem.tail _ hkc), le_rfl, le_rfl⟩
+  have h8_post : memW post (nodew.toNat + 8) = globN st "heap_ptr" := by
+    have h8keep : memW sS2 (nodew.toNat + 8) = memW sS1 (nodew.toNat + 8) :=
+      memW_eq_of_cell_eq (hst2_mem _ (by omega) (by omega))
+    rw [hpost]; change memW sS2 (nodew.toNat + 8) = globN st "heap_ptr"
+    rw [h8keep, hst1_w8, hbufw0]
+  have h16_post : memW post (nodew.toNat + 16) = offF.toNat := by
+    rw [hpost]; exact hst2_w16
+  have hother_cache : ∀ n ∈ Nd, n ≠ nodew.toNat → memW post (n + 8) = memW st (n + 8) ∧
+      memW post (n + 16) = memW st (n + 16) := by
+    intro n hn hne_nd
+    have hin' := (hN.1 n hn).2.2.1.2
+    dsimp [nodeIvl] at hin'
+    have hnsn := nodeSize_ge32 (memW st n)
+    have hdisj_n := hN.2 n hn nodew.toNat hnode_in hne_nd
+    dsimp [nodeIvl] at hdisj_n
+    have h8_ne : n + 8 ≠ nodew.toNat + 8 ∧ n + 8 ≠ nodew.toNat + 16 := by
+      rcases hdisj_n with h0 | h0 | h0 | h0 <;> omega
+    have h16_ne : n + 16 ≠ nodew.toNat + 8 ∧ n + 16 ≠ nodew.toNat + 16 := by
+      rcases hdisj_n with h0 | h0 | h0 | h0 <;> omega
+    refine ⟨?_, ?_⟩
+    · rw [hkeep3 (n + 8) (by omega) h8_ne.1 h8_ne.2,
+        hW_M n hn 8 (by decide) (by omega) (by decide)]
+    · rw [hkeep3 (n + 16) (by omega) h16_ne.1 h16_ne.2,
+        hW_M n hn 16 (by decide) (by omega) (by decide)]
+  obtain ⟨hN_post, hext_post⟩ :
+      NodeHeap post Nd ∧ nodeExtents post Nd = nodeExtents st Nd := by
+    refine nodeHeap_of_heapByteEff_cache hAR hN heff_cache_post ?_ ?_
+    · intro e he o ho
+      rcases List.mem_cons.1 he with rfl | hkc
+      · exact hbuf_disj o ho
+      · exact keccakBufIvls_disj_of_safe hKS e hkc o ho
+    · intro n hn
+      by_cases hne_nd : n = nodew.toNat
+      · subst hne_nd
+        rw [h16_post, hoffF_nat]
+        exact htot40
+      · rw [(hother_cache n hn hne_nd).2]
+        exact (hN.1 n hn).2.2.2.2.2.2.2.1
+  have hword_nd : ∀ n ∈ Nd, memW post n = memW st n ∧
+      (1 ≤ memW st n → memW post (n + 40) = memW st (n + 40)) ∧
+      (memW st n = 1 → memW post (n + 48) = memW st (n + 48) ∧
+        memW post (n + 56) = memW st (n + 56)) := by
+    intro n hn
+    have hin' := (hN.1 n hn).2.2.1.2
+    dsimp [nodeIvl] at hin'
+    have hnsn := nodeSize_ge32 (memW st n)
+    refine ⟨?_, ?_, ?_⟩
+    · have haw0 := haway n hn 0 (by decide) (by decide) (by omega)
+      have h1 := hW_M n hn 0 (by decide) (by omega) (by decide)
+      simpa using (hkeep3 (n + 0) (by omega) haw0.1 haw0.2).trans h1
+    · intro h1k
+      have hns40 : 48 ≤ nodeSize (memW st n) := by
+        unfold nodeSize
+        split_ifs <;> omega
+      have haw40 := haway n hn 40 (by decide) (by decide) (by omega)
+      have h1 := hW_M n hn 40 (by decide) hns40 (by decide)
+      exact (hkeep3 (n + 40) (by omega) haw40.1 haw40.2).trans h1
+    · intro h1k
+      have hns48 : 56 ≤ nodeSize (memW st n) := by rw [h1k]; decide
+      have hns56 : 64 ≤ nodeSize (memW st n) := by rw [h1k]; decide
+      have haw48 := haway n hn 48 (by decide) (by decide) (by omega)
+      have haw56 := haway n hn 56 (by decide) (by decide) (by omega)
+      have h1' := hW_M n hn 48 (by decide) hns48 (by decide)
+      have h2' := hW_M n hn 56 (by decide) hns56 (by decide)
+      exact ⟨(hkeep3 (n + 48) (by omega) haw48.1 haw48.2).trans h1',
+        (hkeep3 (n + 56) (by omega) haw56.1 haw56.2).trans h2'⟩
+  refine ⟨offF, hoffF_nat, heff_final, ?_, hN_post, hext_post, ?_, h8_post, h16_post,
+    hother_cache, hword_nd⟩
+  · have h1 : globN st "heap_ptr" < globN sM "heap_ptr" := hM_hp
+    have h2 : globN sM "heap_ptr" ≤ globN sS2 "heap_ptr" := heff_stores.hp_le
+    have h3 : globN sS2 "heap_ptr" = globN post "heap_ptr" := by
+      rw [hpost]; rfl
+    omega
+  · have hbuf_eq : ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+        bufferRegion post gs = bufferRegion st gs := by
+      intro gs hgs
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hgs
+      rcases hgs with rfl | rfl
+      · unfold bufferRegion globN
+        rw [← heff_final.globals (ofString "keccak_pad") (by decide)]
+      · unfold bufferRegion globN
+        rw [← heff_final.globals (ofString "keccak_st") (by decide)]
+    exact keccakBufsSafe_of_grows hKS ⟨heff_final.hp_le, heff_final.sp_le⟩ hbuf_eq
+      hext_post
 end NodeRlpFillProof
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
