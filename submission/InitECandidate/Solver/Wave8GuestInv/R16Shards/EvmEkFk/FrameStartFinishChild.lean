@@ -14990,14 +14990,15 @@ def FcAddrToU256StepW : Prop :=
       evmChain post = evmChain st ∧
       OpDispatchSpec.evmR post ≤ OpDispatchSpec.evmR st)
 
-/-- Budget-faithful version of `FcMinTailStep`: budget hypotheses dropped. -/
+/-- Budget-faithful version of `FcMinTailStep`: budget hypotheses dropped, and the
+out-window fact is unconditional (at the call site it is available whenever the
+`kind ≠ 2` arm is taken, which is exactly where this leaf is invoked). -/
 def FcMinTailStepW : Prop :=
   ∀ {F : Type} {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat},
     FcBranchState s0 st S →
-    (out_win : memW s0 (globN s0 "cur_cont" + 16) ≠ 2 →
-      memW s0 (globN s0 "cur_cont" + 80) = 0 ∨
-        memW s0 (globN s0 "cur_cont" + 72) + memW s0 (globN s0 "cur_cont" + 80) ≤
-          memW st (globN st "ev" + 40)) →
+    (out_win : memW s0 (globN s0 "cur_cont" + 80) = 0 ∨
+      memW s0 (globN s0 "cur_cont" + 72) + memW s0 (globN s0 "cur_cont" + 80) ≤
+        memW st (globN st "ev" + 40)) →
     (evaluateHOLFiniteState st fcMinTail).1 ≠ some .timeOut →
     (∀ u, (evaluateHOLFiniteState st fcMinTail).1 ≠ some (.returned u)) ∧
     ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st fcMinTail).1 ∧
@@ -15008,6 +15009,27 @@ def FcMinTailStepW : Prop :=
       post.globals = st.globals ∧
       evmChain post = evmChain st ∧
       OpDispatchSpec.evmR post ≤ OpDispatchSpec.evmR st)
+
+/-- A one-word load off a local-valued base address either fails or yields a word:
+the local-loads twin of `R14Shards.OpHandlersA.evalAt_loadG_word`. -/
+private theorem fc_eval_loadL_word {F : Type} (t : PanSemStateFiniteExact 64 F)
+    (n : MlS) (k : BitVec 64) (a : BitVec 64)
+    (hlk : t.locals.lookup n = some (.val (.word a)))
+    (v : ValueHOL 64)
+    (h : @evalHOLExact 64 F _ t.toExact (fun a' => Classical.propDecidable (t.memaddrs a'))
+      (.load .one (.op .add [.var .local n, .const k])) = some v) :
+    ∃ w : BitVec 64, v = .val (.word w) := by
+  simp [evalHOLExact, evalListHOLExact] at h
+  rcases hl : t.locals.lookup n with _ | w
+  · rw [hl] at hlk; cases hlk
+  · rw [hl] at hlk
+    injection hlk with h1
+    have hw : w = .val (.word a) := h1
+    subst hw
+    simp [hl, valueIsWord, valueWord, wordOpHOL, wordOp, memLoadHOLExact] at h
+    rcases hm : t.memory (a + k) with ⟨y⟩
+    rw [hm] at h
+    exact ⟨y, h.2.symm⟩
 
 /-- Proof of `FcSetRetdataZeroStepW`; identical to `fcSetRetdataZero` above,
 minus the two budget hypotheses (which the body never uses). -/
@@ -16132,11 +16154,15 @@ theorem fcBranchWalk_of_leaves (hSR : FcSetRetdataStepW) (hSP : FcStackPushStepW
         rw [hev_u]
       have heu40 : memW u (globN u "ev" + 40) = memW st (globN st "ev" + 40) :=
         hc40_u.trans (hmid.trans hc40_st.symm)
-      have hwin : memW s0 (globN s0 "cur_cont" + 16) ≠ 2 →
-          memW s0 (globN s0 "cur_cont" + 80) = 0 ∨
-            memW s0 (globN s0 "cur_cont" + 72) + memW s0 (globN s0 "cur_cont" + 80) ≤
-              memW u (globN u "ev" + 40) := by
-        intro hne2
+      have hne2 : memW s0 (globN s0 "cur_cont" + 16) ≠ 2 := by
+        intro h2
+        rw [h2] at hw
+        have h2v : BitVec.ofNat 64 2 = 2#64 := rfl
+        rw [h2v] at hw
+        simp at hw
+      have hwin : memW s0 (globN s0 "cur_cont" + 80) = 0 ∨
+          memW s0 (globN s0 "cur_cont" + 72) + memW s0 (globN s0 "cur_cont" + 80) ≤
+            memW u (globN u "ev" + 40) := by
         rcases hPC.out_win_ok hne2 with h0 | hle
         · exact Or.inl h0
         · exact Or.inr (hle.trans (Nat.le_of_eq heu40.symm))
