@@ -20719,4 +20719,276 @@ theorem phase2_msg_new_txBacking :
     (fun k hk => ⟨(hf _ (hl_mem k hk) (by simp)).1, (hf _ (hl_mem k hk) (by simp)).2.1⟩)
     hframe
   exact htx
+/-! ## Segment B part 1¾: `TxBacking` through the message stores
+
+The seven message-prefix stores (positions 69..76) write only inside the fresh
+176-byte buffer, which the store-ready invariant keeps disjoint from every fixed
+object (the world-owned regions contain `fixedObjects`). Each single-word write
+therefore preserves both block-output backing pointers
+(`txBacking_store_disjoint_fixed`), and the Phase 4 caller-local shapes are
+untouched by memory writes. This upgrades the segment-B exit to carry
+`TxBacking ∧ PtxPhase4LocalShapes` alongside the scalar-ready frame. -/
+
+/-- Scalar message-store frame plus both block-output backings and the Phase 4
+caller-local shapes, carried together from `msg_new` into the htab region. -/
+def PtxMessageBScalarReady {ι : Type} (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+  PtxMessageScalarReady buffers contents names s ∧
+    R16Shards.TxBacking s ∧ R16Shards.PtxPhase4LocalShapes s
+
+/-- The fresh message buffer is disjoint from every fixed object. -/
+theorem phase2_message_fixed_disjoint {ι F : Type} [Nonempty ι]
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s)
+    (j : Ivl) (hj : j ∈ fixedObjects s) : Disj (locN s "m", 176) j := by
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  obtain ⟨_, S, Nd, hw, hb, hsep⟩ := hp.2.2.2.2.2 i
+  exact hsep _ (by simp) j (by
+    simp only [worldOwned, List.mem_append]
+    exact Or.inl (Or.inr hj))
+
+/-- Word-list stores into the fresh message buffer keep both block-output backings. -/
+theorem phase2_txBacking_message_words {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (ws : List (HolWordLab 64)) {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageStoreReady buffers contents s)
+    (hback : R16Shards.TxBacking s) (k : Nat) (hk : k + ws.length ≤ 22)
+    {mem : BitVec 64 → HolWordLab 64}
+    (hst : @panMemStoresHOL 64 _ (BitVec.ofNat 64 (locN s "m" + 8 * k)) ws
+      s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem) :
+    R16Shards.TxBacking {s with memory := mem} := by
+  induction ws generalizing s k mem with
+  | nil =>
+    simp only [panMemStoresHOL, Option.some.injEq] at hst
+    subst mem
+    exact hback
+  | cons w ws ih =>
+    have hk' : k < 22 := by simp only [List.length_cons] at hk; omega
+    have hslot := phase2_message_slot hp k hk'
+    let x := BitVec.ofNat 64 (locN s "m" + 8 * k)
+    let mem1 := fun a => if a = x then w else s.memory a
+    have hp1 : PtxMessageStoreReady buffers contents {s with memory := mem1} :=
+      phase2_message_store_ready_store buffers contents hp hslot.2.1 hslot.2.2
+        (fun a ha => if_neg ha)
+    have hback1 : R16Shards.TxBacking {s with memory := mem1} :=
+      R16Shards.PtxP34.txBacking_store_disjoint_fixed (i := (locN s "m", 176))
+        ⟨hp.1, hp.2.1⟩ hback hslot.2.2 (phase2_message_fixed_disjoint hp)
+        (fun a ha => if_neg ha)
+    have he : x + BitVec.ofNat 64 8 = BitVec.ofNat 64 (locN s "m" + 8 * (k + 1)) := by
+      simp only [x, ← BitVec.ofNat_add]
+      congr 1
+    simp only [panMemStoresHOL, panMemStoreHOL, hslot.2.1, ↓reduceIte] at hst
+    apply ih hp1 hback1 (k + 1) (by simp only [List.length_cons] at hk; omega)
+    change @panMemStoresHOL 64 _ (BitVec.ofNat 64 (locN s "m" + 8 * (k + 1))) ws
+      s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) mem1 = some mem
+    change @panMemStoresHOL 64 _ (x + BitVec.ofNat 64 8) ws
+      s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) mem1 = some mem at hst
+    rw [he] at hst
+    exact hst
+
+/-- Any shape-sized message write keeps the whole B-frame. -/
+theorem phase2_message_bscalar_expr_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String)
+    (src : ExpHOL 64) (k n : Nat) (hk : k + n ≤ 22)
+    (hlen : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) v,
+      PtxMessageScalarReady buffers contents names s → evalAt s src = some v →
+      (flattenHOL v).length = n) :
+    Hoare (PtxMessageBScalarReady buffers contents names)
+      (.store (.op .add [.var .local (ofString "m"), .const (8 * k)]) src)
+      (fun r s => r = none → PtxMessageBScalarReady buffers contents names s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  obtain ⟨w, hw⟩ := hp.1.1.2.2.1
+  have hl : locN s "m" = w.toNat := by simp [locN, hw]
+  have he : x = w + BitVec.ofNat 64 (8 * k) := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord, valueWord,
+      panOpHOL, wordOpHOL, wordOp, List.foldr, BitVec.ofNat_mul] using hx.symm
+  have hx' : x = BitVec.ofNat 64 (locN s "m" + 8 * k) := by
+    simp [he, hl, BitVec.ofNat_add]
+  rw [hx'] at hst
+  exact ⟨⟨phase2_message_store_ready_words buffers contents (flattenHOL v) hp.1.1 k
+    (by rw [hlen s v hp.1 hv]; exact hk) hst, hp.1.2⟩,
+    phase2_txBacking_message_words buffers contents (flattenHOL v) hp.1.1 hp.2.1 k
+    (by rw [hlen s v hp.1 hv]; exact hk) hst, hp.2.2⟩
+
+/-- The beacon-roots global holds a word, so its flatten is a single word. -/
+theorem phase2_message_bscalar_be_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String) :
+    Hoare (PtxMessageBScalarReady buffers contents names)
+      (.store (.op .add [.var .local (ofString "m"), .const (8 * 0)])
+        (.var .global (ofString "be")))
+      (fun r s => r = none → PtxMessageBScalarReady buffers contents names s) := by
+  apply phase2_message_bscalar_expr_store buffers contents names _ 0 1 (by decide)
+  intro F s v hp hv
+  have hgw : GlobalsWord s := hp.1.1.1.2.2.2.2.2.2.2.2.2
+  obtain ⟨w, hw⟩ := hgw "be" (by decide)
+  simp only [evalAt, evalHOLExact] at hv
+  rw [hw] at hv
+  have hve : v = .val (.word w) := (Option.some.inj hv).symm
+  subst hve
+  simp [flattenHOL]
+
+/-- A message write of a scalar caller local keeps the whole B-frame. -/
+theorem phase2_message_bscalar_local_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String)
+    (name : String) (hn : name ∈ names) (k : Nat) (hk : k < 22) :
+    Hoare (PtxMessageBScalarReady buffers contents names)
+      (.store (.op .add [.var .local (ofString "m"), .const (8 * k)])
+        (.var .local (ofString name)))
+      (fun r s => r = none → PtxMessageBScalarReady buffers contents names s) := by
+  apply phase2_message_bscalar_expr_store buffers contents names _ k 1 (by omega)
+  intro F s v hp hv
+  obtain ⟨w, hw⟩ := hp.2 name hn
+  have he : v = .val (.word w) := by
+    simpa [evalAt, evalHOLExact, hw] using hv.symm
+  simp [he, flattenHOL]
+
+/-- A message write of a loaded word keeps the whole B-frame. -/
+theorem phase2_message_bscalar_load_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String)
+    (addr : ExpHOL 64) (k : Nat) (hk : k < 22) :
+    Hoare (PtxMessageBScalarReady buffers contents names)
+      (.store (.op .add [.var .local (ofString "m"), .const (8 * k)]) (.load .one addr))
+      (fun r s => r = none → PtxMessageBScalarReady buffers contents names s) := by
+  exact phase2_message_bscalar_expr_store buffers contents names _ k 1 (by omega)
+    (fun s v _ hv => phase2_load_one_length s addr v hv)
+
+/-- Prestate of the message-prefix segment with backing and Phase 4 shapes. -/
+def PtxMsgPreBInv {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+  PtxMsgPreInv buffers contents s ∧ R16Shards.TxBacking s ∧ R16Shards.PtxPhase4LocalShapes s
+
+/-- Any callee entered from a B-prestate keeps the guest invariant. -/
+theorem phase2_msgPreB_callEntry {ι : Type} (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) {fname : MlS} (arguments : List (ExpHOL 64)) :
+    CallEntryOn (PtxMsgPreBInv buffers contents) GuestInv fname arguments := by
+  intro F state values body callee ret hcode hP hargs hl
+  exact phase2_msgPre_callEntry buffers contents arguments state values body callee ret
+    hcode hP.1 hargs hl
+
+/-- Setting `m` (never read by Phase 4) preserves the Phase 4 caller-local shapes. -/
+theorem phase2_p4Shapes_msg_new_resume {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (h : R16Shards.PtxPhase4LocalShapes s) :
+    R16Shards.PtxPhase4LocalShapes
+      (setVarHOLFinite (ofString "m") v {post with locals := s.locals}) := by
+  have hlu : ∀ name : String, ofString name ≠ ofString "m" →
+      (setVarHOLFinite (ofString "m") v {post with locals := s.locals}).locals.lookup
+        (ofString name) = s.locals.lookup (ofString name) := by
+    intro name hn
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm hn]
+  refine ⟨?_, ?_, ?_⟩
+  · intro name hn
+    have hne : ofString name ≠ ofString "m" := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl | rfl | rfl | rfl <;> decide
+    rw [hlu name hne]
+    exact h.1 name hn
+  · rw [hlu "price" (by decide)]; exact h.2.1
+  · rw [hlu "intrinsic" (by decide)]; exact h.2.2
+
+/-- Resuming after msg_new with the B-frame: the scalar-ready part from part 1,
+`TxBacking` from the tight-frame spec, and the Phase 4 shapes survive the local
+restoration because `m` is not a Phase 4 local. -/
+theorem phase2_msgPreB_resume (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    DecCallResumeOn (PtxMsgPreBInv buffers contents)
+      (PtxMessageBScalarReady buffers contents ["te", "sender", "mgas", "reservoir"])
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hW : WorldOK s := hp.1.1.1.1.1.1.1.1.1.1
+  have hscalar := phase2_msgPre_resume h buffers contents s vs body callee ret v post hc
+    hp.1 he hl hb
+  have htx := phase2_msg_new_txBacking s vs body callee ret v post hc
+    ⟨hW, hp.1.2.1, hp.2.1⟩ he hl hb
+  exact ⟨hscalar, htx, phase2_p4Shapes_msg_new_resume s post v hp.2.2⟩
+
+/-- The message-construction prefix (positions 69..76) as a bounded program,
+carrying the backing and Phase 4 shape conjuncts. -/
+theorem phase2_msgPrefix_backing_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (PtxMessageBScalarReady buffers contents ["te", "sender", "mgas", "reservoir"]) tail b) :
+    TerminatingProgBoundedOn (PtxMsgPreBInv buffers contents)
+      (spinePlug 8 (spineAt 69 ptxCode) tail)
+      (K.«msg_new» + b + 1) := by
+  have he : spinePlug 8 (spineAt 69 ptxCode) tail =
+      .decCall (ofString "m") .one (ofString "msg_new") []
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 0])
+          (.var .global (ofString "be")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 8])
+          (.var .local (ofString "te")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 16])
+          (.var .local (ofString "sender")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 24])
+          (.load .one (.op .add [.var .local (ofString "tx"), .const 152])))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 40])
+          (.var .local (ofString "mgas")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 48])
+          (.var .local (ofString "reservoir")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 56])
+          (.load (.comb [.one, .one, .one, .one])
+            (.op .add [.var .local (ofString "tx"), .const 160])))
+          tail))))))) := by
+    simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction, spineAt,
+      spinePlug]
+    rfl
+  have hs (addr src : ExpHOL 64) :
+      TerminatingProgBoundedOn
+        (PtxMessageBScalarReady buffers contents ["te", "sender", "mgas", "reservoir"])
+        (.store addr src) 0 := by
+    intro F s hc hp hn
+    rw [clock_store]
+    exact ⟨by omega, le_rfl⟩
+  have hcont : TerminatingProgBoundedOn
+      (PtxMessageBScalarReady buffers contents ["te", "sender", "mgas", "reservoir"])
+      (.seq (.store (.op .add [.var .local (ofString "m"), .const 0])
+          (.var .global (ofString "be")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 8])
+            (.var .local (ofString "te")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 16])
+            (.var .local (ofString "sender")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 24])
+            (.load .one (.op .add [.var .local (ofString "tx"), .const 152])))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 40])
+            (.var .local (ofString "mgas")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 48])
+            (.var .local (ofString "reservoir")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 56])
+            (.load (.comb [.one, .one, .one, .one])
+              (.op .add [.var .local (ofString "tx"), .const 160])))
+          tail))))))) (0 + (0 + (0 + (0 + (0 + (0 + (0 + b))))))) := by
+    exact seq_bound_trans (hs _ _) (phase2_message_bscalar_be_store buffers contents _)
+      (seq_bound_trans (hs _ _)
+        (phase2_message_bscalar_local_store buffers contents _ "te" (by simp) 1 (by decide))
+        (seq_bound_trans (hs _ _)
+          (phase2_message_bscalar_local_store buffers contents _ "sender" (by simp) 2
+            (by decide))
+          (seq_bound_trans (hs _ _)
+            (phase2_message_bscalar_load_store buffers contents _
+              (.op .add [.var .local (ofString "tx"), .const 152]) 3 (by decide))
+            (seq_bound_trans (hs _ _)
+              (phase2_message_bscalar_local_store buffers contents _ "mgas" (by simp) 5
+                (by decide))
+              (seq_bound_trans (hs _ _)
+                (phase2_message_bscalar_local_store buffers contents _ "reservoir" (by simp) 6
+                  (by decide))
+                (seq_bound_trans (hs _ _)
+                  (phase2_message_bscalar_expr_store buffers contents _
+                    (.load (.comb [.one, .one, .one, .one])
+                      (.op .add [.var .local (ofString "tx"), .const 160])) 7 4 (by decide)
+                    (fun s v _ hv => phase2_load_quad_length s _ v hv))
+                  ht))))))
+  have hmain : TerminatingProgBoundedOn (PtxMsgPreBInv buffers contents)
+      (spinePlug 8 (spineAt 69 ptxCode) tail)
+      (K.«msg_new» + (0 + (0 + (0 + (0 + (0 + (0 + (0 + b))))))) + 1) := by
+    rw [he]
+    exact TerminatingProgBoundedOn.decCall_on h.fb_msg_new (ofString "m") .one []
+      (phase2_msgPreB_callEntry buffers contents [])
+      (phase2_msgPreB_resume h buffers contents) hcont
+  intro F s hc hp hnt
+  obtain ⟨h1, h2⟩ := hmain s hc hp hnt
+  exact ⟨by omega, h2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
