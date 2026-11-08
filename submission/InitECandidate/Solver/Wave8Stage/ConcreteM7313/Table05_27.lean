@@ -104,15 +104,9 @@ theorem words06_eq :
     (((ConcreteCompilerWord.source.drop 80).take 32).zip oracles06).map
       (fun p => wordFunction p.2 p.1) = words06 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 16).length = oracles05.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 32) =
-      ((ConcreteCompilerWord.source.drop 80).take 16) ++ ((ConcreteCompilerWord.source.drop 96).take 16) := by
-    have h := List.take_append_drop 16 ((ConcreteCompilerWord.source.drop 80).take 32)
-    rw [List.take_take, show Nat.min 16 32 = 16 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 16 = 96 from rfl,
-        show 32 - 16 = 16 from rfl] at h
-    exact h.symm
-  unfold words06 oracles06
-  rw [hdrop, List.zip_append hlen1, List.map_append, words05_eq, Chunk06.words_eq]
+  unfold words06 oracles06 chunkOracles06
+  rw [← words05_eq, ← Chunk06.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words07 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words06 ++ Chunk07.words
 noncomputable def bodies07 : List (Nat × HolProg 64) := bodies06 ++ Chunk07.bodies
@@ -140,15 +134,9 @@ theorem words07_eq :
     (((ConcreteCompilerWord.source.drop 80).take 48).zip oracles07).map
       (fun p => wordFunction p.2 p.1) = words07 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 32).length = oracles06.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 48) =
-      ((ConcreteCompilerWord.source.drop 80).take 32) ++ ((ConcreteCompilerWord.source.drop 112).take 16) := by
-    have h := List.take_append_drop 32 ((ConcreteCompilerWord.source.drop 80).take 48)
-    rw [List.take_take, show Nat.min 32 48 = 32 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 32 = 112 from rfl,
-        show 48 - 32 = 16 from rfl] at h
-    exact h.symm
-  unfold words07 oracles07
-  rw [hdrop, List.zip_append hlen1, List.map_append, words06_eq, Chunk07.words_eq]
+  unfold words07 oracles07 chunkOracles07
+  rw [← words06_eq, ← Chunk07.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words08 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words07 ++ Chunk08.words
 noncomputable def bodies08 : List (Nat × HolProg 64) := bodies07 ++ Chunk08.bodies
@@ -176,15 +164,9 @@ theorem words08_eq :
     (((ConcreteCompilerWord.source.drop 80).take 64).zip oracles08).map
       (fun p => wordFunction p.2 p.1) = words08 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 48).length = oracles07.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 64) =
-      ((ConcreteCompilerWord.source.drop 80).take 48) ++ ((ConcreteCompilerWord.source.drop 128).take 16) := by
-    have h := List.take_append_drop 48 ((ConcreteCompilerWord.source.drop 80).take 64)
-    rw [List.take_take, show Nat.min 48 64 = 48 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 48 = 128 from rfl,
-        show 64 - 48 = 16 from rfl] at h
-    exact h.symm
-  unfold words08 oracles08
-  rw [hdrop, List.zip_append hlen1, List.map_append, words07_eq, Chunk08.words_eq]
+  unfold words08 oracles08 chunkOracles08
+  rw [← words07_eq, ← Chunk08.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words09 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words08 ++ Chunk09.words
 noncomputable def bodies09 : List (Nat × HolProg 64) := bodies08 ++ Chunk09.bodies
@@ -212,15 +194,9 @@ theorem words09_eq :
     (((ConcreteCompilerWord.source.drop 80).take 80).zip oracles09).map
       (fun p => wordFunction p.2 p.1) = words09 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 64).length = oracles08.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 80) =
-      ((ConcreteCompilerWord.source.drop 80).take 64) ++ ((ConcreteCompilerWord.source.drop 144).take 16) := by
-    have h := List.take_append_drop 64 ((ConcreteCompilerWord.source.drop 80).take 80)
-    rw [List.take_take, show Nat.min 64 80 = 64 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 64 = 144 from rfl,
-        show 80 - 64 = 16 from rfl] at h
-    exact h.symm
-  unfold words09 oracles09
-  rw [hdrop, List.zip_append hlen1, List.map_append, words08_eq, Chunk09.words_eq]
+  unfold words09 oracles09 chunkOracles09
+  rw [← words08_eq, ← Chunk09.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words10 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words09 ++ Chunk10.words
 noncomputable def bodies10 : List (Nat × HolProg 64) := bodies09 ++ Chunk10.bodies
@@ -248,15 +224,9 @@ theorem words10_eq :
     (((ConcreteCompilerWord.source.drop 80).take 96).zip oracles10).map
       (fun p => wordFunction p.2 p.1) = words10 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 80).length = oracles09.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 96) =
-      ((ConcreteCompilerWord.source.drop 80).take 80) ++ ((ConcreteCompilerWord.source.drop 160).take 16) := by
-    have h := List.take_append_drop 80 ((ConcreteCompilerWord.source.drop 80).take 96)
-    rw [List.take_take, show Nat.min 80 96 = 80 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 80 = 160 from rfl,
-        show 96 - 80 = 16 from rfl] at h
-    exact h.symm
-  unfold words10 oracles10
-  rw [hdrop, List.zip_append hlen1, List.map_append, words09_eq, Chunk10.words_eq]
+  unfold words10 oracles10 chunkOracles10
+  rw [← words09_eq, ← Chunk10.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words11 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words10 ++ Chunk11.words
 noncomputable def bodies11 : List (Nat × HolProg 64) := bodies10 ++ Chunk11.bodies
@@ -284,15 +254,9 @@ theorem words11_eq :
     (((ConcreteCompilerWord.source.drop 80).take 112).zip oracles11).map
       (fun p => wordFunction p.2 p.1) = words11 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 96).length = oracles10.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 112) =
-      ((ConcreteCompilerWord.source.drop 80).take 96) ++ ((ConcreteCompilerWord.source.drop 176).take 16) := by
-    have h := List.take_append_drop 96 ((ConcreteCompilerWord.source.drop 80).take 112)
-    rw [List.take_take, show Nat.min 96 112 = 96 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 96 = 176 from rfl,
-        show 112 - 96 = 16 from rfl] at h
-    exact h.symm
-  unfold words11 oracles11
-  rw [hdrop, List.zip_append hlen1, List.map_append, words10_eq, Chunk11.words_eq]
+  unfold words11 oracles11 chunkOracles11
+  rw [← words10_eq, ← Chunk11.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words12 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words11 ++ Chunk12.words
 noncomputable def bodies12 : List (Nat × HolProg 64) := bodies11 ++ Chunk12.bodies
@@ -320,15 +284,9 @@ theorem words12_eq :
     (((ConcreteCompilerWord.source.drop 80).take 128).zip oracles12).map
       (fun p => wordFunction p.2 p.1) = words12 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 112).length = oracles11.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 128) =
-      ((ConcreteCompilerWord.source.drop 80).take 112) ++ ((ConcreteCompilerWord.source.drop 192).take 16) := by
-    have h := List.take_append_drop 112 ((ConcreteCompilerWord.source.drop 80).take 128)
-    rw [List.take_take, show Nat.min 112 128 = 112 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 112 = 192 from rfl,
-        show 128 - 112 = 16 from rfl] at h
-    exact h.symm
-  unfold words12 oracles12
-  rw [hdrop, List.zip_append hlen1, List.map_append, words11_eq, Chunk12.words_eq]
+  unfold words12 oracles12 chunkOracles12
+  rw [← words11_eq, ← Chunk12.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words13 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words12 ++ Chunk13.words
 noncomputable def bodies13 : List (Nat × HolProg 64) := bodies12 ++ Chunk13.bodies
@@ -356,15 +314,9 @@ theorem words13_eq :
     (((ConcreteCompilerWord.source.drop 80).take 144).zip oracles13).map
       (fun p => wordFunction p.2 p.1) = words13 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 128).length = oracles12.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 144) =
-      ((ConcreteCompilerWord.source.drop 80).take 128) ++ ((ConcreteCompilerWord.source.drop 208).take 16) := by
-    have h := List.take_append_drop 128 ((ConcreteCompilerWord.source.drop 80).take 144)
-    rw [List.take_take, show Nat.min 128 144 = 128 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 128 = 208 from rfl,
-        show 144 - 128 = 16 from rfl] at h
-    exact h.symm
-  unfold words13 oracles13
-  rw [hdrop, List.zip_append hlen1, List.map_append, words12_eq, Chunk13.words_eq]
+  unfold words13 oracles13 chunkOracles13
+  rw [← words12_eq, ← Chunk13.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words14 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words13 ++ Chunk14.words
 noncomputable def bodies14 : List (Nat × HolProg 64) := bodies13 ++ Chunk14.bodies
@@ -392,15 +344,9 @@ theorem words14_eq :
     (((ConcreteCompilerWord.source.drop 80).take 160).zip oracles14).map
       (fun p => wordFunction p.2 p.1) = words14 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 144).length = oracles13.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 160) =
-      ((ConcreteCompilerWord.source.drop 80).take 144) ++ ((ConcreteCompilerWord.source.drop 224).take 16) := by
-    have h := List.take_append_drop 144 ((ConcreteCompilerWord.source.drop 80).take 160)
-    rw [List.take_take, show Nat.min 144 160 = 144 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 144 = 224 from rfl,
-        show 160 - 144 = 16 from rfl] at h
-    exact h.symm
-  unfold words14 oracles14
-  rw [hdrop, List.zip_append hlen1, List.map_append, words13_eq, Chunk14.words_eq]
+  unfold words14 oracles14 chunkOracles14
+  rw [← words13_eq, ← Chunk14.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words15 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words14 ++ Chunk15.words
 noncomputable def bodies15 : List (Nat × HolProg 64) := bodies14 ++ Chunk15.bodies
@@ -428,15 +374,9 @@ theorem words15_eq :
     (((ConcreteCompilerWord.source.drop 80).take 176).zip oracles15).map
       (fun p => wordFunction p.2 p.1) = words15 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 160).length = oracles14.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 176) =
-      ((ConcreteCompilerWord.source.drop 80).take 160) ++ ((ConcreteCompilerWord.source.drop 240).take 16) := by
-    have h := List.take_append_drop 160 ((ConcreteCompilerWord.source.drop 80).take 176)
-    rw [List.take_take, show Nat.min 160 176 = 160 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 160 = 240 from rfl,
-        show 176 - 160 = 16 from rfl] at h
-    exact h.symm
-  unfold words15 oracles15
-  rw [hdrop, List.zip_append hlen1, List.map_append, words14_eq, Chunk15.words_eq]
+  unfold words15 oracles15 chunkOracles15
+  rw [← words14_eq, ← Chunk15.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words16 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words15 ++ Chunk16.words
 noncomputable def bodies16 : List (Nat × HolProg 64) := bodies15 ++ Chunk16.bodies
@@ -464,15 +404,9 @@ theorem words16_eq :
     (((ConcreteCompilerWord.source.drop 80).take 192).zip oracles16).map
       (fun p => wordFunction p.2 p.1) = words16 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 176).length = oracles15.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 192) =
-      ((ConcreteCompilerWord.source.drop 80).take 176) ++ ((ConcreteCompilerWord.source.drop 256).take 16) := by
-    have h := List.take_append_drop 176 ((ConcreteCompilerWord.source.drop 80).take 192)
-    rw [List.take_take, show Nat.min 176 192 = 176 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 176 = 256 from rfl,
-        show 192 - 176 = 16 from rfl] at h
-    exact h.symm
-  unfold words16 oracles16
-  rw [hdrop, List.zip_append hlen1, List.map_append, words15_eq, Chunk16.words_eq]
+  unfold words16 oracles16 chunkOracles16
+  rw [← words15_eq, ← Chunk16.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words17 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words16 ++ Chunk17.words
 noncomputable def bodies17 : List (Nat × HolProg 64) := bodies16 ++ Chunk17.bodies
@@ -500,15 +434,9 @@ theorem words17_eq :
     (((ConcreteCompilerWord.source.drop 80).take 208).zip oracles17).map
       (fun p => wordFunction p.2 p.1) = words17 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 192).length = oracles16.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 208) =
-      ((ConcreteCompilerWord.source.drop 80).take 192) ++ ((ConcreteCompilerWord.source.drop 272).take 16) := by
-    have h := List.take_append_drop 192 ((ConcreteCompilerWord.source.drop 80).take 208)
-    rw [List.take_take, show Nat.min 192 208 = 192 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 192 = 272 from rfl,
-        show 208 - 192 = 16 from rfl] at h
-    exact h.symm
-  unfold words17 oracles17
-  rw [hdrop, List.zip_append hlen1, List.map_append, words16_eq, Chunk17.words_eq]
+  unfold words17 oracles17 chunkOracles17
+  rw [← words16_eq, ← Chunk17.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words18 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words17 ++ Chunk18.words
 noncomputable def bodies18 : List (Nat × HolProg 64) := bodies17 ++ Chunk18.bodies
@@ -536,15 +464,9 @@ theorem words18_eq :
     (((ConcreteCompilerWord.source.drop 80).take 224).zip oracles18).map
       (fun p => wordFunction p.2 p.1) = words18 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 208).length = oracles17.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 224) =
-      ((ConcreteCompilerWord.source.drop 80).take 208) ++ ((ConcreteCompilerWord.source.drop 288).take 16) := by
-    have h := List.take_append_drop 208 ((ConcreteCompilerWord.source.drop 80).take 224)
-    rw [List.take_take, show Nat.min 208 224 = 208 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 208 = 288 from rfl,
-        show 224 - 208 = 16 from rfl] at h
-    exact h.symm
-  unfold words18 oracles18
-  rw [hdrop, List.zip_append hlen1, List.map_append, words17_eq, Chunk18.words_eq]
+  unfold words18 oracles18 chunkOracles18
+  rw [← words17_eq, ← Chunk18.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words19 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words18 ++ Chunk19.words
 noncomputable def bodies19 : List (Nat × HolProg 64) := bodies18 ++ Chunk19.bodies
@@ -572,15 +494,9 @@ theorem words19_eq :
     (((ConcreteCompilerWord.source.drop 80).take 240).zip oracles19).map
       (fun p => wordFunction p.2 p.1) = words19 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 224).length = oracles18.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 240) =
-      ((ConcreteCompilerWord.source.drop 80).take 224) ++ ((ConcreteCompilerWord.source.drop 304).take 16) := by
-    have h := List.take_append_drop 224 ((ConcreteCompilerWord.source.drop 80).take 240)
-    rw [List.take_take, show Nat.min 224 240 = 224 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 224 = 304 from rfl,
-        show 240 - 224 = 16 from rfl] at h
-    exact h.symm
-  unfold words19 oracles19
-  rw [hdrop, List.zip_append hlen1, List.map_append, words18_eq, Chunk19.words_eq]
+  unfold words19 oracles19 chunkOracles19
+  rw [← words18_eq, ← Chunk19.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words20 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words19 ++ Chunk20.words
 noncomputable def bodies20 : List (Nat × HolProg 64) := bodies19 ++ Chunk20.bodies
@@ -608,15 +524,9 @@ theorem words20_eq :
     (((ConcreteCompilerWord.source.drop 80).take 256).zip oracles20).map
       (fun p => wordFunction p.2 p.1) = words20 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 240).length = oracles19.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 256) =
-      ((ConcreteCompilerWord.source.drop 80).take 240) ++ ((ConcreteCompilerWord.source.drop 320).take 16) := by
-    have h := List.take_append_drop 240 ((ConcreteCompilerWord.source.drop 80).take 256)
-    rw [List.take_take, show Nat.min 240 256 = 240 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 240 = 320 from rfl,
-        show 256 - 240 = 16 from rfl] at h
-    exact h.symm
-  unfold words20 oracles20
-  rw [hdrop, List.zip_append hlen1, List.map_append, words19_eq, Chunk20.words_eq]
+  unfold words20 oracles20 chunkOracles20
+  rw [← words19_eq, ← Chunk20.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words21 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words20 ++ Chunk21.words
 noncomputable def bodies21 : List (Nat × HolProg 64) := bodies20 ++ Chunk21.bodies
@@ -644,15 +554,9 @@ theorem words21_eq :
     (((ConcreteCompilerWord.source.drop 80).take 272).zip oracles21).map
       (fun p => wordFunction p.2 p.1) = words21 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 256).length = oracles20.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 272) =
-      ((ConcreteCompilerWord.source.drop 80).take 256) ++ ((ConcreteCompilerWord.source.drop 336).take 16) := by
-    have h := List.take_append_drop 256 ((ConcreteCompilerWord.source.drop 80).take 272)
-    rw [List.take_take, show Nat.min 256 272 = 256 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 256 = 336 from rfl,
-        show 272 - 256 = 16 from rfl] at h
-    exact h.symm
-  unfold words21 oracles21
-  rw [hdrop, List.zip_append hlen1, List.map_append, words20_eq, Chunk21.words_eq]
+  unfold words21 oracles21 chunkOracles21
+  rw [← words20_eq, ← Chunk21.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words22 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words21 ++ Chunk22.words
 noncomputable def bodies22 : List (Nat × HolProg 64) := bodies21 ++ Chunk22.bodies
@@ -680,15 +584,9 @@ theorem words22_eq :
     (((ConcreteCompilerWord.source.drop 80).take 288).zip oracles22).map
       (fun p => wordFunction p.2 p.1) = words22 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 272).length = oracles21.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 288) =
-      ((ConcreteCompilerWord.source.drop 80).take 272) ++ ((ConcreteCompilerWord.source.drop 352).take 16) := by
-    have h := List.take_append_drop 272 ((ConcreteCompilerWord.source.drop 80).take 288)
-    rw [List.take_take, show Nat.min 272 288 = 272 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 272 = 352 from rfl,
-        show 288 - 272 = 16 from rfl] at h
-    exact h.symm
-  unfold words22 oracles22
-  rw [hdrop, List.zip_append hlen1, List.map_append, words21_eq, Chunk22.words_eq]
+  unfold words22 oracles22 chunkOracles22
+  rw [← words21_eq, ← Chunk22.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words23 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words22 ++ Chunk23.words
 noncomputable def bodies23 : List (Nat × HolProg 64) := bodies22 ++ Chunk23.bodies
@@ -716,15 +614,9 @@ theorem words23_eq :
     (((ConcreteCompilerWord.source.drop 80).take 304).zip oracles23).map
       (fun p => wordFunction p.2 p.1) = words23 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 288).length = oracles22.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 304) =
-      ((ConcreteCompilerWord.source.drop 80).take 288) ++ ((ConcreteCompilerWord.source.drop 368).take 16) := by
-    have h := List.take_append_drop 288 ((ConcreteCompilerWord.source.drop 80).take 304)
-    rw [List.take_take, show Nat.min 288 304 = 288 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 288 = 368 from rfl,
-        show 304 - 288 = 16 from rfl] at h
-    exact h.symm
-  unfold words23 oracles23
-  rw [hdrop, List.zip_append hlen1, List.map_append, words22_eq, Chunk23.words_eq]
+  unfold words23 oracles23 chunkOracles23
+  rw [← words22_eq, ← Chunk23.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words24 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words23 ++ Chunk24.words
 noncomputable def bodies24 : List (Nat × HolProg 64) := bodies23 ++ Chunk24.bodies
@@ -752,15 +644,9 @@ theorem words24_eq :
     (((ConcreteCompilerWord.source.drop 80).take 320).zip oracles24).map
       (fun p => wordFunction p.2 p.1) = words24 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 304).length = oracles23.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 320) =
-      ((ConcreteCompilerWord.source.drop 80).take 304) ++ ((ConcreteCompilerWord.source.drop 384).take 16) := by
-    have h := List.take_append_drop 304 ((ConcreteCompilerWord.source.drop 80).take 320)
-    rw [List.take_take, show Nat.min 304 320 = 304 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 304 = 384 from rfl,
-        show 320 - 304 = 16 from rfl] at h
-    exact h.symm
-  unfold words24 oracles24
-  rw [hdrop, List.zip_append hlen1, List.map_append, words23_eq, Chunk24.words_eq]
+  unfold words24 oracles24 chunkOracles24
+  rw [← words23_eq, ← Chunk24.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words25 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words24 ++ Chunk25.words
 noncomputable def bodies25 : List (Nat × HolProg 64) := bodies24 ++ Chunk25.bodies
@@ -788,15 +674,9 @@ theorem words25_eq :
     (((ConcreteCompilerWord.source.drop 80).take 336).zip oracles25).map
       (fun p => wordFunction p.2 p.1) = words25 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 320).length = oracles24.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 336) =
-      ((ConcreteCompilerWord.source.drop 80).take 320) ++ ((ConcreteCompilerWord.source.drop 400).take 16) := by
-    have h := List.take_append_drop 320 ((ConcreteCompilerWord.source.drop 80).take 336)
-    rw [List.take_take, show Nat.min 320 336 = 320 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 320 = 400 from rfl,
-        show 336 - 320 = 16 from rfl] at h
-    exact h.symm
-  unfold words25 oracles25
-  rw [hdrop, List.zip_append hlen1, List.map_append, words24_eq, Chunk25.words_eq]
+  unfold words25 oracles25 chunkOracles25
+  rw [← words24_eq, ← Chunk25.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words26 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words25 ++ Chunk26.words
 noncomputable def bodies26 : List (Nat × HolProg 64) := bodies25 ++ Chunk26.bodies
@@ -824,15 +704,9 @@ theorem words26_eq :
     (((ConcreteCompilerWord.source.drop 80).take 352).zip oracles26).map
       (fun p => wordFunction p.2 p.1) = words26 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 336).length = oracles25.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 352) =
-      ((ConcreteCompilerWord.source.drop 80).take 336) ++ ((ConcreteCompilerWord.source.drop 416).take 16) := by
-    have h := List.take_append_drop 336 ((ConcreteCompilerWord.source.drop 80).take 352)
-    rw [List.take_take, show Nat.min 336 352 = 336 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 336 = 416 from rfl,
-        show 352 - 336 = 16 from rfl] at h
-    exact h.symm
-  unfold words26 oracles26
-  rw [hdrop, List.zip_append hlen1, List.map_append, words25_eq, Chunk26.words_eq]
+  unfold words26 oracles26 chunkOracles26
+  rw [← words25_eq, ← Chunk26.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable def words27 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words26 ++ Chunk27.words
 noncomputable def bodies27 : List (Nat × HolProg 64) := bodies26 ++ Chunk27.bodies
@@ -860,15 +734,9 @@ theorem words27_eq :
     (((ConcreteCompilerWord.source.drop 80).take 368).zip oracles27).map
       (fun p => wordFunction p.2 p.1) = words27 := by
   have hlen1 : ((ConcreteCompilerWord.source.drop 80).take 352).length = oracles26.length := by decide
-  have hdrop : ((ConcreteCompilerWord.source.drop 80).take 368) =
-      ((ConcreteCompilerWord.source.drop 80).take 352) ++ ((ConcreteCompilerWord.source.drop 432).take 16) := by
-    have h := List.take_append_drop 352 ((ConcreteCompilerWord.source.drop 80).take 368)
-    rw [List.take_take, show Nat.min 352 368 = 352 from by decide,
-        List.drop_take, List.drop_drop, show 80 + 352 = 432 from rfl,
-        show 368 - 352 = 16 from rfl] at h
-    exact h.symm
-  unfold words27 oracles27
-  rw [hdrop, List.zip_append hlen1, List.map_append, words26_eq, Chunk27.words_eq]
+  unfold words27 oracles27 chunkOracles27
+  rw [← words26_eq, ← Chunk27.words_eq, ← List.map_append, ← List.zip_append hlen1]
+  congr 1
 
 noncomputable abbrev words : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := words27
 noncomputable abbrev bodies : List (Nat × HolProg 64) := bodies27
