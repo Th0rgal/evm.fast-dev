@@ -24,15 +24,20 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChi
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep5
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep6
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongTail2
+import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongTail3
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockTxProcess
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkSysTxLeaves
 
 /-! Closed strengthened contracts for the cutover rehearsal. Callers must establish
 the stated entry guards before these bridges can replace weaker primitive fields. -/
 
 set_option autoImplicit false
+set_option maxRecDepth 100000
 
 namespace InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
 
 open Flapjack.Basis.Pure.MlString
+open InitECandidate.Solver.PanTerminatingBounded
 open R11Shards
 
 /-- The closed ext-code world contract preserves the EVM and chain cells.
@@ -677,6 +682,154 @@ theorem phase2_b2a_bound :
 theorem ek_frame_start_c08_of :
     type_of% @R16Shards.EvmEkFk.ek_frame_start_c08_of :=
   R16Shards.EvmEkFk.ek_frame_start_c08_of
+
+private theorem chainLinks_g10_iff_bridge (m : Nat → Nat) :
+    ∀ xs : List Ivl, R16Shards.OpHandlersB.Group10.ChainLinks m xs ↔
+      R16Shards.OpHandlersB.HeadMemBridge.ChainLinks m xs
+  | [] => Iff.rfl
+  | [_] => Iff.rfl
+  | _ :: b :: rest =>
+    and_congr_right fun _ => chainLinks_g10_iff_bridge m (b :: rest)
+
+private theorem chainLinks_g09_iff_bridge (m : Nat → Nat) :
+    ∀ xs : List Ivl, R16Shards.OpHandlersB.Group09ChainWF.ChainLinks m xs ↔
+      R16Shards.OpHandlersB.HeadMemBridge.ChainLinks m xs
+  | [] => Iff.rfl
+  | [_] => Iff.rfl
+  | _ :: b :: rest =>
+    and_congr_right fun _ => chainLinks_g09_iff_bridge m (b :: rest)
+
+theorem headMemChainWF_g10_iff_bridge {F : Type}
+    (s : Flapjack.PanSemStateFiniteExact 64 F) :
+    R16Shards.OpHandlersB.Group10.HeadMemChainWF s ↔
+      R16Shards.OpHandlersB.HeadMemBridge.HeadMemChainWF s :=
+  and_congr_right fun _ =>
+    and_congr_right fun _ => chainLinks_g10_iff_bridge (memW s) (evmChain s)
+
+theorem headMemChainWF_g09_iff_bridge {F : Type}
+    (s : Flapjack.PanSemStateFiniteExact 64 F) :
+    R16Shards.OpHandlersB.Group09ChainWF.HeadMemChainWF s ↔
+      R16Shards.OpHandlersB.HeadMemBridge.HeadMemChainWF s :=
+  and_congr_right fun _ =>
+    and_congr_right fun _ => chainLinks_g09_iff_bridge (memW s) (evmChain s)
+
+/-- Unified `HeadMemBridge.HeadMemChainWF`-carrying opcode handler contract matching
+`HeadMemBridge.OpDispatchSpecA`'s precondition and postcondition. -/
+def OpHandlerChainSpecA (fname : Flapjack.Pancake.PanLang.MlS) : Prop :=
+  FunSpec (fun s => EvmInv s ∧ R16Shards.OpHandlersB.HeadMemBridge.HeadMemChainWF s ∧ ¬ EvmDone s)
+    (fun s r post =>
+      ((∃ v, r = some (.returned v)) →
+        (EvmInv post ∧ R16Shards.OpHandlersB.HeadMemBridge.HeadMemChainWF post) ∧
+          evmPot post < evmPot s) ∧
+      (IsEvmErr r →
+        (EvmInv post ∧ R16Shards.OpHandlersB.HeadMemBridge.HeadMemChainWF post) ∧
+          (evmChain post).length = (evmChain s).length ∧
+          Wave8GuestInv.evmR post ≤ Wave8GuestInv.evmR s))
+    fname
+
+theorem opHandlerChainSpecA_of_g10 {fname : Flapjack.Pancake.PanLang.MlS}
+    (h : R16Shards.OpHandlersB.OpHandlerSpecA fname) :
+    OpHandlerChainSpecA fname := by
+  obtain ⟨params, body, retShape, hlk, hbody⟩ := h
+  refine ⟨params, body, retShape, hlk, fun {F} s hc ⟨hinv, hwf, hnd⟩ hval hto => ?_⟩
+  have hstep := hbody s hc ⟨hinv, (headMemChainWF_g10_iff_bridge s).mpr hwf, hnd⟩ hval hto
+  refine ⟨fun hret => ?_, fun herr => ?_⟩
+  · obtain ⟨⟨hinv', hwf'⟩, hpot⟩ := hstep.1 hret
+    exact ⟨⟨hinv', (headMemChainWF_g10_iff_bridge _).mp hwf'⟩, hpot⟩
+  · obtain ⟨⟨hinv', hwf'⟩, hlen, hr⟩ := hstep.2 herr
+    exact ⟨⟨hinv', (headMemChainWF_g10_iff_bridge _).mp hwf'⟩, hlen, hr⟩
+
+theorem opHandlerChainSpecA_of_g09 {fname : Flapjack.Pancake.PanLang.MlS}
+    (h : R16Shards.OpHandlersB.Group09ChainWF.OpHandlerSpecA fname) :
+    OpHandlerChainSpecA fname := by
+  obtain ⟨params, body, retShape, hlk, hbody⟩ := h
+  refine ⟨params, body, retShape, hlk, fun {F} s hc ⟨hinv, hwf, hnd⟩ hval hto => ?_⟩
+  have hstep := hbody s hc ⟨hinv, (headMemChainWF_g09_iff_bridge s).mpr hwf, hnd⟩ hval hto
+  refine ⟨fun hret => ?_, fun herr => ?_⟩
+  · obtain ⟨⟨hinv', hwf'⟩, hpot⟩ := hstep.1 hret
+    exact ⟨⟨hinv', (headMemChainWF_g09_iff_bridge _).mp hwf'⟩, hpot⟩
+  · obtain ⟨⟨hinv', hwf'⟩, hlen, hr⟩ := hstep.2 herr
+    exact ⟨⟨hinv', (headMemChainWF_g09_iff_bridge _).mp hwf'⟩, hlen, hr⟩
+
+theorem op_return_chainSpecA : OpHandlerChainSpecA (ofString "op_return") :=
+  opHandlerChainSpecA_of_g09 R16Shards.OpHandlersB.Group09ChainWF.op_return_specA
+
+theorem op_revert_chainSpecA : OpHandlerChainSpecA (ofString "op_revert") :=
+  opHandlerChainSpecA_of_g09 R16Shards.OpHandlersB.Group09ChainWF.op_revert_specA
+
+theorem op_mcopy_chainSpecA : OpHandlerChainSpecA (ofString "op_mcopy") :=
+  opHandlerChainSpecA_of_g09 R16Shards.OpHandlersB.Group09ChainWF.op_mcopy_specA
+
+theorem op_selfdestruct_chainSpecA (hW : R16Shards.OpHandlersB.WorldAccountSpecsA) :
+    OpHandlerChainSpecA (ofString "op_selfdestruct") :=
+  opHandlerChainSpecA_of_g10 (R16Shards.OpHandlersB.op_selfdestruct_specA hW)
+
+theorem op_create_chainSpecA (hW : R16Shards.OpHandlersB.WorldAccountSpecsA)
+    (hcc : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "compute_contract_address"))
+    (hgc : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "generic_create")) :
+    OpHandlerChainSpecA (ofString "op_create") :=
+  opHandlerChainSpecA_of_g10 (R16Shards.OpHandlersB.op_create_specA_g10 hW hcc hgc)
+
+theorem op_create2_chainSpecA
+    (hU : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "u256_to_be32"))
+    (hW : R16Shards.OpHandlersB.WorldAccountSpecsA)
+    (hcc2 : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "compute_create2_contract_address"))
+    (hgc : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "generic_create")) :
+    OpHandlerChainSpecA (ofString "op_create2") :=
+  opHandlerChainSpecA_of_g10 (R16Shards.OpHandlersB.op_create2_specA_g10 hU hW hcc2 hgc)
+
+theorem op_delegatecall_chainSpecA (hW : R16Shards.OpHandlersB.WorldAccountSpecsA)
+    (hgc : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "generic_call")) :
+    OpHandlerChainSpecA (ofString "op_delegatecall") :=
+  opHandlerChainSpecA_of_g10 (R16Shards.OpHandlersB.op_delegatecall_specA_g10 hW hgc)
+
+theorem ptxPhase12_backing_strong_of_cuts :
+    type_of% @R13Shards.ptxPhase12_backing_strong_of_cuts :=
+  R13Shards.ptxPhase12_backing_strong_of_cuts
+
+theorem ptxPhase12_strong_of_phase2_cut :
+    type_of% @R13Shards.ptxPhase12_strong_of_phase2_cut :=
+  R13Shards.ptxPhase12_strong_of_phase2_cut
+
+theorem gbody_process_transaction_backing_strong_pmc_of_cuts :
+    type_of% @R13Shards.gbody_process_transaction_backing_strong_pmc_of_cuts :=
+  R13Shards.gbody_process_transaction_backing_strong_pmc_of_cuts
+
+theorem gbody_process_transaction_backing_strong_pmc_cutover_of_cuts
+    (h : R16Shards.PtxCalleesCutover)
+    (hwk : R16Shards.PtxP34.PmcStrong)
+    (hkeep : R16Shards.PmcBackingStrong)
+    (hp1 : R13Shards.PtxPhase1BackingCut)
+    (hp2 : R13Shards.PtxPhase2BackingCut) :
+    TerminatingFunBoundedOn
+      R16Shards.TxReadyBackingStrong (ofString "process_transaction")
+      K.«process_transaction» :=
+  R16Shards.gbody_process_transaction_backing_strong_of_h12_pmc_cutover h hwk hkeep
+    (R13Shards.ptxPhase12_backing_strong_of_cuts hp1 hp2)
+
+theorem ek_depth0_prepare_of_ek :
+    type_of% @R16Shards.EvmEkFk.ek_depth0_prepare_of_ek :=
+  R16Shards.EvmEkFk.ek_depth0_prepare_of_ek
+
+theorem wk_process_message_call_strong_of_callees :
+    type_of% @R16Shards.TopGbodyWk.wk_process_message_call_strong_of_callees :=
+  R16Shards.TopGbodyWk.wk_process_message_call_strong_of_callees
+
+theorem wk_process_unchecked_system_transaction_of_sc :
+    type_of% @R16Shards.TopGbodyWk.«wk_process_unchecked_system_transaction_of_sc» :=
+  R16Shards.TopGbodyWk.«wk_process_unchecked_system_transaction_of_sc»
 
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
