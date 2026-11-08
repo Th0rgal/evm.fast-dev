@@ -506,4 +506,194 @@ theorem phase2_b2a_l8_empty_alloc_bound (h : PtxCallees) {ι : Type} [Nonempty �
       (fun s => R16Shards.PtxP1.clock_skip s))
     (Hoare.skip (fun _ hp _ => hp)) hdec s hcode htsr
 
+/-! ### Segment B part 2a L9: the create-vs-call ite (position 91). -/
+
+/-- The ite at position 91 in its exact source shape. -/
+theorem phase2_b2a_spine91 :
+    spineAt 91 ptxCode =
+      .seq (.ite (.cmp .equal
+          (.load .one (.op .add [.var .local (ofString "tx"), .const (152#64)]))
+          (.const (0#64)))
+        (.decCall (ofString "sa") .one (ofString "get_account")
+          [.var .local (ofString "sender")]
+        (.decCall (ofString "ct") .one (ofString "alloc") [.const (24#64)]
+        (.seq (.call (some (none, none)) (ofString "compute_contract_address")
+          [.var .local (ofString "sender"),
+           .op .sub [.load .one (.op .add [.var .local (ofString "sa"), .const (0#64)]),
+             .const (1#64)],
+           .var .local (ofString "ct")])
+        phase2_message_create_stores)))
+      phase2_message_call_stores)
+      (spineAt 92 ptxCode) := by
+  simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
+  rfl
+
+/-- The ite plus the six final instructions as one seven-step spine plug. -/
+theorem phase2_b2a_shape7 (tail : ProgHOL 64) :
+    spinePlug 7 (spineAt 91 ptxCode) tail =
+      .seq (.ite (.cmp .equal
+          (.load .one (.op .add [.var .local (ofString "tx"), .const (152#64)]))
+          (.const (0#64)))
+        (.decCall (ofString "sa") .one (ofString "get_account")
+          [.var .local (ofString "sender")]
+        (.decCall (ofString "ct") .one (ofString "alloc") [.const (24#64)]
+        (.seq (.call (some (none, none)) (ofString "compute_contract_address")
+          [.var .local (ofString "sender"),
+           .op .sub [.load .one (.op .add [.var .local (ofString "sa"), .const (0#64)]),
+             .const (1#64)],
+           .var .local (ofString "ct")])
+        phase2_message_create_stores)))
+      phase2_message_call_stores)
+        (spinePlug 6 (spineAt 92 ptxCode) tail) := by
+  rw [phase2_b2a_spine91]
+  rfl
+
+/-- The create-vs-call ite terminates on both branches. The no branch is pure
+stores (clock-neutral); the yes branch is the account lookup, the fresh
+address allocation, and the contract-address computation, whose trailing
+creation stores are again clock-neutral. -/
+theorem phase2_b2a_l9_ite_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (aa ak : Nat) :
+    TerminatingProgBoundedOn
+      (PtxMessageTableStoreReady buffers contents ["empty", "aa", "ak"] aa ak)
+      (.ite (.cmp .equal
+          (.load .one (.op .add [.var .local (ofString "tx"), .const (152#64)]))
+          (.const (0#64)))
+        (.decCall (ofString "sa") .one (ofString "get_account")
+          [.var .local (ofString "sender")]
+        (.decCall (ofString "ct") .one (ofString "alloc") [.const (24#64)]
+        (.seq (.call (some (none, none)) (ofString "compute_contract_address")
+          [.var .local (ofString "sender"),
+           .op .sub [.load .one (.op .add [.var .local (ofString "sa"), .const (0#64)]),
+             .const (1#64)],
+           .var .local (ofString "ct")])
+        phase2_message_create_stores)))
+      phase2_message_call_stores)
+      (Nat.max
+        (K.get_account + (K.alloc + (K.«compute_contract_address» + 1 + 0) + 1) + 1)
+        0) := by
+  have hptriv : Hoare
+      (fun s => PtxMessageTableStoreReady buffers contents ["ct", "empty", "aa", "ak"] aa ak s ∧
+        ∀ region ∈ [(locN s "ct", 20),
+          (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+          (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)],
+          Disj (locN s "m", 176) region ∧ ∀ i, Disj (buffers i) region)
+      (.call (some (none, none)) (ofString "compute_contract_address")
+        [.var .local (ofString "sender"),
+         .op .sub [.load .one (.op .add [.var .local (ofString "sa"), .const (0#64)]),
+           .const (1#64)],
+         .var .local (ofString "ct")])
+      (fun r _ => r = none → True) :=
+    ⟨fun s hc hp hnt _ => trivial⟩
+  have hentry : CallEntryOn
+      (fun s => PtxMessageTableStoreReady buffers contents ["ct", "empty", "aa", "ak"] aa ak s ∧
+        ∀ region ∈ [(locN s "ct", 20),
+          (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+          (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)],
+          Disj (locN s "m", 176) region ∧ ∀ i, Disj (buffers i) region)
+      GuestInv (ofString "compute_contract_address")
+      [.var .local (ofString "sender"),
+       .op .sub [.load .one (.op .add [.var .local (ofString "sa"), .const (0#64)]),
+         .const (1#64)],
+       .var .local (ofString "ct")] :=
+    fun s vs body callee ret hc hp he hl =>
+      callEntryOn_guestInv _ _ s vs body callee ret hc hp.1.1.1.1.1.1 he hl
+  have hcall : TerminatingProgBoundedOn
+      (fun s => PtxMessageTableStoreReady buffers contents ["ct", "empty", "aa", "ak"] aa ak s ∧
+        ∀ region ∈ [(locN s "ct", 20),
+          (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+          (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)],
+          Disj (locN s "m", 176) region ∧ ∀ i, Disj (buffers i) region)
+      (.call (some (none, none)) (ofString "compute_contract_address")
+        [.var .local (ofString "sender"),
+         .op .sub [.load .one (.op .add [.var .local (ofString "sa"), .const (0#64)]),
+           .const (1#64)],
+         .var .local (ofString "ct")])
+      (K.«compute_contract_address» + 1) :=
+    TerminatingProgBoundedOn.call_on h.fb_compute_contract_address none
+      [.var .local (ofString "sender"),
+       .op .sub [.load .one (.op .add [.var .local (ofString "sa"), .const (0#64)]),
+         .const (1#64)],
+       .var .local (ofString "ct")] hentry
+  have hcs : TerminatingProgBoundedOn (fun _ => True) phase2_message_create_stores 0 :=
+    R16Shards.PtxP1.bound_of_clock (P := fun _ => True) phase2_message_create_stores_clock
+  have hseq : TerminatingProgBoundedOn
+      (fun s => PtxMessageTableStoreReady buffers contents ["ct", "empty", "aa", "ak"] aa ak s ∧
+        ∀ region ∈ [(locN s "ct", 20),
+          (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+          (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)],
+          Disj (locN s "m", 176) region ∧ ∀ i, Disj (buffers i) region)
+      (.seq (.call (some (none, none)) (ofString "compute_contract_address")
+          [.var .local (ofString "sender"),
+           .op .sub [.load .one (.op .add [.var .local (ofString "sa"), .const (0#64)]),
+             .const (1#64)],
+           .var .local (ofString "ct")])
+        phase2_message_create_stores)
+      (K.«compute_contract_address» + 1 + 0) :=
+    seq_bound_trans hcall hptriv hcs
+  have hct : TerminatingProgBoundedOn
+      (PtxMessageTableStoreReady buffers contents ["empty", "aa", "ak"] aa ak)
+      (.decCall (ofString "ct") .one (ofString "alloc") [.const (24#64)]
+        (.seq (.call (some (none, none)) (ofString "compute_contract_address")
+            [.var .local (ofString "sender"),
+             .op .sub [.load .one (.op .add [.var .local (ofString "sa"), .const (0#64)]),
+               .const (1#64)],
+             .var .local (ofString "ct")])
+          phase2_message_create_stores))
+      (K.alloc + (K.«compute_contract_address» + 1 + 0) + 1) :=
+    TerminatingProgBoundedOn.decCall_on h.fb_alloc (ofString "ct") .one [.const (24#64)]
+      (Q := fun s => PtxMessageTableStoreReady buffers contents ["ct", "empty", "aa", "ak"] aa ak s ∧
+        ∀ region ∈ [(locN s "ct", 20),
+          (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+          (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)],
+          Disj (locN s "m", 176) region ∧ ∀ i, Disj (buffers i) region)
+      (fun s vs body callee ret hc hp he hl =>
+        guestInv_callEntry s callee hp.1.1.1.1.1)
+      (phase2_ct_alloc_ready_write_separated h buffers contents ["empty", "aa", "ak"] aa ak
+        (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+            rcases hn with rfl | rfl | rfl <;> decide))
+      hseq
+  have hyes : TerminatingProgBoundedOn
+      (fun s => PtxMessageTableStoreReady buffers contents ["empty", "aa", "ak"] aa ak s ∧
+        CondTrue (.cmp .equal
+          (.load .one (.op .add [.var .local (ofString "tx"), .const (152#64)]))
+          (.const (0#64))) s)
+      (.decCall (ofString "sa") .one (ofString "get_account")
+        [.var .local (ofString "sender")]
+        (.decCall (ofString "ct") .one (ofString "alloc") [.const (24#64)]
+        (.seq (.call (some (none, none)) (ofString "compute_contract_address")
+          [.var .local (ofString "sender"),
+           .op .sub [.load .one (.op .add [.var .local (ofString "sa"), .const (0#64)]),
+             .const (1#64)],
+           .var .local (ofString "ct")])
+        phase2_message_create_stores)))
+      (K.get_account + (K.alloc + (K.«compute_contract_address» + 1 + 0) + 1) + 1) := by
+    apply R16Shards.PtxP1.bound_mono
+      (phase2_get_account_message_table_bound h buffers contents ["empty", "aa", "ak"] aa ak
+        (ofString "sa") [.var .local (ofString "sender")]
+        (by decide) (by decide) (by decide) (by decide)
+        (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+            rcases hn with rfl | rfl | rfl <;> decide)
+        (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+            rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+        hct)
+    intro F s hp
+    exact hp.1
+  have hno : TerminatingProgBoundedOn
+      (fun s => PtxMessageTableStoreReady buffers contents ["empty", "aa", "ak"] aa ak s ∧
+        CondFalse (.cmp .equal
+          (.load .one (.op .add [.var .local (ofString "tx"), .const (152#64)]))
+          (.const (0#64))) s)
+      phase2_message_call_stores 0 := by
+    apply R16Shards.PtxP1.bound_mono
+      (R16Shards.PtxP1.bound_of_clock
+        (P := PtxMessageTableStoreReady buffers contents ["empty", "aa", "ak"] aa ak)
+        phase2_message_call_stores_clock)
+    intro F s hp
+    exact hp.1
+  intro F state hcode hp
+  exact TerminatingProgBoundedOn.ite_cond_on
+    (P := PtxMessageTableStoreReady buffers contents ["empty", "aa", "ak"] aa ak) hyes hno
+    state hcode hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

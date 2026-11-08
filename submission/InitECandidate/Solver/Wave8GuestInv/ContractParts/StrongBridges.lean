@@ -11,6 +11,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodySysTxExecBl
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.NodeRlpFill
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.BuildMptIndexed
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.BuildMptIndexedWalk
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkHostPayloadHeaders
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.Depth0FrameOpen
@@ -492,5 +493,21 @@ theorem op_log_tail_log_append_pc_ret_g09 :
 theorem op_log_topic_while_both_g09 :
     type_of% @R16Shards.OpHandlersB.op_log_topic_while_both_g09 :=
   R16Shards.OpHandlersB.op_log_topic_while_both_g09
+
+theorem phase2_b2a_l9_ite_bound :
+    type_of% @R13Shards.phase2_b2a_l9_ite_bound :=
+  R13Shards.phase2_b2a_l9_ite_bound
+
+theorem mk_mpt_set_eff_strong :
+    type_of% @R16Shards.MptC10C12.mk_mpt_set_eff_strong :=
+  R16Shards.MptC10C12.mk_mpt_set_eff_strong
+
+theorem bmiWkWW_mpt_set :
+    type_of% @R16Shards.MptC10C12.bmiWkWW_mpt_set :=
+  R16Shards.MptC10C12.bmiWkWW_mpt_set
+
+theorem bmiWkLoop_hRl :
+    type_of% @R16Shards.MptC10C12.bmiWkLoop_hRl :=
+  R16Shards.MptC10C12.bmiWkLoop_hRl
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
