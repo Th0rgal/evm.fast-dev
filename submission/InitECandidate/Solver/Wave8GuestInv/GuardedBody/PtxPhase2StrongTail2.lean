@@ -436,4 +436,74 @@ theorem phase2_htabAB_warm_spine_bound (h : PtxCallees) {ι : Type} [Nonempty ι
     (seq_bound_trans hwhile
       (phase2_htabAB_warm_while buffers contents names key bound hne) ht) s hc hp
 
+/-! ### Segment B part 2a L8: the bridge into the frozen table-store frame and
+the `empty := alloc(8)` rung (positions 89..90).
+
+The frozen ite-region machinery runs on `PtxMessageTableStoreReady`, whose
+`memW (m+40) < 2^63` component records the message gas bound. That fact is
+orphaned upstream (the `PtxValidated` gas bound is dropped by the te-suffix and
+message-prefix invariants), so this rung takes it as an explicit entry
+hypothesis, exactly as the frozen `phase2_message_ready_of_access_tables`
+treats it on the tail side. -/
+
+/-- The two-table warming invariant plus the message-gas bound bridges into
+the frozen table-store frame at the message's two live tables. -/
+theorem phase2_htabAB_tableStoreReady {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String)
+    {s : PanSemStateFiniteExact 64 F} (aa ak : Nat)
+    (hp : PtxHtabABInv buffers contents names s)
+    (hg : memW s (locN s "m" + 40) < 2 ^ 63)
+    (haa : locN s "aa" = aa) (hak : locN s "ak" = ak) :
+    PtxMessageTableStoreReady buffers contents ["aa", "ak"] aa ak s := by
+  obtain ⟨hw_aa, hw_ak, ⟨hstore, hnames⟩, htxb, hp4, htables⟩ := hp
+  have hsr : PtxMessageStoreReady buffers contents s := by
+    obtain ⟨hW, hE, hm, hin, hwok, hbufs⟩ := hstore
+    refine ⟨hW, hE, hm, hin, hwok, ?_⟩
+    intro i
+    obtain ⟨hd, S, Nd, _, _, hw, hb, hsep⟩ := hbufs i
+    exact ⟨hd, S, Nd, hw, hb, hsep⟩
+  rw [haa, hak] at htables
+  refine ⟨⟨hsr, ?_⟩, htables, htxb, hp4, hg, haa, hak⟩
+  intro name hn
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+  rcases hn with rfl | rfl
+  · exact hw_aa
+  · exact hw_ak
+
+/-- The `empty := alloc(8)` rung (positions 89..90): the skip after ak
+warming, then the fresh empty-table allocation, which appends `empty` to the
+scalar witness names. -/
+theorem phase2_b2a_l8_empty_alloc_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String)
+    (aa ak : Nat) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (PtxMessageTableStoreReady buffers contents ["empty", "aa", "ak"] aa ak) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => PtxHtabABInv buffers contents names s ∧
+        memW s (locN s "m" + 40) < 2 ^ 63 ∧ locN s "aa" = aa ∧ locN s "ak" = ak)
+      (spinePlug 2 (spineAt 89 ptxCode) tail) (K.alloc + b + 1) := by
+  have hshape : spinePlug 2 (spineAt 89 ptxCode) tail =
+      .seq .skip (.decCall (ofString "empty") .one (ofString "alloc") [.const (8#64)] tail) := by
+    simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
+    rfl
+  rw [hshape]
+  have hdec : TerminatingProgBoundedOn
+      (PtxMessageTableStoreReady buffers contents ["aa", "ak"] aa ak)
+      (.decCall (ofString "empty") .one (ofString "alloc") [.const (8#64)] tail)
+      (K.alloc + b + 1) :=
+    phase2_alloc_message_table_word_bound h buffers contents ["aa", "ak"] aa ak "empty"
+      [.const (8#64)] (by decide) (by decide) (by decide) (by decide)
+      (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+          rcases hn with rfl | rfl <;> decide)
+      (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+          rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide) ht
+  intro F s hcode hp
+  obtain ⟨hab, hg, haa, hak⟩ := hp
+  have htsr := phase2_htabAB_tableStoreReady buffers contents names aa ak hab hg haa hak
+  simpa only [Nat.zero_add] using seq_bound_trans
+    (R16Shards.PtxP1.bound_of_clock
+      (P := PtxMessageTableStoreReady buffers contents ["aa", "ak"] aa ak)
+      (fun s => R16Shards.PtxP1.clock_skip s))
+    (Hoare.skip (fun _ hp _ => hp)) hdec s hcode htsr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
