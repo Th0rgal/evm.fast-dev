@@ -14,6 +14,11 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.BuildMptIndexed
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkHostPayloadHeaders
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.Depth0FrameOpen
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group09LogReturnRevert
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group10CallsCreates
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemAlignedBridge
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep1
+import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongTail2
 
 /-! Closed strengthened contracts for the cutover rehearsal. Callers must establish
 the stated entry guards before these bridges can replace weaker primitive fields. -/
@@ -108,6 +113,11 @@ theorem op_mcopy_aligned_spec :
     FunSpec (fun s => EvmRun s ∧ R16Shards.OpHandlersB.HeadMemAligned s)
       OpDispatchSpec.OpDispatchPost (ofString "op_mcopy") :=
   R16Shards.OpHandlersB.op_mcopy_aligned_spec
+
+theorem op_mload_aligned_spec :
+    FunSpec (fun s => EvmRun s ∧ R16Shards.OpHandlersB.HeadMemAligned s)
+      OpDispatchSpec.OpDispatchPost (ofString "op_mload") :=
+  R16Shards.OpHandlersB.op_mload_aligned_spec
 
 /-- The extcodecopy handler additionally requires preservation of every aligned
 head-frame word by ext_code_of. This premise must be discharged separately. -/
@@ -266,32 +276,221 @@ theorem frame_open_headMemChainWF_B' :
   R16Shards.OpHandlersB.HeadMemBridge.frame_open_headMemChainWF_B'
 
 theorem gbody_node_rlp_strong
-    (hf : TerminatingFunBoundedOn R16Shards.MptC10C12.NodeRlpReadyStrong
+    (hf : TerminatingFunBoundedOn R16Shards.MptC10C12.NrfStrong.NodeRlpReadyStrong
       (ofString "_node_rlp_fill") K.«_node_rlp_fill»)
     (hm : TerminatingFunBoundedOn GuestInv (ofString "mpt_fail") K.«mpt_fail»)
     (hr : ReadOnlyFn (ofString "mpt_fail")) :
-    TerminatingFunBoundedOn R16Shards.MptC10C12.NodeRlpReadyNonNull
+    TerminatingFunBoundedOn R16Shards.MptC10C12.NrfStrong.NodeRlpReadyNonNull
       (ofString "node_rlp") K.«node_rlp» :=
-  R16Shards.MptC10C12.gbody_node_rlp_strong hf hm hr
+  R16Shards.MptC10C12.NrfStrong.gbody_node_rlp_strong hf hm hr
 
 theorem gbody_node_hash_strong
     (ha : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
     (hk : TerminatingFunBoundedOn GuestInv (ofString "keccak256") K.«keccak256»)
-    (hn : TerminatingFunBoundedOn R16Shards.MptC10C12.NodeRlpReadyNonNull
+    (hn : TerminatingFunBoundedOn R16Shards.MptC10C12.NrfStrong.NodeRlpReadyNonNull
       (ofString "node_rlp") K.«node_rlp») :
-    TerminatingFunBoundedOn R16Shards.MptC10C12.NodeRlpReadyNonNull
+    TerminatingFunBoundedOn R16Shards.MptC10C12.NrfStrong.NodeRlpReadyNonNull
       (ofString "node_hash") K.«node_hash» :=
-  R16Shards.MptC10C12.gbody_node_hash_strong ha hk hn
+  R16Shards.MptC10C12.NrfStrong.gbody_node_hash_strong ha hk hn
+
+theorem gbody__node_rlp_fill_strong :
+    R16Shards.MptC10C12.NrfStrong.GBody.«_node_rlp_fill_strong» :=
+  R16Shards.MptC10C12.NrfStrong.«gbody__node_rlp_fill_strong»
 
 theorem gbody_mpt_root_strong
     (hm : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»)
-    (hn : TerminatingFunBoundedOn R16Shards.MptC10C12.NodeRlpReadyNonNull
+    (hn : TerminatingFunBoundedOn R16Shards.MptC10C12.NrfStrong.NodeRlpReadyNonNull
       (ofString "node_hash") K.«node_hash») :
-    TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root» :=
-  R16Shards.MptC10C12.gbody_mpt_root_strong hm hn
+    TerminatingFunBoundedOn R16Shards.MptC10C12.NrfStrong.MptObjReadyStrong
+      (ofString "mpt_root") K.«mpt_root» :=
+  R16Shards.MptC10C12.NrfStrong.gbody_mpt_root_strong hm hn
 
 theorem gbody_build_mpt_indexed_strong :
     type_of% @R16Shards.MptC10C12.gbody_build_mpt_indexed :=
   R16Shards.MptC10C12.gbody_build_mpt_indexed
+
+theorem wk_ws_get_storage_strong :
+    WorldKeeps (fun s => WorldOK s ∧ R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
+      (R16WkAcctWs.bufRegions R16Shards.EvmEkFk.wsAcctBufs)
+      ["heap_ptr", "scratch_ptr"] EvmBase.stdKeep NoExtra (ofString "ws_get_storage") :=
+  R16Shards.EvmEkFk.«wk_ws_get_storage_strong»
+
+theorem wk_get_storage_original_strong :
+    WorldKeeps (fun s => WorldOK s ∧ R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
+      (R16WkAcctWs.bufRegions R16Shards.EvmEkFk.wsAcctBufs)
+      ["heap_ptr", "scratch_ptr"] EvmBase.stdKeep NoExtra (ofString "get_storage_original") :=
+  R16Shards.EvmEkFk.«wk_get_storage_original_strong»
+
+theorem wk_get_storage_strong :
+    WorldKeeps (fun s => WorldOK s ∧ R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
+      (R16WkAcctWs.bufRegions R16Shards.EvmEkFk.extCodeBufs)
+      ["heap_ptr", "scratch_ptr"] EvmBase.stdKeep NoExtra (ofString "get_storage") :=
+  R16Shards.EvmEkFk.«wk_get_storage_strong»
+
+theorem ek_get_storage_original_strong :
+    EvmKeeps
+      (fun s =>
+        EvmAvoids
+          (fun s =>
+            [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+             (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+             (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)]) s ∧
+        R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
+      ["heap_ptr", "scratch_ptr"] (ofString "get_storage_original") :=
+  R16Shards.EvmEkFk.«ek_get_storage_original_strong»
+
+theorem ek_get_storage_strong :
+    EvmKeeps
+      (fun s =>
+        EvmAvoids (R16WkAcctWs.bufRegions R16Shards.EvmEkFk.extCodeBufs) s ∧
+        R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
+      ["heap_ptr", "scratch_ptr"] (ofString "get_storage") :=
+  R16Shards.EvmEkFk.«ek_get_storage_strong»
+
+theorem eps_get_storage_original_strong :
+    R14Shards.OpHandlersA.EvmPreservingSpec
+      R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK
+      (fun s _ post => GlobalsKept ["heap_ptr", "scratch_ptr"] s post ∧
+        R11Shards.OpDispatchSpec.evmR post = R11Shards.OpDispatchSpec.evmR s ∧
+        R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK post)
+      (ofString "get_storage_original") :=
+  R16Shards.EvmEkFk.eps_get_storage_original_strong
+
+theorem eps_get_storage_strong :
+    R14Shards.OpHandlersA.EvmPreservingSpec
+      R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK
+      (fun s _ post => GlobalsKept ["heap_ptr", "scratch_ptr"] s post ∧
+        R11Shards.OpDispatchSpec.evmR post = R11Shards.OpDispatchSpec.evmR s ∧
+        R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK post)
+      (ofString "get_storage") :=
+  R16Shards.EvmEkFk.eps_get_storage_strong
+
+theorem evm_cells_get_storage_original_strong :
+    FunSpec (fun s => EvmInv s ∧ R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
+      (fun s r post => InitECandidate.Solver.Wave8Contracts.M23.Resumes r →
+        EvmStep ["heap_ptr", "scratch_ptr"] s post ∧
+        R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK post ∧
+        R11Shards.OpDispatchSpec.evmR post = R11Shards.OpDispatchSpec.evmR s ∧
+        ∀ ec ∈ evmChain s,
+          memW post (ec.1 + 24) = memW s (ec.1 + 24) ∧
+          memW post (ec.1 + 32) = memW s (ec.1 + 32) ∧
+          memW post (ec.1 + 40) = memW s (ec.1 + 40) ∧
+          memW post (ec.2 + 48) = memW s (ec.2 + 48) ∧
+          memW post (ec.2 + 56) = memW s (ec.2 + 56))
+      (ofString "get_storage_original") :=
+  R16Shards.EvmEkFk.evm_cells_get_storage_original_strong
+
+theorem evm_cells_get_storage_strong :
+    FunSpec (fun s => EvmInv s ∧ R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
+      (fun s r post => InitECandidate.Solver.Wave8Contracts.M23.Resumes r →
+        EvmStep ["heap_ptr", "scratch_ptr"] s post ∧
+        R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK post ∧
+        R11Shards.OpDispatchSpec.evmR post = R11Shards.OpDispatchSpec.evmR s ∧
+        ∀ ec ∈ evmChain s,
+          memW post (ec.1 + 24) = memW s (ec.1 + 24) ∧
+          memW post (ec.1 + 32) = memW s (ec.1 + 32) ∧
+          memW post (ec.1 + 40) = memW s (ec.1 + 40) ∧
+          memW post (ec.2 + 48) = memW s (ec.2 + 48) ∧
+          memW post (ec.2 + 56) = memW s (ec.2 + 56))
+      (ofString "get_storage") :=
+  R16Shards.EvmEkFk.evm_cells_get_storage_strong
+
+theorem op_return_specA :
+    R16Shards.OpHandlersB.Group09ChainWF.OpHandlerSpecA (ofString "op_return") :=
+  R16Shards.OpHandlersB.Group09ChainWF.op_return_specA
+
+theorem op_revert_specA :
+    R16Shards.OpHandlersB.Group09ChainWF.OpHandlerSpecA (ofString "op_revert") :=
+  R16Shards.OpHandlersB.Group09ChainWF.op_revert_specA
+
+theorem op_mcopy_specA :
+    R16Shards.OpHandlersB.Group09ChainWF.OpHandlerSpecA (ofString "op_mcopy") :=
+  R16Shards.OpHandlersB.Group09ChainWF.op_mcopy_specA
+
+theorem fcStackPushW : R16Shards.OpHandlersB.HeadMemBridge.FcClosed.FcStackPushStepW :=
+  R16Shards.OpHandlersB.HeadMemBridge.FcClosed.fcStackPushW
+
+theorem fcAddrToU256W : R16Shards.OpHandlersB.HeadMemBridge.FcClosed.FcAddrToU256StepW :=
+  R16Shards.OpHandlersB.HeadMemBridge.FcClosed.fcAddrToU256W
+
+theorem fcSetRetdataW : R16Shards.OpHandlersB.HeadMemBridge.FcClosed.FcSetRetdataStepW :=
+  R16Shards.OpHandlersB.HeadMemBridge.FcClosed.fcSetRetdataW
+
+theorem fcMinTailW : R16Shards.OpHandlersB.HeadMemBridge.FcClosed.FcMinTailStepW :=
+  R16Shards.OpHandlersB.HeadMemBridge.FcClosed.fcMinTailW
+
+theorem create_finish_specs : R16Shards.EvmEkFk.CreateFinishSpecs :=
+  R16Shards.EvmEkFk.create_finish_specs
+
+theorem finish_child_finishPost :
+    FunSpec FinishReady R16Shards.EvmEkFk.FinishPost (ofString "finish_child") :=
+  R16Shards.OpHandlersB.HeadMemBridge.finish_child_finishPost_of_createFinish
+    R16Shards.EvmEkFk.create_finish_specs
+
+theorem finish_child_spec_closed :
+    type_of% @Wave8GuestInv.finish_child_spec :=
+  R16Shards.OpHandlersB.HeadMemBridge.finishChildSpecU_of_createFinish
+    R16Shards.EvmEkFk.create_finish_specs
+
+theorem finishChildMemSpec :
+    R16Shards.OpHandlersB.HeadMemBridge.FinishChildMemSpec :=
+  R16Shards.OpHandlersB.HeadMemBridge.finishChildMemSpec_of_createFinish
+    R16Shards.EvmEkFk.create_finish_specs
+
+theorem finishChildSpecA :
+    R16Shards.OpHandlersB.HeadMemBridge.FinishChildSpecA :=
+  R16Shards.OpHandlersB.HeadMemBridge.finishChildSpecA_of_createFinish
+    R16Shards.EvmEkFk.create_finish_specs
+
+theorem gbody_run_frames_aligned_closed :
+    type_of% @(R16Shards.OpHandlersB.HeadMemBridge.gbody_run_frames_aligned_of_createFinish
+      (hCF := R16Shards.EvmEkFk.create_finish_specs)) :=
+  fun bf be bx bd hd =>
+    R16Shards.OpHandlersB.HeadMemBridge.gbody_run_frames_aligned_of_createFinish
+      bf be bx bd R16Shards.EvmEkFk.create_finish_specs hd
+
+theorem op_selfdestruct_specA_g10 :
+    type_of% @R16Shards.OpHandlersB.op_selfdestruct_specA :=
+  R16Shards.OpHandlersB.op_selfdestruct_specA
+
+theorem op_create_specA_g10 :
+    type_of% @R16Shards.OpHandlersB.op_create_specA_g10 :=
+  R16Shards.OpHandlersB.op_create_specA_g10
+
+theorem op_create2_specA_g10 :
+    type_of% @R16Shards.OpHandlersB.op_create2_specA_g10 :=
+  R16Shards.OpHandlersB.op_create2_specA_g10
+
+theorem epsA_calculate_message_call_gas_vals_g10 :
+    type_of% @R16Shards.OpHandlersB.epsA_calculate_message_call_gas_vals_g10 :=
+  R16Shards.OpHandlersB.epsA_calculate_message_call_gas_vals_g10
+
+theorem epsA_calculate_delegation_cost_g10 :
+    type_of% @R16Shards.OpHandlersB.epsA_calculate_delegation_cost_g10 :=
+  R16Shards.OpHandlersB.epsA_calculate_delegation_cost_g10
+
+theorem epsA_charge_gas_exact_g10 :
+    type_of% @R16Shards.OpHandlersB.epsA_charge_gas_exact_g10 :=
+  R16Shards.OpHandlersB.epsA_charge_gas_exact_g10
+
+theorem epsA_add_sat_ge_g10 :
+    type_of% @R16Shards.OpHandlersB.epsA_add_sat_ge_g10 :=
+  R16Shards.OpHandlersB.epsA_add_sat_ge_g10
+
+theorem phase2_b2a_l8_empty_alloc_bound :
+    type_of% @R13Shards.phase2_b2a_l8_empty_alloc_bound :=
+  R13Shards.phase2_b2a_l8_empty_alloc_bound
+
+theorem log_append_body_unified_g09 :
+    type_of% @R16Shards.OpHandlersB.log_append_body_unified_g09 :=
+  R16Shards.OpHandlersB.log_append_body_unified_g09
+
+theorem op_log_tail_log_append_pc_ret_g09 :
+    type_of% @R16Shards.OpHandlersB.op_log_tail_log_append_pc_ret_g09 :=
+  R16Shards.OpHandlersB.op_log_tail_log_append_pc_ret_g09
+
+theorem op_log_topic_while_both_g09 :
+    type_of% @R16Shards.OpHandlersB.op_log_topic_while_both_g09 :=
+  R16Shards.OpHandlersB.op_log_topic_while_both_g09
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges

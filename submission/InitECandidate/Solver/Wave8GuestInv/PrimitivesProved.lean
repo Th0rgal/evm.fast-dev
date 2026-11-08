@@ -92,6 +92,8 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.ComputeStateRoot
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockAuxLeaves
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodyPayloadHeaderExport
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemAlignedBridge
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep1
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.GbodyMain
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
@@ -399,7 +401,7 @@ theorem primitives : Primitives where
   «gbody_op_dispatch» := Merged.gbody_op_dispatch
   «fb_frame_epilogue» := Merged.fb_frame_epilogue
   «fb_frame_exception» := Merged.fb_frame_exception
-  «finish_child_spec» := «finish_child_spec»
+  «finish_child_spec» := R16Shards.OpHandlersB.HeadMemBridge.finishChildSpecU_of_createFinish R16Shards.EvmEkFk.create_finish_specs
   «frame_epilogue_spec» := R16Shards.StateRestoreEpilogue.frame_epilogue_spec
   «frame_exception_spec» := R16Shards.PrimC08Closure.frame_exception_spec
   «op_dispatch_spec» := «op_dispatch_spec»

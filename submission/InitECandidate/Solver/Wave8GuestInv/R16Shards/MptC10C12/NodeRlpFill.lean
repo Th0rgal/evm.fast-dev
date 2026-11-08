@@ -11,7 +11,8 @@ set_option linter.unreachableTactic false
 set_option linter.unusedVariables false
 set_option linter.style.nameCheck false
 
-namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
+namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.NrfStrong
+open InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -16542,4 +16543,4 @@ theorem gbody__node_rlp_fill_of_entry
     let ⟨ps, body, rt, hl, hprog⟩ := gbody__node_rlp_fill_strong_of hn hb hf ha hm hrel
     ⟨ps, body, rt, hl, fun s hc hP => hprog s hc (hentry s hP)⟩
 
-end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
+end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.NrfStrong

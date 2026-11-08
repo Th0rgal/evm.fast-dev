@@ -8,6 +8,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group04
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group05
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.CalldataloadSpecs
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.StateAccountOps
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group08
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group09LogReturnRevert
 
 /-! # OpDispatch Router Assembly (`op_dispatch_spec_of_remaining`)
@@ -901,7 +902,8 @@ theorem op_dispatch_aligned_spec_of_handlers (h : AllOpHandlersSpecA) : OpDispat
     exact hwalk.2 (by simp)
 
 /-- Remaining `OpHandlersA`-scope leaves for the aligned router: `RemainingOpHandlersASpec'`
-minus `op_keccak` (discharged by `op_keccak_aligned_spec`). -/
+minus `op_keccak` (discharged by `op_keccak_aligned_spec`) and `op_mload`/`op_mstore`/`op_mstore8`
+(discharged by `Group08`). -/
 def RemainingOpHandlersASpecAligned : Prop :=
   OpHandlerSpec (ofString "op_blockhash") ∧
   OpHandlerSpec (ofString "op_coinbase") ∧
@@ -915,9 +917,6 @@ def RemainingOpHandlersASpecAligned : Prop :=
   OpHandlerSpec (ofString "op_blobbasefee") ∧
   OpHandlerSpec (ofString "op_slotnum") ∧
   OpHandlerSpec (ofString "op_pop") ∧
-  OpHandlerSpec (ofString "op_mload") ∧
-  OpHandlerSpec (ofString "op_mstore") ∧
-  OpHandlerSpec (ofString "op_mstore8") ∧
   OpHandlerSpec (ofString "op_msize") ∧
   OpHandlerSpec (ofString "op_push") ∧
   OpHandlerSpec (ofString "op_dup") ∧
@@ -927,13 +926,10 @@ def RemainingOpHandlersASpecAligned : Prop :=
   OpHandlerSpec (ofString "op_exchange")
 
 /-- Remaining `OpHandlersB`-scope leaves for the aligned router: `RemainingOpHandlersBSpec'`
-minus `op_return`/`op_revert` (discharged by `Group09LogReturnRevert`). -/
+minus `op_calldatacopy`/`op_codecopy`/`op_returndatacopy` (discharged by `Group08`) and
+`op_mcopy`/`op_return`/`op_revert` (discharged by `Group08` + `Group09LogReturnRevert`). -/
 def RemainingOpHandlersBSpecAligned : Prop :=
-  OpHandlerSpec (ofString "op_calldatacopy") ∧
-  OpHandlerSpec (ofString "op_codecopy") ∧
   OpHandlerSpec (ofString "op_extcodecopy") ∧
-  OpHandlerSpec (ofString "op_returndatacopy") ∧
-  OpHandlerSpec (ofString "op_mcopy") ∧
   OpHandlerSpec (ofString "op_log") ∧
   OpHandlerSpec (ofString "op_create") ∧
   OpHandlerSpec (ofString "op_call") ∧
@@ -951,11 +947,10 @@ theorem allOpHandlersSpecA_of_remaining
     ⟨h_op_blockhash, h_op_coinbase, h_op_timestamp, h_op_number, h_op_prevrandao,
      h_op_gaslimit, h_op_chainid, h_op_basefee, h_op_blobhash,
      h_op_blobbasefee, h_op_slotnum,
-     h_op_pop, h_op_mload, h_op_mstore, h_op_mstore8, h_op_msize,
+     h_op_pop, h_op_msize,
      h_op_push, h_op_dup, h_op_swap, h_op_dupn, h_op_swapn, h_op_exchange⟩
   rcases hB with
-    ⟨h_op_calldatacopy, h_op_codecopy, h_op_extcodecopy, h_op_returndatacopy,
-     h_op_mcopy, h_op_log,
+    ⟨h_op_extcodecopy, h_op_log,
      h_op_create, h_op_call, h_op_callcode, h_op_delegatecall,
      h_op_create2, h_op_staticcall⟩
   exact
@@ -973,11 +968,11 @@ theorem allOpHandlersSpecA_of_remaining
      opHandlerSpecA_of (op_balance_spec hW), opHandlerSpecA_of op_origin_spec,
      opHandlerSpecA_of op_caller_spec, opHandlerSpecA_of op_callvalue_spec,
      opHandlerSpecA_of op_calldataload_spec, opHandlerSpecA_of op_calldatasize_spec,
-     opHandlerSpecA_of h_op_calldatacopy,
-     opHandlerSpecA_of op_codesize_spec, opHandlerSpecA_of h_op_codecopy,
+     op_calldatacopy_aligned_spec,
+     opHandlerSpecA_of op_codesize_spec, op_codecopy_aligned_spec,
      opHandlerSpecA_of op_gasprice_spec, opHandlerSpecA_of (op_extcodesize_spec hW),
      opHandlerSpecA_of h_op_extcodecopy,
-     opHandlerSpecA_of op_returndatasize_spec, opHandlerSpecA_of h_op_returndatacopy,
+     opHandlerSpecA_of op_returndatasize_spec, op_returndatacopy_aligned_spec,
      opHandlerSpecA_of (op_extcodehash_spec hW),
      opHandlerSpecA_of h_op_blockhash, opHandlerSpecA_of h_op_coinbase,
      opHandlerSpecA_of h_op_timestamp, opHandlerSpecA_of h_op_number,
@@ -985,12 +980,12 @@ theorem allOpHandlersSpecA_of_remaining
      opHandlerSpecA_of h_op_chainid, opHandlerSpecA_of (op_selfbalance_spec hW),
      opHandlerSpecA_of h_op_basefee, opHandlerSpecA_of h_op_blobhash,
      opHandlerSpecA_of h_op_blobbasefee, opHandlerSpecA_of h_op_slotnum,
-     opHandlerSpecA_of h_op_pop, opHandlerSpecA_of h_op_mload, opHandlerSpecA_of h_op_mstore,
-     opHandlerSpecA_of h_op_mstore8, opHandlerSpecA_of (op_sload_spec hW),
+     opHandlerSpecA_of h_op_pop, op_mload_aligned_spec, op_mstore_aligned_spec,
+     op_mstore8_aligned_spec, opHandlerSpecA_of (op_sload_spec hW),
      opHandlerSpecA_of (op_sstore_spec hW),
      opHandlerSpecA_of op_jump_spec, opHandlerSpecA_of op_jumpi_spec, opHandlerSpecA_of op_pc_spec,
      opHandlerSpecA_of h_op_msize, opHandlerSpecA_of op_gas_spec, opHandlerSpecA_of op_jumpdest_spec,
-     opHandlerSpecA_of op_tload_spec, opHandlerSpecA_of op_tstore_spec, opHandlerSpecA_of h_op_mcopy,
+     opHandlerSpecA_of op_tload_spec, opHandlerSpecA_of op_tstore_spec, op_mcopy_aligned_spec,
      opHandlerSpecA_of h_op_push,
      opHandlerSpecA_of h_op_dup, opHandlerSpecA_of h_op_swap,
      opHandlerSpecA_of h_op_log, opHandlerSpecA_of h_op_dupn, opHandlerSpecA_of h_op_swapn,
@@ -1000,9 +995,9 @@ theorem allOpHandlersSpecA_of_remaining
      opHandlerSpecA_of h_op_create2, opHandlerSpecA_of h_op_staticcall,
      op_revert_aligned_spec, opHandlerSpecA_of (op_selfdestruct_spec hW)⟩
 
-/-- Aligned `op_dispatch_spec` with Groups 01/02/03/04 (incl. `op_keccak`)/05/06a/07a,
-`StateAccountOps`, and Group09 `op_return`/`op_revert` wired
-(53 of 87 handlers discharged; 22 A-side + 12 B-side obligations remain). -/
+/-- Aligned `op_dispatch_spec` with Groups 01/02/03/04 (incl. `op_keccak`)/05/06a/07a/08,
+`StateAccountOps`, and Group09 `op_return`/`op_revert`/`op_mcopy` wired
+(60 of 87 handlers discharged; 19 A-side + 8 B-side obligations remain). -/
 theorem op_dispatch_aligned_spec_of
     (hW : WorldAccountSpecs)
     (hA : RemainingOpHandlersASpecAligned)

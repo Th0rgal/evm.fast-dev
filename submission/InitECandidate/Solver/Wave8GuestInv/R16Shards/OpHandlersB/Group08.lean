@@ -11647,7 +11647,7 @@ private theorem mcopy_after_pops_run_g08 {F : Type} (s0 : PanSemStateFiniteExact
     · intro t hc hInv hlen hR ⟨hHM, ww, hwb, hK⟩ hnt
       exact hcost ww hwb t hc hInv hlen hR ⟨hHM, hK⟩ hnt
 
-theorem op_mcopy_aligned_spec :
+theorem op_mcopy_aligned_spec_g08 :
     FunSpec (fun s => EvmRun s ∧ HeadMemAligned s) OpDispatchPost (ofString "op_mcopy") := by
   refine ⟨_, _, _, lookup_op_mcopy_g08, ?_⟩
   intro F s0 hcode ⟨hRun, hHM⟩ _ hnt
