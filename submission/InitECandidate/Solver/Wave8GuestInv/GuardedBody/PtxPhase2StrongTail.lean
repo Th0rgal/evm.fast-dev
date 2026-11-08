@@ -644,7 +644,7 @@ theorem phase2_htabA_increment_hoare {ι : Type} [Nonempty ι] (buffers : ι →
 
 /-- The warming-loop body never yields `continue`: a flowing `call0` restores
 the caller's locals, and the trailing assign never continues. -/
-private theorem phase2_warm_body_noCont (fname : MlS) (args : List (ExpHOL 64)) :
+theorem phase2_warm_body_noCont (fname : MlS) (args : List (ExpHOL 64)) :
     ∀ {F : Type} (st : PanSemStateFiniteExact 64 F),
       (evaluateHOLFiniteState st
         (.seq (.call (some (none, none)) fname args)
@@ -768,7 +768,7 @@ theorem while_less_noCont {names : List String}
 /-- A normal warming-loop body run increments the counter: the flowing call
 restores the caller's locals, so the trailing assign bumps `i` from `w` to
 `w + 1`. -/
-private theorem phase2_warm_body_incr (fname : MlS) (args : List (ExpHOL 64)) :
+theorem phase2_warm_body_incr (fname : MlS) (args : List (ExpHOL 64)) :
     ∀ {F : Type} (st : PanSemStateFiniteExact 64 F) (w : BitVec 64),
       st.locals.lookup (ofString "i") = some (.val (.word w)) →
       (evaluateHOLFiniteState st
