@@ -288,6 +288,8 @@ open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv.R11Shards
 open InitECandidate.Solver.Wave8Contracts.M23
 
+namespace RouterAligned
+
 /-- `OpHandlerSpec` under the aligned precondition. -/
 def OpHandlerSpecA (fname : MlS) : Prop :=
   FunSpec (fun s => EvmRun s ∧ HeadMemAligned s) OpDispatchPost fname
@@ -1004,5 +1006,9 @@ theorem op_dispatch_aligned_spec_of
     (hB : RemainingOpHandlersBSpecAligned) :
     OpDispatchAlignedSpec :=
   op_dispatch_aligned_spec_of_handlers (allOpHandlersSpecA_of_remaining hW hA hB)
+
+end RouterAligned
+
+open RouterAligned
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

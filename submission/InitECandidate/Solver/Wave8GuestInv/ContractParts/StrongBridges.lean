@@ -26,6 +26,13 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChi
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep6
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongTail2
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongTail3
+import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongExt
+import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongTail4
+import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongTail5
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group05bEnv
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group06Stack
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.RouterCutover
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.RouterChainCutover
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockTxProcess
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkSysTxLeaves
 
@@ -877,5 +884,416 @@ theorem wk_process_transaction_strong_of_witnessDb :
   R16Shards.TopGbodyWk.wk_process_transaction_strong_of_decode_witness
     decode_witness_to_mpt_spec_wkBal
 
+/-! ## Wave 8 R27 Cutover Wiring: A-Side Handlers, Cutover Routers & Phase 2 Strong Cuts -/
+
+theorem remainingOpHandlersASpecAligned_closed :
+    R16Shards.OpHandlers.RemainingOpHandlersASpecAligned :=
+  R16Shards.OpHandlers.remainingOpHandlersASpecAligned_proved
+
+theorem op_blockhash_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_blockhash") :=
+  R16Shards.OpHandlers.op_blockhash_spec
+
+theorem op_coinbase_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_coinbase") :=
+  R16Shards.OpHandlers.op_coinbase_spec
+
+theorem op_timestamp_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_timestamp") :=
+  R16Shards.OpHandlers.op_timestamp_spec
+
+theorem op_number_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_number") :=
+  R16Shards.OpHandlers.op_number_spec
+
+theorem op_prevrandao_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_prevrandao") :=
+  R16Shards.OpHandlers.op_prevrandao_spec
+
+theorem op_gaslimit_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_gaslimit") :=
+  R16Shards.OpHandlers.op_gaslimit_spec
+
+theorem op_chainid_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_chainid") :=
+  R16Shards.OpHandlers.op_chainid_spec
+
+theorem op_basefee_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_basefee") :=
+  R16Shards.OpHandlers.op_basefee_spec
+
+theorem op_blobhash_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_blobhash") :=
+  R16Shards.OpHandlers.op_blobhash_spec
+
+theorem op_blobbasefee_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_blobbasefee") :=
+  R16Shards.OpHandlers.op_blobbasefee_spec
+
+theorem op_slotnum_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_slotnum") :=
+  R16Shards.OpHandlers.op_slotnum_spec
+
+theorem op_pop_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_pop") :=
+  R16Shards.OpHandlers.op_pop_spec
+
+theorem op_msize_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_msize") :=
+  R16Shards.OpHandlers.op_msize_spec
+
+theorem op_dup_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_dup") :=
+  R16Shards.OpHandlers.op_dup_spec
+
+theorem op_swap_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_swap") :=
+  R16Shards.OpHandlers.op_swap_spec
+
+theorem op_dupn_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_dupn") :=
+  R16Shards.OpHandlers.op_dupn_spec
+
+theorem op_swapn_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_swapn") :=
+  R16Shards.OpHandlers.op_swapn_spec
+
+theorem op_exchange_spec : OpDispatchSpec.OpHandlerSpec (ofString "op_exchange") :=
+  R16Shards.OpHandlers.op_exchange_spec
+
+theorem op_push_bounded_spec :
+    type_of% @R16Shards.OpHandlers.op_push_bounded_spec :=
+  R16Shards.OpHandlers.op_push_bounded_spec
+
+theorem op_push_bounded_aligned_spec :
+    R16Shards.OpHandlersB.OpPushBoundedAlignedSpec :=
+  R16Shards.OpHandlersB.op_push_bounded_aligned_spec
+
+/-- Aligned `op_dispatch` cutover router with `ext_code_of` head-word preservation discharged,
+closing 80/87 aligned handlers modulo `WorldAccountSpecs` and the 7 remaining call/create/log specs. -/
+theorem op_dispatch_aligned_spec_cutover_closed
+    (hW : R16Shards.OpHandlersB.WorldAccountSpecs)
+    (hrem : R16Shards.OpHandlersB.RemainingCallCreateLogAlignedSpecs) :
+    R16Shards.OpHandlersB.RouterAligned.OpDispatchAlignedSpec :=
+  R16Shards.OpHandlersB.op_dispatch_aligned_spec_cutover hW extCodeOfHeadSpec_closed hrem
+
+/-- Definitional bridge between `StrongBridges.OpHandlerChainSpecA` and
+`R16Shards.OpHandlersB.OpHandlerChainSpec`. -/
+theorem opHandlerChainSpec_iff (fname : Flapjack.Pancake.PanLang.MlS) :
+    OpHandlerChainSpecA fname ↔ R16Shards.OpHandlersB.OpHandlerChainSpec fname := Iff.rfl
+
+/-- Remaining chain-WF handler obligations after discharging the 7 already-proved
+chain-WF opcodes (`op_return`, `op_revert`, `op_mcopy`, `op_selfdestruct`,
+`op_create`, `op_create2`, `op_delegatecall`). -/
+structure RemainingChainHandlersCutover : Prop where
+  op_stop : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_stop")
+  op_add : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_add")
+  op_mul : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_mul")
+  op_sub : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_sub")
+  op_div : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_div")
+  op_sdiv : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_sdiv")
+  op_mod : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_mod")
+  op_smod : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_smod")
+  op_addmod : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_addmod")
+  op_mulmod : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_mulmod")
+  op_exp : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_exp")
+  op_signextend : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_signextend")
+  op_lt : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_lt")
+  op_gt : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_gt")
+  op_slt : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_slt")
+  op_sgt : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_sgt")
+  op_eq : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_eq")
+  op_iszero : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_iszero")
+  op_and : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_and")
+  op_or : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_or")
+  op_xor : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_xor")
+  op_not : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_not")
+  op_byte : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_byte")
+  op_shl : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_shl")
+  op_shr : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_shr")
+  op_sar : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_sar")
+  op_clz : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_clz")
+  op_keccak : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_keccak")
+  op_address : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_address")
+  op_balance : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_balance")
+  op_origin : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_origin")
+  op_caller : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_caller")
+  op_callvalue : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_callvalue")
+  op_calldataload : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_calldataload")
+  op_calldatasize : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_calldatasize")
+  op_calldatacopy : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_calldatacopy")
+  op_codesize : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_codesize")
+  op_codecopy : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_codecopy")
+  op_gasprice : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_gasprice")
+  op_extcodesize : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_extcodesize")
+  op_extcodecopy : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_extcodecopy")
+  op_returndatasize : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_returndatasize")
+  op_returndatacopy : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_returndatacopy")
+  op_extcodehash : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_extcodehash")
+  op_blockhash : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_blockhash")
+  op_coinbase : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_coinbase")
+  op_timestamp : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_timestamp")
+  op_number : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_number")
+  op_prevrandao : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_prevrandao")
+  op_gaslimit : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_gaslimit")
+  op_chainid : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_chainid")
+  op_selfbalance : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_selfbalance")
+  op_basefee : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_basefee")
+  op_blobhash : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_blobhash")
+  op_blobbasefee : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_blobbasefee")
+  op_slotnum : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_slotnum")
+  op_pop : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_pop")
+  op_mload : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_mload")
+  op_mstore : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_mstore")
+  op_mstore8 : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_mstore8")
+  op_sload : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_sload")
+  op_sstore : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_sstore")
+  op_jump : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_jump")
+  op_jumpi : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_jumpi")
+  op_pc : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_pc")
+  op_msize : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_msize")
+  op_gas : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_gas")
+  op_jumpdest : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_jumpdest")
+  op_tload : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_tload")
+  op_tstore : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_tstore")
+  op_push : R16Shards.OpHandlersB.OpPushBoundedChainSpec
+  op_dup : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_dup")
+  op_swap : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_swap")
+  op_log : R16Shards.OpHandlersB.OpLogBoundedChainSpec
+  op_dupn : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_dupn")
+  op_swapn : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_swapn")
+  op_exchange : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_exchange")
+  op_call : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_call")
+  op_callcode : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_callcode")
+  op_staticcall : R16Shards.OpHandlersB.OpHandlerChainSpec (ofString "op_staticcall")
+
+/-- Assemble `OpDispatchChainHandlersCutover` from `RemainingChainHandlersCutover`,
+plugging in the 7 proved chain-WF handlers (`op_return`, `op_revert`, `op_mcopy`,
+`op_selfdestruct`, `op_create`, `op_create2`, `op_delegatecall`). -/
+theorem opDispatchChainHandlersCutover_of_remaining
+    (hW : R16Shards.OpHandlersB.WorldAccountSpecsA)
+    (hU : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "u256_to_be32"))
+    (hcc : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "compute_contract_address"))
+    (hcc2 : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "compute_create2_contract_address"))
+    (hgcr : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "generic_create"))
+    (hgca : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "generic_call"))
+    (hrem : RemainingChainHandlersCutover) :
+    R16Shards.OpHandlersB.OpDispatchChainHandlersCutover where
+  op_stop := hrem.op_stop
+  op_add := hrem.op_add
+  op_mul := hrem.op_mul
+  op_sub := hrem.op_sub
+  op_div := hrem.op_div
+  op_sdiv := hrem.op_sdiv
+  op_mod := hrem.op_mod
+  op_smod := hrem.op_smod
+  op_addmod := hrem.op_addmod
+  op_mulmod := hrem.op_mulmod
+  op_exp := hrem.op_exp
+  op_signextend := hrem.op_signextend
+  op_lt := hrem.op_lt
+  op_gt := hrem.op_gt
+  op_slt := hrem.op_slt
+  op_sgt := hrem.op_sgt
+  op_eq := hrem.op_eq
+  op_iszero := hrem.op_iszero
+  op_and := hrem.op_and
+  op_or := hrem.op_or
+  op_xor := hrem.op_xor
+  op_not := hrem.op_not
+  op_byte := hrem.op_byte
+  op_shl := hrem.op_shl
+  op_shr := hrem.op_shr
+  op_sar := hrem.op_sar
+  op_clz := hrem.op_clz
+  op_keccak := hrem.op_keccak
+  op_address := hrem.op_address
+  op_balance := hrem.op_balance
+  op_origin := hrem.op_origin
+  op_caller := hrem.op_caller
+  op_callvalue := hrem.op_callvalue
+  op_calldataload := hrem.op_calldataload
+  op_calldatasize := hrem.op_calldatasize
+  op_calldatacopy := hrem.op_calldatacopy
+  op_codesize := hrem.op_codesize
+  op_codecopy := hrem.op_codecopy
+  op_gasprice := hrem.op_gasprice
+  op_extcodesize := hrem.op_extcodesize
+  op_extcodecopy := hrem.op_extcodecopy
+  op_returndatasize := hrem.op_returndatasize
+  op_returndatacopy := hrem.op_returndatacopy
+  op_extcodehash := hrem.op_extcodehash
+  op_blockhash := hrem.op_blockhash
+  op_coinbase := hrem.op_coinbase
+  op_timestamp := hrem.op_timestamp
+  op_number := hrem.op_number
+  op_prevrandao := hrem.op_prevrandao
+  op_gaslimit := hrem.op_gaslimit
+  op_chainid := hrem.op_chainid
+  op_selfbalance := hrem.op_selfbalance
+  op_basefee := hrem.op_basefee
+  op_blobhash := hrem.op_blobhash
+  op_blobbasefee := hrem.op_blobbasefee
+  op_slotnum := hrem.op_slotnum
+  op_pop := hrem.op_pop
+  op_mload := hrem.op_mload
+  op_mstore := hrem.op_mstore
+  op_mstore8 := hrem.op_mstore8
+  op_sload := hrem.op_sload
+  op_sstore := hrem.op_sstore
+  op_jump := hrem.op_jump
+  op_jumpi := hrem.op_jumpi
+  op_pc := hrem.op_pc
+  op_msize := hrem.op_msize
+  op_gas := hrem.op_gas
+  op_jumpdest := hrem.op_jumpdest
+  op_tload := hrem.op_tload
+  op_tstore := hrem.op_tstore
+  op_mcopy := op_mcopy_chainSpecA
+  op_push := hrem.op_push
+  op_dup := hrem.op_dup
+  op_swap := hrem.op_swap
+  op_log := hrem.op_log
+  op_dupn := hrem.op_dupn
+  op_swapn := hrem.op_swapn
+  op_exchange := hrem.op_exchange
+  op_create := op_create_chainSpecA hW hcc hgcr
+  op_call := hrem.op_call
+  op_callcode := hrem.op_callcode
+  op_return := op_return_chainSpecA
+  op_delegatecall := op_delegatecall_chainSpecA hW hgca
+  op_create2 := op_create2_chainSpecA hU hW hcc2 hgcr
+  op_staticcall := hrem.op_staticcall
+  op_revert := op_revert_chainSpecA
+  op_selfdestruct := op_selfdestruct_chainSpecA hW
+
+theorem op_dispatch_chain_spec_cutover :
+    type_of% @R16Shards.OpHandlersB.op_dispatch_chain_spec_cutover :=
+  R16Shards.OpHandlersB.op_dispatch_chain_spec_cutover
+
+theorem op_dispatch_chain_spec_of_remaining
+    (hW : R16Shards.OpHandlersB.WorldAccountSpecsA)
+    (hU : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "u256_to_be32"))
+    (hcc : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "compute_contract_address"))
+    (hcc2 : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "compute_create2_contract_address"))
+    (hgcr : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "generic_create"))
+    (hgca : R16Shards.OpHandlersB.EvmPreservingSpecA (fun _ => True)
+      (fun s _ post => R14Shards.OpHandlersA.LocFrame s post)
+      (ofString "generic_call"))
+    (hrem : RemainingChainHandlersCutover) :
+    R16Shards.OpHandlersB.HeadMemBridge.OpDispatchSpecA :=
+  R16Shards.OpHandlersB.op_dispatch_chain_spec_cutover
+    (opDispatchChainHandlersCutover_of_remaining hW hU hcc hcc2 hgcr hgca hrem)
+
+/-- End-to-end aligned `run_frames` bound directly from `OpDispatchChainHandlersCutover`
+and the closed `finish_child` / `frame_epilogue` / `frame_exception` bridges. -/
+theorem gbody_run_frames_aligned_of_chain_handlers
+    (bf : TerminatingFunBoundedOn R16Shards.OpHandlersB.HeadMemBridge.FinishReadyA
+      (ofString "finish_child") K.«finish_child»)
+    (be : TerminatingFunBoundedOn GuestInv (ofString "frame_epilogue") K.«frame_epilogue»)
+    (bx : TerminatingFunBoundedOn GuestInv (ofString "frame_exception") K.«frame_exception»)
+    (bd : TerminatingFunBoundedOn R16Shards.OpHandlersB.HeadMemBridge.EvmRunA
+      (ofString "op_dispatch") K.«op_dispatch»)
+    (h : R16Shards.OpHandlersB.OpDispatchChainHandlersCutover) :
+    TerminatingFunBoundedOn (fun s => EvmInv s ∧ R16Shards.OpHandlersB.HeadMemBridge.HeadMemChainWF s)
+      (ofString "run_frames") K.«run_frames» :=
+  gbody_run_frames_aligned_closed bf be bx bd (R16Shards.OpHandlersB.op_dispatch_chain_spec_cutover h)
+
+/-! ### Phase 2 `htab_new` exit transports, backing compositions, and relational strong cut -/
+
+theorem phase2_htab_new_txEnv :
+    type_of% @R13Shards.phase2_htab_new_txEnv :=
+  R13Shards.phase2_htab_new_txEnv
+
+theorem phase2_htab_new_txBacking :
+    type_of% @R13Shards.phase2_htab_new_txBacking :=
+  R13Shards.phase2_htab_new_txBacking
+
+theorem phase2_htab_new_live_buffer :
+    type_of% @R13Shards.phase2_htab_new_live_buffer :=
+  R13Shards.phase2_htab_new_live_buffer
+
+theorem phase2_htab_new_world_disj :
+    type_of% @R13Shards.phase2_htab_new_world_disj :=
+  R13Shards.phase2_htab_new_world_disj
+
+theorem phase2_p4Shapes_htab_new_aa :
+    type_of% @R13Shards.phase2_p4Shapes_htab_new_aa :=
+  R13Shards.phase2_p4Shapes_htab_new_aa
+
+theorem phase2_backing_entry_adapter :
+    type_of% @R13Shards.phase2_backing_entry_adapter :=
+  R13Shards.phase2_backing_entry_adapter
+
+theorem gbody_process_transaction_backing_strong_pmc_of_cuts_h4closed :
+    type_of% @R13Shards.gbody_process_transaction_backing_strong_pmc_of_cuts_h4closed :=
+  R13Shards.gbody_process_transaction_backing_strong_pmc_of_cuts_h4closed
+
+theorem gbody_process_transaction_backing_strong_of_cuts_bundled :
+    type_of% @R13Shards.gbody_process_transaction_backing_strong_of_cuts_bundled :=
+  R13Shards.gbody_process_transaction_backing_strong_of_cuts_bundled
+
+theorem gbody_process_transaction_backing_strong_pmc_cutover_of_cuts_bundled
+    (h : R16Shards.PtxCalleesCutover)
+    (hwk : R16Shards.PtxP34.PmcStrong)
+    (hkeep : R16Shards.PmcBackingStrong)
+    (hc : R13Shards.PtxPhase12BackingCuts) :
+    TerminatingFunBoundedOn
+      R16Shards.TxReadyBackingStrong (ofString "process_transaction")
+      K.«process_transaction» :=
+  R16Shards.gbody_process_transaction_backing_strong_of_h12_pmc_cutover h hwk hkeep
+    (R13Shards.ptxPhase12_backing_strong hc)
+
+theorem ptxPhase2_cut_strong :
+    type_of% @R13Shards.ptxPhase2_cut_strong :=
+  R13Shards.ptxPhase2_cut_strong
+
+theorem ptxPhase2_relCut :
+    type_of% @R13Shards.ptxPhase2_relCut :=
+  R13Shards.ptxPhase2_relCut
+
+theorem wk_process_transaction_strong_of_phase2 :
+    type_of% @R13Shards.wk_process_transaction_strong_of_phase2 :=
+  R13Shards.wk_process_transaction_strong_of_phase2
+
+/-- `wk_process_transaction` under `TxReadyStrong` with Phase 2 closed from
+`PtxPhase2RegionStrong` and Phase 5 closed from `decode_witness_to_mpt_spec_wkBal`
+(eliminating the three raw Phase-5 block-output hypotheses of `wk_process_transaction_strong_of_phase2`). -/
+theorem wk_process_transaction_strong_of_phase2_and_witnessDb
+    (hdb : ∀ {F : Type} (s : Flapjack.PanSemStateFiniteExact 64 F),
+      WorldOK s → globN s "ws" ≠ 0 →
+        R16Shards.EvmEkFk.StorageCreateFinish.NodeDbSlicesBounded s (memW s (globN s "ws")))
+    (hregion : R13Shards.PtxPhase2RegionStrong)
+    {A3 : ∀ {F : Type},
+      Flapjack.PanSemStateFiniteExact 64 F → Flapjack.PanSemStateFiniteExact 64 F → Prop}
+    (hcuts : R13Shards.PtxPhase134StrongCuts A3) :
+    WorldKeeps TxReadyStrong
+      (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128),
+        (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64),
+        (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352),
+        (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384),
+        (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32),
+        (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64),
+        (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96),
+        (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40),
+        (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128),
+        (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128),
+        (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128),
+        (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64),
+        (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52),
+        (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr",
+       "heap_ptr", "journal_n", "scratch_ptr", "ts"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]),
+       ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]
+      (fun s r post S Nd =>
+        RetTransactionLogs s r post S Nd ∧ R16Shards.TopGbodyWk.PtxRetSlices s r post S Nd)
+      (ofString "process_transaction") :=
+  wk_process_transaction_strong_of_witnessDb hdb
+    R13Shards.PtxTxReadyBoundary R13Shards.PtxAfterPhase1 R13Shards.PtxAfterPhase2 A3
+    (fun _ hs => hs) hcuts.phase1 (R13Shards.ptxPhase2_cut_strong hregion) hcuts.phase3 hcuts.phase4
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
