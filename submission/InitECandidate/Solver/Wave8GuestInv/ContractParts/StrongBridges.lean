@@ -532,4 +532,136 @@ theorem fcLogLoop_step_s5 :
     type_of% @R16Shards.EvmEkFk.fcLogLoop_step :=
   R16Shards.EvmEkFk.fcLogLoop_step
 
+private theorem worldStepSc_preserves_head_ev_words {F : Type}
+    {B : R16WkAcctWs.BufList} {gw : List String} {keep : List (String × List Nat)}
+    {s post : Flapjack.PanSemStateFiniteExact 64 F}
+    {r : Option (Flapjack.PanSemResultExact 64)}
+    (hB : R16WkAcctWs.ValidBufList B)
+    (hInv : EvmInv s)
+    (hstep : R16WkAcctWs.WorldStepSc (R16WkAcctWs.bufRegions B) gw keep NoExtra s r post) :
+    ∀ off, off + 8 ≤ 280 → off % 8 = 0 →
+      memW post (globN s "ev" + off) = memW s (globN s "ev" + off) := by
+  intro off hoff hoff8
+  obtain ⟨hAs, S, hInvAt⟩ := hInv
+  obtain ⟨hW, _, _, _, hFW_all, _, _, _, hFO_disj, hAT_fo, _, hRoles, _⟩ := hInvAt
+  obtain ⟨Nd_at, hTr_at, hAT_at⟩ := hAT_fo
+  set L : List Nat := S.filter (fun t => decide (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ t))
+  have hL_local : ∀ t ∈ L, ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ t :=
+    fun t ht => of_decide_eq_true (List.mem_filter.1 ht).2
+  have hWT_at_s : WorldTypedWith s S Nd_at := ⟨hW.1, hW.2.1, hW.2.2.1, hTr_at⟩
+  obtain ⟨S0, hS0_sub, _, _, hWT0⟩ :=
+    R16Shards.EvmEkFk.StorageCreateFinish.worldTypedWith_erase_many hWT_at_s L hL_local
+  obtain ⟨⟨hAp, hhp, _, _, hWS⟩, _⟩ := hstep
+  obtain ⟨S0', Nd', _, _, hog0, hfr0, _⟩ :=
+    hWS S0 Nd_at hWT0 (R16WkAcctWs.validBufList_disj hB hWT0)
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s :=
+    R16Shards.OpHandlersB.HeadMemBridge.head_mem_evmChain s
+  have hFW := hFW_all _ hhead
+  obtain ⟨hb1, _, _, _⟩ := InitECandidate.Solver.Wave8Contracts.M23.frameWF_bounds hAs.2 hFW
+  have he1_8 : (globN s "ev") % 8 = 0 := (hFW.1 (globN s "ev", 280) (by simp)).2.1
+  have hal : Allocated s (globN s "ev", 280) := by
+    rcases R16Shards.EvmEkFk.StorageCreateFinish.frameObject_zero_or_allocated hAs.2 hFW
+        (o := (globN s "ev", 280)) (by simp [frameObjects]) with hz | hal | hin
+    · simp at hz
+    · exact hal
+    · exfalso
+      have hin_scr := (hFW.1 (globN s "ev", 280) (by simp)).1
+      dsimp only [Inside] at hin hin_scr
+      have hfm_le : globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" := hAs.2.2.2.2.1
+      omega
+  have ho_fl : (globN s "ev", 280) ∈ ((evmChain s).map (frameObjects s)).flatten :=
+    List.mem_flatten.2 ⟨frameObjects s (globN s "ev", globN s "cur_cont"),
+      List.mem_map.2 ⟨_, hhead, rfl⟩, by simp [frameObjects]⟩
+  have ho_ow0 : ∀ j ∈ worldOwned s S0 Nd_at, Disj (globN s "ev", 280) j := by
+    intro j hj
+    unfold worldOwned at hj
+    rcases List.mem_append.1 hj with hj1 | hj_nd
+    · rcases List.mem_append.1 hj1 with hj_tab | hj_fix
+      · obtain ⟨u, hu0, hi⟩ := List.mem_flatMap.1 hj_tab
+        exact (hFO_disj _ hhead _ (by simp [frameObjects])).1 u (hS0_sub u hu0) j hi
+      · exact (hFO_disj _ hhead _ (by simp [frameObjects])).2 j hj_fix
+    · exact hAT_at _ ho_fl j hj_nd
+  have ho_bufs : ∀ j ∈ R16WkAcctWs.bufRegions B s, Disj (globN s "ev", 280) j := by
+    intro j hj
+    obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hj
+    obtain ⟨sz, hgb, _, hle_sz⟩ := hB p hp
+    have hfix : bufferRegion s (p.1, sz) ∈ fixedObjects s := by
+      unfold fixedObjects
+      apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+      exact List.mem_map.2 ⟨(p.1, sz), hgb, rfl⟩
+    have hd := (hFO_disj _ hhead (globN s "ev", 280) (by simp [frameObjects])).2 _ hfix
+    by_cases hz : globN s p.1 = 0
+    · exact Or.inr (Or.inl (by simp [bufferRegion, hz]))
+    · simp only [bufferRegion, hz, ↓reduceIte] at hd ⊢
+      rcases hd with h0 | h0 | h1 | h2
+      · exact Or.inl h0
+      · exact Or.inr (Or.inl (by dsimp only at h0 ⊢; omega))
+      · exact Or.inr (Or.inr (Or.inl h1))
+      · exact Or.inr (Or.inr (Or.inr (by dsimp only at h2 ⊢; omega)))
+  have hkeep_shape : ∀ j ∈ worldOwned s S0 Nd_at ++ R16WkAcctWs.bufRegions B s ++ [freeGap s],
+      j = (0, 0) ∨ j.1 % 8 = 0 ∨ j.2 ≠ 0 := by
+    intro j hj
+    rcases List.mem_append.1 hj with hj12 | hfg
+    · rcases List.mem_append.1 hj12 with hj_ow | hj_R
+      · exact R16Shards.EvmEkFk.StorageCreateFinish.worldOwned_well_shaped hWT0 j hj_ow
+      · obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hj_R
+        unfold bufferRegion
+        by_cases hz : globN s p.1 = 0
+        · exact Or.inl (by simp [hz])
+        · by_cases hp2 : p.2 = 0
+          · right; left
+            obtain ⟨sz, hgb, _⟩ := hB p hp
+            have hfix : (globN s p.1, if globN s p.1 = 0 then 0 else sz) ∈ fixedObjects s := by
+              unfold fixedObjects
+              apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+              exact List.mem_map.2 ⟨(p.1, sz), hgb, rfl⟩
+            rcases hWT0.2.2.1.1 _ hfix with h0 | ⟨_, hw⟩
+            · simp [hz] at h0
+              exact absurd h0 ((by decide : ∀ gn ∈ globalBuffers, gn.2 ≠ 0) (p.1, sz) hgb)
+            · exact hw.1
+          · exact Or.inr (Or.inr (by simp [hz, hp2]))
+    · rw [List.mem_singleton] at hfg; subst hfg
+      exact Or.inr (Or.inl hAs.2.2.2.2.2.2.2.1)
+  have hunhit : (InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post (globN s "ev", 280)) :=
+    (R16Shards.EvmEkFk.StorageCreateFinish.allocated_survives_world_frame
+      hAs.2 hAp.2 hhp hal ho_ow0 ho_bufs hkeep_shape hfr0 hog0).1
+  exact InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit
+    hunhit (by omega) hb1 ⟨by dsimp only; omega, by dsimp only; omega⟩
+
+theorem extCodeOfHeadSpec_closed : R16Shards.OpHandlersB.ExtCodeOfHeadSpec := by
+  obtain ⟨ps, body, rt, hlk, hbody⟩ := R16Shards.EvmEkFk.wkSc_ext_code_of
+  refine ⟨ps, body, rt, hlk, ?_⟩
+  intro F s hc hInv _ hvalid hnt
+  have hW : WorldOK s := ⟨hInv.1, let ⟨S, hInvAt⟩ := hInv.2; ⟨S, hInvAt.1⟩⟩
+  constructor
+  · intro v hrv
+    have hres : InitECandidate.Solver.Wave8Contracts.M23.Resumes
+        (Flapjack.PanSemStateFiniteExact.evaluateHOLFiniteState s body).1 := Or.inl ⟨v, hrv⟩
+    have hstep := hbody s hc hW hvalid hnt hres
+    obtain ⟨hevm, hevmR, _⟩ :=
+      R16Shards.EvmEkFk.StorageCreateFinish.evmStep_and_cells_of_worldStepSc
+        R16Shards.EvmEkFk.validBufList_extCodeBufs R16Shards.EvmEkFk.safeStepGlobals_hp_sp
+        hInv.1 hInv.2 hstep
+    exact ⟨hevm.1, hevm.2.2.2, le_of_eq hevmR,
+      ⟨hevm.2.2.1, hevmR,
+       worldStepSc_preserves_head_ev_words
+         R16Shards.EvmEkFk.validBufList_extCodeBufs hInv hstep⟩⟩
+  · intro herr
+    obtain ⟨ev, hev⟩ := herr
+    have hres : InitECandidate.Solver.Wave8Contracts.M23.Resumes
+        (Flapjack.PanSemStateFiniteExact.evaluateHOLFiniteState s body).1 :=
+      Or.inr ⟨ofString "EvmErr", ev, hev, by decide⟩
+    have hstep := hbody s hc hW hvalid hnt hres
+    obtain ⟨hevm, hevmR, _⟩ :=
+      R16Shards.EvmEkFk.StorageCreateFinish.evmStep_and_cells_of_worldStepSc
+        R16Shards.EvmEkFk.validBufList_extCodeBufs R16Shards.EvmEkFk.safeStepGlobals_hp_sp
+        hInv.1 hInv.2 hstep
+    exact ⟨hevm.1, hevm.2.2.2, le_of_eq hevmR⟩
+
+theorem op_extcodecopy_aligned_spec_closed :
+    FunSpec (fun s => EvmRun s ∧ R16Shards.OpHandlersB.HeadMemAligned s)
+      OpDispatchSpec.OpDispatchPost (ofString "op_extcodecopy") :=
+  R16Shards.OpHandlersB.op_extcodecopy_aligned_spec extCodeOfHeadSpec_closed
+
+
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
