@@ -46507,10 +46507,10 @@ theorem call_assign_mpt_insert_node_valExt {F : Type}
 
 /-! ## `mpt_set` -> `MptEffStrong` -> `MptKeepsStrong` (`mk_mpt_set_strong`) -/
 
-private abbrev mptSetB_sc : List (String × Nat) :=
+abbrev mptSetB_sc : List (String × Nat) :=
   [("keccak_pad", 136), ("keccak_st", 200), ("mpt_hash_scratch", 40)]
 
-private abbrev mptSetR_sc {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
+abbrev mptSetR_sc {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
   [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
    (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
    (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)]
@@ -47893,6 +47893,27 @@ theorem «mk_mpt_set_strong» :
   have heff := mpt_set_body_eff_strong state wm wkey wklen wvptr wvlen hcode hP
     hlk_m hlk_key hlk_klen hlk_vptr hlk_vlen hres
   exact MptEffStrong.to_mptObjStepStrong hP.1 mptSetB_sc_ok mptSet_sc_gw_sub heff
+
+/-- The `mpt_set` contract at the `MptEffStrong` level: unlike `MptObjStepStrong` (whose
+`FrameOutside` is cell-level only, over `worldOwned ++ mptObjIvls ++ R ++ [freeGap]`), this
+exposes the private `mpt_set_body_eff_strong` write frames directly — a five-way cell *and*
+byte frame over `R ∪ B ∪ mptObjIvls ∪ [freeGap] ∪ heapFree` with no `worldOwned` case, so
+callers that pin the `mptObjIvls` members (node extents) into a known span can state a
+write-frame contract without enumerating the typed world. -/
+theorem mk_mpt_set_eff_strong :
+    FunSpec MptSetReadyStrong
+      (fun s r post => Resumes r →
+        MptEffStrong mptSetR_sc mptSetB_sc ["heap_ptr", "scratch_ptr"] s post)
+      (ofString "mpt_set") := by
+  refine ⟨[(ofString "m", .one), (ofString "key", .one), (ofString "klen", .one),
+           (ofString "vptr", .one), (ofString "vlen", .one)],
+          sourceFnBody Guest.Software.guestFn_mpt_set,
+          .one, P3MptSet.lookup_mpt_set, ?_⟩
+  intro F state hcode hP hshape _ hres
+  obtain ⟨wm, wkey, wklen, wvptr, wvlen, hlk_m, hlk_key, hlk_klen, hlk_vptr, hlk_vlen⟩ :=
+    mpt_set_params_unpack_sc state P3MptSet.lookup_mpt_set hshape
+  exact mpt_set_body_eff_strong state wm wkey wklen wvptr wvlen hcode hP
+    hlk_m hlk_key hlk_klen hlk_vptr hlk_vlen hres
 
 
 end MptStrongKeeps
