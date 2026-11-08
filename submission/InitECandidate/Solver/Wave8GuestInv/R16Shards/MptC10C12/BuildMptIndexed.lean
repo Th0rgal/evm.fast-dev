@@ -19309,6 +19309,266 @@ private theorem seq_returned_noReturn_prefix_p1df {F : Type}
     apply evaluate_noReturnProg_p1b p hp s rv
     simpa only [heval] using hret
 
+/-! ## Section: `wk_build_mpt_indexed` -/
+
+/-- `decCall lname .one "mpt_new" [.const 0, .const 0] cont`: allocates the zeroed
+16-byte block at the old `heap_ptr` (`hp`), grows `heap_ptr` to `hp + 16`, and binds
+`lname = hp`.  The only memory cells touched are the two words of the fresh block,
+which sit inside `heapFree`. -/
+theorem eval_decCall_mpt_new_zero {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (lname : String) (cont : ProgHOL 64)
+    (Rl : List Ivl) (gw : List String)
+    (hcode : s.code = originalRuntimeCode) (hAR : ArenaReady s)
+    (hgw : "heap_ptr" ∈ gw)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall (ofString lname) .one (ofString "mpt_new") [.const 0, .const 0] cont)).1
+        ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString lname) .one (ofString "mpt_new") [.const 0, .const 0] cont)).1) :
+    ∃ (hp q : BitVec 64) (mid : PanSemStateFiniteExact 64 F),
+      s.globals.lookup (ofString "heap_ptr") = some (.val (.word hp)) ∧
+      hp.toNat = globN s "heap_ptr" ∧
+      q.toNat = hp.toNat + 16 ∧
+      q.toNat ≤ heapLimit ∧
+      globN mid "heap_ptr" = q.toNat ∧
+      mid.globals = s.globals.update (ofString "heap_ptr", .val (.word q)) ∧
+      mid.locals = s.locals.update (ofString lname, .val (.word hp)) ∧
+      (∀ a : BitVec 64, mid.memory a ≠ s.memory a →
+        a.toNat = hp.toNat ∨ a.toNat = (hp + 8).toNat) ∧
+      R16Shards.WkBlockTxEnc.HeapByteEff s mid Rl gw ∧
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString lname) .one (ofString "mpt_new") [.const 0, .const 0] cont)) =
+        ((evaluateHOLFiniteState mid cont).1,
+         { (evaluateHOLFiniteState mid cont).2 with
+           locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+             (ofString lname, s.locals.lookup (ofString lname)) }) := by
+  obtain ⟨hp, hhp, hhp_nat⟩ := R16Shards.WkBlockTxEnc.global_heap_ptr_word s hAR.2
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hres ⊢
+  have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 0, .const 0] = some [.val (.word 0), .val (.word 0)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact]
+  have hlk : PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup (ofString "mpt_new")
+      [.val (.word 0), .val (.word 0)] =
+      some (sourceFnBody Guest.Software.guestFn_mpt_new,
+        { lookup := List.foldl
+            (fun (map : MlS → Option (ValueHOL 64)) (entry : MlS × ValueHOL 64) =>
+              fun current => if current = entry.1 then some entry.2 else map current)
+            (fun _ => none)
+            ([(ofString "root_node"), (ofString "secured")].zip [.val (.word 0), .val (.word 0)]),
+          finiteSupport := ⟨[ofString "root_node", ofString "secured"], by
+            intro key hkey
+            simp only [List.zip, List.zipWith_cons_cons, List.zipWith_nil_right,
+              List.foldl_cons, List.foldl_nil] at hkey
+            split at hkey
+            · simp_all
+            · split at hkey
+              · simp_all
+              · simp_all⟩ },
+        .one) := by
+    have hraw : lookupCodeHOLExact s.code.lookup (ofString "mpt_new")
+        [.val (.word 0), .val (.word 0)] =
+        some (sourceFnBody Guest.Software.guestFn_mpt_new,
+          List.foldl
+            (fun (map : MlS → Option (ValueHOL 64)) (entry : MlS × ValueHOL 64) =>
+              fun current => if current = entry.1 then some entry.2 else map current)
+            (fun _ => none)
+            ([(ofString "root_node"), (ofString "secured")].zip [.val (.word 0), .val (.word 0)]),
+          .one) := by
+      rw [hcode]
+      simp only [lookupCodeHOLExact, R13Shards.lookup_mpt_new_r13]
+      simp [evalListHOLExact, evalHOLExact, shapeOfHOLExact, shapeEqHOL, List.zipWith,
+        show ofString "root_node" ≠ ofString "secured" by decide]
+    unfold PanSemStateFiniteExact.lookupCodeHOLFinite; split
+    · rename_i hm; rw [hraw] at hm; simp at hm
+    · rename_i b l r hf
+      have hinj := Option.some.inj (hf.symm.trans hraw)
+      obtain ⟨rfl, hr⟩ := Prod.mk.inj hinj
+      obtain ⟨hl_eq, rfl⟩ := Prod.mk.inj hr
+      subst hl_eq; rfl
+  simp only [ha, hlk] at hnt hres ⊢
+  by_cases hcz : s.clock = 0
+  · simp [hcz] at hnt
+  · simp only [hcz, ↓reduceIte] at hnt hres ⊢
+    set cmap : HolFiniteMapExact MlS (ValueHOL 64) :=
+      { lookup := List.foldl
+          (fun (map : MlS → Option (ValueHOL 64)) (entry : MlS × ValueHOL 64) =>
+            fun current => if current = entry.1 then some entry.2 else map current)
+          (fun _ => none)
+          ([(ofString "root_node"), (ofString "secured")].zip [.val (.word 0), .val (.word 0)]),
+        finiteSupport := ⟨[ofString "root_node", ofString "secured"], by
+          intro key hkey
+          simp only [List.zip, List.zipWith_cons_cons, List.zipWith_nil_right,
+            List.foldl_cons, List.foldl_nil] at hkey
+          split at hkey
+          · simp_all
+          · split at hkey
+            · simp_all
+            · simp_all⟩ } with hcmap_def
+    set ent := callEntryStateHOLFinite s cmap with hent_def
+    have hent_g : ent.globals = s.globals := rfl
+    have hent_m : ent.memory = s.memory := rfl
+    have hent_rn : ent.locals.lookup (ofString "root_node") = some (.val (.word 0)) := by
+      simp [ent, cmap, callEntryStateHOLFinite, hcmap_def, List.zip, List.zipWith_cons_cons,
+        List.zipWith_nil_right, List.foldl_cons, List.foldl_nil,
+        show ofString "root_node" ≠ ofString "secured" by decide]
+    have hent_sec : ent.locals.lookup (ofString "secured") = some (.val (.word 0)) := by
+      simp [ent, cmap, callEntryStateHOLFinite, hcmap_def, List.zip, List.zipWith_cons_cons,
+        List.zipWith_nil_right, List.foldl_cons, List.foldl_nil]
+    have hA_ce : ArenaReady ent := ⟨guestInv_callEntry s cmap hAR.1, hAR.2⟩
+    rcases hal : evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_mpt_new)
+      with ⟨ra, sa⟩
+    have hres_ent : Resumes ra := by
+      cases ra with
+      | none => simp [hal] at hres; exact False.elim (not_resumes_error hres)
+      | some r =>
+        cases r with
+        | returned rv => exact Or.inl ⟨rv, rfl⟩
+        | exception eid ev =>
+          simp only [hal] at hres
+          rcases hres with ⟨_, h⟩ | ⟨e', v', h, hne⟩
+          · simp at h
+          · injection h with h'; injection h' with he1 he2; subst he1 he2
+            exact Or.inr ⟨eid, ev, rfl, hne⟩
+        | timeOut => simp [hal] at hnt
+        | finalFfi _ =>
+          simp only [hal] at hres
+          rcases hres with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+        | _ => simp [hal] at hres; exact False.elim (not_resumes_error hres)
+    obtain ⟨hp', q', hout1, hq8', hhp8, hq_nat', hq_hi', hq8, hg_sa, hm_sa, hbe_sa,
+      hAR_sa, hgrow, hfresh, hmw0, hmw8⟩ :=
+      R13Shards.mpt_new_resumes_props ent 0 0 hcode hA_ce hent_rn hent_sec
+        (by rw [hal]; exact hres_ent)
+    rw [hal] at hout1 hg_sa hm_sa hbe_sa hAR_sa hgrow hfresh hmw0 hmw8
+    dsimp only at hout1 hg_sa hm_sa hbe_sa hAR_sa hgrow hfresh hmw0 hmw8
+    obtain ⟨rfl⟩ := hout1
+    have hq_nat : q'.toNat = hp'.toNat + 16 := hq_nat'
+    have hgp : globN ent "heap_ptr" = globN s "heap_ptr" := by
+      unfold globN; rw [hent_g]
+    obtain ⟨hp0, -, -, hhp, hhp_nat, -, -, -, -⟩ :=
+      Wave8Contracts.M26.arenaOK_globals s hAR.2
+    have hp_eq' : hp' = hp0 := BitVec.eq_of_toNat_eq (by rw [hq8', hgp, ← hhp_nat])
+    have hsh : (shapeEqHOL (shapeOfHOLExact (.val (.word hp') : ValueHOL 64)) .one &&
+        shapeEqHOL (shapeOfHOLExact (.val (.word hp') : ValueHOL 64)) .one) = true := by
+      simp [shapeOfHOLExact, shapeEqHOL]
+    simp only [hal, hsh, ↓reduceIte] at hnt hres ⊢
+    set mid := setVarHOLFinite (ofString lname) (.val (.word hp'))
+      { sa with locals := s.locals } with hmid_def
+    have hgb := M13.evaluateHOLFiniteState_guestInv_be ent
+      (sourceFnBody Guest.Software.guestFn_mpt_new) (guestInv_callEntry s cmap hAR.1)
+    rw [hal] at hgb
+    have hG_mid : GuestInv mid :=
+      guestInv_setVar _ _ _ (guestInv_with_locals_clock sa s.locals sa.clock hgb.1)
+    have hq_lo : sourceBase ≤ q'.toNat := by
+      have h1 := hAR.2.1
+      rw [← hgp, ← hq8'] at h1
+      omega
+    have hAR_mid : ArenaReady mid :=
+      R16Shards.WkBlockTxEnc.arenaReady_update_heap_ptr hG_mid hAR.2 hg_sa hq_lo hq_hi' hq8
+    have hhp_lim : hp'.toNat ≤ heapLimit := by
+      have h2 := hAR.2.2
+      rw [← hgp, ← hq8'] at h2
+      exact h2.1
+    have hlt : hp'.toNat < 2 ^ 64 := by
+      have hhl : heapLimit < 2 ^ 64 := by decide
+      omega
+    have h8' : (hp' + 8).toNat = hp'.toNat + 8 := by
+      rw [BitVec.toNat_add]
+      have h8v : BitVec.toNat (8 : BitVec 64) = 8 := by decide
+      rw [h8v]
+      exact Nat.mod_eq_of_lt (by omega)
+    have hmg : mid.globals = sa.globals := by rw [hmid_def]; rfl
+    have hmid_hp : globN mid "heap_ptr" = q'.toNat := by
+      unfold globN; rw [hmg, hg_sa]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+    have hmid_fp : globN mid "frame_mem_ptr" = globN s "frame_mem_ptr" := by
+      unfold globN; rw [hmg, hg_sa]; simp [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "heap_ptr" ≠ ofString "frame_mem_ptr" by decide, hent_g]
+    have hmid_sp : globN mid "scratch_ptr" = globN s "scratch_ptr" := by
+      unfold globN; rw [hmg, hg_sa]; simp [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "heap_ptr" ≠ ofString "scratch_ptr" by decide, hent_g]
+    have hmem_delta : ∀ a : BitVec 64, mid.memory a ≠ s.memory a →
+        a.toNat = hp'.toNat ∨ a.toNat = (hp' + 8).toNat := by
+      intro a hne
+      have hne' : sa.memory a ≠ s.memory a := hne
+      rw [hm_sa] at hne'
+      simp only [Wave8Contracts.M26.updW] at hne'
+      by_cases h1 : a = hp' + 0
+      · subst h1
+        exact Or.inl (by simp)
+      · simp only [h1, if_false] at hne'
+        by_cases h2 : a = hp' + 8
+        · exact Or.inr (by rw [h2])
+        · simp only [h2, if_false] at hne'
+          exact False.elim (hne' rfl)
+    have heff_mid : R16Shards.WkBlockTxEnc.HeapByteEff s mid Rl gw := by
+      refine ⟨hAR_mid, hG_mid.memaddrs.trans hAR.1.memaddrs.symm,
+        by rw [← hgp, ← hq8', hmid_hp]; omega, hmid_fp, by rw [hmid_sp], hgb.2, ?_, ?_, ?_, ?_⟩
+      · intro k hk
+        have hne : k ≠ ofString "heap_ptr" := fun heq =>
+          hk (List.mem_map.2 ⟨"heap_ptr", hgw, heq.symm⟩)
+        rw [hmg, hg_sa]
+        simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne, hent_g]
+      · intro a hne
+        rw [hAR.1.memaddrs,
+          InitECandidate.Solver.Wave8GuestInv.R10Shards.P26_P28.ordinaryDomain_iff]
+        rcases hmem_delta a hne with h1 | h1
+        · refine ⟨?_, ?_, ?_⟩
+          · rw [h1]; exact hhp8
+          · have h2 := hAR.2.1
+            rw [← hgp, ← hq8'] at h2
+            rw [h1]; exact h2
+          · have hle : heapLimit ≤ heapEnd := by decide
+            rw [h1]; omega
+        · rw [h1, h8']
+          refine ⟨?_, ?_, ?_⟩
+          · omega
+          · have h2 := hAR.2.1
+            rw [← hgp, ← hq8'] at h2
+            omega
+          · have hle : heapLimit ≤ heapEnd := by decide
+            omega
+      · intro a hne
+        rcases hmem_delta a hne with h1 | h1
+        · right; right
+          show 0 < heapLimit - globN s "heap_ptr" ∧
+            globN s "heap_ptr" < a.toNat + 8 ∧
+            a.toNat < globN s "heap_ptr" + (heapLimit - globN s "heap_ptr")
+          refine ⟨by omega, ?_, ?_⟩ <;> omega
+        · right; right
+          show 0 < heapLimit - globN s "heap_ptr" ∧
+            globN s "heap_ptr" < a.toNat + 8 ∧
+            a.toNat < globN s "heap_ptr" + (heapLimit - globN s "heap_ptr")
+          rw [h1, h8']
+          refine ⟨by omega, ?_, ?_⟩ <;> omega
+      · intro b hb hne
+        right; right
+        have hbe' : mid.be = s.be := hbe_sa
+        have halign : mid.memory (panByteAlignHOL (BitVec.ofNat 64 b)) ≠
+            s.memory (panByteAlignHOL (BitVec.ofNat 64 b)) := by
+          intro h
+          have hne' := hne
+          unfold memB at hne'
+          rw [h, hbe'] at hne'
+          exact hne' rfl
+        rcases hmem_delta _ halign with ha1 | ha1
+        · have hb8 : b % 8 < 8 := Nat.mod_lt _ (by omega)
+          have hba : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat = b - b % 8 := by
+            simp [panByteAlignHOL]; omega
+          show globN s "heap_ptr" ≤ b ∧
+            b < globN s "heap_ptr" + (heapLimit - globN s "heap_ptr")
+          refine ⟨?_, ?_⟩ <;> omega
+        · have hb8 : b % 8 < 8 := Nat.mod_lt _ (by omega)
+          have hba : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat = b - b % 8 := by
+            simp [panByteAlignHOL]; omega
+          rw [ha1, h8'] at hba
+          show globN s "heap_ptr" ≤ b ∧
+            b < globN s "heap_ptr" + (heapLimit - globN s "heap_ptr")
+          refine ⟨?_, ?_⟩ <;> omega
+    exact ⟨hp', q', mid, by rw [hp_eq']; exact hhp, by rw [hp_eq']; exact hhp_nat, hq_nat,
+      hq_hi', hmid_hp, by rw [hmg, hg_sa, hent_g], by rw [hmid_def]; rfl, hmem_delta,
+      heff_mid, hnt, hres, rfl⟩
+
 end Part1DFullFinish
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
