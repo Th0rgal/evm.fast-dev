@@ -16922,16 +16922,29 @@ theorem wkScBo_ws_storage_trie_of_decode_witness
                 rw [heqM_s, hite_eq, hdec_s]
               rw [heval_all_s]
               have hbo_dw : PtxBlockOutUnhit s sN := by
-                have hcpost_sN : PtxBlockOutUnhit s cpost_dw := by
-                  apply ptxBlockOutUnhit_of_nonempty
-                  intro b hb hbpos
-                  obtain ⟨_, hal_b, _, _⟩ := blockOut_allocated_words hWT0 hb hbpos
-                  have hf_s : FrameOutside s cpost_dw [(globN s "scratch_ptr", 0)]
-                      (globN s "heap_ptr", globN cpost_dw "heap_ptr" - globN s "heap_ptr") := by
-                    intro a ha hnh
-                    exact hfr_dw a (fun j hj => by cases hj) hnh
-                  exact ivlUnhit_of_freshFrame hW.1.2 hAp_dw hhp_dw hf_s hal_b
-                exact hcpost_sN
+                apply ptxBlockOutUnhit_of_nonempty
+                intro b hb hbpos a ha8 hhit
+                obtain ⟨_, hal_b, _, _⟩ := blockOut_allocated_words hWT0 hb hbpos
+                have hsep : scratchStart = heapLimit := by rw [M13.scratchStart_val, M13.heapLimit_val]
+                have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hW.1.2.2.1
+                have hfm_ge : scratchStart ≤ globN s "frame_mem_ptr" := hW.1.2.2.2.1
+                have hsc_ge : globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" := hW.1.2.2.2.2.1
+                have hfg_eq : freeGap ent_dw = freeGap s := rfl
+                have hhf_eq : heapFree ent_dw = heapFree s := rfl
+                obtain ⟨hb1, hb2⟩ := hhit
+                refine hfr_dw a ?_ ?_
+                · intro j hj hjh
+                  rw [List.mem_singleton.1 hj, hfg_eq] at hjh
+                  obtain ⟨hj1, hj2⟩ := hjh
+                  unfold freeGap at hj1 hj2
+                  dsimp at hj1 hj2
+                  rcases hal_b with ⟨hlo, hhi⟩ | ⟨hlo, hhi⟩ <;> omega
+                · intro hh
+                  rw [hhf_eq] at hh
+                  obtain ⟨hf1, hf2⟩ := hh
+                  unfold heapFree at hf1 hf2
+                  dsimp at hf1 hf2
+                  rcases hal_b with ⟨hlo, hhi⟩ | ⟨hlo, hhi⟩ <;> omega
               have hsN_step_noextra : WorldStepSc (bufRegions []) ["heap_ptr", "scratch_ptr"]
                   stdKeep NoExtra ent_dw (some (.returned (.val (.word nodew)))) cpost_dw := by
                 refine ⟨⟨hsN_step_q.1.1, hsN_step_q.1.2.1, hsN_step_q.1.2.2.1, hsN_step_q.1.2.2.2.1,

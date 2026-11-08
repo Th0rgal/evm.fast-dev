@@ -10308,7 +10308,7 @@ def DecodeWitnessToMptSpec (ExtraGuard : ∀ {F : Type}, PanSemStateFiniteExact 
       globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
       globN post "scratch_ptr" = globN s "scratch_ptr" ∧
       GlobalsKept ["heap_ptr", "scratch_ptr"] s post ∧
-      FrameOutside s post [] (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") ∧
+      FrameOutside s post [freeGap s] (heapFree s) ∧
       ∀ Nd, NodeHeap s Nd →
         (∀ o ∈ nodeExtents s Nd, o.2 = 0 ∨ Allocated s o) →
         ∀ v, r = some (.returned v) →
@@ -10322,6 +10322,42 @@ def DecodeWitnessToMptSpec (ExtraGuard : ∀ {F : Type}, PanSemStateFiniteExact 
             NodeHeap post Nd' ∧
             RootIn Nd' w.toNat)
     (ofString "decode_witness_to_mpt")
+
+private theorem allocated_disj_free_regions_local {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {o : Ivl}
+    (hA : ArenaOK s) (ho : Allocated s o) :
+    Disj o (freeGap s) ∧ Disj o (heapFree s) := by
+  have hsep : heapLimit ≤ scratchStart := by decide
+  have hhp : globN s "heap_ptr" ≤ heapLimit := hA.2.1
+  have hfm : scratchStart ≤ globN s "frame_mem_ptr" := hA.2.2.1
+  have hsc : globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" := hA.2.2.2.1
+  rcases ho with ⟨_, hhi⟩ | ⟨hlo, _⟩
+  · constructor
+    · right; right; left; unfold freeGap; dsimp only; omega
+    · right; right; left; unfold heapFree; exact hhi
+  · constructor
+    · right; right; right; unfold freeGap; dsimp only; omega
+    · right; right; right; unfold heapFree; dsimp only; omega
+
+private theorem unhit_p26_of_free_frame_local {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {i : Ivl}
+    (hAs : ArenaOK s)
+    (hfr : FrameOutside s post [freeGap s] (heapFree s))
+    (hpos : i.2 ≠ 0)
+    (hal : Allocated s i) :
+    R10Shards.P26_P28.IvlUnhit s post i := by
+  obtain ⟨hgap, hheap⟩ := allocated_disj_free_regions_local hAs hal
+  have hhl8 : heapLimit % 8 = 0 := by decide
+  have hhp8 : globN s "heap_ptr" % 8 = 0 := hAs.2.2.2.2.2.1
+  have hfm8 : globN s "frame_mem_ptr" % 8 = 0 := hAs.2.2.2.2.2.2.1
+  have hsc8 : globN s "scratch_ptr" % 8 = 0 := hAs.2.2.2.2.2.2.2.1
+  exact R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hpos hfr
+    (fun j hj => by
+      rw [List.mem_singleton.1 hj]
+      unfold freeGap; dsimp only; omega)
+    (by unfold heapFree; dsimp only; omega)
+    (fun j hj => by rw [List.mem_singleton.1 hj]; exact hgap)
+    hheap
 
 private theorem ws32_roleSlot_disj {F : Type}
     (s : PanSemStateFiniteExact 64 F) (S : List Nat)
@@ -10720,7 +10756,7 @@ private theorem worldStepSc_of_decode_witness_frame {F : Type}
     (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
     (hsp : globN post "scratch_ptr" = globN s "scratch_ptr")
     (hgk : GlobalsKept ["heap_ptr", "scratch_ptr"] s post)
-    (hfr : FrameOutside s post [] (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
+    (hfr : FrameOutside s post [freeGap s] (heapFree s))
     (hext : ∀ Nd, NodeHeap s Nd →
       (∀ o ∈ nodeExtents s Nd, o.2 = 0 ∨ Allocated s o) →
       ∃ Nd', (∀ n ∈ Nd, n ∈ Nd') ∧
@@ -10750,11 +10786,8 @@ private theorem worldStepSc_of_decode_witness_frame {F : Type}
     have h1 := hAs.2.2.2.2.2.2.1
     have h2 := hAp.2.2.2.2.2.2.1
     omega
-  have hunhit_alloc : ∀ i : Ivl, i.2 ≠ 0 → Allocated s i → R10Shards.P26_P28.IvlUnhit s post i := fun i hipos hal =>
-    R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hipos hfr
-      (fun _ hj => by cases hj) hf_al
-      (fun _ hj => by cases hj)
-      (R16WkAcctWs.disj_fresh_of_zero_or_allocated hAs.2 hAp.2 hhp (Or.inr hal))
+  have hunhit_alloc : ∀ i : Ivl, i.2 ≠ 0 → Allocated s i → R10Shards.P26_P28.IvlUnhit s post i :=
+    fun _ hipos hal => unhit_p26_of_free_frame_local hAs.2 hfr hipos hal
   obtain ⟨S0, hWT0_ex⟩ := hW0.2
   obtain ⟨Nd0, hWT0⟩ := (worldTyped_iff_with s S0).1 hWT0_ex
   have hrk : RecordsKept (R16WkAcctWs.bufRegions []) stdKeep s post := by
@@ -10802,10 +10835,17 @@ private theorem worldStepSc_of_decode_witness_frame {F : Type}
       have hsb_lt : sourceBase < 2 ^ 64 := by decide
       have ha_lt : a < 2 ^ 64 := lt_of_le_of_lt (by omega) hsb_lt
       have hm := hfr (BitVec.ofNat 64 a)
-        (fun _ hj => by cases hj)
+        (fun j hj hcj => by
+          rw [List.mem_singleton.1 hj] at hcj
+          obtain ⟨h1, _⟩ := hcj
+          unfold freeGap at h1; dsimp at h1
+          rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt] at h1
+          have h1' := hAs.2.1; have h2' := hAs.2.2.1; have h3' := hAs.2.2.2.1
+          have hsep : heapLimit ≤ scratchStart := by decide
+          omega)
         (fun hcf => by
           obtain ⟨h1, _⟩ := hcf
-          dsimp at h1
+          unfold heapFree at h1; dsimp at h1
           rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt] at h1
           have hlo := hAs.2.1
           omega)
@@ -11054,15 +11094,8 @@ private theorem worldStepSc_of_decode_witness_frame {F : Type}
         unfold worldOwned
         exact List.mem_append_right _ ho_old
       · exact Or.inr (Or.inr ho_fresh)
-  · intro a _ hnot_hf
-    apply hfr a (fun _ hj => by cases hj)
-    intro hcf
-    apply hnot_hf
-    obtain ⟨h1, h2⟩ := hcf
-    unfold heapFree CellHits at *
-    dsimp at h1 h2 ⊢
-    have := hAp.2.2.1
-    omega
+  · intro a ha hnot_hf
+    exact hfr a (fun j hj => ha j (List.mem_append_right _ hj)) hnot_hf
 
 private theorem lookup_ws_storage_trie_add :
     originalRuntimeCode.lookup (ofString "ws_storage_trie") =
@@ -11281,25 +11314,16 @@ private theorem ws_storage_trie_body_worldStepSc {F : Type}
                       have h1 := hAs.2.2.2.2.2.2.1
                       have h2 := hAp_dw.2.2.2.2.2.2.1
                       omega
+                    have hu_dw_alloc : ∀ i : Ivl, i.2 ≠ 0 → Allocated ent_dw i → R10Shards.P26_P28.IvlUnhit ent_dw cpost_dw i :=
+                      fun _ hpos_i hal_i => unhit_p26_of_free_frame_local hAs.2 hfr_dw hpos_i hal_i
                     have hNH' : NodeHeap cpost_dw Nd :=
                       (R10Shards.P26_P28.nodeHeap_congr_bytes hAs.1 hAp_dw.1 hag hNH
-                        (fun n hn => by
-                          have hpos : (nodeIvl ent_dw n).2 ≠ 0 := by
-                            dsimp [nodeIvl]; unfold nodeSize; split_ifs <;> decide
-                          exact R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hpos hfr_dw
-                            (fun _ hj => by cases hj) hf_al (fun _ hj => by cases hj)
-                            (R16WkAcctWs.disj_fresh_of_zero_or_allocated hAs.2 hAp_dw.2 hhp_dw
-                              (Or.inr (hNH.1 n hn).2.1)))
+                        (fun n hn => hu_dw_alloc _ (by unfold nodeIvl nodeSize; dsimp only; split_ifs <;> omega) (hNH.1 n hn).2.1)
                         (fun n hn h12 hp_nz k hk => by
                           rcases (hNH.1 n hn).2.2.2.2.2.2.1 h12 with h0 | ⟨_, hal_p, _⟩
                           · exact absurd h0 hp_nz
-                          · have hp_disj := R16WkAcctWs.disj_fresh_of_zero_or_allocated hAs.2 hAp_dw.2 hhp_dw (Or.inr hal_p)
-                            have hhi := (ivl_allocated_bound hAs.2 hal_p).2
-                            have hu_p : R10Shards.P26_P28.IvlUnhit ent_dw cpost_dw (memW ent_dw (n + 32), memW ent_dw (n + 40)) :=
-                              R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hp_nz hfr_dw
-                                (fun _ hj => by cases hj) hf_al (fun _ hj => by cases hj) hp_disj
-                            have h32_eq : memW sM (n + 32) = memW ent_dw (n + 32) := rfl
-                            have h40_eq : memW sM (n + 40) = memW ent_dw (n + 40) := rfl
+                          · have hhi := (ivl_allocated_bound hAs.2 hal_p).2
+                            have hu_p := hu_dw_alloc _ hp_nz hal_p
                             exact R10Shards.P26_P28.memB_eq_of_ivlUnhit hu_p hbe_dw hhi
                               ⟨by dsimp; omega, by dsimp; omega⟩)).1
                     exact ⟨Nd, fun _ h => h, fun _ h => Or.inl h, hNH', fun _ h => by simp at h⟩)
@@ -12425,7 +12449,7 @@ theorem wk_state_init_of_decode_witness
     (heg_tr : ∀ {F : Type} (s b : PanSemStateFiniteExact 64 F) (db : Nat),
       ArenaReady s → ArenaReady b → b.be = s.be →
       globN s "heap_ptr" ≤ globN b "heap_ptr" →
-      FrameOutside s b [] (globN s "heap_ptr", globN b "heap_ptr" - globN s "heap_ptr") →
+      FrameOutside s b [freeGap s] (heapFree s) →
       ExtraGuard s db → ExtraGuard b db) :
     WorldReturnsIn
       (fun s => StateInitReady s ∧ ExtraGuard s (locN s "nodedb"))
@@ -12559,7 +12583,11 @@ theorem wk_state_init_of_decode_witness
     have hent_guard : ArenaReady ent_dw ∧ ExtraGuard ent_dw (locN ent_dw "db") := by
       refine ⟨hAR_ent, ?_⟩
       rw [hent_db, ← hdb_nat]
-      exact heg_tr s ent_dw (locN s "nodedb") hAR0 hAR_ent hs0c_be hhp_0_s0c hfr_s_s0c hEG_s
+      refine heg_tr s ent_dw (locN s "nodedb") hAR0 hAR_ent hs0c_be hhp_0_s0c ?_ hEG_s
+      intro a _ hnhf
+      exact hfr_s_s0c a (fun _ h => by cases h) (fun ⟨c1, c2⟩ => by
+        dsimp only at c1 c2
+        exact hnhf ⟨c1, by unfold heapFree; dsimp only; have := hAR_s0c.2.2.1; omega⟩)
     rcases hrun_dw : evaluateHOLFiniteState ent_dw
         (sourceFnBody Guest.Software.guestFn_decode_witness_to_mpt) with ⟨res_dw, cpost_dw⟩
     simp only [ent_dw, cmap_dw] at hrun_dw
@@ -12996,44 +13024,33 @@ theorem wk_state_init_of_decode_witness
               hs9_be, hs8_be, hs7_be, hs6_be, hs5_be, hs4_be, hs3a_be, hs3_be, hs2_be, hs1a_be, hs1_be]
         have hs15_m_s10 : s15.memory = s10.memory := by
           rw [hs15_m, hs14_m, hs13_m, hs12_m, hs11_m]
-        -- Build collapsed FrameOutside `s -> s15` keeping `[(globN s "scratch_ptr", 0)]`:
-        have hfr_s_s1 : FrameOutside s s1 [(globN s "scratch_ptr", 0)]
-            (globN s "heap_ptr", globN s1 "heap_ptr" - globN s "heap_ptr") := by
-          have h1 : FrameOutside s s0c [(globN s "scratch_ptr", 0)]
-              (globN s "heap_ptr", globN s0c "heap_ptr" - globN s "heap_ptr") :=
-            fun x _ hnhf => hfr_s_s0c x (fun _ h => by cases h) hnhf
-          have h2 : FrameOutside s0c s1 []
-              (globN s0c "heap_ptr", globN s1 "heap_ptr" - globN s0c "heap_ptr") := hfr_dw
-          have hcomb := WkBal.frameOutside_seq_heap_sp0 hhp_0_s0c hhp_s0c_s1 h1 h2
-          simpa using hcomb
-        have hfr_s_s1a : FrameOutside s s1a [(globN s "scratch_ptr", 0)]
-            (globN s "heap_ptr", globN s1a "heap_ptr" - globN s "heap_ptr") := by
-          have h2 : FrameOutside s1 s1a [(globN s "scratch_ptr", 0), (pws.toNat, 40)]
-              (globN s1 "heap_ptr", globN s1a "heap_ptr" - globN s1 "heap_ptr") := by
-            intro x hno _
-            exact hfr_s1a x (fun _ h => by cases h) (hno (pws.toNat, 40) (by simp))
-          exact frameOutside_collapse_rec_sp s s1 s1a pws.toNat 40 (by omega)
-            (by change pws.toNat + 40 ≤ globN s1 "heap_ptr"; omega)
-            (le_refl _) hfr_s_s1 h2
+        -- Build FrameOutside `s -> s1` and `s -> s15` keeping `[freeGap s]` and fresh `heapFree s`:
+        have hfg_ent_eq : freeGap ent_dw = freeGap s := by
+          unfold freeGap
+          have h1 : globN ent_dw "frame_mem_ptr" = globN s "frame_mem_ptr" := hs0c_fmp
+          have h2 : globN ent_dw "scratch_ptr" = globN s "scratch_ptr" := hs0c_sp
+          rw [h1, h2]
+        have hfr_s_s1 : FrameOutside s s1 [freeGap s] (heapFree s) := by
+          intro x hno hnhf
+          have hno_ent : ∀ j ∈ [freeGap ent_dw], ¬ CellHits x.toNat j := by
+            intro j hj
+            rw [List.mem_singleton.1 hj, hfg_ent_eq]
+            exact hno _ (List.mem_singleton.2 rfl)
+          have hnhf_ent : ¬ CellHits x.toNat (heapFree ent_dw) := by
+            intro ⟨c1, c2⟩
+            unfold heapFree at c1 c2; dsimp only at c1 c2
+            have hent_hp : globN ent_dw "heap_ptr" = globN s0c "heap_ptr" := rfl
+            rw [hent_hp] at c1 c2
+            exact hnhf ⟨by unfold heapFree; dsimp only; omega, by unfold heapFree; dsimp only; omega⟩
+          have hnhf_0c : ¬ CellHits x.toNat (globN s "heap_ptr", globN s0c "heap_ptr" - globN s "heap_ptr") := by
+            intro ⟨c1, c2⟩; dsimp only at c1 c2
+            exact hnhf ⟨c1, by unfold heapFree; dsimp only; have := hAR_s0c.2.2.1; omega⟩
+          have hm12 : s1.memory x = s0c.memory x := hfr_dw x hno_ent hnhf_ent
+          exact hm12.trans (hfr_s_s0c x (fun _ h => by cases h) hnhf_0c)
         have hfr_s1a_s2' : FrameOutside s1a s2 [(globN s "scratch_ptr", 0), (pws.toNat, 40)]
             (globN s1a "heap_ptr", globN s2 "heap_ptr" - globN s1a "heap_ptr") := by
           have hsp_1a : globN s1a "scratch_ptr" = globN s "scratch_ptr" := hs1_sp
           rw [hsp_1a] at hfr_s1a_s2; exact hfr_s1a_s2
-        have hfr_s_s2 : FrameOutside s s2 [(globN s "scratch_ptr", 0)]
-            (globN s "heap_ptr", globN s2 "heap_ptr" - globN s "heap_ptr") :=
-          frameOutside_collapse_rec_sp s s1a s2 pws.toNat 40 (by omega) hpws40_s1a
-            (by omega) hfr_s_s1a hfr_s1a_s2'
-        have hfr_s_s3a : FrameOutside s s3a [(globN s "scratch_ptr", 0)]
-            (globN s "heap_ptr", globN s3a "heap_ptr" - globN s "heap_ptr") := by
-          intro x hno hnhf
-          have hno_bs : ¬ CellHits x.toNat (pbs.toNat, 80) := by
-            intro ⟨c1, c2⟩; dsimp only at c1 c2
-            exact hnhf ⟨by dsimp only; omega, by dsimp only; omega⟩
-          have hnhf_s2 : ¬ CellHits x.toNat (globN s "heap_ptr", globN s2 "heap_ptr" - globN s "heap_ptr") := by
-            intro ⟨c1, c2⟩; dsimp only at c1 c2
-            exact hnhf ⟨c1, by dsimp only; omega⟩
-          exact (hfr_s3a x (fun _ h => by cases h) hno_bs).trans
-            ((congrFun hs3_m x).trans (hfr_s_s2 x hno hnhf_s2))
         -- Chain `s3a -> s4 -> s5 -> s6 -> s7 -> s8 -> s9 -> s9b -> s10` keeping `[(sp, 0), (pbs, 80)]`:
         have hfr_bs_step : ∀ {a b c : PanSemStateFiniteExact 64 F}
             (hab : globN a "heap_ptr" ≤ globN b "heap_ptr")
@@ -13094,28 +13111,54 @@ theorem wk_state_init_of_decode_witness
         have hfr_5_10 := hfr_bs_step (by omega) (by omega) hfr_5_6 hfr_6_10
         have hfr_4_10 := hfr_bs_step (by omega) (by omega) hfr_4_5 hfr_5_10
         have hfr_3a_10 := hfr_bs_step (by omega) (by omega) hfr_3a_4 hfr_4_10
-        have hfr_s_s10 : FrameOutside s s10 [(globN s "scratch_ptr", 0)]
-            (globN s "heap_ptr", globN s10 "heap_ptr" - globN s "heap_ptr") :=
-          frameOutside_collapse_rec_sp s s3a s10 pbs.toNat 80 (by omega) hpbs80_s3a
-            (by omega) hfr_s_s3a hfr_3a_10
-        have hfr_s_s15 : FrameOutside s s15 [(globN s "scratch_ptr", 0)]
-            (globN s "heap_ptr", globN s15 "heap_ptr" - globN s "heap_ptr") := by
+        have hsp_2 : globN s2 "scratch_ptr" = globN s "scratch_ptr" := hs2_sp.trans hs1_sp
+        have hfr_s2_s10 : FrameOutside s2 s10 [(globN s "scratch_ptr", 0)]
+            (globN s2 "heap_ptr", globN s10 "heap_ptr" - globN s2 "heap_ptr") := by
+          have h2_3a : FrameOutside s2 s3a [(globN s2 "scratch_ptr", 0)]
+              (globN s2 "heap_ptr", globN s3a "heap_ptr" - globN s2 "heap_ptr") := by
+            intro x _ hnhf
+            have hno_bs : ¬ CellHits x.toNat (pbs.toNat, 80) := by
+              intro ⟨c1, c2⟩; dsimp only at c1 c2
+              exact hnhf ⟨by dsimp only; omega, by dsimp only; omega⟩
+            exact (hfr_s3a x (fun _ h => by cases h) hno_bs).trans (congrFun hs3_m x)
+          have hcol := frameOutside_collapse_rec_sp s2 s3a s10 pbs.toNat 80 (by omega) hpbs80_s3a
+            (by omega) h2_3a (by rw [hsp_2]; exact hfr_3a_10)
+          rw [hsp_2] at hcol
+          exact hcol
+        have hfr_s1_s15 : FrameOutside s1 s15 [(globN s "scratch_ptr", 0), (pws.toNat, 40)]
+            (globN s1 "heap_ptr", globN s15 "heap_ptr" - globN s1 "heap_ptr") := by
           intro x hno hnhf
+          have hno_sp_x : ∀ j ∈ [(globN s "scratch_ptr", 0)], ¬ CellHits x.toNat j :=
+            fun j hj => hno j (by simp only [List.mem_singleton] at hj; subst hj; simp)
+          have hno_ws_x : ¬ CellHits x.toNat (pws.toNat, 40) := hno (pws.toNat, 40) (by simp)
+          have hnhf_2_10 : ¬ CellHits x.toNat (globN s2 "heap_ptr", globN s10 "heap_ptr" - globN s2 "heap_ptr") :=
+            fun ⟨c1, c2⟩ => hnhf ⟨by dsimp only at c1 ⊢; omega, by dsimp only at c2 ⊢; omega⟩
+          have hnhf_1a_2 : ¬ CellHits x.toNat (globN s1a "heap_ptr", globN s2 "heap_ptr" - globN s1a "heap_ptr") :=
+            fun ⟨c1, c2⟩ => hnhf ⟨by dsimp only at c1 ⊢; omega, by dsimp only at c2 ⊢; omega⟩
           rw [hs15_m_s10]
-          apply hfr_s_s10 x hno
-          intro ⟨c1, c2⟩; dsimp only at c1 c2
-          exact hnhf ⟨c1, by dsimp only; omega⟩
+          exact (hfr_s2_s10 x hno_sp_x hnhf_2_10).trans
+            ((hfr_s1a_s2' x hno hnhf_1a_2).trans
+              (hfr_s1a x (fun _ h => by cases h) hno_ws_x))
+        have hfr_s_s15 : FrameOutside s s15 [freeGap s] (heapFree s) := by
+          intro x hno hnhf
+          have hno_1_15 : ∀ j ∈ [(globN s "scratch_ptr", 0), (pws.toNat, 40)], ¬ CellHits x.toNat j := by
+            intro j hj hcj
+            simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+            rcases hj with rfl | rfl
+            · have hfg_eq : WkBal.freeGap s = freeGap s := rfl
+              have hhit := WkBal.cellHits_sp0_imp_freeGap hAR0.2 hcj
+              rw [hfg_eq] at hhit
+              exact hno _ (List.mem_singleton.2 rfl) hhit
+            · obtain ⟨c1, c2⟩ := hcj; dsimp only at c1 c2
+              exact hnhf ⟨by unfold heapFree; dsimp only; omega, by unfold heapFree; dsimp only; omega⟩
+          have hnhf_1_15 : ¬ CellHits x.toNat (globN s1 "heap_ptr", globN s15 "heap_ptr" - globN s1 "heap_ptr") := by
+            intro ⟨c1, c2⟩; dsimp only at c1 c2
+            have := hAR_s15.2.2.1
+            exact hnhf ⟨by unfold heapFree; dsimp only; omega, by unfold heapFree; dsimp only; omega⟩
+          exact (hfr_s1_s15 x hno_1_15 hnhf_1_15).trans (hfr_s_s1 x hno hnhf)
         have hsp8_s : (globN s "scratch_ptr") % 8 = 0 := hAR0.2.2.2.2.2.2.2.2.1
-        have hunhit_s_s15 : ∀ i : Ivl, i.2 ≠ 0 → Allocated s i → R10Shards.P26_P28.IvlUnhit s s15 i := by
-          intro i hipos hal
-          have hd_hf : Disj i (globN s "heap_ptr", globN s15 "heap_ptr" - globN s "heap_ptr") :=
-            (InitECandidate.Solver.Wave8Contracts.M08.disj_allocated_fresh_heap hAR0.2 hAR_s15.2 hal
-              ⟨le_rfl, by omega⟩).flip
-          exact ivlUnhit_of_frameOutside_aligned hipos hfr_s_s15
-            (fun j hj => by simp only [List.mem_singleton] at hj; subst hj; exact ⟨hsp8_s, rfl⟩)
-            ⟨hAR0.2.2.2.2.2.2.1, by have := hAR0.2.2.2.2.2.2.1; have := hAR_s15.2.2.2.2.2.2.1; omega⟩
-            (fun j hj => by simp only [List.mem_singleton] at hj; subst hj; exact Or.inr (Or.inl rfl))
-            hd_hf
+        have hunhit_s_s15 : ∀ i : Ivl, i.2 ≠ 0 → Allocated s i → R10Shards.P26_P28.IvlUnhit s s15 i :=
+          fun _ hipos hal => unhit_p26_of_free_frame_local hAR0.2 hfr_s_s15 hipos hal
         have hrk_15 : RecordsKept (fun _ => [])
             [("ws", []), ("bs", []),
              ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
@@ -13141,20 +13184,6 @@ theorem wk_state_init_of_decode_witness
         · -- Step A: Transfer `pws` words (`16, 24, 32`) and `pbs` words (`8, 16, 24, 32, 40, 48, 72`) to `s15`,
           -- and transfer `tw_ws, tb8, tb16, tb24, tb32, tb40, tb48, tb72` to `s15`:
           have h264_lim : heapLimit < 2 ^ 64 := by decide
-          have hsp_2 : globN s2 "scratch_ptr" = globN s "scratch_ptr" := hs2_sp.trans hs1_sp
-          have hfr_s2_s10 : FrameOutside s2 s10 [(globN s "scratch_ptr", 0)]
-              (globN s2 "heap_ptr", globN s10 "heap_ptr" - globN s2 "heap_ptr") := by
-            have h2_3a : FrameOutside s2 s3a [(globN s2 "scratch_ptr", 0)]
-                (globN s2 "heap_ptr", globN s3a "heap_ptr" - globN s2 "heap_ptr") := by
-              intro x _ hnhf
-              have hno_bs : ¬ CellHits x.toNat (pbs.toNat, 80) := by
-                intro ⟨c1, c2⟩; dsimp only at c1 c2
-                exact hnhf ⟨by dsimp only; omega, by dsimp only; omega⟩
-              exact (hfr_s3a x (fun _ h => by cases h) hno_bs).trans (congrFun hs3_m x)
-            have hcol := frameOutside_collapse_rec_sp s2 s3a s10 pbs.toNat 80 (by omega) hpbs80_s3a
-              (by omega) h2_3a (by rw [hsp_2]; exact hfr_3a_10)
-            rw [hsp_2] at hcol
-            exact hcol
           have hmw_s2_s15 : ∀ k : Nat, k % 8 = 0 → k + 8 ≤ globN s2 "heap_ptr" → memW s15 k = memW s2 k := by
             intro k hk8 hk_hi
             have hk64 : k < 2 ^ 64 := by have := hAR_s2.2.2.1; omega
@@ -13178,13 +13207,18 @@ theorem wk_state_init_of_decode_witness
             rw [hmw_s2_s15 (pws.toNat + 16) (by omega) (by omega),
                 hmw_ws_other 16 (by omega) (by decide),
                 hmw_ne_s1a (pws.toNat + 16) (by rw [h24_nat]; omega) (by omega)]
-            have hm_dw := hfr_dw (BitVec.ofNat 64 (pws.toNat + 16)) (fun _ h => by cases h)
+            have hm_dw := hfr_dw (BitVec.ofNat 64 (pws.toNat + 16))
+              (fun j hj ⟨c1, c2⟩ => by
+                rw [List.mem_singleton.1 hj, hfg_ent_eq] at c1
+                unfold freeGap at c1; dsimp only at c1
+                rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)] at c1
+                have hsep : heapLimit ≤ scratchStart := by decide
+                have := hAR0.2.2.2.1
+                omega)
               (fun ⟨c1, c2⟩ => by
-                dsimp only at c1 c2
-                rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)] at c1 c2
-                have hent_hp : globN (s0c.callEntryStateHOLFinite
-                  ((HolFiniteMapExact.empty.update (ofString "db", ValueHOL.val (.word dbw))).update
-                    (ofString "root_hash", ValueHOL.val (.word srw)))) "heap_ptr" = qws.toNat := hs0c_hp
+                unfold heapFree at c1; dsimp only at c1
+                rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)] at c1
+                have hent_hp : globN ent_dw "heap_ptr" = qws.toNat := hs0c_hp
                 rw [hent_hp] at c1
                 omega)
             have hs1_m_eq : memW s1 (pws.toNat + 16) = memW s0c (pws.toNat + 16) := by
@@ -13436,13 +13470,25 @@ theorem wk_state_init_of_decode_witness
             · exact hget k1 k2 hk1 hk2 hlt i hi j hj
             · exact (hget k2 k1 hk2 hk1 hgt j hj i hi).flip
           -- Low memory words `0, 8, 16` preserved from `s` to `s15`:
-          have hm0_15 : memW s15 0 = memW s 0 ∧ memW s15 8 = memW s 8 ∧ memW s15 16 = memW s 16 :=
-            WkBal.mem0_8_16_eq_of_heap_sp_frame hAR0.2
-              (fun j hj => by
-                simp only [List.mem_singleton] at hj; subst hj
-                have hsep : sourceBase ≤ scratchStart := by decide
-                exact le_trans hsep (le_trans hAR0.2.2.2.1 hAR0.2.2.2.2.1))
-              hfr_s_s15
+          have hm0_15 : memW s15 0 = memW s 0 ∧ memW s15 8 = memW s 8 ∧ memW s15 16 = memW s 16 := by
+            have hlow : ∀ a : Nat, a + 8 ≤ sourceBase → memW s15 a = memW s a := fun a ha => by
+              have hsb_lt : sourceBase < 2 ^ 64 := by decide
+              have ha_lt : a < 2 ^ 64 := lt_of_le_of_lt (by omega) hsb_lt
+              have hm := hfr_s_s15 (BitVec.ofNat 64 a)
+                (fun j hj hcj => by
+                  rw [List.mem_singleton.1 hj] at hcj
+                  obtain ⟨c1, _⟩ := hcj
+                  unfold freeGap at c1; dsimp at c1
+                  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt] at c1
+                  have hsep : sourceBase ≤ scratchStart := by decide
+                  have := hAR0.2.2.2.1; omega)
+                (fun hcf => by
+                  obtain ⟨c1, _⟩ := hcf
+                  unfold heapFree at c1; dsimp at c1
+                  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt] at c1
+                  have := hAR0.2.1; omega)
+              unfold memW; rw [hm]
+            exact ⟨hlow 0 (by decide), hlow 8 (by decide), hlow 16 (by decide)⟩
           -- Fact from `StateInitReady`: if `cdw.toNat ≠ 0`, `cdw.toNat ∉ S_sir` and `cdw.toNat` is distinct from all `bal` tables in `s`!
           have hcd_not_bal : cdw.toNat ≠ 0 →
               cdw.toNat ≠ globN s "bal_accounts" ∧
@@ -13504,20 +13550,6 @@ theorem wk_state_init_of_decode_witness
             cases hv_dw2; rfl
           subst hrootw_eq
           have hNH_s1 : NodeHeap s1 Nd' := hNH_dw
-          have hfr_s1_s15 : FrameOutside s1 s15 [(globN s "scratch_ptr", 0), (pws.toNat, 40)]
-              (globN s1 "heap_ptr", globN s15 "heap_ptr" - globN s1 "heap_ptr") := by
-            intro x hno hnhf
-            have hno_sp_x : ∀ j ∈ [(globN s "scratch_ptr", 0)], ¬ CellHits x.toNat j :=
-              fun j hj => hno j (by simp only [List.mem_singleton] at hj; subst hj; simp)
-            have hno_ws_x : ¬ CellHits x.toNat (pws.toNat, 40) := hno (pws.toNat, 40) (by simp)
-            have hnhf_2_10 : ¬ CellHits x.toNat (globN s2 "heap_ptr", globN s10 "heap_ptr" - globN s2 "heap_ptr") :=
-              fun ⟨c1, c2⟩ => hnhf ⟨by dsimp only at c1 ⊢; omega, by dsimp only at c2 ⊢; omega⟩
-            have hnhf_1a_2 : ¬ CellHits x.toNat (globN s1a "heap_ptr", globN s2 "heap_ptr" - globN s1a "heap_ptr") :=
-              fun ⟨c1, c2⟩ => hnhf ⟨by dsimp only at c1 ⊢; omega, by dsimp only at c2 ⊢; omega⟩
-            rw [hs15_m_s10]
-            exact (hfr_s2_s10 x hno_sp_x hnhf_2_10).trans
-              ((hfr_s1a_s2' x hno hnhf_1a_2).trans
-                (hfr_s1a x (fun _ h => by cases h) hno_ws_x))
           have hunhit_s1_s15_disj : ∀ i : Ivl, i.2 ≠ 0 → Allocated s1 i → Disj i (pws.toNat, 40) →
               R10Shards.P26_P28.IvlUnhit s1 s15 i := by
             intro i hipos hal_i hd_ws
@@ -13542,15 +13574,8 @@ theorem wk_state_init_of_decode_witness
           have hold_ivl_s1 : ∀ n ∈ Nd, nodeIvl s1 n = nodeIvl s n ∧ nodePath s1 n = nodePath s n := by
             intro n hn
             have hpos : (nodeIvl s n).2 ≠ 0 := by dsimp [nodeIvl]; unfold nodeSize; split_ifs <;> decide
-            have hun_0_1 : R10Shards.P26_P28.IvlUnhit s s1 (n, nodeSize (memW s n)) := by
-              have hd_hf : Disj (n, nodeSize (memW s n)) (globN s "heap_ptr", globN s1 "heap_ptr" - globN s "heap_ptr") :=
-                (InitECandidate.Solver.Wave8Contracts.M08.disj_allocated_fresh_heap hAR0.2 hAR_s1.2
-                  ((hTr.1.1 n hn).2.1) ⟨le_rfl, by omega⟩).flip
-              exact ivlUnhit_of_frameOutside_aligned hpos hfr_s_s1
-                (fun j hj => by simp only [List.mem_singleton] at hj; subst hj; exact ⟨hsp8_s, rfl⟩)
-                ⟨hAR0.2.2.2.2.2.2.1, by have := hAR0.2.2.2.2.2.2.1; have := hAR_s1.2.2.2.2.2.2.1; omega⟩
-                (fun j hj => by simp only [List.mem_singleton] at hj; subst hj; exact Or.inr (Or.inl rfl))
-                hd_hf
+            have hun_0_1 : R10Shards.P26_P28.IvlUnhit s s1 (n, nodeSize (memW s n)) :=
+              unhit_p26_of_free_frame_local hAR0.2 hfr_s_s1 hpos (hTr.1.1 n hn).2.1
             have hn8 : n % 8 = 0 := (hTr.1.1 n hn).2.2.2.1.1
             have hhi_n : n + nodeSize (memW s n) ≤ 2 ^ 64 := (ivl_allocated_bound hAR0.2 (hTr.1.1 n hn).2.1).2
             have hsz32 : 32 ≤ nodeSize (memW s n) := by unfold nodeSize; split_ifs <;> omega
@@ -14172,13 +14197,8 @@ theorem wk_state_init_of_decode_witness
                 exact List.mem_append_right _ ho_old
               · exact Or.inr (Or.inr ⟨by dsimp [Inside] at ho_dw ⊢; omega, by dsimp [Inside] at ho_dw ⊢; omega⟩)
           · -- `FrameOutside s s15 (worldOwned s S Nd ++ [] ++ [freeGap s]) (heapFree s)`:
-            have hfr_world : FrameOutside s s15 (worldOwned s S Nd ++ [WkBal.freeGap s]) (WkBal.heapFree s) :=
-              WkBal.frameOutside_sp0_to_world (extra := worldOwned s S Nd) hAR0.2 hAR_s15.2 hhp_15
-                (fun j hj => List.mem_singleton.1 hj) hfr_s_s15
-            have hfg_eq : WkBal.freeGap s = freeGap s := rfl
-            have hhf_eq : WkBal.heapFree s = heapFree s := rfl
-            rw [hfg_eq, hhf_eq] at hfr_world
-            simpa only [List.append_nil] using hfr_world
+            intro x hno hnhf
+            exact hfr_s_s15 x (fun j hj => hno j (List.mem_append_right _ hj)) hnhf
           · -- `RetStateInit`:
             intro v hv
             rw [hjcap_15]

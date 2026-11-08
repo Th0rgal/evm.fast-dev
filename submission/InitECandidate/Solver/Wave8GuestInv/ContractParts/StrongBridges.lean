@@ -1,6 +1,7 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.DecodeTransaction
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeTransaction
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkLstPush
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkIdxStateInit
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodyRunAttempt
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.HeaderHash
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.RecoverSender
@@ -238,6 +239,27 @@ theorem decode_witness_to_mpt_spec :
       @R16Shards.EvmEkFk.StorageCreateFinish.NodeDbSlicesBounded :=
   R16Shards.EvmEkFk.StorageCreateFinish.decode_witness_to_mpt_spec
 
+theorem decode_witness_to_mpt_spec_wkBal :
+    R16Shards.WkBalStateInit.DecodeWitnessToMptSpec
+      @R16Shards.EvmEkFk.StorageCreateFinish.NodeDbSlicesBounded :=
+  R16Shards.EvmEkFk.StorageCreateFinish.decode_witness_to_mpt_spec
+
+theorem wk_state_init_strong :
+    WorldReturnsIn
+      (fun s => StateInitReady s ∧
+        R16Shards.EvmEkFk.StorageCreateFinish.NodeDbSlicesBounded s (locN s "nodedb"))
+      (fun s => if locN s "codedb" = 0 then [] else [locN s "codedb"])
+      (fun _ => [])
+      ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
+      [("ws", []), ("bs", []),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetStateInit (ofString "state_init") :=
+  R16Shards.WkBalStateInit.wk_state_init_of_decode_witness
+    decode_witness_to_mpt_spec_wkBal
+    (fun _ _ _ hAs hAb _ hhp hfr h =>
+      R16Shards.EvmEkFk.StorageCreateFinish.dbTableAt_of_frame_so hAs hAb hhp hfr h)
+
 theorem mpt_from_witness_preserves_witnessDbOK :
     FunSpec (fun s => R16Shards.EvmEkFk.StorageCreateFinish.MptFromWitnessReady s ∧
         R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
@@ -318,6 +340,18 @@ theorem gbody_mpt_root_strong
 theorem gbody_build_mpt_indexed_strong :
     type_of% @R16Shards.MptC10C12.gbody_build_mpt_indexed :=
   R16Shards.MptC10C12.gbody_build_mpt_indexed
+
+theorem wkSc_ws_storage_trie_strong :
+    R16WkAcctWs.WorldKeepsSc (fun s => WorldOK s ∧ R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
+      (R16WkAcctWs.bufRegions []) ["heap_ptr", "scratch_ptr"] EvmBase.stdKeep NoExtra
+      (ofString "ws_storage_trie") :=
+  R16Shards.EvmEkFk.wkSc_ws_storage_trie_strong
+
+theorem wk_ws_storage_trie_strong :
+    WorldKeeps (fun s => WorldOK s ∧ R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
+      (fun _ => []) ["heap_ptr", "scratch_ptr"] EvmBase.stdKeep NoExtra
+      (ofString "ws_storage_trie") :=
+  R16Shards.EvmEkFk.wk_ws_storage_trie_strong
 
 theorem wk_ws_get_storage_strong :
     WorldKeeps (fun s => WorldOK s ∧ R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
@@ -830,6 +864,18 @@ theorem wk_process_message_call_strong_of_callees :
 theorem wk_process_unchecked_system_transaction_of_sc :
     type_of% @R16Shards.TopGbodyWk.«wk_process_unchecked_system_transaction_of_sc» :=
   R16Shards.TopGbodyWk.«wk_process_unchecked_system_transaction_of_sc»
+
+theorem ptxAfterPhase4_phase5_relRun_strong :
+    type_of% @(R16Shards.TopGbodyWk.ptxAfterPhase4_phase5_relRun_strong_of_decode_witness
+      decode_witness_to_mpt_spec_wkBal) :=
+  R16Shards.TopGbodyWk.ptxAfterPhase4_phase5_relRun_strong_of_decode_witness
+    decode_witness_to_mpt_spec_wkBal
+
+theorem wk_process_transaction_strong_of_witnessDb :
+    type_of% @(R16Shards.TopGbodyWk.wk_process_transaction_strong_of_decode_witness
+      decode_witness_to_mpt_spec_wkBal) :=
+  R16Shards.TopGbodyWk.wk_process_transaction_strong_of_decode_witness
+    decode_witness_to_mpt_spec_wkBal
 
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
