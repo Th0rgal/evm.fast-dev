@@ -19,6 +19,8 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group09LogRetur
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group10CallsCreates
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemAlignedBridge
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep1
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep4b
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep5
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongTail2
 
 /-! Closed strengthened contracts for the cutover rehearsal. Callers must establish
@@ -509,5 +511,25 @@ theorem bmiWkWW_mpt_set :
 theorem bmiWkLoop_hRl :
     type_of% @R16Shards.MptC10C12.bmiWkLoop_hRl :=
   R16Shards.MptC10C12.bmiWkLoop_hRl
+
+theorem fcStackPushStepW_s23 :
+    type_of% @R16Shards.EvmEkFk.fcStackPushStepW :=
+  R16Shards.EvmEkFk.fcStackPushStepW
+
+theorem fcAddrToU256StepW_s23 :
+    type_of% @R16Shards.EvmEkFk.fcAddrToU256StepW :=
+  R16Shards.EvmEkFk.fcAddrToU256StepW
+
+theorem fcMinTailStepW_s23 :
+    type_of% @R16Shards.EvmEkFk.fcMinTailStepW :=
+  R16Shards.EvmEkFk.fcMinTailStepW
+
+theorem fcSetRetdataStepW_s4b :
+    type_of% @R16Shards.EvmEkFk.fcSetRetdataStepW :=
+  R16Shards.EvmEkFk.fcSetRetdataStepW
+
+theorem fcLogLoop_step_s5 :
+    type_of% @R16Shards.EvmEkFk.fcLogLoop_step :=
+  R16Shards.EvmEkFk.fcLogLoop_step
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
