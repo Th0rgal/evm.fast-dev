@@ -17,10 +17,12 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkHostPayloadHea
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.Depth0FrameOpen
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group09LogReturnRevert
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group10CallsCreates
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group10CallsCreatesTail
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemAlignedBridge
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep1
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep4b
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep5
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChildStep6
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongTail2
 
 /-! Closed strengthened contracts for the cutover rehearsal. Callers must establish
@@ -427,30 +429,31 @@ theorem create_finish_specs : R16Shards.EvmEkFk.CreateFinishSpecs :=
 
 theorem finish_child_finishPost :
     FunSpec FinishReady R16Shards.EvmEkFk.FinishPost (ofString "finish_child") :=
-  R16Shards.OpHandlersB.HeadMemBridge.finish_child_finishPost_of_createFinish
-    R16Shards.EvmEkFk.create_finish_specs
+  R16Shards.EvmEkFk.finish_child_finishPost
 
 theorem finish_child_spec_closed :
     type_of% @Wave8GuestInv.finish_child_spec :=
-  R16Shards.OpHandlersB.HeadMemBridge.finishChildSpecU_of_createFinish
-    R16Shards.EvmEkFk.create_finish_specs
+  R16Shards.EvmEkFk.finish_child_spec_c00
 
 theorem finishChildMemSpec :
     R16Shards.OpHandlersB.HeadMemBridge.FinishChildMemSpec :=
-  R16Shards.OpHandlersB.HeadMemBridge.finishChildMemSpec_of_createFinish
-    R16Shards.EvmEkFk.create_finish_specs
+  R16Shards.EvmEkFk.headMemBridge_finishChildMemSpec
 
 theorem finishChildSpecA :
     R16Shards.OpHandlersB.HeadMemBridge.FinishChildSpecA :=
-  R16Shards.OpHandlersB.HeadMemBridge.finishChildSpecA_of_createFinish
-    R16Shards.EvmEkFk.create_finish_specs
+  R16Shards.OpHandlersB.HeadMemBridge.finish_child_spec_aligned
+    R16Shards.EvmEkFk.headMemBridge_finishChildSpecU
+    R16Shards.EvmEkFk.headMemBridge_finishChildMemSpec
 
 theorem gbody_run_frames_aligned_closed :
     type_of% @(R16Shards.OpHandlersB.HeadMemBridge.gbody_run_frames_aligned_of_createFinish
       (hCF := R16Shards.EvmEkFk.create_finish_specs)) :=
   fun bf be bx bd hd =>
-    R16Shards.OpHandlersB.HeadMemBridge.gbody_run_frames_aligned_of_createFinish
-      bf be bx bd R16Shards.EvmEkFk.create_finish_specs hd
+    R16Shards.OpHandlersB.HeadMemBridge.gbody_run_frames_aligned_fc
+      bf be bx bd
+      R16Shards.EvmEkFk.headMemBridge_finishChildSpecU
+      R16Shards.EvmEkFk.headMemBridge_finishChildMemSpec
+      hd
 
 theorem op_selfdestruct_specA_g10 :
     type_of% @R16Shards.OpHandlersB.op_selfdestruct_specA :=
@@ -662,6 +665,18 @@ theorem op_extcodecopy_aligned_spec_closed :
     FunSpec (fun s => EvmRun s ∧ R16Shards.OpHandlersB.HeadMemAligned s)
       OpDispatchSpec.OpDispatchPost (ofString "op_extcodecopy") :=
   R16Shards.OpHandlersB.op_extcodecopy_aligned_spec extCodeOfHeadSpec_closed
+
+theorem op_delegatecall_specA_g10 :
+    type_of% @R16Shards.OpHandlersB.op_delegatecall_specA_g10 :=
+  R16Shards.OpHandlersB.op_delegatecall_specA_g10
+
+theorem phase2_b2a_bound :
+    type_of% @R13Shards.phase2_b2a_bound :=
+  R13Shards.phase2_b2a_bound
+
+theorem ek_frame_start_c08_of :
+    type_of% @R16Shards.EvmEkFk.ek_frame_start_c08_of :=
+  R16Shards.EvmEkFk.ek_frame_start_c08_of
 
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges

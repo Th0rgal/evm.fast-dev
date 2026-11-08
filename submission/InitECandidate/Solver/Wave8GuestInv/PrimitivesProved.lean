@@ -401,7 +401,7 @@ theorem primitives : Primitives where
   «gbody_op_dispatch» := Merged.gbody_op_dispatch
   «fb_frame_epilogue» := Merged.fb_frame_epilogue
   «fb_frame_exception» := Merged.fb_frame_exception
-  «finish_child_spec» := R16Shards.OpHandlersB.HeadMemBridge.finishChildSpecU_of_createFinish R16Shards.EvmEkFk.create_finish_specs
+  «finish_child_spec» := ContractParts.StrongBridges.finish_child_spec_closed
   «frame_epilogue_spec» := R16Shards.StateRestoreEpilogue.frame_epilogue_spec
   «frame_exception_spec» := R16Shards.PrimC08Closure.frame_exception_spec
   «op_dispatch_spec» := «op_dispatch_spec»
