@@ -21,7 +21,7 @@ The `WorldKeeps` for `build_mpt_indexed`. The walk mirrors the terminating walk
 list `bmiWkRl` (the keep buffers, the trie object, the fresh heap tail and the
 entry world's owned intervals), the composed `RecordsKept`, and the loop
 invariant `BuildMptLoopInv2`. The final packaging assembles the `WorldStep`
-directly: its `FrameOutside` admits `worldOwned` writes, so the widened regions
+directly: its `FrameOutside` permits `worldOwned` writes, so the widened regions
 absorb without a table-unchangedness argument. The `mpt_root` contract is taken
 as a hypothesis (the C08 `«mk_mpt_root»` stub's signature). -/
 
@@ -335,36 +335,5 @@ theorem heapByteEff_decCall_heap_mark {F : Type} {s cur : PanSemStateFiniteExact
       (ofString lname, cur.locals.lookup (ofString lname)))
     (evaluateHOLFiniteState mid cont).2.clock
 
-/-- The `mpt_new(0, 0)` decCall extends a `HeapByteEff` chain. -/
-theorem heapByteEff_decCall_mpt_new {F : Type} {s cur : PanSemStateFiniteExact 64 F}
-    {cont : ProgHOL 64} {Rl : List Ivl} {gw : List String}
-    (heff : HeapByteEff s cur Rl gw) (hAR_cur : ArenaReady cur)
-    (hcode_cur : cur.code = originalRuntimeCode) (hgw : "heap_ptr" ∈ gw)
-    (name : MlS)
-    (hnt : (evaluateHOLFiniteState cur
-      (.decCall (ofString lname) .one (ofString "mpt_new") [.const 0, .const 0] cont)).1 ≠ some .timeOut)
-    (hres : Resumes (evaluateHOLFiniteState cur
-      (.decCall (ofString lname) .one (ofString "mpt_new") [.const 0, .const 0] cont)).1)
-    (hcont : ∀ (hp q : BitVec 64) (mid : PanSemStateFiniteExact 64 F),
-      cur.globals.lookup (ofString "heap_ptr") = some (.val (.word hp)) →
-      hp.toNat = globN cur "heap_ptr" → q.toNat = hp.toNat + 16 →
-      globN mid "heap_ptr" = q.toNat →
-      mid.globals = cur.globals.update (ofString "heap_ptr", .val (.word q)) →
-      mid.locals = cur.locals.update (ofString lname, .val (.word hp)) →
-      (∀ a : BitVec 64, mid.memory a ≠ cur.memory a →
-        a.toNat = hp.toNat ∨ a.toNat = (hp + 8).toNat) →
-      HeapByteEff s mid Rl gw →
-      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut →
-      HeapByteEff s (evaluateHOLFiniteState mid cont).2 Rl gw) :
-    HeapByteEff s (evaluateHOLFiniteState cur
-      (.decCall (ofString lname) .one (ofString "mpt_new") [.const 0, .const 0] cont)).2 Rl gw := by
-  obtain ⟨hp, q, mid, hhp_lk, hhp_nat, hq, hq_lim, hmid_hp, hmid_g, hmid_l, hmid_mem,
-    heff_mid, hcont_run, hcont_res, heval⟩ :=
-    eval_decCall_mpt_new_zero cur lname cont Rl gw hcode_cur hAR_cur hgw hnt hres
-  rw [heval]
-  dsimp only
-  exact (hcont hp q mid hhp_lk hhp_nat hq hmid_hp hmid_g hmid_l hmid_mem
-    (heff.trans heff_mid) hcont_run).locals_clock
-    (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
-      (ofString lname, cur.locals.lookup (ofString lname)))
-    (evaluateHOLFiniteState mid cont).2.clock
+end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
+
