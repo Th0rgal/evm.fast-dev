@@ -32,7 +32,7 @@ open InitECandidate.Solver.Wave8GuestInv.R14Shards.OpHandlersA
 open InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers
 open InitECandidate.Solver.Wave8Contracts.M23
 
-private theorem store_some_eq_error_g09 {F : Type} {s post : PanSemStateFiniteExact 64 F}
+theorem store_some_eq_error_g09 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {dst val : ExpHOL 64} {res : PanSemResultExact 64}
     (h : evaluateHOLFiniteState s (.store dst val) = (some res, post)) :
     res = .error := by
@@ -50,7 +50,7 @@ private theorem store_some_eq_error_g09 {F : Type} {s post : PanSemStateFiniteEx
     · intro h; injection h with h1; injection h1 with h2; exact h2.symm
     · intro h; injection h with h1; injection h1 with h2; exact h2.symm
 
-private theorem headMemAligned_congr_head {F : Type}
+theorem headMemAligned_congr_head {F : Type}
     {s t : PanSemStateFiniteExact 64 F}
     (hg : t.globals = s.globals)
     (hmem : ∀ off : Nat, off ∈ ([24, 32, 40] : List Nat) →
@@ -62,7 +62,7 @@ private theorem headMemAligned_congr_head {F : Type}
   · rw [hgev, hmem 32 (by simp)]; exact h.1
   · rw [hgev, hgfp, hmem 24 (by simp), hmem 40 (by simp)]; exact h.2
 
-private theorem eps_stack_pop_headMem :
+theorem eps_stack_pop_headMem :
     EvmPreservingSpec (fun _ => True)
       (fun s _ post =>
         post.globals = s.globals ∧
@@ -183,7 +183,7 @@ private theorem eps_stack_pop_headMem :
       (rw [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)] at htn; omega)
   unfold memW; rw [hmem_ne16 _ hne_bv]
 
-private theorem eps_charge_gas_any_headMem :
+theorem eps_charge_gas_any_headMem :
     EvmPreservingSpec (fun _ => True)
       (fun s _ post =>
         post.globals = s.globals ∧
@@ -333,13 +333,13 @@ private theorem eps_charge_gas_any_headMem :
   · obtain ⟨hI, _, hch, hR⟩ := hcg.2 herr
     exact ⟨hI, hch, le_of_eq hR⟩
 
-private theorem evmR_lt_saturated_g09 {F : Type} {s : PanSemStateFiniteExact 64 F}
+theorem evmR_lt_saturated_g09 {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hInv : EvmInv s) : OpDispatchSpec.evmR s < 2 ^ 64 - 1 := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, hGas⟩ := hInv
   change OpDispatchSpec.evmR s + 1 < 2 ^ 64 at hGas
   omega
 
-private theorem charge_gas_return_amount_lt_g09 {F : Type}
+theorem charge_gas_return_amount_lt_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hInv : EvmInv s) {amtw : BitVec 64}
     (hamt : s.locals.lookup (ofString "amount") = some (.val (.word amtw)))
     {v : ValueHOL 64}
@@ -349,7 +349,7 @@ private theorem charge_gas_return_amount_lt_g09 {F : Type}
   have hbound := evmR_lt_saturated_g09 hInv
   omega
 
-private def XCostAligned {F : Type} (t : PanSemStateFiniteExact 64 F) : Prop :=
+def XCostAligned {F : Type} (t : PanSemStateFiniteExact 64 F) : Prop :=
   ∃ cw ebw : BitVec 64,
     t.locals.lookup (ofString "x") = some (.rStruct [.val (.word cw), .val (.word ebw)]) ∧
     (ebw = 0#64 ∨
@@ -357,7 +357,7 @@ private def XCostAligned {F : Type} (t : PanSemStateFiniteExact 64 F) : Prop :=
        (memW t (globN t "ev" + 32) + ebw.toNat) % 8 = 0 ∧
        memW t (globN t "ev" + 24) + memW t (globN t "ev" + 40) = globN t "frame_mem_ptr"))
 
-private theorem xCostAligned_of_cost1 {F : Type}
+theorem xCostAligned_of_cost1 {F : Type}
     {t ce cpost : PanSemStateFiniteExact 64 F} {cw ebw : BitVec 64}
     (hHM : HeadMemAligned t) (hlf : LocFrame ce cpost)
     (hce_m : ce.memory = t.memory) (hce_g : ce.globals = t.globals)
@@ -391,7 +391,7 @@ private theorem xCostAligned_of_cost1 {F : Type}
     rw [hsum]
     exact ⟨haft_lt, by omega, hHM_res.2⟩
 
-private theorem extendMemoryPre_of_xCostAligned {F : Type}
+theorem extendMemoryPre_of_xCostAligned {F : Type}
     {t : PanSemStateFiniteExact 64 F} {values : List (ValueHOL 64)}
     {b_em : ProgHOL 64} {callee : HolFiniteMapExact MlS (ValueHOL 64)} {rs_em : ShapeHOL}
     (hc : t.code = originalRuntimeCode) (hx : XCostAligned t)
@@ -424,7 +424,7 @@ theorem lookup_op_revert :
   lookup_of_guestAst_getElem 569 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn_op_revert) rfl
 
-private theorem eval_ev24_plus_s_word {F : Type} (t : PanSemStateFiniteExact 64 F) (v : ValueHOL 64)
+theorem eval_ev24_plus_s_word {F : Type} (t : PanSemStateFiniteExact 64 F) (v : ValueHOL 64)
     (hv : @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a))
       (.op .add
         [.load .one (.op .add [.var .global (ofString "ev"), .const 24#64]),
@@ -440,7 +440,7 @@ private theorem eval_ev24_plus_s_word {F : Type} (t : PanSemStateFiniteExact 64 
       · intro hv; injection hv with hv'; exact ⟨w, hv'.symm⟩
     · simp
 
-private theorem eval_local_n_word {F : Type} (t : PanSemStateFiniteExact 64 F) (nw : BitVec 64)
+theorem eval_local_n_word {F : Type} (t : PanSemStateFiniteExact 64 F) (nw : BitVec 64)
     (hn : t.locals.lookup (ofString "n") = some (.val (.word nw))) (v : ValueHOL 64)
     (hv : @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a))
       (.var .local (ofString "n")) = some v) :
@@ -449,7 +449,7 @@ private theorem eval_local_n_word {F : Type} (t : PanSemStateFiniteExact 64 F) (
   injection hv with hv'
   exact ⟨nw, hv'.symm⟩
 
-private theorem seq_raise_evmErr_ret {F : Type} {s0 : PanSemStateFiniteExact 64 F}
+theorem seq_raise_evmErr_ret {F : Type} {s0 : PanSemStateFiniteExact 64 F}
     {P : PanSemStateFiniteExact 64 F → Prop} {charged : Bool}
     (e r : ExpHOL 64) :
     HandlerRun s0 P charged (.seq (.raise (ofString "EvmErr") e) (.return r)) := by
@@ -900,7 +900,7 @@ theorem eps_sat_word_exact_g09 :
 
 def ceil32NatG09 (n : Nat) : Nat := ((n + 31) / 32) * 32
 
-private theorem one_u256_arg_lookup_g09 {fname param : MlS} {body : ProgHOL 64}
+theorem one_u256_arg_lookup_g09 {fname param : MlS} {body : ProgHOL 64}
     {v0 : ValueHOL 64} {body' : ProgHOL 64}
     {callee : HolFiniteMapExact MlS (ValueHOL 64)} {ret' : ShapeHOL}
     (hlook : originalRuntimeCode.lookup fname =
@@ -919,7 +919,7 @@ private theorem one_u256_arg_lookup_g09 {fname param : MlS} {body : ProgHOL 64}
     simpa [FUPDATE_LIST, FUPDATE] using hfn
   · cases hx
 
-private theorem u256_is_zero_body_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
+theorem u256_is_zero_body_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
     (a b c d : BitVec 64)
     (ha : s.locals.lookup (ofString "a") =
       some (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)]))
@@ -947,7 +947,7 @@ private theorem u256_is_zero_body_exact_g09 {F : Type} (s : PanSemStateFiniteExa
       evaluateHOLFiniteState_return, evaluateHOLFiniteState_skip,
       shapeOfHOLExact, sizeOfShapeWithContextHOL] using hret.symm
 
-private theorem add_sat_body_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F) {aw bw : BitVec 64}
+theorem add_sat_body_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F) {aw bw : BitVec 64}
     (ha : s.locals.lookup (ofString "a") = some (.val (.word aw)))
     (hb : s.locals.lookup (ofString "b") = some (.val (.word bw)))
     (v : ValueHOL 64)
@@ -1015,7 +1015,7 @@ private theorem add_sat_body_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64
       rw [if_pos hok, BitVec.toNat_add, Nat.mod_eq_of_lt hok]
     · simp at hret
 
-private theorem ceil32_body_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F) {vw : BitVec 64}
+theorem ceil32_body_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 F) {vw : BitVec 64}
     (hcode : s.code = originalRuntimeCode)
     (hv_lk : s.locals.lookup (ofString "v") = some (.val (.word vw)))
     (ret : ValueHOL 64)
@@ -1142,7 +1142,7 @@ private theorem ceil32_body_exact_g09 {F : Type} (s : PanSemStateFiniteExact 64 
           · simp at hret
         | _ => simp at hret
 
-private theorem satWordG09_ne_zero_of_or_ne_zero (a b c d : BitVec 64)
+theorem satWordG09_ne_zero_of_or_ne_zero (a b c d : BitVec 64)
     (h : a ||| b ||| c ||| d ≠ 0#64) :
     satWordG09 (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)]) ≠ 0#64 := by
   dsimp only [satWordG09]
@@ -1156,7 +1156,7 @@ private theorem satWordG09_ne_zero_of_or_ne_zero (a b c d : BitVec 64)
     have : (((0#64 ||| b) ||| c) ||| d) = b ||| c ||| d := by simp [BitVec.or_assoc]
     exact this.trans hhi0
 
-private theorem or_ne_zero_of_satWordG09_ne_zero (a b c d : BitVec 64)
+theorem or_ne_zero_of_satWordG09_ne_zero (a b c d : BitVec 64)
     (h : satWordG09 (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)]) ≠ 0#64) :
     a ||| b ||| c ||| d ≠ 0#64 := by
   intro hz
@@ -2535,7 +2535,7 @@ theorem eps_extend_memory_length_g09 :
             (by change nlenw.toNat ≤ memW s (globN s "ev" + 40); rw [← hcapw_eq]; exact hnlen_le_cap)
             hs3_len hs3_nlen hs3_eb hnt
 
-private theorem eval_mul64x64_lt_twoPow32_g09 {F : Type}
+theorem eval_mul64x64_lt_twoPow32_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) {ww : BitVec 64}
     (hw_lt : ww.toNat < 2 ^ 32)
     (ha : s.locals.lookup (ofString "a") = some (.val (.word ww)))
@@ -2788,7 +2788,7 @@ private theorem eval_mul64x64_lt_twoPow32_g09 {F : Type}
   · rw [← hv, hhi_eq]
   · rw [hlo_eq]; exact hp00_nat
 
-private theorem words_of_exact_lt37_g09 {F : Type}
+theorem words_of_exact_lt37_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) {nw : BitVec 64}
     (hn_bound : nw.toNat ≤ 2 ^ 37 - 32 ∨ (nw.toNat < 2 ^ 37 ∧ nw.toNat % 32 = 0))
     (hcode : s.code = originalRuntimeCode)
@@ -2857,7 +2857,7 @@ private theorem words_of_exact_lt37_g09 {F : Type}
         · simp at hret
       | _ => simp at hret
 
-private theorem memory_gas_cost_exact_lt37_g09 {F : Type}
+theorem memory_gas_cost_exact_lt37_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) {szw : BitVec 64}
     (hsz_bound : szw.toNat ≤ 2 ^ 37 - 32 ∨ (szw.toNat < 2 ^ 37 ∧ szw.toNat % 32 = 0))
     (hcode : s.code = originalRuntimeCode)
@@ -3110,7 +3110,7 @@ theorem memory_gas_cost_mono_lt37_g09 {F : Type}
   rw [heq1, heq2]
   omega
 
-private def cost2NoRaiseCalleesG09 (f : MlS) : Bool :=
+def cost2NoRaiseCalleesG09 (f : MlS) : Bool :=
   f == ofString "u256_is_zero" ||
   f == ofString "sat_word" ||
   f == ofString "add_sat" ||
@@ -3120,7 +3120,7 @@ private def cost2NoRaiseCalleesG09 (f : MlS) : Bool :=
   f == ofString "memory_gas_cost" ||
   f == ofString "extend_memory_cost1"
 
-private theorem cost2NoRaiseCalleesG09_good :
+theorem cost2NoRaiseCalleesG09_good :
     ∀ function, cost2NoRaiseCalleesG09 function = true → ∀ values body callee rs,
       PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup function values =
         some (body, callee, rs) →
@@ -3164,7 +3164,7 @@ private theorem cost2NoRaiseCalleesG09_good :
     have heq := (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1
     rw [← heq]; decide
 
-private theorem eval_mul64x64_hi_nonzero_g09 {F : Type}
+theorem eval_mul64x64_hi_nonzero_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) {ww : BitVec 64}
     (hw_ge : 2 ^ 32 ≤ ww.toNat) (hw_lt : ww.toNat < 2 ^ 59)
     (ha : s.locals.lookup (ofString "a") = some (.val (.word ww)))
@@ -3419,7 +3419,7 @@ private theorem eval_mul64x64_hi_nonzero_g09 {F : Type}
     omega
   intro hz; rw [hz] at hhi_pos; simp at hhi_pos
 
-private theorem words_of_ge_of_ge_g09 {F : Type}
+theorem words_of_ge_of_ge_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) {nw : BitVec 64}
     (hn_ge : 2 ^ 37 ≤ nw.toNat)
     (hcode : s.code = originalRuntimeCode)
@@ -3487,7 +3487,7 @@ private theorem words_of_ge_of_ge_g09 {F : Type}
         · simp at hret
       | _ => simp at hret
 
-private theorem memory_gas_cost_ge_twoPow37_g09 {F : Type}
+theorem memory_gas_cost_ge_twoPow37_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) {szw : BitVec 64}
     (hsz_ge : 2 ^ 37 ≤ szw.toNat)
     (hcode : s.code = originalRuntimeCode)
@@ -3628,7 +3628,7 @@ private theorem memory_gas_cost_ge_twoPow37_g09 {F : Type}
         · simp at hret
       | _ => simp at hret
 
-private theorem extend_memory_cost1_body_full_g09 {F : Type}
+theorem extend_memory_cost1_body_full_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F)
     (hcode : s.code = originalRuntimeCode)
     (v : ValueHOL 64)
@@ -3947,7 +3947,7 @@ theorem lookup_extend_memory_cost2_g09 :
   lookup_of_guestAst_getElem 459 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn_extend_memory_cost2) rfl
 
-private theorem two_u256_arg_lookup_cost1_g09
+theorem two_u256_arg_lookup_cost1_g09
     {v0 v1 : ValueHOL 64} {body' : ProgHOL 64}
     {callee : HolFiniteMapExact MlS (ValueHOL 64)} {ret' : ShapeHOL}
     (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "extend_memory_cost1") [v0, v1] =
@@ -4485,7 +4485,7 @@ theorem lookup_op_mcopy :
   lookup_of_guestAst_getElem 512 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn_op_mcopy) rfl
 
-private theorem eps_add_sat_pos_ge_b_g09 :
+theorem eps_add_sat_pos_ge_b_g09 :
     EvmPreservingSpec
       (fun s => ∃ aw bw : BitVec 64,
         s.locals.lookup (ofString "a") = some (.val (.word aw)) ∧
@@ -4524,7 +4524,7 @@ private theorem eps_add_sat_pos_ge_b_g09 :
   rw [hrw_exact]
   split <;> omega
 
-private theorem seq_charge_gas_exact_g09 {F : Type} {s0 : PanSemStateFiniteExact 64 F}
+theorem seq_charge_gas_exact_g09 {F : Type} {s0 : PanSemStateFiniteExact 64 F}
     {P Q : PanSemStateFiniteExact 64 F → Prop} {charged : Bool}
     {amtExp : ExpHOL 64} {cont : ProgHOL 64}
     (hpos : ∀ t (w : BitVec 64),
@@ -4632,7 +4632,7 @@ private theorem seq_charge_gas_exact_g09 {F : Type} {s0 : PanSemStateFiniteExact
             rintro ⟨_, h⟩; cases h
           | error => exact opDispatchPost_error s0 cpost.emptyLocalsHOLFinite
 
-private theorem op_mcopy_post_extend_run {F : Type} (s0 : PanSemStateFiniteExact 64 F) :
+theorem op_mcopy_post_extend_run {F : Type} (s0 : PanSemStateFiniteExact 64 F) :
     HandlerRun s0
       (fun t => ∃ (dstVal srcVal lenVal : ValueHOL 64),
         (∃ a b c d : BitVec 64, dstVal = .rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)]) ∧
@@ -5529,7 +5529,7 @@ private theorem op_mcopy_post_extend_run {F : Type} (s0 : PanSemStateFiniteExact
     rw [hseq_eq] at hgoal
     exact hgoal
 
-private theorem four_u256_arg_lookup_cost2_g09
+theorem four_u256_arg_lookup_cost2_g09
     {v0 v1 v2 v3 : ValueHOL 64} {body' : ProgHOL 64}
     {callee : HolFiniteMapExact MlS (ValueHOL 64)} {ret' : ShapeHOL}
     (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "extend_memory_cost2") [v0, v1, v2, v3] =
@@ -6352,11 +6352,11 @@ theorem logOwnedIvls_eq_record_of_ne_sys {F : Type}
   unfold logOwnedIvls logRecordIvls
   simp [h1, h2, h3, h4]
 
-private def EvmInvWith {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) : Prop :=
+def EvmInvWith {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) : Prop :=
   ArenaReady s ∧ EvmInvAt s S ∧ TriesTypedWith s S Nd ∧
   ∀ o ∈ ((evmChain s).map (frameObjects s)).flatten, ∀ j ∈ nodeExtents s Nd, Disj o j
 
-private theorem mem_eq_of_byte_eq_g09 {F : Type}
+theorem mem_eq_of_byte_eq_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F}
     (hbe : post.be = s.be)
     {a : BitVec 64} (ha_dom : ordinaryDomain a)
@@ -6422,7 +6422,7 @@ private theorem mem_eq_of_byte_eq_g09 {F : Type}
   rw [hpow_eq 0 (by omega), hpow_eq 1 (by omega), hpow_eq 2 (by omega), hpow_eq 3 (by omega),
       hpow_eq 4 (by omega), hpow_eq 5 (by omega), hpow_eq 6 (by omega), hpow_eq 7 (by omega)]
 
-private theorem memW_eq_of_frameDisj_g09 {F : Type} {s post : PanSemStateFiniteExact 64 F}
+theorem memW_eq_of_frameDisj_g09 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hma_s : s.memaddrs = ordinaryDomain)
     {Rl : List Ivl} (heff : ByteRegionEffect s post Rl)
     {base sz k : Nat} (hbnd : base + sz ≤ 2 ^ 64) (_hb8 : base % 8 = 0) (_hk8 : k % 8 = 0)
@@ -6445,7 +6445,7 @@ private theorem memW_eq_of_frameDisj_g09 {F : Type} {s post : PanSemStateFiniteE
     · dsimp only at h; omega
   · rw [heff.out_dom _ (by rwa [hma_s])]
 
-private theorem wordAt_congr_of_dom_g09 {F : Type} {s post : PanSemStateFiniteExact 64 F}
+theorem wordAt_congr_of_dom_g09 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hma : post.memaddrs = s.memaddrs) {a : Nat} :
     WordAt post a ↔ WordAt s a := by
   unfold WordAt
@@ -6458,14 +6458,14 @@ private theorem wordAt_congr_of_dom_g09 {F : Type} {s post : PanSemStateFiniteEx
     cases hp : post.memory (BitVec.ofNat 64 a) with
     | word w => exact ⟨w, hdom, rfl⟩
 
-private theorem wordsOK_congr_of_dom_g09 {F : Type} {s post : PanSemStateFiniteExact 64 F}
+theorem wordsOK_congr_of_dom_g09 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hma : post.memaddrs = s.memaddrs) {i : Ivl} :
     WordsOK post i ↔ WordsOK s i := by
   unfold WordsOK
   exact and_congr Iff.rfl (and_congr Iff.rfl (forall_congr' fun _ => imp_congr_right fun _ =>
     wordAt_congr_of_dom_g09 hma))
 
-private theorem logRecord_in_frameObjects_g09 {F : Type} {s : PanSemStateFiniteExact 64 F} {ec : Ivl}
+theorem logRecord_in_frameObjects_g09 {F : Type} {s : PanSemStateFiniteExact 64 F} {ec : Ivl}
     {i : Nat} (hi : i < memW s (memW s (ec.1 + 88) + 8)) :
     (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40) ∈ frameObjects s ec := by
   unfold frameObjects
@@ -6477,7 +6477,7 @@ private theorem logRecord_in_frameObjects_g09 {F : Type} {s : PanSemStateFiniteE
   unfold logOwnedIvls logRecordIvls
   exact List.mem_filter.2 ⟨by simp, by simp⟩
 
-private theorem logsList_and_objects_congr_g09 {F : Type}
+theorem logsList_and_objects_congr_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl}
     (hFW : FrameWF s S ec)
     (hdom : post.memaddrs = s.memaddrs)
@@ -6540,7 +6540,7 @@ private theorem logsList_and_objects_congr_g09 {F : Type}
       rw [r0, r8, r16, r24, r32, hglob "heap_ptr"]
       exact ⟨(wordsOK_congr_of_dom_g09 hdom).2 hle.1, hle.2⟩
 
-private theorem worldTableRefs_eq_of_cell_g09 {F : Type}
+theorem worldTableRefs_eq_of_cell_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     (hAs : ArenaOK s) (hWT : WorldTypedWith s S Nd)
     (hcell : SameTypedCells s post S Nd)
@@ -6630,7 +6630,7 @@ private theorem worldTableRefs_eq_of_cell_g09 {F : Type}
   dsimp only
   rw [hbs, hts, hws_sl, hbs_sl, hts_sl, hnest_bs, hnest_ts, hbal_fl, hjrn_mp]
 
-private theorem sameTypedCells_sub_nd_g09 {F : Type}
+theorem sameTypedCells_sub_nd_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd Ndi : List Nat}
     (hsub : ∀ n ∈ Ndi, n ∈ Nd)
     (hcell : SameTypedCells s post S Nd) :
@@ -6650,7 +6650,7 @@ private theorem sameTypedCells_sub_nd_g09 {F : Type}
   · intro b hb ⟨i, hi, h1, h2⟩
     exact hcell.2.2.2.2.2 b hb ⟨i, hwti_sub i hi, h1, h2⟩
 
-private theorem msgOwned_congr_g09 {F : Type}
+theorem msgOwned_congr_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {m : Nat}
     (hAs : ArenaReady s) (hApost : ArenaReady post)
     (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
@@ -6692,18 +6692,18 @@ private theorem msgOwned_congr_g09 {F : Type}
     rw [hne_i_eq] at hj
     exact hdj_m o ho j (hsub_int j hj).2
 
-private theorem evmInvWith_of_evmInv {F : Type} {s : PanSemStateFiniteExact 64 F} (h : EvmInv s) :
+theorem evmInvWith_of_evmInv {F : Type} {s : PanSemStateFiniteExact 64 F} (h : EvmInv s) :
     ∃ S Nd, EvmInvWith s S Nd := by
   obtain ⟨hAs, S, hW, hrest⟩ := h
   have hInvAt : EvmInvAt s S := ⟨hW, hrest⟩
   obtain ⟨Nd, hTr, hAT⟩ := hInvAt.2.2.2.2.2.2.2.2.2.1
   exact ⟨S, Nd, hAs, hInvAt, hTr, hAT⟩
 
-private theorem evmInvWith_to_evmInv {F : Type} {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+theorem evmInvWith_to_evmInv {F : Type} {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     (h : EvmInvWith s S Nd) : EvmInv s :=
   ⟨h.1, S, h.2.1.1, h.2.1.2⟩
 
-private theorem worldTypedIvls_eq_of_cell_g09 {F : Type}
+theorem worldTypedIvls_eq_of_cell_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     (hAs : ArenaOK s) (hWT : WorldTypedWith s S Nd) (hcell : SameTypedCells s post S Nd)
     (hcg : ∀ g : String, ofString g ≠ ofString "heap_ptr" →
@@ -6732,7 +6732,7 @@ private theorem worldTypedIvls_eq_of_cell_g09 {F : Type}
   have hne_ext := nodeExtents_eq hWT.2.2.2.1 hcell
   rw [hfp, htr, hjc, hj, hbo, hbal, hne_ext]
 
-private theorem evmInvWith_of_bre {F : Type}
+theorem evmInvWith_of_bre {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {S Nd : List Nat}
     (hInvW : EvmInvWith s S Nd)
     (hdj : IvlsDisj Rl (worldTypedIvls s S Nd ++ ((evmChain s).map (frameObjects s)).flatten))
@@ -6989,13 +6989,13 @@ private theorem evmInvWith_of_bre {F : Type}
   rw [hmap_fo, hne_eq]
   exact hAT
 
-private theorem evmInvWith_localsFree {F : Type} {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+theorem evmInvWith_localsFree {F : Type} {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     (locs : HolFiniteMapExact MlS (ValueHOL 64)) (clk : Nat) (h : EvmInvWith s S Nd) :
     EvmInvWith { s with locals := locs, clock := clk } S Nd :=
   (evmInvWith_of_bre h (fun _ hx _ _ => by simp at hx)
     ((ByteRegionEffect.refl s []).with_locals_clock locs clk)).1
 
-private theorem frameObject_disj_fresh_heap_g09 {F : Type}
+theorem frameObject_disj_fresh_heap_g09 {F : Type}
     {s : PanSemStateFiniteExact 64 F} {S : List Nat} {ec o : Ivl} {hp_post : Nat}
     (hA : ArenaOK s) (hhp_lim : hp_post ≤ heapLimit)
     (hFW : FrameWF s S ec) (ho : o ∈ frameObjects s ec) :
@@ -7045,7 +7045,7 @@ private theorem frameObject_disj_fresh_heap_g09 {F : Type}
       · exact Or.inr (Or.inr hle.2.2.2.2.2.1.2)
       · exact Or.inr (Or.inr hle.2.2.2.2.2.2.2)
 
-private theorem evmInvWith_of_alloc_pure {F : Type}
+theorem evmInvWith_of_alloc_pure {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     {pw qw : BitVec 64} {sz : Nat}
     (hInvW : EvmInvWith s S Nd)
@@ -7183,7 +7183,7 @@ private theorem evmInvWith_of_alloc_pure {F : Type}
   rw [hmap_fo, hne_eq]
   exact hAT
 
-private theorem evmInvWith_of_head_sp_cell {F : Type}
+theorem evmInvWith_of_head_sp_cell {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     (hInvW : EvmInvWith s S Nd)
     (hGp : GuestInv post)
@@ -7577,7 +7577,7 @@ private theorem evmInvWith_of_head_sp_cell {F : Type}
   rw [hmap_fo, hne_eq]
   exact hAT_at
 
-private theorem stack_pop_body_evmInvWith {F : Type}
+theorem stack_pop_body_evmInvWith {F : Type}
     {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     (hInvW : EvmInvWith s S Nd)
     (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_stack_pop)).1) :
@@ -7745,7 +7745,7 @@ private theorem stack_pop_body_evmInvWith {F : Type}
     evmInvWith_of_head_sp_cell hInvW hGp hbe hcore.1 hcore.2.1 hcore.2.2
   exact ⟨hInvW_p, hwti_p, hfo_p, hcore.1, hmeta.2.1, hch_p, hR_p, hHM_p, hcore.2.1⟩
 
-private theorem decCall_alloc_step_g09 {F : Type}
+theorem decCall_alloc_step_g09 {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     {charged : Bool} {nm : MlS} {szExp : ExpHOL 64} {nw : BitVec 64} {cont : ProgHOL 64}
     (hcode : s.code = originalRuntimeCode)
@@ -7850,7 +7850,7 @@ private theorem decCall_alloc_step_g09 {F : Type}
           hsal_glob hsal_mem hal_meta.2.1 rfl hp_g hq_g hq_ge hq_lim hp_m8 hq_mod8 hp_lo hw_blk hdj_blk hnt
         exact opDispatchPost_congr_lc rfl rfl rfl hb_cont
 
-private theorem bswap64_body_ro_g09 {F : Type} (s : PanSemStateFiniteExact 64 F) (Rl : List Ivl) :
+theorem bswap64_body_ro_g09 {F : Type} (s : PanSemStateFiniteExact 64 F) (Rl : List Ivl) :
     ByteRegionEffect s (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_bswap64)).2 Rl := by
   have hb : sourceFnBody Guest.Software.guestFn_bswap64 =
       InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
@@ -7889,7 +7889,7 @@ private theorem bswap64_body_ro_g09 {F : Type} (s : PanSemStateFiniteExact 64 F)
   refine hseq_ro s _ _ (hasgn_eff s _ _) fun s1 hs1 => ?_
   exact hs1.trans (hseq_ro s1 _ _ (hasgn_eff s1 _ _) (fun s2 hs2 => hs2.trans (hret_eff s2 _)))
 
-private theorem decCall_bswap64_eff_g09 {F : Type} {s : PanSemStateFiniteExact 64 F}
+theorem decCall_bswap64_eff_g09 {F : Type} {s : PanSemStateFiniteExact 64 F}
     {argExp : ExpHOL 64} {cont : ProgHOL 64} {Rl : List Ivl}
     (hcode : s.code = originalRuntimeCode)
     (hcont : ∀ mid : PanSemStateFiniteExact 64 F,
@@ -7957,7 +7957,7 @@ private theorem decCall_bswap64_eff_g09 {F : Type} {s : PanSemStateFiniteExact 6
           | timeOut | error | exception _ _ | finalFfi _ => exact heff_sb.with_locals_clock _ _
           | «break» | «continue» => exact heff_sb
 
-private theorem seq_call_bswap64_eff_g09 {F : Type} {s : PanSemStateFiniteExact 64 F}
+theorem seq_call_bswap64_eff_g09 {F : Type} {s : PanSemStateFiniteExact 64 F}
     {argExp : ExpHOL 64} {cont : ProgHOL 64} {Rl : List Ivl}
     (hcode : s.code = originalRuntimeCode)
     (hcont : ∀ mid : PanSemStateFiniteExact 64 F,
@@ -8036,7 +8036,7 @@ private theorem seq_call_bswap64_eff_g09 {F : Type} {s : PanSemStateFiniteExact 
           | «break» | «continue» =>
             injection hc with hr hsc; subst hr hsc; exact heff_sb
 
-private theorem seq_store_word_eff_g09 {F : Type} {s : PanSemStateFiniteExact 64 F}
+theorem seq_store_word_eff_g09 {F : Type} {s : PanSemStateFiniteExact 64 F}
     {dstExp valExp : ExpHOL 64} {base w : BitVec 64} {off len : Nat} {cont : ProgHOL 64}
     (hma : s.memaddrs = ordinaryDomain) (hbase_lt : base.toNat + len ≤ heapEnd) (hoff : off + 8 ≤ len)
     (hdst : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) dstExp =
@@ -8069,7 +8069,7 @@ private theorem seq_store_word_eff_g09 {F : Type} {s : PanSemStateFiniteExact 64
         exact ⟨(base.toNat, len), List.mem_singleton.2 rfl, by rw [hnat]; omega, by rw [hnat]; omega⟩)
     exact heff1.1.trans (hcont s1 heff1.1.code heff1.1.memaddrs heff1.2)
 
-private theorem bswap64_body_no_evmErr_g09 {F : Type} (s : PanSemStateFiniteExact 64 F) :
+theorem bswap64_body_no_evmErr_g09 {F : Type} (s : PanSemStateFiniteExact 64 F) :
     ¬ IsEvmErr (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_bswap64)).1 := by
   have hb : sourceFnBody Guest.Software.guestFn_bswap64 =
       InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
@@ -8104,7 +8104,7 @@ private theorem bswap64_body_no_evmErr_g09 {F : Type} (s : PanSemStateFiniteExac
     | some _ => exact ha
   exact hseq_ne s _ _ (hasgn_ne s _ _) fun s1 => hseq_ne s1 _ _ (hasgn_ne s1 _ _) fun s2 => hret_ne s2 _
 
-private theorem bswap64_body_no_ffi_exc_g09 {F : Type} (s : PanSemStateFiniteExact 64 F) :
+theorem bswap64_body_no_ffi_exc_g09 {F : Type} (s : PanSemStateFiniteExact 64 F) :
     (∀ ff, (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_bswap64)).1 ≠ some (.finalFfi ff)) ∧
     (∀ eid ev, (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_bswap64)).1 ≠ some (.exception eid ev)) := by
   have hbp : sourceFnBody Guest.Software.guestFn_bswap64 =
@@ -8138,7 +8138,7 @@ private theorem bswap64_body_no_ffi_exc_g09 {F : Type} (s : PanSemStateFiniteExa
           · simp
       · simp
 
-private theorem u256_to_be32_aligned_no_ffi_exc_g09 {F : Type}
+theorem u256_to_be32_aligned_no_ffi_exc_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) (out : BitVec 64)
     (hcode : s.code = originalRuntimeCode)
     (hout_lu : s.locals.lookup (ofString "out") = some (.val (.word out)))
@@ -8321,7 +8321,7 @@ private theorem u256_to_be32_aligned_no_ffi_exc_g09 {F : Type}
   rw [hgoal_yes256]
   exact ⟨hcomb.1, hcomb.2.1⟩
 
-private theorem u256_to_be32_aligned_body_g09 {F : Type}
+theorem u256_to_be32_aligned_body_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) (out : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
     (hout_lu : s.locals.lookup (ofString "out") = some (.val (.word out)))
@@ -8576,7 +8576,7 @@ private theorem u256_to_be32_aligned_body_g09 {F : Type}
                 hsc_ne s3 _ _ (hs3.trans hm2) fun m3 _ =>
                   hst_ne m3 _ _ _ fun s4 _ => hret0_ne s4
 
-private theorem holAsmSignedLess_eq_slt_g09 (left right : BitVec 64) :
+theorem holAsmSignedLess_eq_slt_g09 (left right : BitVec 64) :
     Compiler.Encoders.Asm.holAsmSignedLess left right = left.slt right := by
   have bl := left.isLt
   have br := right.isLt
@@ -8588,7 +8588,7 @@ private theorem holAsmSignedLess_eq_slt_g09 (left right : BitVec 64) :
   all_goals simp_all [decide_eq_true_eq]
   all_goals omega
 
-private def opLogWhileBody : ProgHOL 64 :=
+def opLogWhileBody : ProgHOL 64 :=
   InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
     (Prog.decCall "t" (Shape.comb [Shape.one, Shape.one, Shape.one, Shape.one]) "stack_pop" []
       (Prog.seq
@@ -8599,11 +8599,11 @@ private def opLogWhileBody : ProgHOL 64 :=
         (Prog.assign VarKind.local "i"
           (Exp.op BinOp.add [(Exp.var VarKind.local "i"), (Exp.const (BitVec.ofNat 64 1))]))))
 
-private def opLogWhileProg : ProgHOL 64 :=
+def opLogWhileProg : ProgHOL 64 :=
   .while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "ntopics")))
     opLogWhileBody
 
-private theorem worldTypedIvls_congr_mg_g09 {F : Type}
+theorem worldTypedIvls_congr_mg_g09 {F : Type}
     {s t : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     (hm : t.memory = s.memory) (hg : t.globals = s.globals) :
     worldTypedIvls t S Nd = worldTypedIvls s S Nd := by
@@ -8635,7 +8635,7 @@ private theorem worldTypedIvls_congr_mg_g09 {F : Type}
   unfold worldTypedIvls
   rw [hfp, htr, hjrn, hbo, hbal, hne]
 
-private theorem map_frameObjects_congr_mg_g09 {F : Type}
+theorem map_frameObjects_congr_mg_g09 {F : Type}
     {s t : PanSemStateFiniteExact 64 F}
     (hm : t.memory = s.memory) (hg : t.globals = s.globals) :
     (evmChain t).map (frameObjects t) = (evmChain s).map (frameObjects s) := by
@@ -8653,7 +8653,7 @@ private theorem map_frameObjects_congr_mg_g09 {F : Type}
   rw [hmw (ec.1 + 8), hmw (ec.1 + 232), hmw (ec.1 + 24), hmw (ec.1 + 40), hmw (ec.1 + 88),
       hfl, hfr, hflo]
 
-private theorem op_log_while_body_step_g09 {F : Type}
+theorem op_log_while_body_step_g09 {F : Type}
     {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     {nt topics qw iv : BitVec 64}
     (hiv_lt : iv.toNat < nt.toNat)
@@ -9042,7 +9042,7 @@ private theorem op_log_while_body_step_g09 {F : Type}
         · injection hbody' with hrb _
           exact hnot_to_err (Or.inr hrb.symm)
 
-private theorem op_log_topic_while_step_g09 {F : Type}
+theorem op_log_topic_while_step_g09 {F : Type}
     {s0 : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     {nt topics qw : BitVec 64} {cont : ProgHOL 64} :
     ∀ (rem : Nat) (s : PanSemStateFiniteExact 64 F) (iv : BitVec 64),
@@ -9187,7 +9187,7 @@ private theorem op_log_topic_while_step_g09 {F : Type}
           · refine And.intro (fun ⟨_, h⟩ => by cases h) (fun ⟨_, h⟩ => ?_)
             injection h with h'; injection h' with h1 _; exact absurd h1 heid
 
-private def MemcpyWordInvG09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+def MemcpyWordInvG09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
     (dst0 src0 n0 : BitVec 64) (t : PanSemStateFiniteExact 64 F) : Prop :=
   ByteRegionEffect s0 t [(dst0.toNat, n0.toNat)] ∧
   t.locals.lookup (ofString "dst") = some (.val (.word dst0)) ∧
@@ -9199,7 +9199,7 @@ private def MemcpyWordInvG09 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
     iv.toNat % 8 = 0 ∧
     ∀ k, 8 * k < iv.toNat → memW t (dst0.toNat + 8 * k) = memW s0 (src0.toNat + 8 * k)
 
-private theorem memcpy_word_one_step_g09 {F : Type}
+theorem memcpy_word_one_step_g09 {F : Type}
     {s0 st : PanSemStateFiniteExact 64 F}
     {dst0 src0 n0 iv : BitVec 64} {c : Nat}
     {addrExp srcExp : ExpHOL 64}
@@ -9302,7 +9302,7 @@ private theorem memcpy_word_one_step_g09 {F : Type}
       · exact hreq.symm
     · exact hreq.symm
 
-private theorem memcpy_word_loop_runner_g09 {F : Type}
+theorem memcpy_word_loop_runner_g09 {F : Type}
     (s0 : PanSemStateFiniteExact 64 F) (dst0 src0 n0 : BitVec 64) (step : Nat)
     (cond : ExpHOL 64) (body : ProgHOL 64)
     (hcond_eq : cond = .cmp .notLower (.var .local (ofString "n"))
@@ -9827,7 +9827,7 @@ theorem eval_call_memcpy_words_g09 {F : Type}
       | error | «break» | «continue» | finalFfi _ =>
         exact ⟨fun h => by simp at h, fun _ ⟨_, h⟩ => by cases h⟩
 
-private theorem frameMemByteEff_heap_frame_g09 {F : Type}
+theorem frameMemByteEff_heap_frame_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {Rl : List Ivl}
     (heff : FrameMemByteEff s post Rl)
     (hregions : ∀ i ∈ Rl, i = (0, 0) ∨ heapLimit ≤ i.1) :
@@ -9855,7 +9855,7 @@ private theorem frameMemByteEff_heap_frame_g09 {F : Type}
     · unfold InIvl
       omega
 
-private theorem evmInvWith_of_head_mem_extend_g09 {F : Type}
+theorem evmInvWith_of_head_mem_extend_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {freshIvl : Ivl}
     (hInvW : EvmInvWith s S Nd)
     (hApost : ArenaReady post)
@@ -10564,7 +10564,7 @@ private theorem evmInvWith_of_head_mem_extend_g09 {F : Type}
       rw [hsum_eq]; exact hGas
   exact ⟨⟨hApost, hInvAt_post, hWT_post.2.2.2, hAT_post⟩, hwti_eq, hchain_eq, hR_eq, hfo_post_cases⟩
 
-private theorem heap_buffer_disj_after_head_mem_extend_g09 {F : Type}
+theorem heap_buffer_disj_after_head_mem_extend_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {buf : Ivl}
     (hInvW : EvmInvWith post S Nd)
     (hbuf_hi : buf.1 + buf.2 ≤ heapLimit)
@@ -12669,7 +12669,7 @@ theorem log_growth_chain_records_preserved_g09 {F : Type}
       hl hp (hbounds ec hec).2 (hheader ec hec).2 (hbuffer ec hec).2 k hk).trans
       ((hcopy ec hec).2 k hk hk8)
 
-private theorem log_growth_store_effect_g09 {F : Type}
+theorem log_growth_store_effect_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) (a w : BitVec 64) (Rl : List Ivl)
     (hma : s.memaddrs = ordinaryDomain) (hd : s.memaddrs a)
     (hin : ∃ i ∈ Rl, i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2) :
@@ -18295,12 +18295,12 @@ theorem opDispatchPostA_congr_lc {F : Type}
       hc.2.2.1.trans hl, ?_⟩
     rw [hc.2.1]; exact hR
 
-private theorem rboundA_step_g09 {charged : Bool} {r1 r2 r0 : Nat}
+theorem rboundA_step_g09 {charged : Bool} {r1 r2 r0 : Nat}
     (h1 : r2 ≤ r1) (h2 : if charged then r1 < r0 else r1 ≤ r0) :
     if charged then r2 < r0 else r2 ≤ r0 := by
   cases charged <;> simp only [↓reduceIte, Bool.false_eq_true] at h2 ⊢ <;> omega
 
-private theorem rboundA_to_le_g09 {charged : Bool} {r1 r0 : Nat}
+theorem rboundA_to_le_g09 {charged : Bool} {r1 r0 : Nat}
     (h : if charged then r1 < r0 else r1 ≤ r0) : r1 ≤ r0 := by
   cases charged <;> simp only [↓reduceIte, Bool.false_eq_true] at h <;> omega
 
@@ -20790,7 +20790,7 @@ theorem op_revert_specA : OpHandlerSpecA (ofString "op_revert") := by
     (fun _ _ _ _ _ _ => trivial)
     (HandlerRunA.seq_raise_evmErr_ret _ _)
 
-private theorem seq_stepA {F : Type}
+theorem seq_stepA {F : Type}
     (s0 t : PanSemStateFiniteExact 64 F) (p1 p2 : ProgHOL 64)
     (hnt : (evaluateHOLFiniteState t (.seq p1 p2)).1 ≠ some .timeOut)
     (hp1 : (evaluateHOLFiniteState t p1).1 ≠ some .timeOut →
@@ -20822,7 +20822,7 @@ private theorem seq_stepA {F : Type}
     obtain ⟨hnr, hne⟩ := hsome (by simp)
     exact opDispatchPostA_other hnr hne
 
-private theorem op_mcopy_post_extend_runA {F : Type} (s0 : PanSemStateFiniteExact 64 F) :
+theorem op_mcopy_post_extend_runA {F : Type} (s0 : PanSemStateFiniteExact 64 F) :
     HandlerRunA s0
       (fun t => ∃ (dstVal srcVal lenVal : ValueHOL 64),
         (∃ a b c d : BitVec 64, dstVal = .rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)]) ∧
@@ -22091,7 +22091,7 @@ section Group09LogUnifiedWip
 open Group09ChainWF
 local notation "evmR" => R11Shards.OpDispatchSpec.evmR
 
-private theorem mem_eq_of_byte_eq_tmp {F : Type}
+theorem mem_eq_of_byte_eq_tmp {F : Type}
     {s post : PanSemStateFiniteExact 64 F}
     (hbe : post.be = s.be)
     {a : BitVec 64} (ha_dom : ordinaryDomain a)
@@ -22158,7 +22158,7 @@ private theorem mem_eq_of_byte_eq_tmp {F : Type}
   rw [hpow_eq 0 (by omega), hpow_eq 1 (by omega), hpow_eq 2 (by omega), hpow_eq 3 (by omega),
       hpow_eq 4 (by omega), hpow_eq 5 (by omega), hpow_eq 6 (by omega), hpow_eq 7 (by omega)]
 
-private theorem memW_eq_of_frameDisj_tmp {F : Type} {s post : PanSemStateFiniteExact 64 F}
+theorem memW_eq_of_frameDisj_tmp {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hma_s : s.memaddrs = ordinaryDomain)
     {Rl : List Ivl} (heff : ByteRegionEffect s post Rl)
     {base sz k : Nat} (hbnd : base + sz ≤ 2 ^ 64) (hk : k + 8 ≤ sz)
@@ -24649,13 +24649,14 @@ theorem op_log_topic_while_both_g09 {F : Type}
           dsimp only at hnt_seq ⊢
           try rw [hw] at hnt_seq
           exact hnt_seq
+        have hsb_R' : R11Shards.OpDispatchSpec.evmR sb = R11Shards.OpDispatchSpec.evmR s := hsb_R
         have hih := ih sb (iv + 1) (by omega) hnt4 hsb_code hsb_InvW hsb_WF
           (by rw [hsb_ch]; exact hlen)
           (by
-            change R11Shards.OpDispatchSpec.evmR sb = R11Shards.OpDispatchSpec.evmR s at hsb_R
+            change R11Shards.OpDispatchSpec.evmR sb = R11Shards.OpDispatchSpec.evmR s at hsb_R'
             change R11Shards.OpDispatchSpec.evmR sb < R11Shards.OpDispatchSpec.evmR s0
             change R11Shards.OpDispatchSpec.evmR s < R11Shards.OpDispatchSpec.evmR s0 at hR
-            rw [hsb_R]; exact hR)
+            rw [hsb_R']; exact hR)
           htop_le hq_lim htop_mod8 htop_lo hdj_sb hsb_i
           (by rw [hsb_loc _ (by decide) (by decide)]; exact hnt_lu)
           (by rw [hsb_loc _ (by decide) (by decide)]; exact htop_lu)
@@ -24688,10 +24689,11 @@ theorem op_log_topic_while_both_g09 {F : Type}
             obtain ⟨hsb_InvW, hsb_ch, hsb_R⟩ := hbody_step.2.1 ev rfl
             have hsb_Inv : EvmInv sb := evmInvWith_to_evmInv hsb_InvW
             have hch_len : (evmChain sb).length = (evmChain s0).length := by rw [hsb_ch]; exact hlen
+            have hsb_R' : R11Shards.OpDispatchSpec.evmR sb = R11Shards.OpDispatchSpec.evmR s := hsb_R
             have hR_le : R11Shards.OpDispatchSpec.evmR sb ≤ R11Shards.OpDispatchSpec.evmR s0 := by
-              change R11Shards.OpDispatchSpec.evmR sb = R11Shards.OpDispatchSpec.evmR s at hsb_R
+              change R11Shards.OpDispatchSpec.evmR sb = R11Shards.OpDispatchSpec.evmR s at hsb_R'
               change R11Shards.OpDispatchSpec.evmR s < R11Shards.OpDispatchSpec.evmR s0 at hR
-              rw [hsb_R]; exact Nat.le_of_lt hR
+              rw [hsb_R']; exact Nat.le_of_lt hR
             refine And.intro ?_ (fun hw_s => ?_)
             · refine And.intro (fun ⟨_, h⟩ => by cases h) (fun _ => ⟨hsb_Inv, hch_len, ?_⟩)
               change evmR sb ≤ evmR s0; exact hR_le
