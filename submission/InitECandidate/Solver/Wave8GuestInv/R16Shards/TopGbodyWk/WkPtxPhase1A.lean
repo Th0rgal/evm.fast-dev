@@ -48,54 +48,6 @@ open private wordsOK_post_of_memaddrs txValidRecoverReadyAt_step_heap
 
 /-! # Phase 1 Leaf Specs & Relational Helpers (`WkPtxPhase1A`) -/
 
-/-! ## 0. `progWStepBo_raise` & `wkScBo_get_code` -/
-
-theorem progWStepBo_raise (B : BufList) (gw : List String) (eid : MlS) (e : ExpHOL 64) :
-    ProgWStepBo B gw (.raise eid e) := by
-  intro F s _ hW _ hfr
-  rw [evaluateHOLFiniteState_raise] at hfr ⊢
-  rcases hsh : s.eshapes.lookup eid with _ | sh
-  · simp [hsh] at hfr; exact absurd hfr not_flowingOrResumes_error
-  · simp only [hsh] at hfr ⊢
-    rcases hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e with _ | v
-    · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
-    · simp only [hev] at hfr ⊢
-      split
-      · exact (WorldStepScBo.refl s none hW.1).with_locals_clock (fun _ => Or.inl rfl) _ s.clock
-      · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
-
-theorem wkScBo_get_code :
-    WorldKeepsScBo WorldOK (bufRegions [("sk_buf", 52)]) ["heap_ptr"] stdKeep NoExtra
-      (ofString "get_code") := by
-  have hB : ValidBufList [("sk_buf", 52)] := by
-    intro p hp; simp at hp; subst hp
-    exact ⟨64, by decide, by decide, by decide⟩
-  have hgw : SafeStepGlobals ["heap_ptr"] := by intro g hg; simp at hg; subst hg; simp
-  refine worldKeepsScBo_of_progWStepBo lookup_get_code ?_
-  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_get_code,
-    FrontendCodecComputation.declToHOLStructural, FrontendCodecComputation.funDeclToHOLStructural,
-    FrontendCodecComputation.progToHOLStructural, FrontendCodecComputation.expToHOLStructural,
-    FrontendCodecComputation.expListToHOLStructural, FrontendCodecComputation.shapeToHOLStructural,
-    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
-  refine progWStepBo_decCall hB hgw (by intro p hp; cases hp) (by intro g hg; cases hg)
-    (worldKeepsScBo_of_readOnly EvmFrameSpecs.ro_memeq) ?_
-  refine progWStepBo_seq hB hgw (progWStepBo_ite (progWStepBo_return _ _ _) (progWStepBo_skip _ _)) ?_
-  refine progWStepBo_decCall hB hgw (by intro p hp; cases hp) (by intro g hg; cases hg)
-    (worldKeepsScBo_of_readOnly EvmFrameSpecs.ro_htab_get) ?_
-  refine progWStepBo_seq hB hgw (progWStepBo_ite (progWStepBo_return _ _ _) (progWStepBo_skip _ _)) ?_
-  refine progWStepBo_seq hB hgw
-    (progWStepBo_call_local (by intro p hp; cases hp) (by intro g hg; cases hg)
-      (worldKeepsScBo_of_readOnly EvmFrameSpecs.ro_htab_get)) ?_
-  refine progWStepBo_seq hB hgw (progWStepBo_ite (progWStepBo_return _ _ _) (progWStepBo_skip _ _)) ?_
-  refine progWStepBo_decCall hB hgw (by intro p hp; exact hp) (by intro g hg; cases hg)
-    worldKeepsScBo_sk_make ?_
-  refine progWStepBo_seq hB hgw
-    (progWStepBo_call0_htab_set_recSlot "ts" "ts+40" 40 _ _ (by simp) (by decide)
-      (fun s S hT hts ht0 => nonValueSlot_ts40 s S hT hts ht0)) ?_
-  refine progWStepBo_decCall hB hgw (by intro p hp; cases hp) (by intro g hg; cases hg)
-    (worldKeepsScBo_of_readOnly ro_ws_get_code) ?_
-  exact progWStepBo_return _ _ _
-
 /-! ## 1. `wkScBo_calculate_blob_gas_price` & `wkScBo_check_transaction` -/
 
 theorem wkScBo_calculate_blob_gas_price :

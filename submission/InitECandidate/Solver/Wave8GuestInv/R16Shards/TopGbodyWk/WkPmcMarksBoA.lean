@@ -35,23 +35,6 @@ open private wk_alloc_local rt_alloc_local zv_memzero_local
 
 /-! ## 1. `WorldKeepsScBo` for `ws_account_has_storage`, `account_has_storage`, `account_deployable` -/
 
-theorem wkScBo_ws_storage_root_of :
-    WorldKeepsScBo WorldOK (bufRegions wsAcctBufs) ["heap_ptr", "scratch_ptr"] stdKeep NoExtra
-      (ofString "ws_storage_root_of") := by
-  refine ⟨_, _, _, lookup_ws_storage_root_of_top, fun s hc hWOK _ hnt hres => ?_⟩
-  have heff := worldEff_ws_storage_root_of s s hWOK.1.2
-    (WorldEff.refl s [] wsBufs wsGw hWOK.1 hc) hnt hres
-  have heff' : WorldEff s
-      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_ws_storage_root_of)).2
-      (bufRegions wsAcctBufs s) wsBufs wsGw :=
-    heff.mono (fun _ hiv => by cases hiv) (fun _ h => h) (fun _ h => h)
-  have hws : WorldStep (bufRegions wsAcctBufs) ["heap_ptr", "scratch_ptr"] stdKeep NoExtra s
-      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_ws_storage_root_of)).1
-      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_ws_storage_root_of)).2 :=
-    heff'.to_worldStep_Q hWOK (by decide) (by decide) (fun _ _ _ _ _ _ _ _ => trivial)
-  exact ⟨⟨hws, heff.sp_hi⟩, fun _ =>
-    ptxBlockOutUnhit_of_worldEff_bufs validBufList_wsAcctBufs heff hWOK⟩
-
 theorem wkScBo_ws_account_has_storage :
     WorldKeepsScBo WorldOK (bufRegions wsAcctBufs) ["heap_ptr", "scratch_ptr"] stdKeep NoExtra
       (ofString "ws_account_has_storage") := by

@@ -405,7 +405,7 @@ window, which no aligned cell can hit). Heap-allocated `i` lies below the old
 `heap_ptr` and alignment keeps the boundary cell out of the growth; scratch-
 allocated `i` lies at or above `scratchStart = heapLimit`, which bounds the
 new `heap_ptr` from above, so the growth cannot reach it either. -/
-private theorem ivlUnhit_of_freshFrame {F : Type}
+private theorem ivlUnhit_of_freshFrame_scbo {F : Type}
     {s post : PanSemStateFiniteExact 64 F}
     (hA : ArenaOK s) (hArd : ArenaReady post)
     (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
@@ -564,7 +564,7 @@ theorem wkScBo_state_fresh_tx :
         change a.toNat < globN s "heap_ptr" + (globN inner_post "heap_ptr" - globN s "heap_ptr")
         omega⟩)
   exact ptxBlockOutUnhit_of_nonempty fun i hi hpos =>
-    ivlUnhit_of_freshFrame hAR0.2 hws.1 hws.2.1 hfr_09 (blockOut_allocated_words hWT hi hpos).2.1
+    ivlUnhit_of_freshFrame_scbo hAR0.2 hws.1 hws.2.1 hfr_09 (blockOut_allocated_words hWT hi hpos).2.1
 open InitECandidate.Solver.Wave8GuestInv
 open InitECandidate.Solver.Wave8GuestInv.R16Shards
 open InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc

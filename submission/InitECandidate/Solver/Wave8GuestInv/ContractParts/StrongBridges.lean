@@ -12,7 +12,8 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodySysTxExecBl
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.NodeRlpFill
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.BuildMptIndexed
-import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.BuildMptIndexedWalk
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.BuildMptIndexedWalk3
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.BuildMptIndexedWalk4
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkHostPayloadHeaders
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.Depth0FrameOpen
@@ -345,8 +346,8 @@ theorem gbody_mpt_root_strong
   R16Shards.MptC10C12.NrfStrong.gbody_mpt_root_strong hm hn
 
 theorem gbody_build_mpt_indexed_strong :
-    type_of% @R16Shards.MptC10C12.gbody_build_mpt_indexed :=
-  R16Shards.MptC10C12.gbody_build_mpt_indexed
+    type_of% @R16Shards.MptC10C12.gbody_build_mpt_indexed_strong :=
+  R16Shards.MptC10C12.gbody_build_mpt_indexed_strong
 
 theorem wkSc_ws_storage_trie_strong :
     R16WkAcctWs.WorldKeepsSc (fun s => WorldOK s ∧ R16Shards.EvmEkFk.StorageCreateFinish.WitnessDbOK s)
@@ -553,13 +554,9 @@ theorem mk_mpt_set_eff_strong :
     type_of% @R16Shards.MptC10C12.mk_mpt_set_eff_strong :=
   R16Shards.MptC10C12.mk_mpt_set_eff_strong
 
-theorem bmiWkWW_mpt_set :
-    type_of% @R16Shards.MptC10C12.bmiWkWW_mpt_set :=
-  R16Shards.MptC10C12.bmiWkWW_mpt_set
-
-theorem bmiWkLoop_hRl :
-    type_of% @R16Shards.MptC10C12.bmiWkLoop_hRl :=
-  R16Shards.MptC10C12.bmiWkLoop_hRl
+theorem wk_build_mpt_indexed_strong :
+    type_of% @R16Shards.MptC10C12.wk_build_mpt_indexed_strong :=
+  R16Shards.MptC10C12.wk_build_mpt_indexed_strong
 
 theorem fcStackPushStepW_s23 :
     type_of% @R16Shards.EvmEkFk.fcStackPushStepW :=

@@ -26,8 +26,11 @@ private theorem decCallResume_heap_mark_bmi_strong
       (fun s => BuildMptAfterMark s ∧ BmiAfterMarkC s)
       (ofString "mark") (ofString "heap_mark") [] := by
   intro F state values body callee ret value post hcode hP hargs hl hrun
-  exact ⟨decCallResume_heap_mark_bmi hro state values body callee ret value post
-      hcode hP.1 hargs hl hrun,
+  have hdisjE : BmiWorldDisjE state := by
+    obtain ⟨S, Nd, hr⟩ := strong_bmiReadyG hP
+    exact ⟨S, Nd, hr.2.1, hr.2.2.2.1⟩
+  exact ⟨(decCallResume_heap_mark_bmi hro state values body callee ret value post
+      hcode ⟨hP.1, hdisjE⟩ hargs hl hrun).1,
     decCallResume_heap_mark_bmi2 hro state values body callee ret value post
       hcode (strong_bmiReadyG hP) hargs hl hrun⟩
 private theorem decCallResume_mpt_new_bmi_strong
@@ -40,8 +43,11 @@ private theorem decCallResume_mpt_new_bmi_strong
     DecCallResumeOn (fun s => BuildMptAfterMark s ∧ BmiAfterMarkC s) BmiAfterNewStrong
       (ofString "m") (ofString "mpt_new") [.const 0, .const 0] := by
   intro F state values body callee ret value post hcode hP hargs hl hrun
-  exact ⟨decCallResume_mpt_new_bmi hwk hrt state values body callee ret value post
-      hcode hP.1 hargs hl hrun,
+  have hdisjE : BmiWorldDisjE state := by
+    obtain ⟨S, Nd, hr, _, _⟩ := hP.2
+    exact ⟨S, Nd, hr.2.1, hr.2.2.2.1⟩
+  exact ⟨(decCallResume_mpt_new_bmi hwk hrt state values body callee ret value post
+      hcode ⟨hP.1, hdisjE⟩ hargs hl hrun).1,
     decCallResume_mpt_new_bmi2w hwk hrt state values body callee ret value post
       hcode hP.2 hargs hl hrun⟩
 private theorem bmiAfterNewStrong_set_counter_loopInv2 {F : Type}
@@ -398,10 +404,12 @@ private abbrev bmiSetArgs : List (ExpHOL 64) :=
      .panop .mul [.var .local (ofString "i"), .const 16],
      .const 8])]
 private theorem callEntryOn_mpt_set_bmi3 :
-    CallEntryOn (fun s => BuildMptLoopInv2 s ∧ locN s "klen" ≤ 32 ∧ locN s "i" < locN s "n")
+    CallEntryOn
+      (fun s => BuildMptLoopInv2 s ∧ locN s "klen" ≤ 32 ∧ locN s "i" < locN s "n" ∧
+        ∃ w, s.locals.lookup (ofString "klen") = some (.val (.word w)))
       MptSetReady (ofString "mpt_set") bmiSetArgs := by
   intro F s values body callee ret hcode hP hargs hl
-  obtain ⟨hP2, hklen_le, hlt⟩ := hP
+  obtain ⟨hP2, hklen_le, hlt, _⟩ := hP
   obtain ⟨hready, hinv, _, _, hlocs⟩ := hP2.1
   obtain ⟨v1, v2, v3, v4, v5, he1, he2, he3, he4, he5, hc1, hc2, hc3, hc4, hc5⟩ :=
     callee_param_five_exp s (ofString "mpt_set")
@@ -582,7 +590,8 @@ private theorem bmi3_loop_body_step_core
             dsimp only at hrun
             split at hrun
             · set u := setVarHOLFinite (ofString "klen") v1 { bp1 with locals := s.locals }
-              have hu_inv : BuildMptLoopInv2 u ∧ locN u "klen" ≤ 32 ∧ locN u "i" < locN u "n" :=
+              have hu_inv : BuildMptLoopInv2 u ∧ locN u "klen" ≤ 32 ∧ locN u "i" < locN u "n" ∧
+                  ∃ w, u.locals.lookup (ofString "klen") = some (.val (.word w)) :=
                 bmi_rlp_resume_strong hwk_rlp s values b1 c1 ret1 v1 bp1
                   hcode ⟨hP, hact⟩ hargs hl hb1
               have hu_code : u.code = originalRuntimeCode := hmeta1.trans hcode
@@ -656,7 +665,7 @@ private theorem bmi3_loop_body_step_core
                           | _ => simp at hc2
                 obtain ⟨wi, hwi⟩ := hm2_inv.1.1.2.2.2.2 "i" (by simp)
                 have hlt_m2 : locN m2 "i" < locN m2 "n" := by
-                  rw [hm2_inv.2.1, hm2_inv.2.2]; exact hu_inv.2.2
+                  rw [hm2_inv.2.1, hm2_inv.2.2]; exact hu_inv.2.2.1
                 have hasgn : evaluateHOLFiniteState m2
                     (.assign .local (ofString "i")
                       (.op .add [.var .local (ofString "i"), .const 1])) =
