@@ -1,5 +1,4 @@
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongTail4
-import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2StrongDelta
 
 /-!
 # Phase 2 backing replay, pre-`msg_new` part (guest spine 34..69)
