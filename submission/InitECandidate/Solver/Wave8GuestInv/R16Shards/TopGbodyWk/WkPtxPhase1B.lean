@@ -30,7 +30,7 @@ open InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc
 open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
 
 open private wk_alloc_local rt_alloc_local ro_u256_fits_word ro_u256_lt
-  ro_calculate_total_blob_gas ro_fee_mul ro_u256_add_carry ro_is_valid_delegation
+  ro_u256_add_carry ro_is_valid_delegation
   wsEnv_of_worldOK_local heapByteEff_of_m23_bre_local wk_calculate_blob_gas_price_local
   lookup_calculate_blob_gas_price_local lookup_taylor_exponential_local
   taylor_exponential_wsSafe_local lookup_check_transaction checkTxBufs

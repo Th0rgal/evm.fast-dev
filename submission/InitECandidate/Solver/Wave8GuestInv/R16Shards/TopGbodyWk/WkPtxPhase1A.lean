@@ -4,6 +4,7 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M17.ro_tx_chain_id
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.ro_validate_transaction
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.rv_validate_transaction
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.rv_min
+import InitECandidate.Solver.Wave8GuestInv.R10Ports.ReadOnly
 
 set_option Elab.async false
 set_option autoImplicit false
@@ -33,9 +34,10 @@ open InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover
 open InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers
 open InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc
 open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+open InitECandidate.Solver.Wave8GuestInv.R10Ports (ro_calculate_total_blob_gas ro_fee_mul)
 
 open private wk_alloc_local rt_alloc_local ro_u256_fits_word ro_u256_lt
-  ro_calculate_total_blob_gas ro_fee_mul ro_u256_add_carry ro_is_valid_delegation
+  ro_u256_add_carry ro_is_valid_delegation
   wsEnv_of_worldOK_local heapByteEff_of_m23_bre_local wk_calculate_blob_gas_price_local
   lookup_calculate_blob_gas_price_local lookup_taylor_exponential_local
   taylor_exponential_wsSafe_local lookup_check_transaction checkTxBufs
@@ -144,7 +146,7 @@ theorem wkScBo_check_transaction :
   refine progWStepBo_seq hB hgw (progWStepBo_ite (progWStepBo_raise _ _ _ _) (progWStepBo_skip _ _)) ?_
   refine progWStepBo_seq hB hgw (progWStepBo_ite (progWStepBo_raise _ _ _ _) (progWStepBo_skip _ _)) ?_
   refine progWStepBo_decCall hB hgw hB0 hgw0
-    (worldKeepsScBo_of_readOnly ro_calculate_total_blob_gas) ?_
+    (worldKeepsScBo_of_readOnly R10Ports.ro_calculate_total_blob_gas) ?_
   refine progWStepBo_seq hB hgw (progWStepBo_ite (progWStepBo_raise _ _ _ _) (progWStepBo_skip _ _)) ?_
   refine progWStepBo_decCall hB hgw
     (by intro p hp; simp [wsAcctBufs, checkTxBufs] at hp ⊢
@@ -176,7 +178,7 @@ theorem wkScBo_check_transaction :
       refine progWStepBo_seq hB hgw
         (progWStepBo_call_local hB0 hgw0 (worldKeepsScBo_of_readOnly ro_u256_add))
         (progWStepBo_assign_local _ _ _ _)
-  · refine progWStepBo_decCall hB hgw hB0 hgw0 (worldKeepsScBo_of_readOnly ro_fee_mul) ?_
+  · refine progWStepBo_decCall hB hgw hB0 hgw0 (worldKeepsScBo_of_readOnly R10Ports.ro_fee_mul) ?_
     refine progWStepBo_dec ?_
     refine progWStepBo_dec ?_
     refine progWStepBo_seq hB hgw ?_ ?_
@@ -197,7 +199,7 @@ theorem wkScBo_check_transaction :
       refine progWStepBo_dec ?_
       refine progWStepBo_decCall hB hgw hB0 hgw0 (worldKeepsScBo_of_readOnly ro_u256_lt) ?_
       refine progWStepBo_seq hB hgw (progWStepBo_ite (progWStepBo_raise _ _ _ _) (progWStepBo_skip _ _)) ?_
-      refine progWStepBo_decCall hB hgw hB0 hgw0 (worldKeepsScBo_of_readOnly ro_fee_mul) ?_
+      refine progWStepBo_decCall hB hgw hB0 hgw0 (worldKeepsScBo_of_readOnly R10Ports.ro_fee_mul) ?_
       refine progWStepBo_seq hB hgw
         (progWStepBo_ite (progWStepBo_assign_local _ _ _ _) (progWStepBo_skip _ _)) ?_
       refine progWStepBo_decCall hB hgw hB0 hgw0 (worldKeepsScBo_of_readOnly ro_u256_add_carry) ?_

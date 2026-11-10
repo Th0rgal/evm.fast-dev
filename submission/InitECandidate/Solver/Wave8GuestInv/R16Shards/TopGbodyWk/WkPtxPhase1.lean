@@ -30,7 +30,7 @@ open InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc
 open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
 
 open private wk_alloc_local rt_alloc_local ro_u256_fits_word ro_u256_lt
-  ro_calculate_total_blob_gas ro_fee_mul ro_u256_add_carry ro_is_valid_delegation
+  ro_u256_add_carry ro_is_valid_delegation
   wsEnv_of_worldOK_local heapByteEff_of_m23_bre_local wk_calculate_blob_gas_price_local
   lookup_calculate_blob_gas_price_local lookup_taylor_exponential_local
   taylor_exponential_wsSafe_local lookup_check_transaction checkTxBufs
@@ -1175,7 +1175,7 @@ theorem ptxPhase1_relCut_strong :
     (fun _ _ hp9 hc9 => ?_)
   refine p1_skip hp9 (fun hp9' => ?_)
   refine p1_decCall_ro_add hc9 "tx_blob_gas_used" .one (ofString "calculate_total_blob_gas")
-    [.var .local (ofString "tx")] _ ro_calculate_total_blob_gas hp9'
+    [.var .local (ofString "tx")] _ R10Ports.ro_calculate_total_blob_gas hp9'
     (by decide) (by decide) (by decide) (by decide) (by decide)
     (fun _ _ _ _ _ _ _ _ _ _ hp10 hc10 => ?_)
   refine p1_decCall_scBo_keep hc10 hp10 (by decide)
@@ -1199,7 +1199,7 @@ theorem ptxPhase1_relCut_strong :
     (by decide) (by decide) (by decide) (by decide) (by decide)
     (fun _ _ _ hp14 => ?_)
   refine p1_decCall_ro_keep (by simpa [setVarHOLFinite] using hc13) "egf" (.comb [.one, .one, .one, .one, .one]) (ofString "fee_mul")
-    _ _ ro_fee_mul hp14
+    _ _ R10Ports.ro_fee_mul hp14
     (by decide) (by decide) (by decide) (by decide) (by decide)
     (fun _ _ _ _ _ _ _ _ _ _ hp15 hc15 => ?_)
   refine p1_dec_keep "effective_gas_fee" (.comb [.one, .one, .one, .one]) _ _ hp15
