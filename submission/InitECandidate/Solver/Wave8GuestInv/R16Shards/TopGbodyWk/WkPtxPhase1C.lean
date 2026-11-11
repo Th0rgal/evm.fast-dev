@@ -36,7 +36,7 @@ open InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc
 open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
 
 open private wk_alloc_local rt_alloc_local ro_u256_fits_word ro_u256_lt
-  ro_u256_add_carry ro_is_valid_delegation
+  ro_calculate_total_blob_gas ro_fee_mul ro_u256_add_carry ro_is_valid_delegation
   wsEnv_of_worldOK_local heapByteEff_of_m23_bre_local wk_calculate_blob_gas_price_local
   lookup_calculate_blob_gas_price_local lookup_taylor_exponential_local
   taylor_exponential_wsSafe_local lookup_check_transaction checkTxBufs
@@ -1122,7 +1122,7 @@ theorem p1_blobBranch {F : Type} {xs : List (String × ShapeHOL)}
             | exception e2 v2 =>
               dsimp only at hbp
               injection hbp with h1 h2; injection h1 with h1'; injection h1' with he hv
-              have hspec2 := FunSpec.at_lookup R10Ports.ro_fee_mul s1 hc1 vs2 b2 cal2 ret2 hl2
+              have hspec2 := FunSpec.at_lookup ro_fee_mul s1 hc1 vs2 b2 cal2 ret2 hl2
                 (guestInv_callEntry s1 cal2 hbase1.world.1.1) (by rw [hb2']; simp)
               have hro2 : p2 = { callEntryStateHOLFinite s1 cal2 with locals := p2.locals, clock := p2.clock } := by
                 have h0 := hspec2 (by rw [hb2']; exact Or.inr ⟨e2, v2, rfl, he ▸ hne⟩)
@@ -1175,7 +1175,7 @@ theorem p1_blobBranch {F : Type} {xs : List (String × ShapeHOL)}
             | returned rv2 =>
               dsimp only at hbp
               split at hbp
-              · have hspec2 := FunSpec.at_lookup R10Ports.ro_fee_mul s1 hc1 vs2 b2 cal2 ret2 hl2
+              · have hspec2 := FunSpec.at_lookup ro_fee_mul s1 hc1 vs2 b2 cal2 ret2 hl2
                   (guestInv_callEntry s1 cal2 hbase1.world.1.1) (by rw [hb2']; simp)
                 have hro2 : p2 = { callEntryStateHOLFinite s1 cal2 with locals := p2.locals, clock := p2.clock } := by
                   have h0 := hspec2 (by rw [hb2']; exact Or.inl ⟨rv2, rfl⟩)

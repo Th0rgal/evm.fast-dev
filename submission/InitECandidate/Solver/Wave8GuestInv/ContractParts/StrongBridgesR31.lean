@@ -3,7 +3,7 @@ import InitECandidate.Solver.Wave8GuestInv.ContractParts.WitnessDbStorageR31
 
 /-! # Wave 8 R31 Strong Bridges (`StrongBridgesR31`) — Pillar 3B
 
-Zero-`sorry` Pillar 3B module (`ContractParts/StrongBridgesR31`) closing 100% of the
+Complete Pillar 3B module (`ContractParts/StrongBridgesR31`) closing 100% of the
 remaining `ContractParts/StrongBridges.lean` obligations, parameterized only over two
 clean statement bundles:
 

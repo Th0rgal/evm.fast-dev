@@ -16922,29 +16922,41 @@ theorem wkScBo_ws_storage_trie_of_decode_witness
                 rw [heqM_s, hite_eq, hdec_s]
               rw [heval_all_s]
               have hbo_dw : PtxBlockOutUnhit s sN := by
-                apply ptxBlockOutUnhit_of_nonempty
-                intro b hb hbpos a ha8 hhit
-                obtain ⟨_, hal_b, _, _⟩ := blockOut_allocated_words hWT0 hb hbpos
-                have hsep : scratchStart = heapLimit := by rw [M13.scratchStart_val, M13.heapLimit_val]
-                have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hW.1.2.2.1
-                have hfm_ge : scratchStart ≤ globN s "frame_mem_ptr" := hW.1.2.2.2.1
-                have hsc_ge : globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" := hW.1.2.2.2.2.1
-                have hfg_eq : freeGap ent_dw = freeGap s := rfl
-                have hhf_eq : heapFree ent_dw = heapFree s := rfl
-                obtain ⟨hb1, hb2⟩ := hhit
-                refine hfr_dw a ?_ ?_
-                · intro j hj hjh
-                  rw [List.mem_singleton.1 hj, hfg_eq] at hjh
-                  obtain ⟨hj1, hj2⟩ := hjh
-                  unfold freeGap at hj1 hj2
-                  dsimp at hj1 hj2
-                  rcases hal_b with ⟨hlo, hhi⟩ | ⟨hlo, hhi⟩ <;> omega
-                · intro hh
-                  rw [hhf_eq] at hh
-                  obtain ⟨hf1, hf2⟩ := hh
-                  unfold heapFree at hf1 hf2
-                  dsimp at hf1 hf2
-                  rcases hal_b with ⟨hlo, hhi⟩ | ⟨hlo, hhi⟩ <;> omega
+                have hcpost_sN : PtxBlockOutUnhit s cpost_dw := by
+                  apply ptxBlockOutUnhit_of_nonempty
+                  intro b hb hbpos
+                  obtain ⟨_, hal_b, _, _⟩ := blockOut_allocated_words hWT0 hb hbpos
+                  -- cutover reconciliation: `DecodeWitnessToMptSpec` now frames the callee
+                  -- with `FrameOutside ent [freeGap ent] (heapFree ent)`.  The call-entry
+                  -- state changes only locals/clock, so it is defeq to `s` on globals and
+                  -- memory; transport the spec frame to `s` and bridge through the aligned
+                  -- P26/P28 unhit lemma, using that every blockOut object is `Allocated s b`.
+                  have hfr_s : FrameOutside s cpost_dw [freeGap s] (heapFree s) := hfr_dw
+                  have hA : ArenaOK s := hW.1.2
+                  have hsep : heapLimit ≤ scratchStart := by decide
+                  have hhp : globN s "heap_ptr" ≤ heapLimit := hA.2.1
+                  have hfm : scratchStart ≤ globN s "frame_mem_ptr" := hA.2.2.1
+                  have hsc : globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" := hA.2.2.2.1
+                  have hhl8 : heapLimit % 8 = 0 := by decide
+                  have hhp8 : globN s "heap_ptr" % 8 = 0 := hA.2.2.2.2.2.1
+                  have hfm8 : globN s "frame_mem_ptr" % 8 = 0 := hA.2.2.2.2.2.2.1
+                  have hsc8 : globN s "scratch_ptr" % 8 = 0 := hA.2.2.2.2.2.2.2.1
+                  obtain ⟨hgap, hheap⟩ : Disj b (freeGap s) ∧ Disj b (heapFree s) := by
+                    rcases hal_b with ⟨_, hhi⟩ | ⟨hlo, _⟩
+                    · constructor
+                      · right; right; left; unfold freeGap; dsimp only; omega
+                      · right; right; left; unfold heapFree; exact hhi
+                    · constructor
+                      · right; right; right; unfold freeGap; dsimp only; omega
+                      · right; right; right; unfold heapFree; dsimp only; omega
+                  exact R10Shards.P26_P28.ivlUnhit_of_frameOutside_aligned hbpos hfr_s
+                    (fun j hj => by
+                      rw [List.mem_singleton.1 hj]
+                      unfold freeGap; dsimp only; omega)
+                    (by unfold heapFree; dsimp only; omega)
+                    (fun j hj => by rw [List.mem_singleton.1 hj]; exact hgap)
+                    hheap
+                exact hcpost_sN
               have hsN_step_noextra : WorldStepSc (bufRegions []) ["heap_ptr", "scratch_ptr"]
                   stdKeep NoExtra ent_dw (some (.returned (.val (.word nodew)))) cpost_dw := by
                 refine ⟨⟨hsN_step_q.1.1, hsN_step_q.1.2.1, hsN_step_q.1.2.2.1, hsN_step_q.1.2.2.2.1,

@@ -12669,9 +12669,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsListOK_preserved
-  WkBlockTxEnc.memW_eq_of_allocated_disj_fixed
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsListOK_preserved WkBlockTxEnc.memW_eq_of_allocated_disj_fixed from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 theorem receipt_snapshot_logs {F : Type}
     {s mid : PanSemStateFiniteExact 64 F} {logs : Nat}
@@ -12703,9 +12701,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  WkBlockTxEnc.memW_eq_of_allocated_disj_fixed
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum WkBlockTxEnc.memW_eq_of_allocated_disj_fixed from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 theorem receipt_logs_sum_preserved {F : Type}
     {s mid : PanSemStateFiniteExact 64 F} {logs : Nat}
@@ -12774,8 +12770,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 theorem receipt_encode_logs_frame {F : Type}
     {s mid post : PanSemStateFiniteExact 64 F}
@@ -12805,8 +12800,6 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 theorem receipt_logs_bloom_frame {F : Type}
     {s mid post : PanSemStateFiniteExact 64 F}
@@ -12838,8 +12831,6 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- The bloom call and its RLP serialization in the receipt body share the
 entry scratch frame; both output buffers are fresh relative to that entry. -/
@@ -12904,9 +12895,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  WkBlockTxEnc.eval_call_local_encode_logs
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum WkBlockTxEnc.eval_call_local_encode_logs from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- Keep the encoded length and local update alongside the receipt frame, so
 the enclosing body can advance `p` and discharge the final-list bounds. -/
@@ -12963,8 +12952,6 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- Advance the receipt cursor by the encoded log length and finalize its RLP
 list while preserving the entry scratch frame. -/
@@ -13023,8 +13010,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- The concrete log-encoding suffix threads the entry frame through the
 returned length, cursor advance, and final RLP list write. -/
@@ -13080,8 +13066,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- The receipt suffix after bloom serialization advances past that encoding,
 encodes the logs, and finalizes the list within the fresh allocation. -/
@@ -13157,8 +13142,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- Compose the concrete receipt body from bloom generation through final
 list encoding, using only the entry log invariants and fresh-buffer bounds. -/
@@ -13508,9 +13492,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  WkBlockTxEnc.call_noexc_ne_returned
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum WkBlockTxEnc.call_noexc_ne_returned from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- Encode logs, advance the cursor, finalize the list, and return the receipt. -/
 theorem receipt_logs_finish_return_frame {F : Type}
@@ -13625,8 +13607,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- The post-bloom cursor advance composes with log encoding and receipt return. -/
 theorem receipt_advance_logs_finish_return_frame {F : Type}
@@ -13691,9 +13672,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  WkBlockTxEnc.call_noexc_ne_returned
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum WkBlockTxEnc.call_noexc_ne_returned from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- The complete bloom-to-return receipt suffix preserves the entry frame. -/
 theorem receipt_bloom_logs_finish_return_frame {F : Type}
@@ -13929,8 +13908,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- Allocating the bloom and executing the complete receipt suffix preserves
 the entry frame, including restoration of the scoped bloom local. -/
@@ -14008,8 +13986,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- The gas encoder, cursor advance, bloom allocation and concrete receipt
 return suffix together preserve the entry heap frame. -/
@@ -14306,8 +14283,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- Concrete receipt suffix starting with cumulative-gas serialization. -/
 def receiptGasReturnCode : ProgHOL 64 :=
@@ -14396,8 +14372,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- Concrete receipt suffix starting with the status byte. -/
 def receiptStatusReturnCode : ProgHOL 64 :=
@@ -14458,8 +14433,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- Initializing the receipt cursor reserves the list header and frames the
 entire remaining encoder, including restoration of both local scopes. -/
@@ -14514,8 +14488,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- The receipt buffer's one-byte type-prefix reservation initializes all
 three scoped locals and preserves the entry frame through return. -/
@@ -14568,8 +14541,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- Receipt buffer allocation supplies enough fresh space to the complete
 initialized encoder and restores the buffer local on return. -/
@@ -14637,9 +14609,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
-  WkBlockTxEnc.eval_decCall_logs_encoded_bound
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.logsEncodedSum WkBlockTxEnc.eval_decCall_logs_encoded_bound from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- The complete concrete receipt body preserves its entry heap frame. -/
 theorem encode_receipt_body_heapByteEff {F : Type}
@@ -14698,8 +14668,7 @@ end PtxP34
 
 namespace PtxP34
 open WkBlockTxEnc
-open private WkBlockTxEnc.lookupCode_four_words WkBlockTxEnc.receiptKeccakIvls
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.lookupCode_four_words from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 /-- The concrete receipt call preserves both block-output backing pointers. -/
 theorem encode_receipt_backing (h : PtxCallees) {F : Type}
@@ -22490,8 +22459,7 @@ end PtxP34
 namespace PtxP34
 open PtxP1
 open WkBlockTxEnc
-open private WkBlockTxEnc.lookupCode_four_words WkBlockTxEnc.receiptKeccakIvls
-  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+open private WkBlockTxEnc.lookupCode_four_words from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 theorem phase4Totals_backing_cut_cutover (h : PtxCalleesCutover) {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :

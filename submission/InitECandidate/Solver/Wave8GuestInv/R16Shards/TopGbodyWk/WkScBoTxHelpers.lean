@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockTxProcess
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.wk_u256_to_be_min
+
 set_option Elab.async false
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -8,6 +9,7 @@ set_option exponentiation.threshold 2000
 set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
+
 namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -26,10 +28,14 @@ open InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers
 open InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc
 open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
 open InitECandidate.Solver.Wave8Leaves.Rlp
+
 /-! # Phases 1–4 Relational Closure (`PtxRelCutStrong`) -/
+
 section Phases1To4RelationalClosure
+
 open private acct_copy_step flattenHOL_shape_u256 evaluateHOLFiniteState_seq_assoc
   from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
 theorem wkScBo_increment_nonce :
     WorldKeepsScBo WorldOK (bufRegions acctMutBufs) ["heap_ptr", "journal_n", "scratch_ptr"] stdKeep NoExtra
       (ofString "increment_nonce") := by
@@ -67,6 +73,7 @@ theorem wkScBo_increment_nonce :
       (progWStepBo_call0 (by intro p hp; simp at hp; subst hp; simp [acctMutBufs])
         (by intro g hg; simp at hg; rcases hg with rfl | rfl <;> simp) wkScBo_modify_state_commit)
       (progWStepBo_return _ _ _))
+
 theorem wkScBo_create_ether :
     WorldKeepsScBo WorldOK (bufRegions acctMutBufs) ["heap_ptr", "journal_n", "scratch_ptr"] stdKeep NoExtra
       (ofString "create_ether") := by
@@ -216,6 +223,7 @@ theorem wkScBo_create_ether :
                   s3 heff3.code hWs3 hnt0 hfr0
                 exact WorldStepScBo.trans_flow hB hgw hW0 hstep03 (Or.inl rfl) (htail_step.with_locals_clock id _ _)
             · simp [hsh_nb] at hfr0; exact absurd hfr0 not_flowingOrResumes_error
+
 theorem wkScBo_set_account_balance :
     WorldKeepsScBo WorldOK (bufRegions acctMutBufs) ["heap_ptr", "journal_n", "scratch_ptr"] stdKeep NoExtra
       (ofString "set_account_balance") := by
@@ -398,48 +406,7 @@ theorem wkScBo_set_account_balance :
                 exact WorldStepScBo.trans_flow hB hgw hWsa hm_step (Or.inl rfl) htail
             exact WorldStepScBo.trans_flow hB hgw hW0 hstep_ga (Or.inl rfl) (hcont_step.with_locals_clock id _ _)
           · simp [hsh_ga] at hfr0; exact absurd hfr0 not_flowingOrResumes_error
-/-- Any aligned word whose cell hits an allocated interval `i` is preserved by a
-step whose memory effects a `FrameOutside` frame confines to the fresh heap
-growth above the old `heap_ptr` (the keep-set is the zero-length scratch
-window, which no aligned cell can hit). Heap-allocated `i` lies below the old
-`heap_ptr` and alignment keeps the boundary cell out of the growth; scratch-
-allocated `i` lies at or above `scratchStart = heapLimit`, which bounds the
-new `heap_ptr` from above, so the growth cannot reach it either. -/
-private theorem ivlUnhit_of_freshFrame_scbo {F : Type}
-    {s post : PanSemStateFiniteExact 64 F}
-    (hA : ArenaOK s) (hArd : ArenaReady post)
-    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
-    (hfr : FrameOutside s post [(globN s "scratch_ptr", 0)]
-      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
-    {i : Ivl} (hal : Allocated s i) :
-    InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21.IvlUnhit s post i := by
-  have hhp_s : globN s "heap_ptr" ≤ heapLimit := hA.2.1
-  have hhp8 : globN s "heap_ptr" % 8 = 0 := hA.2.2.2.2.2.1
-  have hsp8 : globN s "scratch_ptr" % 8 = 0 := hA.2.2.2.2.2.2.2.1
-  have hsp_lo : scratchStart ≤ globN s "scratch_ptr" :=
-    le_trans hA.2.2.1 hA.2.2.2.1
-  have hsp_hi : globN s "scratch_ptr" ≤ scratchEnd := hA.2.2.2.2.1
-  have hhp_p : globN post "heap_ptr" ≤ heapLimit := hArd.2.2.1
-  have hhp_p8 : globN post "heap_ptr" % 8 = 0 := hArd.2.2.2.2.2.2.1
-  have hls : heapLimit = scratchStart := rfl
-  intro a ha8 hhit
-  obtain ⟨hh1, hh2⟩ := hhit
-  have hkeep : ∀ j ∈ [((globN s "scratch_ptr", 0) : Ivl)], ¬ CellHits a.toNat j := by
-    intro j hj
-    have hje : j = (globN s "scratch_ptr", 0) := by simpa using hj
-    subst hje
-    intro hc
-    obtain ⟨hc1, hc2⟩ := hc
-    omega
-  have hfresh : ¬ CellHits a.toNat
-      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
-    intro ⟨hc1, hc2⟩
-    rcases hal with hins | hins
-    · obtain ⟨hlo, hhi⟩ := hins
-      omega
-    · obtain ⟨hlo, hhi⟩ := hins
-      omega
-  exact hfr a hkeep hfresh
+
 theorem wkScBo_state_fresh_tx :
     WorldKeepsScBo WorldOK (fun _ => [])
       ["heap_ptr", "journal_n", "ts"]
@@ -564,10 +531,12 @@ theorem wkScBo_state_fresh_tx :
         change a.toNat < globN s "heap_ptr" + (globN inner_post "heap_ptr" - globN s "heap_ptr")
         omega⟩)
   exact ptxBlockOutUnhit_of_nonempty fun i hi hpos =>
-    ivlUnhit_of_freshFrame_scbo hAR0.2 hws.1 hws.2.1 hfr_09 (blockOut_allocated_words hWT hi hpos).2.1
+    ivlUnhit_of_freshFrame hAR0.2 hws.1 hws.2.1 hfr_09 (blockOut_allocated_words hWT hi hpos).2.1
+
 open InitECandidate.Solver.Wave8GuestInv
 open InitECandidate.Solver.Wave8GuestInv.R16Shards
 open InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc
+
 open private txEnc_wordsOK_wordAt_memW txEnc_wordAt_memW_below_hp txEnc_wordsOK_below_hp
   accessListPayloadSumPure_congr authListPayloadSumPure_congr
   eval_decCall_tx_encode_bound txEncodeBoundPure
@@ -578,6 +547,7 @@ open private txEnc_wordsOK_wordAt_memW txEnc_wordAt_memW_below_hp txEnc_wordsOK_
   eval_call_local_tx_put_access_list eval_call_local_tx_put_blob_hashes
   eval_call_local_tx_put_authorizations
   from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeTransaction
+
 def RetTxSliceBounded : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
     Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
   fun s r post _ _ =>
@@ -586,6 +556,7 @@ def RetTxSliceBounded : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
       v = .rStruct [.val (.word a), .val (.word b)] ∧
       Inside (a.toNat, b.toNat) sourceBase (globN post "heap_ptr") ∧
       a.toNat < 2 ^ 40 ∧ b.toNat < 2 ^ 40
+
 theorem ptxBlockOutUnhit_of_heapByteEff {F : Type}
     {s post : PanSemStateFiniteExact 64 F}
     {R : List Ivl} {gw : List String}
@@ -629,6 +600,7 @@ theorem ptxBlockOutUnhit_of_heapByteEff {F : Type}
         rcases hAs.2 with ⟨_, hp, hf, hsc, _⟩
         have sep : heapLimit ≤ InitE.scratchStart := by decide
         dsimp only; omega)))
+
 def TxEncBoundedOut {F : Type} (s0 : PanSemStateFiniteExact 64 F) (Rl : List Ivl) (gw : List String)
     (out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F) : Prop :=
   HeapByteEff s0 out.2 Rl gw ∧
@@ -636,6 +608,7 @@ def TxEncBoundedOut {F : Type} (s0 : PanSemStateFiniteExact 64 F) (Rl : List Ivl
     v = .rStruct [.val (.word a), .val (.word b)] ∧
     Inside (a.toNat, b.toNat) sourceBase (globN out.2 "heap_ptr") ∧
     a.toNat < 2 ^ 40 ∧ b.toNat < 2 ^ 40)
+
 theorem txEnc_eff_ret_of_eq_resVar {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {p : ProgHOL 64}
     {r' : Option (PanSemResultExact 64)} {q : PanSemStateFiniteExact 64 F}
@@ -645,6 +618,7 @@ theorem txEnc_eff_ret_of_eq_resVar {F : Type}
     TxEncBoundedOut s0 Rl gw (evaluateHOLFiniteState s p) := by
   rw [heq]
   exact ⟨hq.1.locals_clock L q.clock, hq.2⟩
+
 theorem txEnc_trailer_bounded_resumes {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
     {buf bnd bodyw pw tw : BitVec 64}
@@ -949,6 +923,7 @@ theorem txEnc_trailer_bounded_resumes {F : Type}
       · rw [hsb] at hse; dsimp only at hse; subst hse
         dsimp only at hres
         exact False.elim (not_resumes_error hres)
+
 theorem txEncBoundedOut_mono {F : Type}
     {s0 : PanSemStateFiniteExact 64 F} {R1 R2 : List Ivl} {gw1 gw2 : List String}
     {out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F}
@@ -960,6 +935,7 @@ theorem txEncBoundedOut_mono {F : Type}
     (hgw : ∀ g ∈ gw1, g ∈ gw2) :
     TxEncBoundedOut s0 R2 gw2 out :=
   ⟨h.1.mono hR hgw, h.2⟩
+
 theorem txEnc_call_assign_p_step_hp {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
     {fname : String} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
@@ -1047,6 +1023,7 @@ theorem txEnc_call_assign_p_step_hp {F : Type}
     · refine ⟨len, ?_⟩; rw [hm_loc]; simp [HolFiniteMapExact.lookup_update, FUPDATE,
         show ofString "p" ≠ ofString "w" from M13.mls_ne rfl]
     · rw [hm_loc]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+
 theorem txEnc_seq_assoc_step_eq {F : Type}
     (s : PanSemStateFiniteExact 64 F) (a b c : ProgHOL 64) :
     evaluateHOLFiniteState s (.seq a (.seq b c)) =
@@ -1054,6 +1031,7 @@ theorem txEnc_seq_assoc_step_eq {F : Type}
   simp only [evaluateHOLFiniteState_seq_line780]
   cases evaluateHOLFiniteState s a with | mk ra sa =>
   cases ra <;> rfl
+
 theorem txEnc_call_word_step_hp {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
     {cont : ProgHOL 64} {txw pw : BitVec 64} (off : Nat)
@@ -1119,6 +1097,7 @@ theorem txEnc_call_word_step_hp {F : Type}
       obtain ⟨len, _, hlen9, _, _, hloc, heff_c⟩ := hc.1 hnone
       exact ⟨len, hlen9, hloc, heff_c⟩, hc.2⟩
     hnt hres
+
 theorem txEnc_seq_call_word_hp {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
     {cont : ProgHOL 64} {txw pw : BitVec 64} (off : Nat)
@@ -1165,6 +1144,7 @@ theorem txEnc_seq_call_word_hp {F : Type}
             cont)) = evaluateHOLFiniteState m cont := by
   rw [txEnc_seq_assoc_step_eq] at hnt hres ⊢
   exact txEnc_call_word_step_hp off hAR0 heff0 hRl_ge htx_ins htx_wok hoff8 hoff_hi htx hp hw hin_ivl hnt hres
+
 theorem txEnc_call_u256_step_hp {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
     {cont : ProgHOL 64} {txw pw : BitVec 64} (off : Nat)
@@ -1245,6 +1225,7 @@ theorem txEnc_call_u256_step_hp {F : Type}
       obtain ⟨len, _, _, hlen33, _, _, hloc, heff_c⟩ := hc.1 hnone
       exact ⟨len, hlen33, hloc, heff_c⟩, hc.2⟩
     hnt hres
+
 theorem txEnc_seq_call_u256_hp {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
     {cont : ProgHOL 64} {txw pw : BitVec 64} (off : Nat)
@@ -1295,6 +1276,7 @@ theorem txEnc_seq_call_u256_hp {F : Type}
             cont)) = evaluateHOLFiniteState m cont := by
   rw [txEnc_seq_assoc_step_eq] at hnt hres ⊢
   exact txEnc_call_u256_step_hp off hAR0 heff0 hgw hRl_ge htx_ins htx_wok hoff8 hoff_hi htx hp hw hin_ivl hnt hres
+
 theorem txEnc_seq_call_to_hp {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
     {cont : ProgHOL 64} {txw pw : BitVec 64} (off : Nat)
@@ -1358,6 +1340,7 @@ theorem txEnc_seq_call_to_hp {F : Type}
       obtain ⟨len, hlen21, _, _, hloc, heff_c⟩ := hc.1 hnone
       exact ⟨len, hlen21, hloc, heff_c⟩, hc.2⟩
     hnt hres
+
 theorem txEnc_seq_call_bytes_hp {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
     {cont : ProgHOL 64} {txw pw : BitVec 64}
@@ -1433,6 +1416,7 @@ theorem txEnc_seq_call_bytes_hp {F : Type}
       obtain ⟨len, hlen_le, _, _, hloc, heff_c⟩ := hc.1 hnone
       exact ⟨len, by omega, hloc, heff_c⟩, hc.2⟩
     hnt hres
+
 theorem txEnc_ite_hp {F : Type}
     {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
     {cond : ExpHOL 64} {p_then p_else cont : ProgHOL 64}
@@ -1492,5 +1476,6 @@ theorem txEnc_ite_hp {F : Type}
   by_cases hcz : cw = 0#64
   · rw [if_pos hcz] at hnt hres ⊢; exact helse hcz hnt hres
   · rw [if_neg hcz] at hnt hres ⊢; exact hthen hcz hnt hres
+
 end Phases1To4RelationalClosure
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
