@@ -6,7 +6,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group10CallsCre
 
 /-! # Wave 8 R31 Witness DB, Storage, & World-Account Closure (`WitnessDbStorageR31`)
 
-Zero-`sorry` Pillar 2 module (`ContractParts/WitnessDbStorageR31`) proving:
+Fully proved Pillar 2 module (`ContractParts/WitnessDbStorageR31`) proving:
 1. Generic world-step lifting to `R14Shards.OpHandlersA.EvmPreservingSpec`,
    `R16Shards.OpHandlersB.EvmPreservingSpecA`, and `ev + 32` cell preservation
    via `evmStep_and_cells_of_worldStepSc` + `headMemChainWF_of_evmStep` +

@@ -49,7 +49,7 @@ import InitECandidate.Solver.Wave8GuestInv.R13Shards.HtabSetSpec
 
 /-! # Wave 8 R31 Proved `process_transaction` Callee Bundle & Backing-Cut Closure
 
-Zero-`sorry` Pillar 1 module (`ContractParts/PtxCalleesProvedR31`) closing:
+Fully proved Pillar 1 module (`ContractParts/PtxCalleesProvedR31`) closing:
 1. All proved `process_transaction` callee bounds, read-only/domain/return specs,
    strong `encode_transaction` (`TxValidEncodeReady`), strong `recover_sender_with_chain_id`
    (`TxValidRecoverReady`), strong `lst_push` (`BoListArgStrong`), and closed
@@ -210,9 +210,9 @@ theorem gbody_incorporate_tx_into_block_of_witnessDb
       Merged.fb_htab_set Merged.fb_htab_union_into)
     g_ub
 
-/-! ## 2. Zero-`sorry` `PtxCalleesProvedR31` Structure and Concrete Witness -/
+/-! ## 2. Fully Proved `PtxCalleesProvedR31` Structure and Concrete Witness -/
 
-/-- Complete 0-`sorry` bundle of proved `process_transaction` callees, carrying the
+/-- Complete fully proved bundle of `process_transaction` callees, carrying the
 strong `TxValidEncodeReady`, `TxValidRecoverReady`, and `BoListArgStrong` contracts
 in place of legacy weak signatures. -/
 structure PtxCalleesProvedR31 : Prop where
@@ -294,7 +294,7 @@ structure PtxCalleesProvedR31 : Prop where
   ro_validate_transaction : ReadOnlyFn (ofString "validate_transaction")
   rv_validate_transaction : RetIntrinsic (ofString "validate_transaction")
 
-/-- Unconditional 0-`sorry` witness for `PtxCalleesProvedR31`. -/
+/-- Unconditional fully proved witness for `PtxCalleesProvedR31`. -/
 theorem ptxCalleesProvedR31 : PtxCalleesProvedR31 where
   fb_alloc := Merged.fb_alloc
   fb_calculate_blob_gas_price := R11Adapters.fb_calculate_blob_gas_price

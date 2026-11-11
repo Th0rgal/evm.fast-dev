@@ -132,6 +132,8 @@ theorem p4Run_decCall_encode_receipt {F : Type}
       a.toNat < 2 ^ 61 → b.toNat < 2 ^ 61 →
       mid.locals.lookup (ofString "rc") = some (.rStruct [.val (.word a), .val (.word b)]) →
       (∀ y, y ≠ ofString "rc" → mid.locals.lookup y = s.locals.lookup y) →
+      HeapByteEff s mid (receiptKeccakIvls s) ["heap_ptr"] →
+      LogsListOK mid logsw.toNat →
       P4Data entry mid s_pmc w_out →
       mid.code = originalRuntimeCode →
       PtxRelRunStrong entry tail mid) :
@@ -315,10 +317,35 @@ theorem p4Run_decCall_encode_receipt {F : Type}
               { sb with locals := s.locals }).locals.lookup y = s.locals.lookup y := by
             intro y hy
             simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hy, Ne.symm hy]
+          have hAR_s : ArenaReady s := h.base.world.1
+          have heff_ent : HeapByteEff s (callEntryStateHOLFinite s cmap)
+              (receiptKeccakIvls s) ["heap_ptr"] :=
+            ((HeapByteEff.refl hAR_s (receiptKeccakIvls s) []).locals_clock
+              (callEntryStateHOLFinite s cmap).locals
+              (callEntryStateHOLFinite s cmap).clock).mono
+              (fun i hi _ => Or.inl ⟨i, hi, le_rfl, le_rfl⟩) (fun _ h => by cases h)
+          have heff_sb : HeapByteEff s sb (receiptKeccakIvls s) ["heap_ptr"] :=
+            heff_ent.trans hmain.1
+          have heff_mid : HeapByteEff s
+              (setVarHOLFinite (ofString "rc")
+                (.rStruct [.val (.word a), .val (.word b)]) { sb with locals := s.locals })
+              (receiptKeccakIvls s) ["heap_ptr"] :=
+            heff_sb.locals_clock
+              (setVarHOLFinite (ofString "rc")
+                (.rStruct [.val (.word a), .val (.word b)]) { sb with locals := s.locals }).locals
+              (setVarHOLFinite (ofString "rc")
+                (.rStruct [.val (.word a), .val (.word b)]) { sb with locals := s.locals }).clock
+          have hLL_sb : LogsListOK sb logsw.toNat := by
+            simp only [locN, hent_logs] at hlogs_sb
+            exact hlogs_sb
+          have hLL_mid : LogsListOK
+              (setVarHOLFinite (ofString "rc")
+                (.rStruct [.val (.word a), .val (.word b)]) { sb with locals := s.locals })
+              logsw.toNat := hLL_sb
           have hmid := htail a b
             (setVarHOLFinite (ofString "rc")
               (.rStruct [.val (.word a), .val (.word b)]) { sb with locals := s.locals })
-            ha61 hb61 hloc_name hloc_rest hdata_mid (hmeta.trans hc) hres
+            ha61 hb61 hloc_name hloc_rest heff_mid hLL_mid hdata_mid (hmeta.trans hc) hres
           exact ptxWorldStep_strong_with_locals_right'
             (HolFiniteMapExact.resVarEq
               (evaluateHOLFiniteState (setVarHOLFinite (ofString "rc")

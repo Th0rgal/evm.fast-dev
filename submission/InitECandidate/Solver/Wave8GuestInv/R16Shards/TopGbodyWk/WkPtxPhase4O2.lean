@@ -573,7 +573,7 @@ theorem p4Run_g6 {F : Type}
       htxdom', htxcell', hbod16, hboc16, hz1, hz2, hz3]
   -- the callee
   refine p4Run_decCall_encode_receipt h hc _ txw succw cgasw wl _ harg hLL hDF ?_
-  intro a b mid ha61 hb61 hin hrc hlok heff hLLm hcapm hDm hcm
+  intro a b mid ha61 hb61 hrc hlok heff hLLm hDm hcm
   -- the logs facts at mid (callee transports)
   have hDFm : LogsDisjFixed mid wl.toNat :=
     p4O_logsDisjFixed_callee hWT0 hE0 hAR0 heff hLL hDF
