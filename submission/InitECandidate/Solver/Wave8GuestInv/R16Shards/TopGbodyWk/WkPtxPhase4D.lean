@@ -199,7 +199,7 @@ theorem p4Run_decCall_encode_receipt {F : Type}
         exact absurd hres (by rintro (⟨_, hh⟩ | ⟨_, _, hh, _⟩) <;> simp at hh)
       | exception eid ev =>
         dsimp only at hres ⊢
-        have hspec := PtxP1.funSpec_at_lookup «wk_encode_receipt» s hc
+        have hspec := PtxP1.funSpec_at_lookup (R16Shards.WkBlockTxEnc.«wk_encode_receipt») s hc
           [.val (.word txw), .val (.word succw), .val (.word cgasw), .val (.word logsw)]
           (sourceFnBody Guest.Software.guestFn_encode_receipt)
           cmap (.comb [.one, .one]) hlk ⟨hW_ent, hLL_ent, hDF_ent⟩ (by rw [hb']; simp)
@@ -240,7 +240,7 @@ theorem p4Run_decCall_encode_receipt {F : Type}
               (.rStruct [.val (.word a), .val (.word b)] : ValueHOL 64))
               (.comb [.one, .one])) = true
         · simp only [hsh, ↓reduceIte] at hres ⊢
-          have hspec := PtxP1.funSpec_at_lookup «wk_encode_receipt» s hc
+          have hspec := PtxP1.funSpec_at_lookup (R16Shards.WkBlockTxEnc.«wk_encode_receipt») s hc
             [.val (.word txw), .val (.word succw), .val (.word cgasw), .val (.word logsw)]
             (sourceFnBody Guest.Software.guestFn_encode_receipt)
             cmap (.comb [.one, .one]) hlk ⟨hW_ent, hLL_ent, hDF_ent⟩ (by rw [hb']; simp)

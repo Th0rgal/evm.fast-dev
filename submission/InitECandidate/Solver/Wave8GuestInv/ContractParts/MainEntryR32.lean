@@ -66,17 +66,36 @@ def InputAtR32With {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat
 def InputAtR32 {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : Prop :=
   ∃ S Nd, InputAtR32With s S Nd si
 
+/-- The honest `run_attempt` entry guard at R32: `InputAtR32` conjoined with
+the two R16 numeric bounds (`nvh` = the validator-header count at `si + 16`,
+`nwd` = the withdrawal count at `pl + 56`). They are genuinely true at the
+`decode_host_input` exit (the strengthened `RetInputStrongSound` post
+provides them) and are what the `GbodyRunAttemptR32` spine needs to
+reconstruct `InputAtStrong`. Equivalent to the guard
+`R32CanonicalBridges.InputReadyR32CanonBounded`
+(= `GbodyRunAttemptR32.InputReadyR32`). -/
 def InputReadyR32 : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => InputAtR32 s (locN s "si")
+  fun s => InputAtR32 s (locN s "si") ∧
+    memW s (locN s "si" + 16) < 2 ^ 32 ∧
+    memW s (memW s (locN s "si") + 56) < 2 ^ 32
 
 /-- The R32 replacement of `R16Shards.TopGbodyWk.HtrNewPayloadReady`: the
 `InputAt` component becomes `InputAtR32` (the `(0, 0)` slice case is
-accepted) and the slice set is `runAttemptCells`. -/
+accepted) and the slice set is `runAttemptCells`; the two R16 numeric
+bounds (`nvh` = the validator-header count at `si + 16`, `nwd` = the
+withdrawal count at `pl + 56`) are carried, since they are genuinely true at
+the `decode_host_input` exit (the strengthened `RetInputStrongSound` post
+provides them). -/
 def HtrNewPayloadReadyR32 : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => InputAtR32 s (locN s "si") ∧ IvlsDisj (runAttemptCells s (locN s "si")) [(locN s "out", 32)]
+  fun s => InputAtR32 s (locN s "si") ∧ IvlsDisj (runAttemptCells s (locN s "si")) [(locN s "out", 32)] ∧
+    memW s (locN s "si" + 16) < 2 ^ 32 ∧
+    memW s (memW s (locN s "si") + 56) < 2 ^ 32
 
-/-- `InputReadyWithRoot` at R32 strength (the `nvh`/`nwd` fields, which are
-false at `ntx = 0`, are dropped). -/
+/-- `InputReadyWithRoot` at R32 strength, now carrying the two R16 numeric
+bounds (`nvh`/`nwd`): they hold at the `decode_host_input` exit (the
+strengthened `RetInputStrongSound` post) and are preserved by the `alloc`
+resume (every read address lies in the unhit `(si, 96)` / `(pl, 136)`
+slices). -/
 def InputReadyWithRootR32 : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ∃ w_si w_rt : BitVec 64, ∃ S Nd : List Nat,
     InputAtR32With s S Nd w_si.toNat ∧
@@ -85,7 +104,9 @@ def InputReadyWithRootR32 : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop
     w_rt.toNat % 8 = 0 ∧
     Inside (w_rt.toNat, 32) sourceBase (globN s "heap_ptr") ∧
     IvlsDisj [(w_rt.toNat, 32)] (worldOwned s S Nd) ∧
-    IvlsDisj (runAttemptCells s w_si.toNat) [(w_rt.toNat, 32)]
+    IvlsDisj (runAttemptCells s w_si.toNat) [(w_rt.toNat, 32)] ∧
+    memW s (w_si.toNat + 16) < 2 ^ 32 ∧
+    memW s (memW s w_si.toNat + 56) < 2 ^ 32
 
 theorem inputAtR32With_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
     (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) (S Nd : List Nat) (si : Nat) :
@@ -105,13 +126,16 @@ theorem inputAtR32_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
 theorem localsOnly_inputReadyR32 : LocalsOnly ["si"] InputReadyR32 := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "si" (hl "si" (by simp))
-  show InputAtR32 _ _
-  rw [ht]
-  exact (inputAtR32_with_locals s locals k _).2 hP
+  refine ⟨?_, ?_, ?_⟩
+  · show InputAtR32 _ _
+    rw [ht]
+    exact (inputAtR32_with_locals s locals k _).2 hP.1
+  · rw [ht]; exact hP.2.1
+  · rw [ht]; exact hP.2.2
 
 theorem inputReadyR32_guestInv {F : Type} (s : PanSemStateFiniteExact 64 F)
     (h : InputReadyR32 s) : GuestInv s := by
-  obtain ⟨S, Nd, hIA⟩ := h
+  obtain ⟨⟨S, Nd, hIA⟩, _, _⟩ := h
   exact hIA.1.1
 
 theorem inputReadyWithRootR32_guestInv {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -130,9 +154,12 @@ theorem callEntryOn_inputReadyR32 {fname : MlS} {e : List (MlS × ShapeHOL) × P
     body' callee ret' hargs hlook
   have hsi : locN (callEntryStateHOLFinite state callee) "si" = locN state "si" := by
     simp only [locN, callEntryStateHOLFinite, hc]
-  show InputAtR32 (callEntryStateHOLFinite state callee) (locN (callEntryStateHOLFinite state callee) "si")
-  rw [hsi]
-  exact (inputAtR32_with_locals state callee (state.clock - 1) _).2 hP
+  refine ⟨?_, ?_, ?_⟩
+  · show InputAtR32 (callEntryStateHOLFinite state callee) (locN (callEntryStateHOLFinite state callee) "si")
+    rw [hsi]
+    exact (inputAtR32_with_locals state callee (state.clock - 1) _).2 hP.1
+  · rw [hsi]; exact hP.2.1
+  · rw [hsi]; exact hP.2.2
 
 /-! ## 2. Preservation of `InputAtR32With` under a world step -/
 
@@ -198,8 +225,10 @@ theorem worldStep_preserves_inputAtR32With
     (h : InputAtR32With s S Nd si) (hw : WorldStep R gw keep Q s r post)
     (hz : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
     (ht : IvlsDisj (R s) (worldTypedIvls s S Nd))
-    (hc : IvlsDisj (runAttemptCells s si) (R s)) :
-    ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ InputAtR32With post S' Nd' si ∧ Q s r post S' Nd' := by
+    (hc : IvlsDisj (runAttemptCells s si) (R s))
+    (hnvh : memW s (si + 16) < 2 ^ 32) (hnwd : memW s (memW s si + 56) < 2 ^ 32) :
+    ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ InputAtR32With post S' Nd' si ∧ Q s r post S' Nd' ∧
+      memW post (si + 16) < 2 ^ 32 ∧ memW post (memW post si + 56) < 2 ^ 32 := by
   obtain ⟨hAs, hWT, hcells, hdisj_ow, hPay, hReq⟩ := h
   obtain ⟨hAp, hhp, _, _, hStep⟩ := hw
   obtain ⟨S', Nd', hsub, hWT', hog, hfr, hQ⟩ := hStep S Nd hWT ht
@@ -248,7 +277,7 @@ theorem worldStep_preserves_inputAtR32With
       hsi_eq 40 (by decide) (by decide), hsi_eq 48 (by decide) (by decide),
       hsi_eq 56 (by decide) (by decide), hsi_eq 64 (by decide) (by decide),
       hsi_eq 72 (by decide) (by decide), hsi_eq 80 (by decide) (by decide)]
-  refine ⟨S', Nd', hsub, ⟨hAp, hWT', ?_, ?_, ?_, ?_⟩, hQ⟩
+  refine ⟨S', Nd', hsub, ⟨hAp, hWT', ?_, ?_, ?_, ?_⟩, hQ, ?_, ?_⟩
   · rw [heq]
     intro c hcm
     obtain ⟨hal, horc, hword⟩ := hcells c hcm
@@ -288,6 +317,10 @@ theorem worldStep_preserves_inputAtR32With
           (by have := hin_r.2; omega) ⟨by omega, by omega⟩
       rw [hce]
       exact hReq.2 idx hidx
+  · rw [hsi_eq 16 (by decide) (by decide)]
+    exact hnvh
+  · rw [hsi0, hpl_eq 56 (by decide) (by decide)]
+    exact hnwd
 
 /-! ## 3. The R32 attempt chain (`run_attempt` → … → `verify_stateless_new_payload`) -/
 
@@ -481,7 +514,9 @@ theorem hdhi_hoare_r32 : ∀ (handler : ProgHOL 64),
         (ofString "decode_host_input") [])
       (fun r t => r = none →
         ∃ w_si : BitVec 64, t.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
-          InputAtR32 t w_si.toNat) := by
+          InputAtR32 t w_si.toNat ∧
+          memW t (w_si.toNat + 16) < 2 ^ 32 ∧
+          memW t (memW t w_si.toNat + 56) < 2 ^ 32) := by
   intro handler hh_ne
   exact R16Shards.Hoare.callHandleDest_fall
       (R16Shards.TopGbodyWk.wk_decode_host_input_strong_sound)
@@ -495,7 +530,7 @@ theorem hdhi_hoare_r32 : ∀ (handler : ProgHOL 64),
           change i ∈ [bufferRegion (callEntryStateHOLFinite s callee) ("ssz_offs", 64)] at hi
           simp only [List.mem_singleton] at hi; subst hi
           exact bufferRegion_disj_le hWT_entry ("ssz_offs", 64) (by decide) (by decide) 64 le_rfl j hj)
-        obtain ⟨w_si, rfl, hcells, hdisj_ow, hntx63, hPay, hReq⟩ := hQ v rfl
+        obtain ⟨w_si, rfl, hcells, hdisj_ow, hntx63, hPay, hReq, hnvh, hnwd⟩ := hQ v rfl
         have hAp := hws.1
         have hIA_post : InputAtR32With post S' Nd' w_si.toNat :=
           ⟨hAp, hWT',
@@ -508,7 +543,8 @@ theorem hdhi_hoare_r32 : ∀ (handler : ProgHOL 64),
         set resSt := setVarHOLFinite (ofString "si") (.val (.word w_si)) { post with locals := s.locals }
         exact ⟨w_si,
           by simp [resSt, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE],
-          ⟨S', Nd', (inputAtR32With_with_locals post _ post.clock S' Nd' w_si.toNat).2 hIA_post⟩⟩)
+          ⟨S', Nd', (inputAtR32With_with_locals post _ post.clock S' Nd' w_si.toNat).2 hIA_post⟩,
+          hnvh, hnwd⟩)
 
 /-- The R32 `alloc` resume: from the `si`-local guard with `InputAtR32`,
 `alloc 32` into `root` establishes `InputReadyWithRootR32`. -/
@@ -520,10 +556,12 @@ theorem resumeOn_alloc32_inputReadyR32
     (rtal : Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n")) (ofString "alloc")) :
     DecCallResumeOn
       (fun s => ∃ w_si : BitVec 64, s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
-        InputAtR32 s w_si.toNat)
+        InputAtR32 s w_si.toNat ∧
+        memW s (w_si.toNat + 16) < 2 ^ 32 ∧
+        memW s (memW s w_si.toNat + 56) < 2 ^ 32)
       InputReadyWithRootR32
       (ofString "root") (ofString "alloc") [.const 32#64] := by
-  intro F state values body callee ret value post hcode ⟨w_si, hlu_si, hIA0⟩ hargs hl hrun
+  intro F state values body callee ret value post hcode ⟨w_si, hlu_si, hIA0, hnvh0, hnwd0⟩ hargs hl hrun
   obtain ⟨S, Nd, hIA⟩ := hIA0
   have hAs := hIA.1
   have hW_state : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.2.1⟩⟩
@@ -543,9 +581,10 @@ theorem resumeOn_alloc32_inputReadyR32
   have hfb_in : Inside (w_rt.toNat, 32) (globN state "heap_ptr") (globN post "heap_ptr") := hfb.2.1
   have hIA_entry : InputAtR32With (callEntryStateHOLFinite state callee) S Nd w_si.toNat :=
     (inputAtR32With_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
-  obtain ⟨S', Nd', _, hIA_post, hQ⟩ :=
+  obtain ⟨S', Nd', _, hIA_post, hQ, _, _⟩ :=
     worldStep_preserves_inputAtR32With hIA_entry hws
       (fun _ hj => by simp at hj) (fun _ hj => by simp at hj) (fun _ _ _ hj => by simp at hj)
+      hnvh0 hnwd0
   obtain ⟨w_rt', hw_eq, hav⟩ := hQ (.val (.word w_rt)) rfl
   injection hw_eq with hw_eq'; injection hw_eq' with hw_eq''; subst hw_eq''
   dsimp only at hav; rw [hn_loc] at hav
@@ -621,12 +660,21 @@ theorem resumeOn_alloc32_inputReadyR32
     rcases (hIA.2.2.1 c hc).2.1 with ⟨_, h0''⟩ | hinc
     · exact Or.inl h0''
     · exact Or.inr (Or.inr (Or.inl (Nat.le_trans hinc.2 hfb_in.1)))
+  have hmemR : ∀ a, memW resumed a = memW post a := fun _ => rfl
+  have hnw_res : memW resumed (memW resumed w_si.toNat + 56) < 2 ^ 32 := by
+    have h0 : memW resumed w_si.toNat = memW state w_si.toNat := by
+      rw [hmemR _]; exact hsi0_eq
+    rw [h0, hmemR _]
+    rw [hpl_eq 56 (by decide) (by decide)]
+    exact hnwd0
   refine ⟨w_si, w_rt, S', Nd',
     (inputAtR32With_with_locals post _ post.clock S' Nd' w_si.toNat).2 hIA_post,
     by have hne : ofString "root" ≠ ofString "si" := by decide
        simp [resumed, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne, hlu_si],
     by simp [resumed, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE],
-    hfb.1, ⟨Nat.le_trans hAs.2.1 hfb_in.1, hfb_in.2⟩, hav, hic_disj_rt⟩
+    hfb.1, ⟨Nat.le_trans hAs.2.1 hfb_in.1, hfb_in.2⟩, hav, hic_disj_rt,
+    by rw [hmemR _]; rw [hsi_eq 16 (by decide) (by decide)]; exact hnvh0,
+    hnw_res⟩
 
 /-- The R32 `htr_new_payload_request` Hoare: from `InputReadyWithRootR32`
 before the call, the fall-through result state satisfies `InputReadyR32`. -/
@@ -647,7 +695,7 @@ theorem hoare_htr_inputReadyR32
         [.var .local (ofString "si"), .var .local (ofString "root")]) with ⟨cres, cpost⟩
   have hr' : cres = none := by rw [hcall] at hr; exact hr
   subst hr'
-  obtain ⟨w_si, w_rt, S, Nd, hIA, hlu_si, hlu_rt, hrt8, _, hdisj_rt, hdisj_ic_rt⟩ := hIR
+  obtain ⟨w_si, w_rt, S, Nd, hIA, hlu_si, hlu_rt, hrt8, _, hdisj_rt, hdisj_ic_rt, hnvh_st, hnwd_st⟩ := hIR
   rw [evaluateHOLFiniteState_call] at hcall
   have hargs : evalListHOLFinite state (h := fun a => Classical.propDecidable (state.memaddrs a))
       [.var .local (ofString "si"), .var .local (ofString "root")] =
@@ -684,10 +732,13 @@ theorem hoare_htr_inputReadyR32
               simp [locN, callEntryStateHOLFinite, hpc.2.2]
             have hIA_entry : InputAtR32With (callEntryStateHOLFinite state callee) S Nd w_si.toNat :=
               (inputAtR32With_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+            have hmemE : ∀ a, memW (callEntryStateHOLFinite state callee) a = memW state a := fun _ => rfl
             have hReady_entry : HtrNewPayloadReadyR32 (callEntryStateHOLFinite state callee) := by
-              refine ⟨?_, ?_⟩
+              refine ⟨?_, ?_, ?_, ?_⟩
               · rw [hsi_loc]; exact ⟨S, Nd, hIA_entry⟩
               · rw [hsi_loc, hout_loc]; exact hdisj_ic_rt
+              · rw [hsi_loc, hmemE _]; exact hnvh_st
+              · rw [hsi_loc]; simp only [hmemE]; exact hnwd_st
             have hstep := FunSpec.at_lookup whtrR32 state hcode _ body callee ret hl
               hReady_entry (by rw [hb]; simp)
             rw [hb] at hstep; dsimp only at hstep
@@ -716,14 +767,15 @@ theorem hoare_htr_inputReadyR32
               rcases hj with rfl | rfl
               · exact hdisj_ic_rt i hi (w_rt.toNat, 32) (by simp)
               · exact runAttemptCells_disj_bufferRegion_le hIA_entry.2.2.2.1 ("ssz_len_chunk", 32) (by decide) 32 le_rfl i hi
-            obtain ⟨S', Nd', _, hIA_post, hQ⟩ :=
-              worldStep_preserves_inputAtR32With hIA_entry hws hhz hht hhi
+            obtain ⟨S', Nd', _, hIA_post, hQ, hnvh_post, hnwd_post⟩ :=
+              worldStep_preserves_inputAtR32With hIA_entry hws hhz hht hhi hnvh_st hnwd_st
             have hIR_res : InputReadyR32 { post with locals := state.locals } := by
-              show InputAtR32 { post with locals := state.locals } (locN { post with locals := state.locals } "si")
               have hloc_si : locN { post with locals := state.locals } "si" = w_si.toNat := by
                 simp [locN, hlu_si]
+              show InputAtR32 _ _ ∧ _ ∧ _
               rw [hloc_si]
-              exact ⟨S', Nd', (inputAtR32With_with_locals post state.locals post.clock S' Nd' w_si.toNat).2 hIA_post⟩
+              exact ⟨⟨S', Nd', (inputAtR32With_with_locals post state.locals post.clock S' Nd' w_si.toNat).2 hIA_post⟩,
+                hnvh_post, hnwd_post⟩
             rwa [hpost_eq] at hIR_res
           · simp at hcall
         | _ => simp [emptyLocalsHOLFinite] at hcall
@@ -956,9 +1008,11 @@ theorem mainEntryR32 (hChain : ChainHandlersR32Stmt) (hWkPtx : WkProcessTransact
                     (fun u => seq3_return_ne_none u _ _ _ _)))
                   (TerminatingProgBoundedOn.decCall_on hal _ _ _
                     (callEntryOn_of_imp (P := fun s => ∃ w_si : BitVec 64,
-                        s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧ InputAtR32 s w_si.toNat)
+                        s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧ InputAtR32 s w_si.toNat ∧
+                        memW s (w_si.toNat + 16) < 2 ^ 32 ∧
+                        memW s (memW s w_si.toNat + 56) < 2 ^ 32)
                       localsFree_guestInv
-                      (fun _ ⟨_, _, ⟨S', Nd', hIA⟩⟩ => hIA.1.1) _ _)
+                      (fun _ ⟨_, _, ⟨S', Nd', hIA⟩, _, _⟩ => hIA.1.1) _ _)
                     (resumeOn_alloc32_inputReadyR32 wal rtal)
                     (TerminatingProgBoundedOn.seq_hoare_trans
                       (TerminatingProgBoundedOn.call_on hhtr _ _

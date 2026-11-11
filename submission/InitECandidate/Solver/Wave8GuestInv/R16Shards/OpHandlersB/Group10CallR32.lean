@@ -210,7 +210,7 @@ theorem op_staticcall_specA_r32
     (hW : WorldAccountSpecsA)
     (hRun : Group10CallR32Continuations) :
     OpHandlerSpecA (ofString "op_staticcall") := by
-  refine opHandlerSpecA_of_run_seed_g10 606 (by rw [guestAst_len]; decide)
+  refine opHandlerSpecA_of_run 606 (by rw [guestAst_len]; decide)
     Guest.Software.guestFn_op_staticcall rfl ?_
   intro F s0 hInv0 hWF0 hnd0
   exact hRun.op_staticcall s0

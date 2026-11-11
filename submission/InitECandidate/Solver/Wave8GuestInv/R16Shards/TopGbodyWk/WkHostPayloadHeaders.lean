@@ -6917,7 +6917,8 @@ private theorem worldEff_htr_new_payload_request {F : Type}
     (hAs0 : ArenaOK s0) (heff_cur : WorldEff s0 cur Rl sszBufs hpGw)
     {siw outw : BitVec 64}
     (hsi_lk : cur.locals.lookup (ofString "si") = some (.val (.word siw)))
-    (hcells_in : ∀ iv ∈ inputCells s0 siw.toNat, Inside iv sourceBase (globN s0 "heap_ptr"))
+    (hcells_in : ∀ iv ∈ inputCells s0 siw.toNat,
+      ((iv.1 = 0 ∧ iv.2 = 0) ∨ Inside iv sourceBase (globN s0 "heap_ptr")))
     (hcells_disj_R : ∀ iv ∈ inputCells s0 siw.toNat, ∀ j ∈ Rl, Disj iv j)
     (hcells_disj_B : ∀ iv ∈ inputCells s0 siw.toNat, ∀ gs ∈ sszBufs, Disj iv (bufferRegion s0 gs))
     (hpl_at : PayloadAt s0 (memW s0 siw.toNat))
@@ -6931,12 +6932,18 @@ private theorem worldEff_htr_new_payload_request {F : Type}
     WorldEff s0 (evaluateHOLFiniteState cur (sourceFnBody Guest.Software.guestFn_htr_new_payload_request)).2 Rl sszBufs hpGw := by
   have hhl_lt : heapLimit < 2 ^ 64 := by decide
   have hhp0_le : globN s0 "heap_ptr" ≤ heapLimit := hAs0.2.1
-  have hsi_in : Inside (siw.toNat, 40) sourceBase (globN s0 "heap_ptr") :=
-    hcells_in _ (by simp [inputCells])
-  have hpl_in : Inside (memW s0 siw.toNat, 136) sourceBase (globN s0 "heap_ptr") :=
-    hcells_in _ (by simp [inputCells])
-  have hrq_in : Inside (memW s0 (siw.toNat + 32), 80) sourceBase (globN s0 "heap_ptr") :=
-    hcells_in _ (by simp [inputCells])
+  have hsi_in : Inside (siw.toNat, 40) sourceBase (globN s0 "heap_ptr") := by
+    rcases hcells_in (siw.toNat, 40) (by simp [inputCells]) with h | h
+    · exact absurd h.2 (by simp)
+    · exact h
+  have hpl_in : Inside (memW s0 siw.toNat, 136) sourceBase (globN s0 "heap_ptr") := by
+    rcases hcells_in (memW s0 siw.toNat, 136) (by simp [inputCells]) with h | h
+    · exact absurd h.2 (by simp)
+    · exact h
+  have hrq_in : Inside (memW s0 (siw.toNat + 32), 80) sourceBase (globN s0 "heap_ptr") := by
+    rcases hcells_in (memW s0 (siw.toNat + 32), 80) (by simp [inputCells]) with h | h
+    · exact absurd h.2 (by simp)
+    · exact h
   have hsi_disj_R : ∀ j ∈ Rl, Disj (siw.toNat, 40) j := hcells_disj_R _ (by simp [inputCells])
   have hsi_disj_B : ∀ gs ∈ sszBufs, Disj (siw.toNat, 40) (bufferRegion s0 gs) :=
     hcells_disj_B _ (by simp [inputCells])
@@ -7086,6 +7093,65 @@ theorem «wk_htr_new_payload_request_strong» :
       NoExtra (ofString "htr_new_payload_request") := by
   refine ⟨_, _, _, lookup_htr_new_payload_request, fun {F} s hc hReady ⟨vals, hl⟩ hnt hres => ?_⟩
   obtain ⟨⟨hAr, S, Nd, hWT, hcells, hdisj_ow, _, hPay, hReq⟩, hdisj_out, hnvh_lt, hnwd_lt⟩ := hReady
+  have hWOK : WorldOK s := ⟨hAr, S, (worldTyped_iff_with s S).2 ⟨Nd, hWT⟩⟩
+  obtain ⟨siw, outw, rfl, hsi_lk, hout_lk⟩ := lookupCode_two_words (by decide) lookup_htr_new_payload_request hl
+  have hsi_loc : locN s "si" = siw.toNat := by simp [locN, hsi_lk]
+  have hout_loc : locN s "out" = outw.toNat := by simp [locN, hout_lk]
+  rw [hsi_loc] at hcells hdisj_ow hdisj_out hPay hReq hnvh_lt hnwd_lt
+  rw [hout_loc] at hdisj_out
+  let Rfn : ∀ {F' : Type}, PanSemStateFiniteExact 64 F' → List Ivl :=
+    fun t => [(locN t "out", 32),
+              (globN t "ssz_len_chunk", if globN t "ssz_len_chunk" = 0 then 0 else 32)]
+  have heff0 : WorldEff s s (Rfn s) sszBufs hpGw := WorldEff.refl s (Rfn s) sszBufs hpGw hAr hc
+  have hcells_disj_B : ∀ iv ∈ inputCells s siw.toNat, ∀ gs ∈ sszBufs, Disj iv (bufferRegion s gs) := by
+    intro iv hiv gs hgs
+    simp only [sszBufs, List.mem_singleton] at hgs
+    subst hgs
+    have hmem_wo : bufferRegion s ("ssz_len_chunk", 32) ∈ worldOwned s S Nd := by
+      unfold worldOwned fixedObjects
+      apply List.mem_append.2; left; apply List.mem_append.2; right
+      apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; left
+      exact List.mem_map.2 ⟨("ssz_len_chunk", 32), by decide, rfl⟩
+    exact hdisj_ow iv hiv _ hmem_wo
+  have hcells_disj_R : ∀ iv ∈ inputCells s siw.toNat, ∀ j ∈ Rfn s, Disj iv j := by
+    intro iv hiv j hj
+    simp only [Rfn, hout_loc, List.mem_cons, List.not_mem_nil, or_false] at hj
+    rcases hj with rfl | rfl
+    · exact hdisj_out iv hiv (outw.toNat, 32) (by simp)
+    · exact hcells_disj_B iv hiv ("ssz_len_chunk", 32) (by simp [sszBufs])
+  have hout_cov : OutIvlCovered s (Rfn s) outw :=
+    Or.inl ⟨(outw.toNat, 32), by simp [Rfn, hout_loc], le_rfl, le_rfl⟩
+  have heff_post : WorldEff s (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htr_new_payload_request)).2
+      (Rfn s) sszBufs hpGw :=
+    worldEff_htr_new_payload_request s s hAr.2 heff0 hsi_lk
+      (fun iv hiv => Or.inr ((hcells iv hiv).1)) hcells_disj_R hcells_disj_B
+      hPay hReq hnvh_lt hnwd_lt hout_lk hout_cov hnt hres
+  exact heff_post.to_worldStep_Q hWOK ssz_B_ok hp_core_out (fun _ _ _ _ _ _ _ _ => trivial)
+
+/-- `htr_new_payload_request` keeps the world for any guard `P` implying the strong
+`HtrNewPayloadReady` facts with each input cell's `Inside` weakened to "empty null cell or
+inside the heap window". The R32 lane uses this: decoded input lists may legitimately be
+empty, in which case their cells are `(0, 0)` and sit outside the heap window. -/
+theorem «wk_htr_new_payload_request_guarded» {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s →
+      ArenaReady s ∧ ∃ S Nd : List Nat, WorldTypedWith s S Nd ∧
+        (∀ i ∈ inputCells s (locN s "si"),
+          ((i.1 = 0 ∧ i.2 = 0) ∨ Inside i sourceBase (globN s "heap_ptr")) ∧ WordsOK s i) ∧
+        IvlsDisj (inputCells s (locN s "si")) (worldOwned s S Nd) ∧
+        IvlsDisj (inputCells s (locN s "si")) [(locN s "out", 32)] ∧
+        memW s (locN s "si" + 16) < 2 ^ 32 ∧
+        memW s (memW s (locN s "si") + 56) < 2 ^ 32 ∧
+        PayloadAt s (memW s (locN s "si")) ∧
+        RequestsAt s (memW s (locN s "si" + 32))) :
+    WorldKeeps P
+      (fun s => [(locN s "out", 32),
+                 (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "htr_new_payload_request") := by
+  refine ⟨_, _, _, lookup_htr_new_payload_request, fun {F} s hc hReady ⟨vals, hl⟩ hnt hres => ?_⟩
+  obtain ⟨hAr, S, Nd, hWT, hcells, hdisj_ow, hdisj_out, hnvh_lt, hnwd_lt, hPay, hReq⟩ := hP s hReady
   have hWOK : WorldOK s := ⟨hAr, S, (worldTyped_iff_with s S).2 ⟨Nd, hWT⟩⟩
   obtain ⟨siw, outw, rfl, hsi_lk, hout_lk⟩ := lookupCode_two_words (by decide) lookup_htr_new_payload_request hl
   have hsi_loc : locN s "si" = siw.toNat := by simp [locN, hsi_lk]
