@@ -84,7 +84,7 @@ private theorem lookupCode_four_words {fname p1 p2 p3 p4 : MlS} {body : ProgHOL 
 
 /-! ## Section 2: `LogsListOK` preservation across `HeapByteEff` into `keccak_pad`/`keccak_st` -/
 
-private def receiptKeccakIvls {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
+def receiptKeccakIvls {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
   [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
    (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)]
 
@@ -3631,13 +3631,33 @@ private theorem eval_call_local_encode_logs {F : Type}
 
 /-! ## Section 6: `wk_encode_receipt` -/
 
-/-- `encode_receipt` (AST line 32051): relational world step with output region and extra `RetReceiptBounded`. -/
-theorem «wk_encode_receipt» :
-    WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs") ∧ LogsDisjFixed s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
-    ["heap_ptr"]
-    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    RetReceiptBounded (ofString "encode_receipt") := by
-  refine ⟨_, _, _, lookup_encode_receipt, fun {F} s hcode ⟨hW, hLL, hDF⟩ hparams hnt hres => ?_⟩
+/-- Factored form of the `«wk_encode_receipt»` closure: the `HeapByteEff`
+output-region bound and the returned-two-words shape for `encode_receipt`,
+at an arbitrary call-entry state.  Consumed by
+`TopGbodyWk.WkPtxPhase4D.p4Run_decCall_encode_receipt`. -/
+theorem encode_receipt_main {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode)
+    (hW : WorldOK s) (hLL : LogsListOK s (locN s "logs"))
+    (hDF : LogsDisjFixed s (locN s "logs"))
+    (hparams : ∃ values, PanSemStateFiniteExact.lookupCodeHOLFinite
+        originalRuntimeCode.lookup (ofString "encode_receipt") values =
+      some (sourceFnBody Guest.Software.guestFn_encode_receipt, s.locals,
+        .comb [.one, .one]))
+    (hnt : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).1 ≠
+      some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).1) :
+          HeapByteEff s (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).2
+            (receiptKeccakIvls s) ["heap_ptr"] ∧
+          (∀ v, (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).1 =
+              some (.returned v) →
+            ∃ a b : BitVec 64,
+              v = .rStruct [.val (.word a), .val (.word b)] ∧
+              Inside (a.toNat, b.toNat) sourceBase
+                (globN (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).2 "heap_ptr") ∧
+              a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧
+              memW (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).2 (locN s "logs" + 8) < 2 ^ 28 ∧
+              LogsListOK (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).2 (locN s "logs"))
+      := by
   have hAR : ArenaReady s := hW.1
   have hA0 : ArenaOK s := hAR.2
   have hma0 : s.memaddrs = ordinaryDomain := hAR.1.memaddrs
@@ -3653,29 +3673,6 @@ theorem «wk_encode_receipt» :
   have hlogs_locN : locN s "logs" = logs0.toNat := by simp [locN, hlogs]
   rw [hlogs_locN] at hLL hDF
   let R0 : List Ivl := receiptKeccakIvls s
-  suffices hmain :
-      HeapByteEff s (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).2
-        R0 ["heap_ptr"] ∧
-      (∀ v, (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).1 =
-          some (.returned v) →
-        ∃ a b : BitVec 64,
-          v = .rStruct [.val (.word a), .val (.word b)] ∧
-          Inside (a.toNat, b.toNat) sourceBase
-            (globN (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).2 "heap_ptr") ∧
-          a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧
-          memW (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).2 (locN s "logs" + 8) < 2 ^ 28 ∧
-          LogsListOK (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).2 (locN s "logs")) by
-    have heff_ws : HeapByteEff s
-        (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).2
-        (receiptKeccakIvls s ++ ([] : List (String × Nat)).map (bufferRegion s)) ["heap_ptr"] := by
-      simpa using hmain.1
-    exact HeapByteEff.to_worldStep
-      (R := fun t => [(globN t "keccak_pad", if globN t "keccak_pad" = 0 then 0 else 136),
-                      (globN t "keccak_st", if globN t "keccak_st" = 0 then 0 else 200)])
-      (B := [])
-      (by intro _ h; cases h)
-      (by intro g hg; simp at hg; exact Or.inl hg)
-      hW heff_ws (fun _ _ _ _ _ v hv => hmain.2 v hv)
   -- Unfold `guestFn_encode_receipt`
   have hb_er : sourceFnBody Guest.Software.guestFn_encode_receipt =
       .decCall (ofString "bound") .one (ofString "logs_encoded_bound") [ExpHOL.var VarKind.local (ofString "logs")]
@@ -4684,4 +4681,24 @@ theorem «wk_encode_receipt» :
               refine ⟨bufw, w1, rfl, ?_, by omega, by omega⟩
               exact ⟨hbuf_lo, by change bufw.toNat + w1.toNat ≤ globN d15 "heap_ptr"; unfold globN at hd14_hp_ge ⊢; rw [hd15_g]; omega⟩
 
+
+/-- `encode_receipt` (AST line 32051): relational world step with output region and extra `RetReceiptBounded`. -/
+theorem «wk_encode_receipt» :
+    WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs") ∧ LogsDisjFixed s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    RetReceiptBounded (ofString "encode_receipt") := by
+  refine ⟨_, _, _, lookup_encode_receipt, fun {F} s hcode ⟨hW, hLL, hDF⟩ hparams hnt hres => ?_⟩
+  have hmain := encode_receipt_main s hcode hW hLL hDF hparams hnt hres
+  have heff_ws : HeapByteEff s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_encode_receipt)).2
+      (receiptKeccakIvls s ++ ([] : List (String × Nat)).map (bufferRegion s)) ["heap_ptr"] := by
+    simpa using hmain.1
+  exact HeapByteEff.to_worldStep
+    (R := fun t => [(globN t "keccak_pad", if globN t "keccak_pad" = 0 then 0 else 136),
+                    (globN t "keccak_st", if globN t "keccak_st" = 0 then 0 else 200)])
+    (B := [])
+    (by intro _ h; cases h)
+    (by intro g hg; simp at hg; exact Or.inl hg)
+    hW heff_ws (fun _ _ _ _ _ v hv => hmain.2 v hv)
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc
