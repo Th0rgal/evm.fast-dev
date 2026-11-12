@@ -46,7 +46,11 @@ def RetInputStrongSound : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option
       WordsOK post i) ∧
     IvlsDisj (runAttemptCells post w.toNat) (worldOwned post S' Nd') ∧
     memW post (memW post w.toNat + 40) < 2 ^ 63 ∧
-    PayloadAt post (memW post w.toNat) ∧ RequestsAt post (memW post (w.toNat + 32))
+    PayloadAt post (memW post w.toNat) ∧ RequestsAt post (memW post (w.toNat + 32)) ∧
+    memW post (w.toNat + 16) < 2 ^ 32 ∧ memW post (memW post w.toNat + 56) < 2 ^ 32
+  -- (R32 amendment) the two u32 bounds (`nvh` at `si + 16`, `nwd` at `pl + 56`)
+  -- required by `MainEntryR32.hdhi_hoare_r32`. Strengthens the postcondition;
+  -- both are proved in `decode_stateless_input_body_returns` below.
 
 /-! ### `decode_stateless_input` Return Postcondition -/
 
@@ -93,7 +97,9 @@ theorem decode_stateless_input_body_returns {F : Type}
       WordsOK post (w_si.toNat, 40) ∧
       memW post (memW post w_si.toNat + 40) < 2 ^ 63 ∧
       PayloadAt post (memW post w_si.toNat) ∧
-      RequestsAt post (memW post (w_si.toNat + 32)) := by
+      RequestsAt post (memW post (w_si.toNat + 32)) ∧
+      memW post (w_si.toNat + 16) < 2 ^ 32 ∧
+      memW post (memW post w_si.toNat + 56) < 2 ^ 32 := by
   have hhl : heapLimit < 2 ^ 64 := by decide
   have hnt : (evaluateHOLFiniteState entry (sourceFnBody Guest.Software.guestFn_decode_stateless_input)).1 ≠ some .timeOut := by
     rw [hrun]; simp
@@ -413,7 +419,7 @@ theorem decode_stateless_input_body_returns {F : Type}
   obtain ⟨wp_pl, wlen_pl, _, hfc_pl_p, hfc_pl_len⟩ :=
     lookupCode_two_words_any_dhi (by decide) lookup_decode_payload hl_pl
   obtain ⟨heff_cp_pl, heff_step_pl, w_pl, rfl, hpl_al, hpl_sb, hpl_lo_m22, hpl_hi_cp, hcp_pl_lim,
-    hwok_pl_cp, hpl_at_cp, hntx_lt32_cp, htxp_al_cp, hwok_tx_cp, htx_cases_cp⟩ :=
+    hwok_pl_cp, hpl_at_cp, hntx_lt32_cp, htxp_al_cp, hwok_tx_cp, htx_cases_cp, hnwd_lt32_cp⟩ :=
     decode_payload_body_returns hOK_entry (heff22.locals_clock fc_pl (m22.clock - 1)) hfc_pl_p hfc_pl_len hc_pl
   have hpl_lo_si : w_si.toNat + 96 ≤ w_pl.toNat := by
     change globN m22 "heap_ptr" ≤ w_pl.toNat at hpl_lo_m22; omega
@@ -436,7 +442,7 @@ theorem decode_stateless_input_body_returns {F : Type}
       (.op .sub [.var .local (ofString "o_rq"), .var .local (ofString "o_vh")]) =
       some (.val (.word (w_orq - w_ovh))) := by
     simp [evalHOLExact, evalListHOLExact, toExact, hm24_orq, hm24_ovh, wordOpHOL, wordOp, valueIsWord, valueWord]
-  obtain ⟨w_nvh, m25, post_nvh, _, _, _, hm25_mem, hm25_glob, hm25_loc, heff25, hk25, hpost_nvh⟩ :=
+  obtain ⟨w_nvh, m25, post_nvh, _, hmul_nvh, _, hm25_mem, hm25_glob, hm25_loc, heff25, hk25, hpost_nvh⟩ :=
     decCall_ssz_fixed_list_count_returned heff24 (ofString "nvh") _ 32#64 9223372036854775807#64 hsub_vh_ev hk24
   have hm25_hp : globN m25 "heap_ptr" = globN cp_pl "heap_ptr" := by
     unfold globN; rw [hm25_glob, hm24_glob]; rfl
@@ -447,11 +453,16 @@ theorem decode_stateless_input_body_returns {F : Type}
   obtain ⟨m26, _, _, hm26_loc, hm26_glob, heff26, _, hm26_ne, hk26⟩ :=
     seq_store_fresh_returned heff25 (ofString "si") w_si 96 8 hm25_si hsi_lo (by omega) (by omega) _
       (eval_op_word m25 _ ⟨_, _, rfl⟩) hk25
-  obtain ⟨m27, _, _, hm27_loc, hm27_glob, heff27, _, hm27_ne, hk27⟩ :=
+  obtain ⟨m27, vw_nvh, hv_nvh_ev, hm27_loc, hm27_glob, heff27, hm27_si16, hm27_ne, hk27⟩ :=
     seq_store_fresh_returned heff26 (ofString "si") w_si 96 16 (by rw [hm26_loc]; exact hm25_si) hsi_lo
       (by have : globN m26 "heap_ptr" = globN m25 "heap_ptr" := by unfold globN; rw [hm26_glob]
           omega) (by omega) _
       (eval_var_local_word m26 _ w_nvh (by rw [hm26_loc]; exact hm25_nvh)) hk26
+  have hvw_nvh : vw_nvh = w_nvh := by
+    have h26 : m26.locals.lookup (ofString "nvh") = some (.val (.word w_nvh)) := by
+      rw [hm26_loc]; exact hm25_nvh
+    simp [evalHOLExact, toExact, h26] at hv_nvh_ev; exact hv_nvh_ev.symm
+  rw [hvw_nvh] at hm27_si16
   obtain ⟨m28, _, _, hm28_loc, hm28_glob, heff28, _, hm28_ne, hk28⟩ :=
     seq_store_fresh_returned heff27 (ofString "si") w_si 96 24 (by rw [hm27_loc, hm26_loc]; exact hm25_si) hsi_lo
       (by have : globN m27 "heap_ptr" = globN m25 "heap_ptr" := by unfold globN; rw [hm27_glob, hm26_glob]
@@ -788,6 +799,12 @@ theorem decode_stateless_input_body_returns {F : Type}
         hm45_46_keep _ (by omega) (by omega) (by omega), hm45_ne _ (by omega) (by omega), hm44_ne _ (by omega) (by omega),
         hm42_43_keep _ (by omega) (by omega) (by omega), hm42_ne _ (by omega) (by omega), hm41_ne _ (by omega) (by omega),
         hm39_40_keep _ (by omega) (by omega) (by omega), hm30_39_keep _ (by omega) (by omega) (by omega), hm30_si32]
+  have hpost_si16 : memW post (w_si.toNat + 16) = w_nvh.toNat := by
+    rw [hpost_memW, hm48_ne _ (by omega) (by omega), hm47_ne _ (by omega) (by omega),
+        hm45_46_keep _ (by omega) (by omega) (by omega), hm45_ne _ (by omega) (by omega), hm44_ne _ (by omega) (by omega),
+        hm42_43_keep _ (by omega) (by omega) (by omega), hm42_ne _ (by omega) (by omega), hm41_ne _ (by omega) (by omega),
+        hm39_40_keep _ (by omega) (by omega) (by omega), hm30_39_keep _ (by omega) (by omega) (by omega), hm30_ne _ (by omega) (by omega),
+        hm28_29_keep _ (by omega) (by omega) (by omega), hm28_ne _ (by omega) (by omega), hm27_si16]
   have hpost_si0 : memW post w_si.toNat = w_pl.toNat := by
     have hm25_24 : ∀ a, memW m25 a = memW m24 a := fun a => by unfold memW; rw [hm25_mem]
     rw [hpost_memW, hm48_ne _ (by omega) (by omega), hm47_ne _ (by omega) (by omega),
@@ -825,6 +842,14 @@ theorem decode_stateless_input_body_returns {F : Type}
     hkeep_after_pl _ (by omega) (by omega) (by omega)
   have hpl_40_eq : memW post (w_pl.toNat + 40) = memW cp_pl (w_pl.toNat + 40) :=
     hkeep_after_pl _ (by omega) (by omega) (by omega)
+  have hpl_56_eq : memW post (w_pl.toNat + 56) = memW cp_pl (w_pl.toNat + 56) :=
+    hkeep_after_pl _ (by omega) (by omega) (by omega)
+  have hnvh_lt32 : w_nvh.toNat < 2 ^ 32 := by
+    have h32 : (32#64).toNat = 32 := by decide
+    rw [h32] at hmul_nvh
+    have hsub : (w_orq - w_ovh).toNat = w_orq.toNat - w_ovh.toNat :=
+      BitVec.toNat_sub_of_le (BitVec.le_def.mpr hnpr_chain.2.2.1)
+    omega
   have hpl_at_post : PayloadAt post w_pl.toNat := by
     refine ⟨hwok_pl_post, by rw [hpl_24_eq]; exact hpl_at_cp.2.1, by rw [hpl_40_eq]; exact hpl_at_cp.2.2.1, ?_⟩
     intro j hj
@@ -869,7 +894,9 @@ theorem decode_stateless_input_body_returns {F : Type}
   refine ⟨heff_s_post, heff_entry_post, w_si, hrv_eq.symm, ?_, hsi_ins, hpl_ins, hrq_ins, hwok_si40,
     by rw [hpost_si0, hpl_40_eq]; omega,
     by rw [hpost_si0]; exact hpl_at_post,
-    by rw [hpost_si32]; exact hrq_at_post⟩
+    by rw [hpost_si32]; exact hrq_at_post,
+    by rw [hpost_si16]; exact hnvh_lt32,
+    by rw [hpost_si0, hpl_56_eq]; exact hnwd_lt32_cp⟩
   intro c hc
   simp only [runAttemptCells, List.mem_cons, List.mem_nil_iff, or_false] at hc
   rcases hc with rfl | rfl | rfl | rfl | rfl | rfl | rfl
@@ -919,7 +946,9 @@ theorem decode_host_input_body_returns {F : Type}
       WordsOK post (w_si.toNat, 40) ∧
       memW post (memW post w_si.toNat + 40) < 2 ^ 63 ∧
       PayloadAt post (memW post w_si.toNat) ∧
-      RequestsAt post (memW post (w_si.toNat + 32)) := by
+      RequestsAt post (memW post (w_si.toNat + 32)) ∧
+      memW post (w_si.toNat + 16) < 2 ^ 32 ∧
+      memW post (memW post w_si.toNat + 56) < 2 ^ 32 := by
   have hOK := dhiOffsOK_of_worldOK hWOK
   have hnt : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_decode_host_input)).1 ≠ some .timeOut := by
     rw [hrun]; simp
@@ -952,7 +981,8 @@ theorem decode_host_input_body_returns {F : Type}
     tailCall_returned_split heff2.code lookup_decode_stateless_input hk2
   obtain ⟨wp_d, wlen_d, _, hfc_d_p, hfc_d_len⟩ :=
     lookupCode_two_words_any_dhi (by decide) lookup_decode_stateless_input hl_dsi
-  obtain ⟨heff_s_cp, heff_step_dsi, w_si, rfl, hcells_cp, hsi_ins, hpl_ins, hrq_ins, hwok_si40, hntx_lt, hpl_at, hrq_at⟩ :=
+  obtain ⟨heff_s_cp, heff_step_dsi, w_si, rfl, hcells_cp, hsi_ins, hpl_ins, hrq_ins, hwok_si40, hntx_lt, hpl_at, hrq_at,
+    hnvh_cp, hnwd_cp⟩ :=
     decode_stateless_input_body_returns hOK (heff2.locals_clock fc_dsi (m2.clock - 1)) hfc_d_p hfc_d_len hc_dsi
   have hpost_mem : post.memory = cp_dsi.memory := by
     rw [hpost_inp, hpost_dsi]; rfl
@@ -969,7 +999,7 @@ theorem decode_host_input_body_returns {F : Type}
     simp only [WordsOK, hwordAt_eq]
   have hcells_eq : runAttemptCells post w_si.toNat = runAttemptCells cp_dsi w_si.toNat := by
     simp only [runAttemptCells, hpost_memW]
-  refine ⟨heff_s_post, w_si, rfl, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨heff_s_post, w_si, rfl, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro c hc
     rw [hcells_eq] at hc
     obtain ⟨hal, hins, hwok⟩ := hcells_cp c hc
@@ -999,6 +1029,8 @@ theorem decode_host_input_body_returns {F : Type}
              simpa only [hpost_memW] using hpl_at.2.2.2 j hj⟩
   · rw [hpost_memW]
     exact ⟨(hwok_eq _).2 hrq_at.1, fun j hj => by simpa only [hpost_memW] using hrq_at.2 j hj⟩
+  · simpa only [hpost_memW] using hnvh_cp
+  · simpa only [hpost_memW] using hnwd_cp
 
 theorem wk_decode_host_input_sound :
     WorldKeeps WorldOK
@@ -1022,7 +1054,7 @@ theorem wk_decode_host_input_sound :
   have hrun : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_decode_host_input) =
       (some (.returned v), (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_decode_host_input)).2) :=
     Prod.ext hrv rfl
-  obtain ⟨heff_post, w_si, rfl, hcells, hsi_ins, hpl_ins, hrq_ins, hwok_si40, hntx_lt, hpl_at, hrq_at⟩ :=
+  obtain ⟨heff_post, w_si, rfl, hcells, hsi_ins, hpl_ins, hrq_ins, hwok_si40, hntx_lt, hpl_at, hrq_at, hnvh, hnwd⟩ :=
     decode_host_input_body_returns hWOK heff0 hrun
   let post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_decode_host_input)).2
   have hinp_mem : ∀ c ∈ inputCells post w_si.toNat,
@@ -1067,7 +1099,7 @@ theorem wk_decode_host_input_strong_sound :
   have hrun : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_decode_host_input) =
       (some (.returned v), (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_decode_host_input)).2) :=
     Prod.ext hrv rfl
-  obtain ⟨heff_post, w_si, rfl, hcells, _, _, _, _, hntx_lt, hpl_at, hrq_at⟩ :=
+  obtain ⟨heff_post, w_si, rfl, hcells, _, _, _, _, hntx_lt, hpl_at, hrq_at, hnvh, hnwd⟩ :=
     decode_host_input_body_returns hWOK heff0 hrun
   let post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_decode_host_input)).2
   have hdisj : IvlsDisj (runAttemptCells post w_si.toNat) (worldOwned post S Nd) :=
@@ -1076,7 +1108,7 @@ theorem wk_decode_host_input_strong_sound :
         rcases (hcells c hc_in).2.1 with ⟨_, h0⟩ | hins
         · exact Or.inl h0
         · exact Or.inr hins)
-  exact ⟨w_si, rfl, hcells, hdisj, hntx_lt, hpl_at, hrq_at⟩
+  exact ⟨w_si, rfl, hcells, hdisj, hntx_lt, hpl_at, hrq_at, hnvh, hnwd⟩
 
 /-- Conditional bridge to exact `RetInput` whenever the decoded transaction list is non-empty
     (`0 < memW post (memW post w.toNat + 40)`). When `ntx = 0`, `ssz_split_var_list` returns `(0, 0)`
@@ -1110,7 +1142,7 @@ theorem wk_decode_host_input_of_nonempty :
   have hrun : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_decode_host_input) =
       (some (.returned v), (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_decode_host_input)).2) :=
     Prod.ext hrv rfl
-  obtain ⟨heff_post, w_si, rfl, hcells, hsi_ins, hpl_ins, hrq_ins, hwok_si40, hntx_lt, hpl_at, hrq_at⟩ :=
+  obtain ⟨heff_post, w_si, rfl, hcells, hsi_ins, hpl_ins, hrq_ins, hwok_si40, hntx_lt, hpl_at, hrq_at, hnvh, hnwd⟩ :=
     decode_host_input_body_returns hWOK heff0 hrun
   let post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_decode_host_input)).2
   have hpos_tx : 0 < memW post (memW post w_si.toNat + 40) := hne_tx _ w_si hrv rfl

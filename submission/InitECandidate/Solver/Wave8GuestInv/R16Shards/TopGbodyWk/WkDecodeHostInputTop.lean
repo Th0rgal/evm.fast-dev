@@ -737,7 +737,12 @@ theorem decode_payload_body_returns {F : Type}
         sourceBase ≤ memW post (w_pl.toNat + 32) ∧
         globN entry "heap_ptr" ≤ memW post (w_pl.toNat + 32) ∧
         memW post (w_pl.toNat + 32) + 16 * memW post (w_pl.toNat + 40) ≤ globN post "heap_ptr" ∧
-        w_pl.toNat + 136 ≤ memW post (w_pl.toNat + 32))) := by
+        w_pl.toNat + 136 ≤ memW post (w_pl.toNat + 32))) ∧
+      memW post (w_pl.toNat + 56) < 2 ^ 32 := by
+  -- (R32 amendment) the `pl + 56` withdrawal count bound: `pl + 56` stores
+  -- `nwd = ssz_fixed_list_count (o_bal - o_wd, 44, 2^63 - 1)` and the span is
+  -- u32-bounded (`w_owd ≤ w_obl < 2^32`), so the count is `< 2^32`. Required
+  -- by `MainEntryR32.hdhi_hoare_r32` (the `nwd` conjunct of `InputAtR32`).
   have hhl : heapLimit < 2 ^ 64 := by decide
   have hnt : (evaluateHOLFiniteState entry (sourceFnBody Guest.Software.guestFn_decode_payload)).1 ≠ some .timeOut := by
     rw [hrun]; simp
@@ -897,6 +902,9 @@ theorem decode_payload_body_returns {F : Type}
   have howd_le_obl : w_obl.toNat ≤ wlen.toNat := by
     have hb := (hchk_b 3 (by decide)).2
     simpa [hm12_24] using hb
+  have howd_le_bal : w_owd.toNat ≤ w_obl.toNat := by
+    have hm := hchk_m 2 (by decide)
+    simpa [hm12_16, hm12_24] using hm
   obtain ⟨m14, hm14, hk14⟩ := seq_returned_split (ite_call0_noret_dhi m13 _ _ _) hk13
   obtain ⟨hm14_eq, hm14_cond⟩ := ite_ssz_fail_keeps m13 m14 heff13.code _ _ hm14
   have hm13_loc_eq : m13.locals = m8.locals := by rw [hm13_loc, hm12_loc_eq]
@@ -1018,7 +1026,7 @@ theorem decode_payload_body_returns {F : Type}
     have h_owd : m19.locals.lookup (ofString "o_wd") = some (.val (.word w_owd)) := by
       rw [hm19_loc_eq, hm17_rest _ (by decide)]; exact hm8_owd
     simp [evalHOLExact, evalListHOLExact, toExact, h_obl, h_owd, wordOpHOL, wordOp, valueIsWord, valueWord]
-  obtain ⟨w_nwd, m20, post_nwd, _, _, _, hm20_mem, hm20_glob, hm20_loc, heff20, hk20, hpost_nwd⟩ :=
+  obtain ⟨w_nwd, m20, post_nwd, _, hmul_nwd, _, hm20_mem, hm20_glob, hm20_loc, heff20, hk20, hpost_nwd⟩ :=
     decCall_ssz_fixed_list_count_returned heff19 (ofString "nwd") _ 44#64 9223372036854775807#64 hm19_wd_ev hk19
   have hm20_pl : m20.locals.lookup (ofString "pl") = some (.val (.word w_pl)) := by
     rw [hm20_loc]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hm19_loc_eq, hm17_pl,
@@ -1029,9 +1037,13 @@ theorem decode_payload_body_returns {F : Type}
   obtain ⟨s1, _, _, hl1, hg1, hs1, _, hne1, hks1⟩ :=
     seq_store_fresh_returned heff20 (ofString "pl") w_pl 136 48 hm20_pl hpl_lo (by omega) (by omega) _
       (eval_op_word m20 _ ⟨_, _, rfl⟩) hk20
-  obtain ⟨s2, _, _, hl2, hg2, hs2, _, hne2, hks2⟩ :=
+  obtain ⟨s2, vw_nwd, hv_nwd_ev, hl2, hg2, hs2, hs2_pl56, hne2, hks2⟩ :=
     seq_store_fresh_returned hs1 (ofString "pl") w_pl 136 56 (by rw [hl1]; exact hm20_pl) hpl_lo (by omega) (by omega) _
       (eval_var_local_word s1 _ w_nwd (by rw [hl1]; exact hm20_nwd)) hks1
+  have hvw_nwd : vw_nwd = w_nwd := by
+    have h1' : s1.locals.lookup (ofString "nwd") = some (.val (.word w_nwd)) := by rw [hl1]; exact hm20_nwd
+    simp [evalHOLExact, toExact, h1'] at hv_nwd_ev; exact hv_nwd_ev.symm
+  rw [hvw_nwd] at hs2_pl56
   obtain ⟨s3, _, _, hl3, hg3, hs3, _, hne3, hks3⟩ :=
     seq_store_fresh_returned hs2 (ofString "pl") w_pl 136 64 (by rw [hl2, hl1]; exact hm20_pl) hpl_lo (by omega) (by omega) _
       (eval_op_word s2 _ ⟨_, _, rfl⟩) hks2
@@ -1089,6 +1101,12 @@ theorem decode_payload_body_returns {F : Type}
         hm19_ne _ (by omega) (by omega), hm18_pl32]
   have hpost_pl40 : memW post (w_pl.toNat + 40) = w_ntx.toNat := by
     rw [hpost_memW_s11, hs11_keep_m19 _ (by omega) (Or.inl (by omega)), hm19_pl40]
+  have hpost_pl56 : memW post (w_pl.toNat + 56) = w_nwd.toNat := by
+    rw [hpost_memW_s11, hne11 _ (by omega) (by omega), hne10 _ (by omega) (by omega),
+        hne9 _ (by omega) (by omega), hne8 _ (by omega) (by omega), hne7 _ (by omega) (by omega),
+        hne6 _ (by omega) (by omega), hne5 _ (by omega) (by omega), hne4 _ (by omega) (by omega),
+        hne3 _ (by omega) (by omega)]
+    exact hs2_pl56
   have hpost_hp_cp : globN post "heap_ptr" = globN cp_tx "heap_ptr" := by
     unfold globN; rw [hpost_glob]
   have hcp_hp_ge : w_pl.toNat + 136 ≤ globN cp_tx "heap_ptr" := by
@@ -1098,8 +1116,14 @@ theorem decode_payload_body_returns {F : Type}
   have hwok_pl_post : WordsOK post (w_pl.toNat, 136) :=
     wordsOK_preserved_of_worldEff heff_entry_post hpl_al (by omega) hpl_sb (by have := heff_entry_post.arena.2.2.1; omega)
   have hntx_lt32 : w_ntx.toNat < 2 ^ 32 := by omega
+  have hnwd_lt32 : w_nwd.toNat < 2 ^ 32 := by
+    have h44 : (44#64).toNat = 44 := by decide
+    rw [h44] at hmul_nwd
+    have hsub : (w_obl - w_owd).toNat = w_obl.toNat - w_owd.toNat :=
+      BitVec.toNat_sub_of_le (BitVec.le_def.mpr howd_le_bal)
+    omega
   refine ⟨heff_s_post, heff_entry_post, w_pl, hrv_eq.symm, hpl_al, hpl_sb, hpl_lo,
-    by omega, heff_entry_post.arena.2.2.1, hwok_pl_post, ?_, ?_, ?_, ?_, ?_⟩
+    by omega, heff_entry_post.arena.2.2.1, hwok_pl_post, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · -- PayloadAt post w_pl.toNat
     refine ⟨hwok_pl_post, by rw [hpost_pl24]; exact hextra_le_32, by rw [hpost_pl40]; exact hntx_lt32, ?_⟩
     intro i hi
@@ -1127,5 +1151,6 @@ theorem decode_payload_body_returns {F : Type}
     · have h16_lo : w_pl.toNat + 136 ≤ w_txp.toNat := by
         change globN m16 "heap_ptr" ≤ w_txp.toNat at htxp_lo_m16; omega
       exact Or.inr ⟨hc1, htxp_sb, by omega, by omega, h16_lo⟩
+  · rw [hpost_pl56]; exact hnwd_lt32
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
