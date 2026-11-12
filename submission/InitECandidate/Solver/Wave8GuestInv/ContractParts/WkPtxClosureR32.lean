@@ -18,8 +18,8 @@ from it. The following fields are closed outright here:
 
 - `hset`   := `SetStorageR31.eps_set_storage_r31` (unconditional),
 - `hsetA`  := `SetStorageR31.epsA_set_storage_r31` (unconditional),
-- `h4`     := `ptxPhase4_relCut_strong_of p4Run_g6 hG8` (only the `Q`-lane
-  theorem `p4Run_g8` is owed by `WkPtxPhase4Q.lean`),
+- `h4`     := `ptxPhase4_relCut_strong_of p4Run_g6 p4Run_g8` (both lane
+  theorems are proved: `WkPtxPhase4O2.p4Run_g6`, `WkPtxPhase4Q6.p4Run_g8`),
 - `hbacking` / `hfull` := the R31 `gbody_process_transaction_*_strong_r31`
   bounds guard-weakened from `TxReadyBackingStrong` / `TxReadyFullStrong` to
   the R32 conjoined guards `… ∧ WorldOKR32` (a bound on a weaker guard is a
@@ -29,7 +29,7 @@ from it. The following fields are closed outright here:
 
 The remaining fields stay as explicit parameters of
 `wkProcessTransactionStmtR32_of`: `gb_pmc`, `hleg`, `hentBacking`, `hent`,
-`hdw`, `hdb`, `hwk`, `hkeep`, `h2`, `hpm`, `hpcm`, `hG8`. `hdw`/`hdb` are
+`hdw`, `hdb`, `hwk`, `hkeep`, `h2`, `hpm`, `hpcm`. `hdw`/`hdb` are
 stated at the concrete witness-DB instantiation
 `ExtraGuard := fun _ n => NodeDbSlicesBounded · n`, so a single `hdb : HdbBounded`
 serves the relational cut and both terminating bounds; once the R32
@@ -115,8 +115,7 @@ theorem wkProcessTransactionStmtR32_of
     (hpcm : WorldKeepsIn MsgReady R16Shards.TopGbodyWk.pmcTables
       R16Shards.TopGbodyWk.pmcRegions R16Shards.TopGbodyWk.pmcGlobals
       R16Shards.TopGbodyWk.pmcKeep
-      R16Shards.TopGbodyWk.RetFrameResultMarksBo (ofString "process_create_message"))
-    (hG8 : R16Shards.TopGbodyWk.PtxPhase4QStep) :
+      R16Shards.TopGbodyWk.RetFrameResultMarksBo (ofString "process_create_message")) :
     WkProcessTransactionStmtR32 where
   hset := eps_set_storage_r31
   hsetA := epsA_set_storage_r31
@@ -129,7 +128,7 @@ theorem wkProcessTransactionStmtR32_of
   h2 := h2
   hpm := hpm
   hpcm := hpcm
-  h4 := ptxPhase4_relCut_strong_of p4Run_g6_step hG8
+  h4 := ptxPhase4_relCut_strong_of p4Run_g6_step ptxPhase4QStep_proved
   hbacking :=
     (gbody_process_transaction_backing_strong_r31 hdb gb_pmc hleg hentBacking hwk hkeep).mono
       (fun _ h => h.1)
@@ -138,7 +137,8 @@ theorem wkProcessTransactionStmtR32_of
       (fun _ h => h.1)
   hrel :=
     worldKeeps_guard_mono
-      (wkProcessTransactionStrongStmt_of hent hdw hdb hpm hpcm h2 p4Run_g6_step hG8)
+      (wkProcessTransactionStrongStmt_of hent hdw hdb hpm hpcm h2 p4Run_g6_step
+        ptxPhase4QStep_proved)
       (fun _ h => h.1)
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.WkPtxClosureR32

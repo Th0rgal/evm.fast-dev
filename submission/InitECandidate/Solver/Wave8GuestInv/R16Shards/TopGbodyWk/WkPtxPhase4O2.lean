@@ -454,6 +454,42 @@ theorem p4O_encDstEval8 {F : Type} {u : PanSemStateFiniteExact 64 F}
 
 /-! ## I. Instruction 24 (the receipt encoding) and the two slice stores -/
 
+/-- The `bo+32` receipt-slices array field is the entry one. -/
+theorem p4O_bo32_entry {F : Type}
+    {entry s s_pmc : PanSemStateFiniteExact 64 F} {w_out : BitVec 64}
+    (h : P4Data entry s s_pmc w_out) :
+    memW s (globN s "bo" + 32) = memW entry (globN entry "bo" + 32) := by
+  obtain ⟨⟨_, hbo_nz_e, _, _, _⟩, _, _, _, S_e, Nd_e, hWT_e, _⟩ := h.base.ready_entry
+  exact ptx_entry_bo_field_eq hWT_e h.base.globals h.base.records hbo_nz_e (by simp) (by omega)
+
+/-- The second receipt store leaves the stored word in the current receipt
+slice's length cell (stated against the entry `index`). -/
+theorem p4O_rcptCur_of_store {F : Type}
+    {entry s s_pmc : PanSemStateFiniteExact 64 F} {w_out : BitVec 64}
+    (h : P4Data entry s s_pmc w_out)
+    {x b : BitVec 64} {mem' : BitVec 64 → HolWordLab 64}
+    (h' : P4Data entry ({s with memory := mem'} : PanSemStateFiniteExact 64 F) s_pmc w_out)
+    (hx_eq : x.toNat = memW s (globN s "bo" + 32) + 16 * locN s "index" + 8)
+    (hval : mem' x = HolWordLab.word b) (hb : b.toNat < 2 ^ 40) :
+    memW ({s with memory := mem'} : PanSemStateFiniteExact 64 F)
+      (memW ({s with memory := mem'} : PanSemStateFiniteExact 64 F)
+        (globN ({s with memory := mem'} : PanSemStateFiniteExact 64 F) "bo" + 32) +
+        16 * locN entry "index" + 8) < 2 ^ 40 := by
+  have h32 := p4O_bo32_entry h
+  have h32' := p4O_bo32_entry h'
+  have hidx : locN s "index" = locN entry "index" := by simp only [locN, h.idx_local]
+  have haddr : memW ({s with memory := mem'} : PanSemStateFiniteExact 64 F)
+      (globN ({s with memory := mem'} : PanSemStateFiniteExact 64 F) "bo" + 32) +
+      16 * locN entry "index" + 8 = x.toNat := by
+    rw [h32', hx_eq, h32, hidx]
+  rw [haddr]
+  have hcell : memW ({s with memory := mem'} : PanSemStateFiniteExact 64 F) x.toNat =
+      b.toNat := by
+    unfold memW
+    dsimp only
+    rw [BitVec.ofNat_toNat, BitVec.setWidth_eq, hval]
+  omega
+
 /-- Instructions 24-26: `dec rc := encode_receipt(tx[0], succeeded, bo[0x10],
 logs)`, then the two receipt words are stored into the `bo+32` receipt-slices
 array at `16 * index + {0, 8}`.  The logs-list facts (`LogsListOK` is given
@@ -484,6 +520,7 @@ theorem p4Run_g6 {F : Type}
           memW s' (wl'.toNat + 8) = 0 ∧
           WordAt s' (wl'.toNat) ∧ WordAt s' (wl'.toNat + 8) ∧
           wl'.toNat + 32 ≤ globN s' "heap_ptr")) →
+      memW s' (memW s' (globN s' "bo" + 32) + 16 * locN entry "index" + 8) < 2 ^ 40 →
       PtxRelRunStrong entry rest s') :
     PtxRelRunStrong entry
       (.decCall (ofString "rc") (.comb [.one, .one]) (ofString "encode_receipt")
@@ -573,7 +610,7 @@ theorem p4Run_g6 {F : Type}
       htxdom', htxcell', hbod16, hboc16, hz1, hz2, hz3]
   -- the callee
   refine p4Run_decCall_encode_receipt h hc _ txw succw cgasw wl _ harg hLL hDF ?_
-  intro a b mid ha61 hb61 hrc hlok heff hLLm hDm hcm
+  intro a b mid ha61 hb61 hb40 hrc hlok heff hLLm hDm hcm
   -- the logs facts at mid (callee transports)
   have hDFm : LogsDisjFixed mid wl.toNat :=
     p4O_logsDisjFixed_callee hWT0 hE0 hAR0 heff hLL hDF
@@ -624,5 +661,6 @@ theorem p4Run_g6 {F : Type}
       PanSemStateFiniteExact 64 F).locals.lookup (ofString "succeeded") =
       some (.val (.word succw)) := (hlok _ (by decide)).trans hsw
   exact htail _ wl succw hDm2 hcm hllu2 hswu2 hLL2 hDF2 hdisj2
+    (p4O_rcptCur_of_store hDm1 hDm2 hx2_eq hval2 hb40)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

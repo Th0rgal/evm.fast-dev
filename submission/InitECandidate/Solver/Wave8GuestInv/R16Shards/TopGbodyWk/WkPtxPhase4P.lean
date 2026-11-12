@@ -115,6 +115,7 @@ theorem p4Run_g7 {F : Type}
         memW s (wl.toNat + 8) = 0 ∧
         WordAt s wl.toNat ∧ WordAt s (wl.toNat + 8) ∧
         wl.toNat + 32 ≤ globN s "heap_ptr"))
+    (hrc32 : memW s (memW s (globN s "bo" + 32) + 16 * locN entry "index" + 8) < 2 ^ 40)
     (htail : ∀ (s' : PanSemStateFiniteExact 64 F) (nl_w lp_w : BitVec 64),
       P4Data entry s' s_pmc w_out →
       s'.code = originalRuntimeCode →
@@ -127,6 +128,7 @@ theorem p4Run_g7 {F : Type}
           memW s' (w_out.toNat + 16) ≠ 0 ∧
           nl_w.toNat < 2 ^ 28) ∨
         nl_w.toNat = 0) →
+      memW s' (memW s' (globN s' "bo" + 32) + 16 * locN entry "index" + 8) < 2 ^ 40 →
       PtxRelRunStrong entry rest s') :
     PtxRelRunStrong entry
       (.dec (ofString "nl") .one
@@ -336,13 +338,13 @@ theorem p4Run_g7 {F : Type}
       refine p4Run_loop31
         (⟨⟨hD₃, ⟨0x0000000000000000#64, hi₃⟩, ⟨nl_w, hnl₃⟩, ⟨lp_w, hlp₃⟩,
             hile, hnl28, hlenb⟩, txEnv_of_p4Data hD₃, hlogs_nz,
-          ⟨lp_w, nl_w, hlp₃, hnl₃, hlp_pin, hnl_pin⟩⟩) hcode₃ ?_
+          ⟨lp_w, nl_w, hlp₃, hnl₃, hlp_pin, hnl_pin⟩, hrc32⟩) hcode₃ ?_
       intro t' hfull hcond
       obtain ⟨⟨hD', hi_w', hnl_w', hlp_w', hile', hnl28', hlenb'⟩, htxenv', hlogs_nz',
-        ⟨lp_w', nl_w', hlp', hnl', hlp_pin', hnl_pin'⟩⟩ := hfull
+        ⟨lp_w', nl_w', hlp', hnl', hlp_pin', hnl_pin'⟩, hrc32'⟩ := hfull
       have hqlocn : locN t' "nl" = nl_w'.toNat := by simp only [locN, hnl']
       refine htail t' nl_w' lp_w' hD' ?_ hnl' hlp'
-        (Or.inl ⟨hnl_pin', hlp_pin', hD'.logs_ok, ?_, hlogs_nz', ?_⟩)
+        (Or.inl ⟨hnl_pin', hlp_pin', hD'.logs_ok, ?_, hlogs_nz', ?_⟩) hrc32'
       · exact hD'.base.world.1.1.code
       · obtain ⟨⟨_, hbo_nz_e', hbo24_nz_e', hbo32_nz_e', hidx_lt_e'⟩, _, hbo40_nz_e',
           hbo72_nz_e', S_e', Nd_e', hWT_e', _⟩ := hD'.base.ready_entry
@@ -443,7 +445,7 @@ theorem p4Run_g7 {F : Type}
         p4Loop31Body_noTopBreak p4Loop31Body_noTopContinue ?_ ?_ s₃ rfl
       · intro t ht hcond
         subst ht
-        exact htail s₃ _ _ hD₃ hcode₃ hnl₃ hlp₃ (Or.inr hn0)
+        exact htail s₃ _ _ hD₃ hcode₃ hnl₃ hlp₃ (Or.inr hn0) hrc32
       · intro t ht ⟨w, hw1, hw2⟩ ih
         subst ht
         exfalso

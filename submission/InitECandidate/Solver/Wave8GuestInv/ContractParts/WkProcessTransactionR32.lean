@@ -18,7 +18,8 @@ Every field of the R32 bundle is either
   `epsA_set_storage_r31`), and the phase-4 relational strong cut from
   `WkPtxPhase4Wire.ptxPhase4_relCut_strong_of` over the *proved*
   `p4Run_g6` (`WkPtxPhase4O2`, adapted to the `PtxPhase4OStep` statement)
-  plus the still-open stable-logs step `PtxPhase4QStep`;
+  and the *proved* stable-logs step `p4Run_g8` (`WkPtxPhase4Q6`, as
+  `WkPtxPhase4Wire.ptxPhase4QStep_proved`);
 * or obtained from the R31 sibling bundle (`gbody_process_transaction_backing_strong_r31`,
   `gbody_process_transaction_full_strong_r31`,
   `wk_process_transaction_strong_r31`) by pure guard strengthening
@@ -28,11 +29,11 @@ Every field of the R32 bundle is either
   their entry guard.
 
 The remaining premises (witness-DB closures, entry lifts, PMC contracts,
-phase-2 cut, legacy Phase 1/2 cutover fields, message Bo-marks contracts,
-and the phase-4 stable-logs step `hG8`) stay explicit hypothesis parameters
-of `wkProcessTransactionStmtR32`, exactly mirroring the R31 parameter
-convention (`R31.PrimitivesProvedR31.primitivesR31`), minus the two
-obligations closed above. -/
+phase-2 cut, legacy Phase 1/2 cutover fields, message Bo-marks contracts)
+stay explicit hypothesis parameters of `wkProcessTransactionStmtR32`,
+exactly mirroring the R31 parameter convention
+(`R31.PrimitivesProvedR31.primitivesR31`), minus the obligations closed
+above (the two `set_storage` premises and both phase-4 lane steps). -/
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -108,8 +109,8 @@ theorem ptxPhase4OStep_of_p4Run_g6 : R16Shards.TopGbodyWk.PtxPhase4OStep :=
 (`StrongBridgesR31.WkProcessTransactionStmt`) with the `set_storage`
 world-account premises and the phase-4 relational cut discharged from proved
 modules, lifted to the R32-threaded guards
-(`… ∧ WorldOKR32`). The phase-4 stable-logs step (`hG8`) and the R31 sibling
-bundle's remaining premises stay explicit. -/
+(`… ∧ WorldOKR32`). The R31 sibling bundle's remaining premises stay
+explicit. -/
 theorem wkProcessTransactionStmtR32
     (hdb : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
       WorldOK s → globN s "ws" ≠ 0 →
@@ -136,12 +137,12 @@ theorem wkProcessTransactionStmtR32
     (hpcm : WorldKeepsIn MsgReady R16Shards.TopGbodyWk.pmcTables
       R16Shards.TopGbodyWk.pmcRegions R16Shards.TopGbodyWk.pmcGlobals
       R16Shards.TopGbodyWk.pmcKeep
-      R16Shards.TopGbodyWk.RetFrameResultMarksBo (ofString "process_create_message"))
-    (hG8 : R16Shards.TopGbodyWk.PtxPhase4QStep) :
+      R16Shards.TopGbodyWk.RetFrameResultMarksBo (ofString "process_create_message")) :
     WkProcessTransactionStmtR32 := by
   have h4 : R16Shards.TopGbodyWk.PtxRelCutStrong R13Shards.ptxPhase4
       R16Shards.TopGbodyWk.PtxAfterPhase3 R16Shards.TopGbodyWk.PtxAfterPhase4 :=
-    R16Shards.TopGbodyWk.ptxPhase4_relCut_strong_of ptxPhase4OStep_of_p4Run_g6 hG8
+    R16Shards.TopGbodyWk.ptxPhase4_relCut_strong_of ptxPhase4OStep_of_p4Run_g6
+      R16Shards.TopGbodyWk.ptxPhase4QStep_proved
   have hrec : StrongBridgesR31.WkProcessTransactionStmt :=
     { hdb := hdb, hdbI := hdbI, hsys := hsys,
       hset := eps_set_storage_r31,

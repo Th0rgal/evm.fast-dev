@@ -36,7 +36,9 @@ This file continues `WkPtxPhase4Q4`.  It composes the `lst_new` allocation
 (`p4Q8_tailSetup`, instructions 34-36) and the copy loop (`p4Q8_loop38`,
 loop 38): the loop invariant `P4Q8Loop` is established at the post-setup
 state with index `0`, and the loop's exit obligation is handed to the
-caller's tail continuation.
+caller's tail continuation.  The bound on the current receipt slice's
+length cell (`hrc32`, established by instruction 27) is carried across the
+allocation and the count store into the invariant.
 
 The source logs list (the out-record's list at `w_out + 16`) was allocated
 before the fresh `stable_logs` blocks, so each of its regions is a geo
@@ -135,6 +137,7 @@ theorem p4Q8_loopEntry {F : Type}
     (hLL : LogsListOK s (memW s (w_out.toNat + 16)))
     (hDF : LogsDisjFixed s (memW s (w_out.toNat + 16)))
     (hnl28 : nl_w.toNat < 2 ^ 28)
+    (hrc32 : memW s (memW s (globN s "bo" + 32) + 16 * locN entry "index" + 8) < 2 ^ 40)
     (htail : ∀ (lw capw w_lp : BitVec 64) (t' : PanSemStateFiniteExact 64 F) (i_w : BitVec 64),
       P4Q8Loop entry s_pmc w_out lw capw nl_w w_lp lp_w i_w t' →
       evalAt t' p4Loop38Cond = some (.val (.word 0#64)) →
@@ -510,6 +513,16 @@ theorem p4Q8_loopEntry {F : Type}
             (pmcUpdW mid.memory (BitVec.ofNat 64 (lw.toNat + 8)) nl_w)})).locals.lookup
         (ofString "stable_lp") = some (.val (.word w_lp)) :=
     (p4Q8_lookup_setVar_other _ _ _ _ (by decide)).trans (p4Q8_lookup_setVar_same _ _ _)
+  -- the current receipt slice across the allocation and the count store
+  have hrc_mid : memW mid (memW mid (globN mid "bo" + 32) + 16 * locN entry "index" + 8) <
+      2 ^ 40 :=
+    lt_of_eq_of_lt (p4Q8_rcptCur_of_fresh_heap h.base hDmid.base hARmid hFO_mid) hrc32
+  have hrc_post :
+      memW {mid with memory := pmcUpdW mid.memory (BitVec.ofNat 64 (lw.toNat + 8)) nl_w}
+        (memW {mid with memory := pmcUpdW mid.memory (BitVec.ofNat 64 (lw.toNat + 8)) nl_w}
+          (globN {mid with memory := pmcUpdW mid.memory (BitVec.ofNat 64 (lw.toNat + 8)) nl_w}
+            "bo" + 32) + 16 * locN entry "index" + 8) < 2 ^ 40 :=
+    lt_of_eq_of_lt (p4Q8_rcptCur_of_unhit hDmid.base hbase_post hbo_unhit) hrc_mid
   -- ===== 7. the loop invariant at the post-setup state =====
   have hINV : P4Q8Loop entry s_pmc w_out lw capw nl_w w_lp lp_w 0x0000000000000000#64
       (setVarHOLFinite (ofString "i") (.val (.word 0x0000000000000000#64))
@@ -546,7 +559,15 @@ theorem p4Q8_loopEntry {F : Type}
       pmc_wordsOK_updW mid (BitVec.ofNat 64 (lw.toNat + 8)) nl_w
         (lw.toNat + 24, 8 * capw.toNat) harr_words,
       Nat.zero_le _,
-      fun j hj => absurd hj (Nat.not_lt_zero j)⟩
+      fun j hj => absurd hj (Nat.not_lt_zero j),
+      h.arena_pmc,
+      (hlu (ofString "index") (by decide) (by decide)).trans hDmid.idx_local,
+      (pmc_memW_updW_ne mid (lw.toNat + 8) lw.toNat nl_w (by omega) (by omega)
+        (by omega)).trans hm0,
+      pmc_memW_updW_same mid (lw.toNat + 8) nl_w,
+      (pmc_memW_updW_ne mid (lw.toNat + 8) (lw.toNat + 16) nl_w (by omega) (by omega)
+        (by omega)).trans hm16,
+      hrc_post⟩
   -- ===== 8. the setup and the loop =====
   refine p4Q8_tailSetup (.seq (.while p4Loop38Cond p4Loop38Body) tail) hnl_mid hlocm
     hhdr_words (by omega) hw0' ?_
