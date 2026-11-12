@@ -1,0 +1,66 @@
+R32f Canonical Shadow Integrator — Wave 8 cutover rehearsal — READY
+
+Repo base: Th0rgal/evm.fast-dev @ 2d259a7e36bb7fc5fc257bd7115e042b1776a00d
+R32 bundle refs: wave8/cutover-rehearsal (b76bc1b37), wave8/r32-bundle (d0bcd295677ce04f91ecf3ec7adc1d05b43816ec)
+Bundle SHA-256: 98e0ea5cc348c21568d9023d6c2875c41eb72482f44f4efb7513f6a7af1d2506
+
+WHAT THIS DELIVERS
+- R31/PrimitivesProvedR31.lean (753 lines): direct construction of `Primitives.mk`
+  (no projection from the opaque `primitives` theorem, no `{ primitives with }`
+  structure-update). Every field comes from a checked shard theorem, the
+  SetStorageR31 world-account closures (ContractParts.eps_set_storage_r31 /
+  epsA_set_storage_r31), the R31/R32 ptx bridges
+  (StrongBridgesPtxBridgeR31.gbody_process_transaction_full_strong_r31_bridge
+  lifted from TxReadyFullStrong to TxReadyStrong via lift_bound_entry), or 17
+  explicit hypothesis parameters (hwkdhi, the StrongBridgesR31.WkProcessTransactionStmt
+  bundle params, and hS1 : S1ContR31 covering the remaining S1-Cont leaves).
+- R31/AssemblyR31.lean: generic `assemblyR31 (P : Primitives)`.
+- R31/TargetR31.lean: campaign theorem
+  `InitECandidate.Solver.Wave8GuestInv.R31.coveredSourceTicksConsumedBounded_K_pan_r31`
+  with the matching 17-parameter list := assemblyR31 (primitivesR31 ...).
+- R16Shards/TopGbodyWk/WkPtxPhase4D.lean: `p4Run_decCall_encode_receipt` htail
+  enriched with HeapByteEff/LogsListOK transports (HeapByteEff.refl/.locals_clock/
+  .trans/.mono chain), fixing a bundle-internal intro-mismatch with WkPtxPhase4O2.
+- R16Shards/TopGbodyWk/WkPtxPhase4O2.lean: g6 intro adjusted to the enriched htail.
+- ContractParts/PtxCalleesProvedR31.lean, ContractParts/WitnessDbStorageR31.lean:
+  docstring scrub (zero lexical occurrences of forbidden tokens).
+- Full chain C (33 modules, EncodeReceipt through WkProcessTransactionBridgeR31)
+  compiled via atomic lean_safe.
+
+VERIFICATION
+- All modules compiled via lean_safe (atomic tmp+mv oleans, no lake build,
+  LEAN_NUM_THREADS=1).
+- Every new/modified .lean file has zero lexical occurrences of
+  sorry/admit/axiom/native_decide/bv_decide/ofReduceBool; all are <= 1500 lines
+  except the three grandfathered files (EncodeReceipt, PtxPhase34R11,
+  WkBlockTxProcess).
+- Axiom probes (axiom_probe.txt):
+  * coveredSourceTicksConsumedBounded_K_pan_r31: [propext, Classical.choice, Quot.sound]
+  * primitivesR31: [propext, Classical.choice, Quot.sound]
+  * ContractParts.eps_set_storage_r31 / epsA_set_storage_r31: clean
+  * wk_process_transaction_strong_of_decode_witness, ptxPhase4_relCut_strong_of: clean
+  * R16Shards.TopGbodyWk.ptxPhase1_relCut_strong: depends on sorryAx — the
+    phase-1 relational cut still rests on the campaign's remaining open leaf
+    (decode-host-input side). It is OUTSIDE the closure of
+    coveredSourceTicksConsumedBounded_K_pan_r31, which is fully clean: the
+    campaign theorem takes the phase-1/decode facts as explicit parameters
+    (h2, hwkdhi et al.) per the cutover-rehearsal design.
+
+OPEN LEAVES (explicit parameters of primitivesR31 / the campaign theorem)
+hwkdhi (WkDecodeHostInputLeaf), hdb, hdbI, hsys, gb_pmc, hleg, hentBacking, hent,
+hwk, hkeep, h2, hpm, hpcm, hG6, hG8, hpmc, hS1 (S1ContR31 — the remaining
+S1-Cont leaves of the 28-leaf inventory).
+
+STRONG-BRIDGES MAP CHECK (per operator request)
+All 16 theorems in the operator-supplied map exist and are 0-sorry, but most
+have statements that do NOT match the legacy Primitives field types (strong
+preconditions / different predicates): wk_recover_sender_with_chain_id_strong,
+wk_encode_transaction_strong, gbody__node_rlp_fill_strong (NrfStrong),
+gbody/wk_build_mpt_indexed_strong, wk_mpt_from_witness_strong,
+ek_get_storage_original_strong (adds WitnessDbOK conjunct), fk_frame_open_bounded
+(FrameOpenReadyB), gbody_execute_block_strong (BlockReadyExecStrong vs legacy
+BlockReadyStrong). Potential exact-conclusion adapters exist
+(ek_frame_start_c08_of, ek_depth0_prepare_of_ek) but their premises
+(FramePrologueCalleeSpecs / set_delegation / prepare_dispatch facts) are not
+unconditionally proved anywhere, so wiring them would only trade leaf
+parameters for new bundle parameters. No rewiring was done.
