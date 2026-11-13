@@ -1,10 +1,10 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptNT2
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptStrongR32
-import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptR32Empty
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.R32CanonicalBridges
 
-/-! Wave 8 R32 (GbodyRunAttemptNT2R32): all three decode-empty cases of
-`run_attempt` (`TxNullCase`, `WitNullCase`, `AccNullCase`), reduced to the
-`execute_block` and `payload_header` premises at null-tolerant guards.
+/-! Wave 8 R32 (GbodyRunAttemptNT2R32): the `run_attempt` bound at the R32
+guard, with no decode-empty case premise, reduced to the `execute_block` and
+`payload_header` premises at null-tolerant guards.
 
 `GbodyRunAttemptNT2` replays the `run_attempt` proof over an `InputAt` whose
 tx cell may be the null pair, so its guard `InputReadyStrong` holds in every
@@ -20,8 +20,9 @@ R32 `run_attempt` entry state:
   `GbodyRunAttemptR32.InputReadyR32` and at `MainEntryR32.InputReadyR32`, with
   no case premise.
 * `txNullCase_run_attempt`, `witNullCase_run_attempt`,
-  `accNullCase_run_attempt` — the `hTx` / `hWit` / `hAcc` premises of
-  `GbodyRunAttemptR32Empty.hraR32_of`, verbatim.
+  `accNullCase_run_attempt` (the `hTx` / `hWit` / `hAcc` premises of
+  `GbodyRunAttemptR32Empty.hraR32_of`) are in `GbodyRunAttemptNT2R32Cases`;
+  this file does not import `GbodyRunAttemptR32Empty`.
 * `hexec_of_nt2`, `hph_of_nt2`, `wph_of_nt2` — each null-tolerant premise
   implies the corresponding premise of `gbody_run_attempt_strong_r32`. -/
 
@@ -43,7 +44,6 @@ open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
 open InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
 open InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptR32
-open InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptR32Empty
 
 /-! ### The null-tolerant notions against the original ones -/
 
@@ -286,29 +286,5 @@ theorem hraR32_nt2
       K.«run_attempt» :=
   (run_attempt_r32_nt2 hnt).mono
     (fun _ hs => (R32CanonicalBridges.inputReadyR32CanonBounded_iff _).mp hs)
-
-/-- The tx-list-null sub-case (the `hTx` premise of
-`GbodyRunAttemptR32Empty.hraR32_of`) from the null-tolerant bound. -/
-theorem txNullCase_run_attempt
-    (hnt : TerminatingFunBoundedOn GbodyRunAttemptNT2.InputReadyStrong
-      (ofString "run_attempt") K.«run_attempt») :
-    TerminatingFunBoundedOn TxNullCase (ofString "run_attempt") K.«run_attempt» :=
-  (run_attempt_r32_nt2 hnt).mono (fun _ hs => hs.1)
-
-/-- The witness-list-null sub-case (the `hWit` premise) from the
-null-tolerant bound. -/
-theorem witNullCase_run_attempt
-    (hnt : TerminatingFunBoundedOn GbodyRunAttemptNT2.InputReadyStrong
-      (ofString "run_attempt") K.«run_attempt») :
-    TerminatingFunBoundedOn WitNullCase (ofString "run_attempt") K.«run_attempt» :=
-  (run_attempt_r32_nt2 hnt).mono (fun _ hs => hs.1)
-
-/-- The access-list-null sub-case (the `hAcc` premise) from the
-null-tolerant bound. -/
-theorem accNullCase_run_attempt
-    (hnt : TerminatingFunBoundedOn GbodyRunAttemptNT2.InputReadyStrong
-      (ofString "run_attempt") K.«run_attempt») :
-    TerminatingFunBoundedOn AccNullCase (ofString "run_attempt") K.«run_attempt» :=
-  (run_attempt_r32_nt2 hnt).mono (fun _ hs => hs.1)
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptNT2R32

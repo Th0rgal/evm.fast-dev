@@ -1,5 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.CertificateR32Core
-import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptNT2R32
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptNT2R32Cases
 
 /-! Wave 8 R32 (CertificateR32NT2): the R32 certificate with all three
 decode-empty leaves discharged.
