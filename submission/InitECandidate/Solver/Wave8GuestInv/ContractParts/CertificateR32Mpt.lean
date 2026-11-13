@@ -89,12 +89,10 @@ theorem certificateR32_of_mpt
     (hWit : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.WitNullCase
       (ofString "run_attempt") K.«run_attempt»)
     (hAcc : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.AccNullCase
-      (ofString "run_attempt") K.«run_attempt»)
-    (hVh : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.VhNullCase
       (ofString "run_attempt") K.«run_attempt») :
     InitE.Certificate submission (.finite K_target) :=
   certificateR32_of_witness w same hexec
     (ExecBlockAndCalleeClosureR32.hph_r32_of_mpt hmpt wmpt)
-    wph wsi wvhs hTx hWit hAcc hVh
+    wph wsi wvhs hTx hWit hAcc
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.CertificateR32

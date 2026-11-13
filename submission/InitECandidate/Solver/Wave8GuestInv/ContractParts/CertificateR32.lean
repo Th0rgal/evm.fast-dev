@@ -10,11 +10,11 @@ the proved `Wave8Stage.StageTransfer.stageTransfer w same` (assembled in
 `MainEntryR32.mainEntryR32_honest` route (no `ChainHandlersR32Stmt` /
 `WkProcessTransactionStmtR32` bundle), and the `run_attempt` decode-empty
 case is split by `GbodyRunAttemptR32Empty.hemptyCanon_of` into its four
-null-list sub-cases.
+null-list sub-cases, of which the vh-list-null one is closed
+(`GbodyRunAttemptR32Empty.vhNullCase_run_attempt`).
 
-Frozen leaf premises (9): `hexec`, `hph`, `wph`, `wsi`, `wvhs`, `hTx`,
-`hWit`, `hAcc`, `hVh`; see `CertificateR32Core` for the description of
-each. -/
+Frozen leaf premises (8): `hexec`, `hph`, `wph`, `wsi`, `wvhs`, `hTx`,
+`hWit`, `hAcc`; see `CertificateR32Core` for the description of each. -/
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -34,7 +34,7 @@ open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
 
 /-- The honest R32 certificate over a compilation witness with the
-`ConcreteM7313` oracle table; the nine open leaves are explicit named
+`ConcreteM7313` oracle table; the eight open leaves are explicit named
 premises. -/
 theorem certificateR32
     (w : LeanBridge.ConcreteOracleCompilationWitness)
@@ -72,10 +72,8 @@ theorem certificateR32
     (hWit : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.WitNullCase
       (ofString "run_attempt") K.«run_attempt»)
     (hAcc : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.AccNullCase
-      (ofString "run_attempt") K.«run_attempt»)
-    (hVh : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.VhNullCase
       (ofString "run_attempt") K.«run_attempt») :
     InitE.Certificate submission (.finite K_target) :=
-  certificateR32_of_witness w same hexec hph wph wsi wvhs hTx hWit hAcc hVh
+  certificateR32_of_witness w same hexec hph wph wsi wvhs hTx hWit hAcc
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.CertificateR32

@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptR32
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptR32VhNull
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.R32CanonicalBridges
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodySysTxExecBlock
 
@@ -30,7 +31,10 @@ Each sub-case premise is a documented open leaf for the sibling R32 missions:
   with the corresponding loop at zero iterations; the execute-block entry
   still applies via the strong `BlockReadyExecStrong` on the remaining cells.
 * `VhNullCase` (vh list null): the scan raises early at the empty
-  validation-header list; the replay up to that raise is the obligation.
+  validation-header list. This sub-case is **closed** below
+  (`vhNullCase_run_attempt`, from
+  `GbodyRunAttemptR32VhNull.run_attempt_vhLenZero`); `hraR32_of` no longer
+  takes it as a premise.
 
 Everything else in this module is proved: the null-cell decomposition, the
 spine assembly `hempty_of`, the canonical-form corollary `hemptyCanon_of`
@@ -150,18 +154,25 @@ theorem hemptyCanon_of
   (hempty_of hTx hWit hAcc hVh).mono (fun s hs =>
     ⟨(inputReadyR32CanonBounded_iff _).mp hs.1, hs.2⟩)
 
+/-- The vh-list-null sub-case, closed: with an empty witness header list
+`run_attempt` throws `BlockErr 3` right after `validate_headers(_, 0)`
+(`GbodyRunAttemptR32VhNull.run_attempt_vhLenZero`). -/
+theorem vhNullCase_run_attempt :
+    TerminatingFunBoundedOn VhNullCase (ofString "run_attempt") K.«run_attempt» :=
+  GbodyRunAttemptR32VhNull.run_attempt_vhLenZero.mono (fun _ hs => ⟨hs.1, hs.2.2⟩)
+
 /-- End-to-end: the `hraR32` premise of `MainEntryR32.mainEntryR32` from the
-strong bound plus the four empty-case sub-bounds. -/
+strong bound plus the three open empty-case sub-bounds (the vh-list-null
+sub-case is `vhNullCase_run_attempt`). -/
 theorem hraR32_of
     (hstrong : TerminatingFunBoundedOn InputReadyStrong (ofString "run_attempt")
       K.«run_attempt»)
     (hTx : TerminatingFunBoundedOn TxNullCase (ofString "run_attempt") K.«run_attempt»)
     (hWit : TerminatingFunBoundedOn WitNullCase (ofString "run_attempt") K.«run_attempt»)
-    (hAcc : TerminatingFunBoundedOn AccNullCase (ofString "run_attempt") K.«run_attempt»)
-    (hVh : TerminatingFunBoundedOn VhNullCase (ofString "run_attempt") K.«run_attempt») :
+    (hAcc : TerminatingFunBoundedOn AccNullCase (ofString "run_attempt") K.«run_attempt») :
     TerminatingFunBoundedOn MainEntryR32.InputReadyR32 (ofString "run_attempt")
       K.«run_attempt» :=
-  hraR32 hstrong (hemptyCanon_of hTx hWit hAcc hVh)
+  hraR32 hstrong (hemptyCanon_of hTx hWit hAcc vhNullCase_run_attempt)
 
 /-! ### The R32 execute-block entry (tx-null route) -/
 
