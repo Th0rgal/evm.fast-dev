@@ -18,7 +18,7 @@ bound `R16Shards.MptC10C12.gbody_build_mpt_indexed_strong` is at that same
 stronger guard and is itself conditional on eleven callee premises; and no
 `payload_header` composition in the tree consumes
 `BuildMptIndexedReadyStrong`. So this variant trades one open leaf (`hph`)
-for two (`hmpt`, `wmpt`), ten in total, and the main route
+for two (`hmpt`, `wmpt`), nine premises in total, and the main route
 (`CertificateR32.certificateR32`) keeps `hph` as its frozen leaf. -/
 
 set_option autoImplicit false

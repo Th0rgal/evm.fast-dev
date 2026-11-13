@@ -31,7 +31,8 @@ closed by `GbodyRunAttemptStrongR32.gbody_run_attempt_strong_r32`; and the
 of which the vh-list-null one is closed
 (`GbodyRunAttemptR32Empty.vhNullCase_run_attempt`).
 
-The genuinely-open obligations are the eight frozen leaf premises: the five
+The genuinely-open obligations are nine frozen leaves: the compilation
+witness (`w` with `same`) and eight premises, namely the five
 sub-`run_attempt` hypotheses of the strong bound (`hexec`, `hph`, `wph`,
 `wsi`, `wvhs`) and the three open null-list sub-cases of `run_attempt`
 (`hTx`, `hWit`, `hAcc`). -/

@@ -12,8 +12,10 @@ compilation witness.
 transfer with `source_not_timeOut_K_pan`, which rests on the dishonest
 `assembly primitives` route (`Wave8GuestInv.Target`). This module assembles
 the honest replacement, parameterized only by a compilation witness with the
-`ConcreteM7313` oracle table (closed in `ContractParts.WitnessR32`) and by
-the frozen leaf premises listed below:
+`ConcreteM7313` oracle table (`w`, `same`: one frozen leaf, since its only
+inhabitant in the tree sits behind `InitECandidate.Proofs`, which the
+`Solution` import path must not reach) and by the frozen leaf premises listed
+below:
 
 * the stage transfer is the proved
   `Wave8Stage.StageTransfer.stageTransfer w same` — it is no longer a
@@ -50,6 +52,17 @@ Notes on the open leaves (none of these is proved here):
   header, but the guest's `decode_header` stores the raw extra-data length
   unchecked (`st h + 136, ex.1`) and `validate_headers` never tests it; the
   `> 32` rejection only exists in `validate_header`, for the new header.
+  Weakening the post to `RetHeaders` (C03) does not help: it still asks
+  `HeaderAt` of every header, and its only statement, C08's
+  `wk_validate_headers`, carries no proof; the tree has no world proof of
+  `validate_headers` or `decode_header` at any post. The bound is also
+  really used: `RA_Parent` hands `HeaderAt` of the parent (the last witness
+  header) to `ValidateHeaderReady`, because `validate_header` runs
+  `header_hash(parent, tmp)` and `encode_header` copies the extra-data into
+  a fixed `alloc(1024)` buffer. Dropping the leaf therefore needs new world
+  proofs of `encode_header` / `header_hash` / `validate_header` for an
+  unbounded parent extra-data length (or a guest-side length check in
+  `decode_header`) in addition to a world proof of `validate_headers`.
 * `wsi` is not reachable from `ExecBlockAndCalleeClosureR32.wsi_r32_guarded`
   at the current entry guard: its extra conjunct `NodeDbSlicesBounded` is the
   post of `wk_nodedb_build_nodedb_bounded` at `NodeDbSlicesReady`, which
@@ -71,11 +84,17 @@ Notes on the open leaves (none of these is proved here):
   asks, through `hret`, for a normal return on every `InputReady` state,
   while the guest body has a `throw BlockErr 7` path; the second asks for
   `RetHeader` of an arbitrary result. Neither premise has a supplier.
+  `WkPayloadHeaderRetR32.wk_payload_header_of_bodyEffect_returned` is the
+  repaired reduction (return facts asked only on the normal-return branch),
+  but its body-effect premise is still open for the same reason as `hph`:
+  the body calls `build_mpt_indexed` on the transaction list, and
+  `InputReady` (`PayloadAt` bounds each slice length only) gives no
+  per-transaction pointer fact for `BuildMptIndexedReadyStrong`.
 * `hexec`: the proved `gbody_execute_block_strong` is at
   `BlockReadyExecStrong`, whose `ExecBlock.EntryAt` again asks per-item
   content bounds for the transaction list.
 
-Common root of `wsi`, `hph` and `hexec`: the decode post
+Common root of `wsi`, `hph`, `wph` and `hexec`: the decode post
 `RetInputStrongSound` (`WkDecodeHostInputMain`) states `Inside` / `WordsOK`
 only for the seven `runAttemptCells` (the list cells themselves) and says
 nothing about the `(ptr, len)` items stored in them, so no per-item fact
