@@ -1,20 +1,28 @@
-import InitECandidate.Solver.Wave8GuestInv.ContractParts.CertificateR32Core
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.CertificateR32Null
 
 /-! Wave 8 R32 (CertificateR32): honest certificate assembly route.
 
 `certificateR32` is the R32 certificate
 `InitE.Certificate submission (.finite K_target)` over a compilation witness
 `w` carrying the `ConcreteM7313` oracle table (`same`). The stage transfer is
-the proved `Wave8Stage.StageTransfer.stageTransfer w same` (assembled in
-`CertificateR32Core.certificateR32_of_witness`), the main lane is the honest
-`MainEntryR32.mainEntryR32_honest` route (no `ChainHandlersR32Stmt` /
-`WkProcessTransactionStmtR32` bundle), and the `run_attempt` decode-empty
-case is split by `GbodyRunAttemptR32Empty.hemptyCanon_of` into its four
-null-list sub-cases, of which the vh-list-null one is closed
-(`GbodyRunAttemptR32Empty.vhNullCase_run_attempt`).
+the proved `Wave8Stage.StageTransfer.stageTransfer w same`, the main lane is
+the honest `MainEntryR32.mainEntryR32_honest` route (no
+`ChainHandlersR32Stmt` / `WkProcessTransactionStmtR32` bundle), and the
+`run_attempt` bound at the canonical entry guard is the null-tolerant replay
+`GbodyRunAttemptNullR32Close.hraR32_null`, assembled in
+`CertificateR32Null.certificateR32_of_witness_null`. The decode-empty case is
+no longer split into null-list sub-cases, so the `hTx` / `hWit` / `hAcc`
+leaves of `CertificateR32Core.certificateR32_of_witness` do not appear.
 
-Frozen leaf premises (8): `hexec`, `hph`, `wph`, `wsi`, `wvhs`, `hTx`,
-`hWit`, `hAcc`; see `CertificateR32Core` for the description of each. -/
+Frozen leaf premises (5): `hexec`, `hph`, `wph`, `wsi`, `wvhs`. The last two
+are stated exactly as in `CertificateR32Core`. The first three are stated at
+the null-tolerant guards of `GbodyRunAttemptNullR32`
+(`BlockReadyExecAttemptNull True`, `InputReadyNwdZ True`, `InputReadyZ True`),
+where every list cell of the input, the transaction cell included, may be the
+null pair. Those guards are implied by the ones in `CertificateR32Core`, so
+each of the three is a stronger statement than the leaf it replaces
+(`GbodyRunAttemptNullR32Close.hexec_strong_of_null`, `hph_of_z`, `wph_of_z`);
+the notes on the open leaves in `CertificateR32Core` still apply. -/
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -34,16 +42,17 @@ open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
 
 /-- The honest R32 certificate over a compilation witness with the
-`ConcreteM7313` oracle table; the eight open leaves are explicit named
+`ConcreteM7313` oracle table; the five open leaves are explicit named
 premises. -/
 theorem certificateR32
     (w : LeanBridge.ConcreteOracleCompilationWitness)
     (same : w.oracles = InitECandidate.Solver.Wave8Stage.ConcreteM7313.oracles)
-    (hexec : TerminatingFunBoundedOn R16Shards.TopGbodyWk.BlockReadyExecAttemptStrong
+    (hexec : TerminatingFunBoundedOn (GbodyRunAttemptNullR32.BlockReadyExecAttemptNull True)
       (ofString "execute_block") K.«execute_block»)
-    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header")
+    (hph : TerminatingFunBoundedOn (GbodyRunAttemptNullR32.InputReadyNwdZ True)
+      (ofString "payload_header")
       K.«payload_header»)
-    (wph : WorldKeeps InputReady
+    (wph : WorldKeeps (GbodyRunAttemptNullR32.InputReadyZ True)
       (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
         (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
         (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40),
@@ -66,14 +75,8 @@ theorem certificateR32
       ["heap_ptr", "scratch_ptr"]
       [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
        ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-      R16Shards.TopGbodyWk.RetHeadersStrong (ofString "validate_headers"))
-    (hTx : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.TxNullCase
-      (ofString "run_attempt") K.«run_attempt»)
-    (hWit : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.WitNullCase
-      (ofString "run_attempt") K.«run_attempt»)
-    (hAcc : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.AccNullCase
-      (ofString "run_attempt") K.«run_attempt») :
+      R16Shards.TopGbodyWk.RetHeadersStrong (ofString "validate_headers")) :
     InitE.Certificate submission (.finite K_target) :=
-  certificateR32_of_witness w same hexec hph wph wsi wvhs hTx hWit hAcc
+  CertificateR32Null.certificateR32_of_witness_null w same hexec hph wph wsi wvhs
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.CertificateR32

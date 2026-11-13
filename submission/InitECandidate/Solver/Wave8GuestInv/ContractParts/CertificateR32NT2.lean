@@ -24,8 +24,10 @@ exactly as in `certificateR32_of_witness`. Each of the first three implies
 the corresponding premise there (`hexec_of_nt2`, `hph_of_nt2`, `wph_of_nt2`),
 not conversely: its guard also admits the states with a null list cell.
 
-This is a variant; `certificateR32_of_witness`, `certificateR32` and
-`Solution.certificate` are unchanged. -/
+This is a variant; `certificateR32_of_witness` is unchanged, and
+`certificateR32` / `Solution.certificate` go through
+`CertificateR32Null.certificateR32_of_witness_null`, not through this
+module. -/
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
