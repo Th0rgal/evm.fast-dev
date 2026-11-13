@@ -181,8 +181,10 @@ theorem p4Loop31_guard_lt {F : Type} {u : PanSemStateFiniteExact 64 F}
     exact hw hwif
 
 /-- The full loop-31 invariant: the Phase-4H invariant plus the `TxEnv`, the
-nonvacuousness of the `out+16` log list, and the identification of the `lp`
-and `nl` locals with that list's data pointer and length. -/
+nonvacuousness of the `out+16` log list, the identification of the `lp`
+and `nl` locals with that list's data pointer and length, and the bound on
+the current receipt slice's length cell (written by instruction 27; the loop
+writes neither the `bo+32` array nor the `bo` record). -/
 structure P4Loop31Full {F : Type}
     (entry s s_pmc : PanSemStateFiniteExact 64 F) (w_out : BitVec 64) : Prop where
   base : P4Loop31 entry s s_pmc w_out
@@ -193,6 +195,7 @@ structure P4Loop31Full {F : Type}
     s.locals.lookup (ofString "nl") = some (.val (.word nl_w)) ∧
     lp_w.toNat = memW s (memW s (w_out.toNat + 16)) ∧
     nl_w.toNat = memW s (memW s (w_out.toNat + 16) + 8)
+  rcpt_cur : memW s (memW s (globN s "bo" + 32) + 16 * locN entry "index" + 8) < 2 ^ 40
 
 /-! ## The out-list cell preservation
 
@@ -372,7 +375,7 @@ theorem p4Loop31_bodyRun {F : Type}
     (hi_lt : locN u "i" < locN u "nl")
     (hcode : u.code = originalRuntimeCode) :
     PtxRelRunStrong entry p4Loop31Body u := by
-  obtain ⟨hbase31, htxenv, hlogs_nz, hlpnl⟩ := hINV
+  obtain ⟨hbase31, htxenv, hlogs_nz, hlpnl, hrcpt⟩ := hINV
   obtain ⟨hdata, hi_word, hnl_word, hlp_word, hile, hnl28, hlenb31⟩ := hbase31
   obtain ⟨i_w, hi⟩ := hi_word
   obtain ⟨lp_w, nl_w, hlp, hnl, hlpw, hnlw⟩ := hlpnl
@@ -646,7 +649,7 @@ theorem p4Loop31_postInvariant {F : Type}
     (heq : evaluateHOLFiniteState u p4Loop31Body = (none, post)) :
     P4Loop31Full entry post s_pmc w_out ∧
     post.code = originalRuntimeCode ∧ u.clock ≠ 0 := by
-  obtain ⟨hbase31, htxenv, hlogs_nz, hlpnl⟩ := hINV
+  obtain ⟨hbase31, htxenv, hlogs_nz, hlpnl, hrcpt⟩ := hINV
   obtain ⟨hdata, hi_word, hnl_word, hlp_word, hile, hnl28, hlenb31⟩ := hbase31
   obtain ⟨i_w, hi⟩ := hi_word
   obtain ⟨lp_w, nl_w, hlp, hnl, hlpw, hnlw⟩ := hlpnl
@@ -1225,7 +1228,7 @@ theorem p4Loop31_postInvariant {F : Type}
                         -- the full invariant at post₂
                         refine ⟨⟨⟨hDpost, ⟨i_w + 0x0000000000000001#64, ?_⟩,
                           ⟨nl_w, ?_⟩, ⟨lp_w, ?_⟩, ?_, ?_, ?_⟩, ?_, ?_,
-                          ⟨lp_w, nl_w, ?_, ?_, ?_, ?_⟩⟩, ?_, hcz⟩
+                          ⟨lp_w, nl_w, ?_, ?_, ?_, ?_⟩, ?_⟩, ?_, hcz⟩
                         · exact hli
                         · rw [hpostlu "nl" (by decide) (by decide)]
                           exact hnl
@@ -1306,6 +1309,36 @@ theorem p4Loop31_postInvariant {F : Type}
                         · -- nlw
                           rw [hout16, houtL8]
                           exact hnlw
+                        · -- rcpt_cur
+                          have hRs₀ : memW s₀ (globN s₀ "bo" + 32)
+                              = memW u (globN u "bo" + 32) := by
+                            rw [hs₀]
+                            show memW post_c (globN post_c "bo" + 32)
+                              = memW u (globN u "bo" + 32)
+                            rw [hbo_eq, hbo_pres 32 (by decide)]
+                          have hRcell : memW post₂ (globN post₂ "bo" + 32)
+                              = memW u (globN u "bo" + 32) := by
+                            rw [hpost₂]
+                            show memW {s₀ with memory := mem'} (globN s₀ "bo" + 32)
+                              = memW u (globN u "bo" + 32)
+                            rw [p4Loop31_memW_of_storeMiss hmem'pw (hmiss_bo 32 (by decide))]
+                            rw [hRs₀]
+                          have hmissR := hmiss_slices 32 (by decide) (locN entry "index") le_rfl
+                          rw [hRs₀] at hmissR
+                          have hRlen : memW post₂
+                              (memW u (globN u "bo" + 32) + 16 * locN entry "index" + 8)
+                              = memW u
+                                (memW u (globN u "bo" + 32) + 16 * locN entry "index" + 8) := by
+                            rw [hpost₂]
+                            show memW {s₀ with memory := mem'}
+                                (memW u (globN u "bo" + 32) + 16 * locN entry "index" + 8)
+                              = memW u
+                                (memW u (globN u "bo" + 32) + 16 * locN entry "index" + 8)
+                            rw [p4Loop31_memW_of_storeMiss hmem'pw hmissR]
+                            rw [hs₀]
+                            exact hslice_pres 32 (by decide) (locN entry "index") le_rfl
+                          rw [hRcell, hRlen]
+                          exact hrcpt
                         · -- code
                           rw [hpost₂, hs₀]
                           show post_c.code = originalRuntimeCode
@@ -1328,12 +1361,12 @@ theorem p4Loop31Full_decClock {F : Type}
     {entry t s_pmc : PanSemStateFiniteExact 64 F} {w_out : BitVec 64}
     (hINV : P4Loop31Full entry t s_pmc w_out) :
     P4Loop31Full entry (decClockHOLFinite t) s_pmc w_out := by
-  obtain ⟨hbase31, htxenv, hlogs_nz, hlpnl⟩ := hINV
+  obtain ⟨hbase31, htxenv, hlogs_nz, hlpnl, hrcpt⟩ := hINV
   obtain ⟨hdata, hi_word, hnl_word, hlp_word, hile, hnl28, hlenb31⟩ := hbase31
   have hD : P4Data entry (decClockHOLFinite t) s_pmc w_out :=
     p4Data_with_locals t.locals (t.clock - 1) hdata.out_local rfl rfl rfl hdata.shapes hdata
   exact ⟨⟨hD, hi_word, hnl_word, hlp_word, hile, hnl28, hlenb31⟩,
-    TxEnv_decClockHOLFinite htxenv, hlogs_nz, hlpnl⟩
+    TxEnv_decClockHOLFinite htxenv, hlogs_nz, hlpnl, hrcpt⟩
 
 /-- Theorem A: the loop-31 body obligation for `p4Run_while_guard`.  At a
 full-invariant state `t` with the guard holding and the code intact, the
@@ -1352,14 +1385,14 @@ theorem p4Loop31_bodyWhile {F : Type}
       PtxRelRunStrong entry rest t') :
     PtxRelRunStrong entry (.seq p4Loop31Body
       (.seq (.while p4Loop31Cond p4Loop31Body) rest)) (decClockHOLFinite t) := by
-  obtain ⟨hbase31, htxenv, hlogs_nz, hlpnl⟩ := hINV
+  obtain ⟨hbase31, htxenv, hlogs_nz, hlpnl, hrcpt⟩ := hINV
   obtain ⟨hdata, hi_word, hnl_word, hlp_word, hile, hnl28, hlenb31⟩ := hbase31
   obtain ⟨i_w, hi⟩ := hi_word
   obtain ⟨nl_w, hnl⟩ := hnl_word
   obtain ⟨wg, hwg, hwne⟩ := hguard
   have hINV' : P4Loop31Full entry t s_pmc w_out :=
     ⟨⟨hdata, ⟨i_w, hi⟩, ⟨nl_w, hnl⟩, hlp_word, hile, hnl28, hlenb31⟩,
-      htxenv, hlogs_nz, hlpnl⟩
+      htxenv, hlogs_nz, hlpnl, hrcpt⟩
   have hi_lt : locN t "i" < locN t "nl" := by
     have h1 : locN t "i" = i_w.toNat := by simp [locN, hi]
     have h2 : locN t "nl" = nl_w.toNat := by simp [locN, hnl]

@@ -130,6 +130,7 @@ theorem p4Run_decCall_encode_receipt {F : Type}
     (hLL : LogsListOK s logsw.toNat) (hDF : LogsDisjFixed s logsw.toNat)
     (htail : ∀ (a b : BitVec 64) (mid : PanSemStateFiniteExact 64 F),
       a.toNat < 2 ^ 61 → b.toNat < 2 ^ 61 →
+      b.toNat < 2 ^ 40 →
       mid.locals.lookup (ofString "rc") = some (.rStruct [.val (.word a), .val (.word b)]) →
       (∀ y, y ≠ ofString "rc" → mid.locals.lookup y = s.locals.lookup y) →
       HeapByteEff s mid (receiptKeccakIvls s) ["heap_ptr"] →
@@ -342,10 +343,15 @@ theorem p4Run_decCall_encode_receipt {F : Type}
               (setVarHOLFinite (ofString "rc")
                 (.rStruct [.val (.word a), .val (.word b)]) { sb with locals := s.locals })
               logsw.toNat := hLL_sb
+          have hb40 : b.toNat < 2 ^ 40 := by
+            have hlim : globN sb "heap_ptr" ≤ heapLimit := hstep_s.1.2.2.1
+            have hlv : heapLimit = 2952790016 := heapLimit_val
+            have hin2 : a.toNat + b.toNat ≤ globN sb "heap_ptr" := hins.2
+            omega
           have hmid := htail a b
             (setVarHOLFinite (ofString "rc")
               (.rStruct [.val (.word a), .val (.word b)]) { sb with locals := s.locals })
-            ha61 hb61 hloc_name hloc_rest heff_mid hLL_mid hdata_mid (hmeta.trans hc) hres
+            ha61 hb61 hb40 hloc_name hloc_rest heff_mid hLL_mid hdata_mid (hmeta.trans hc) hres
           exact ptxWorldStep_strong_with_locals_right'
             (HolFiniteMapExact.resVarEq
               (evaluateHOLFiniteState (setVarHOLFinite (ofString "rc")
