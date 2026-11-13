@@ -30,18 +30,58 @@ below:
 * the `run_attempt` strong bound is closed by
   `GbodyRunAttemptStrongR32.gbody_run_attempt_strong_r32`, and the
   decode-empty case by the spine `GbodyRunAttemptR32Empty.hraR32_of`
-  (`hemptyCanon_of`), which splits it into the four null-list sub-cases.
+  (`hemptyCanon_of`), which splits it into the four null-list sub-cases;
+  the vh-list-null sub-case is closed by
+  `GbodyRunAttemptR32Empty.vhNullCase_run_attempt`.
 
-Frozen leaf premises (9), each stated verbatim in the theorem signature:
+Frozen leaf premises (8), each stated verbatim in the theorem signature:
 
 * `hexec` — `execute_block` terminating bound at `BlockReadyExecAttemptStrong`,
 * `hph` — `payload_header` terminating bound at `InputReadyNwd`,
 * `wph` — `payload_header` world contract at `InputReady`,
 * `wsi` — `state_init` world contract at `StateInitReady`,
 * `wvhs` — `validate_headers` world contract at `WorldOK`,
-* `hTx`, `hWit`, `hAcc`, `hVh` — `run_attempt` terminating bound in the four
-  null-list sub-cases (`TxNullCase`, `WitNullCase`, `AccNullCase`,
-  `VhNullCase` of `GbodyRunAttemptR32Empty`). -/
+* `hTx`, `hWit`, `hAcc` — `run_attempt` terminating bound in the three open
+  null-list sub-cases (`TxNullCase`, `WitNullCase`, `AccNullCase` of
+  `GbodyRunAttemptR32Empty`).
+
+Notes on the open leaves (none of these is proved here):
+
+* `wvhs` looks unprovable as stated. `RetHeadersStrong` asks `HeaderAt`
+  (`memW (h + 136) ≤ 32`, the extra-data length) of every decoded witness
+  header, but the guest's `decode_header` stores the raw extra-data length
+  unchecked (`st h + 136, ex.1`) and `validate_headers` never tests it; the
+  `> 32` rejection only exists in `validate_header`, for the new header.
+* `wsi` is not reachable from `ExecBlockAndCalleeClosureR32.wsi_r32_guarded`
+  at the current entry guard: its extra conjunct `NodeDbSlicesBounded` is the
+  post of `wk_nodedb_build_nodedb_bounded` at `NodeDbSlicesReady`, which
+  needs `WitnessSliceOK` for every witness slice, while `InputAtStrong` only
+  constrains the slice-array cell itself.
+* `hTx`, `hWit`, `hAcc` do not follow from `hexec`: its guard
+  `BlockReadyExecAttemptStrong` contains `InputReadyStrong`, which fails
+  while a run-attempt cell is null, so each of them needs an `execute_block`
+  bound at a null-tolerant guard.
+* `hph` reduces (`ExecBlockAndCalleeClosureR32.hph_r32_of_mpt`) to a
+  `build_mpt_indexed` bound and world contract. The proved world contract
+  `R16Shards.MptC10C12.wk_build_mpt_indexed_strong` is at
+  `BuildMptIndexedReadyStrong`, which asks
+  `memW s (slice_arr + 16 * i) + 8 ≤ heap_ptr` of every slice; at the
+  transaction-list call site of `payload_header` that is a per-transaction
+  pointer fact which `InputReadyNwd` does not carry.
+* `wph` has only the reductions `wk_payload_header_of_bodyEffect` /
+  `wk_payload_header_of_heapByteEff` in `WkHostPayloadHeaders`. The first
+  asks, through `hret`, for a normal return on every `InputReady` state,
+  while the guest body has a `throw BlockErr 7` path; the second asks for
+  `RetHeader` of an arbitrary result. Neither premise has a supplier.
+* `hexec`: the proved `gbody_execute_block_strong` is at
+  `BlockReadyExecStrong`, whose `ExecBlock.EntryAt` again asks per-item
+  content bounds for the transaction list.
+
+Common root of `wsi`, `hph` and `hexec`: the decode post
+`RetInputStrongSound` (`WkDecodeHostInputMain`) states `Inside` / `WordsOK`
+only for the seven `runAttemptCells` (the list cells themselves) and says
+nothing about the `(ptr, len)` items stored in them, so no per-item fact
+reaches `run_attempt` through `MainEntryR32.InputReadyR32`. -/
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -66,7 +106,7 @@ open InitECandidate.Solver.Wave8GuestInv
 `UniformSourceClock` wrappers) feeds the proved stage transfer
 `Wave8Stage.StageTransfer.stageTransfer w same`, which yields the
 kernel-checked `InitE.Certificate submission (.finite K_target)`. All closed
-leaves are proved theorems; the nine open leaves are explicit named
+leaves are proved theorems; the eight open leaves are explicit named
 premises. -/
 theorem certificateR32_of_witness
     (w : LeanBridge.ConcreteOracleCompilationWitness)
@@ -104,8 +144,6 @@ theorem certificateR32_of_witness
     (hWit : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.WitNullCase
       (ofString "run_attempt") K.«run_attempt»)
     (hAcc : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.AccNullCase
-      (ofString "run_attempt") K.«run_attempt»)
-    (hVh : TerminatingFunBoundedOn GbodyRunAttemptR32Empty.VhNullCase
       (ofString "run_attempt") K.«run_attempt») :
     InitE.Certificate submission (.finite K_target) :=
   LeanBridge.finite_certificate_of_witness w K_target
@@ -118,6 +156,6 @@ theorem certificateR32_of_witness
               (GbodyRunAttemptR32Empty.hraR32_of
                 (GbodyRunAttemptStrongR32.gbody_run_attempt_strong_r32
                   hexec hph wph wsi wvhs)
-                hTx hWit hAcc hVh))))))
+                hTx hWit hAcc))))))
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.CertificateR32

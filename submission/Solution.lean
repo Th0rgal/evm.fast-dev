@@ -27,13 +27,15 @@ the `ConcreteM7313` oracle table (`same`). The stage transfer is the proved
 `ChainHandlersR32Stmt` / `WkProcessTransactionStmtR32` bundle; `hstrong` is
 closed by `GbodyRunAttemptStrongR32.gbody_run_attempt_strong_r32`; and the
 `run_attempt` decode-empty case is split by
-`GbodyRunAttemptR32Empty.hemptyCanon_of` into its four null-list sub-cases.
+`GbodyRunAttemptR32Empty.hemptyCanon_of` into its four null-list sub-cases,
+of which the vh-list-null one is closed
+(`GbodyRunAttemptR32Empty.vhNullCase_run_attempt`).
 
-The genuinely-open obligations are ten frozen leaves: the compilation
-witness (`w` with `same`) and nine premises, namely the five
+The genuinely-open obligations are nine frozen leaves: the compilation
+witness (`w` with `same`) and eight premises, namely the five
 sub-`run_attempt` hypotheses of the strong bound (`hexec`, `hph`, `wph`,
-`wsi`, `wvhs`) and the four null-list sub-cases of `run_attempt` (`hTx`,
-`hWit`, `hAcc`, `hVh`). -/
+`wsi`, `wvhs`) and the three open null-list sub-cases of `run_attempt`
+(`hTx`, `hWit`, `hAcc`). -/
 theorem certificate
     (w : LeanBridge.ConcreteOracleCompilationWitness)
     (same : w.oracles = InitECandidate.Solver.Wave8Stage.ConcreteM7313.oracles)
@@ -70,12 +72,10 @@ theorem certificate
     (hWit : TerminatingFunBoundedOn ContractParts.GbodyRunAttemptR32Empty.WitNullCase
       (ofString "run_attempt") K.«run_attempt»)
     (hAcc : TerminatingFunBoundedOn ContractParts.GbodyRunAttemptR32Empty.AccNullCase
-      (ofString "run_attempt") K.«run_attempt»)
-    (hVh : TerminatingFunBoundedOn ContractParts.GbodyRunAttemptR32Empty.VhNullCase
       (ofString "run_attempt") K.«run_attempt») :
     InitE.Certificate submission claimedScore := by
   rw [claimedScore_eq_K_target]
   exact ContractParts.CertificateR32.certificateR32
-    w same hexec hph wph wsi wvhs hTx hWit hAcc hVh
+    w same hexec hph wph wsi wvhs hTx hWit hAcc
 
 end InitE.Challenge
