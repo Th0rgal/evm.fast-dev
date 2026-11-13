@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodyRunAttempt
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkHostPayloadHeaders
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.DecodeSlicesWitnessR32
 
 /-!
@@ -153,5 +154,51 @@ theorem codeDbSlices_of_inputSlicesOK {F : Type} {s : PanSemStateFiniteExact 64 
   rw [harr]
   rw [hn] at hj
   exact h.2.1 j hj
+
+/-- The guard `NodeDbSlicesReady` of `wk_nodedb_build_nodedb_bounded` at a state
+where `InputAtStrongWith` holds and `(slice_arr, 16 * n)` is one of the
+`runAttemptCells` whose slices are `WitnessSliceOK`.  The three keccak / mpt
+buffers are members of `worldOwned`, so the disjointness clause is the one
+`InputAtStrongWith` already carries. -/
+theorem nodeDbSlicesReady_of_cell {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {si : Nat}
+    (hIA : InputAtStrongWith s S Nd si)
+    (hsl : ∀ j < locN s "n", WitnessSliceOK s (locN s "slice_arr" + 16 * j))
+    (hmem : (locN s "slice_arr", 16 * locN s "n") ∈ runAttemptCells s si) :
+    NodeDbSlicesReady s := by
+  refine ⟨⟨hIA.1.1, S, (worldTyped_iff_with s S).2 ⟨Nd, hIA.1.2.1⟩⟩, hsl, S, Nd, hIA.1.2.1, ?_⟩
+  intro c hc j hj
+  rw [List.mem_singleton.1 hc]
+  rcases List.mem_append.1 hj with hj | hj
+  · exact hIA.2.2.1 _ hmem j hj
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+    rcases hj with rfl | rfl | rfl
+    · exact hIA.2.2.1 _ hmem _
+        (R10Shards.Fast_GbodyC17ToC21.bufferRegion_mem_worldOwned s S Nd
+          (gn := ("keccak_pad", 136)) (by decide))
+    · exact hIA.2.2.1 _ hmem _
+        (R10Shards.Fast_GbodyC17ToC21.bufferRegion_mem_worldOwned s S Nd
+          (gn := ("keccak_st", 200)) (by decide))
+    · exact hIA.2.2.1 _ hmem _
+        (R10Shards.Fast_GbodyC17ToC21.bufferRegion_mem_worldOwned s S Nd
+          (gn := ("mpt_hash_scratch", 40)) (by decide))
+
+/-- `NodeDbSlicesReady` at the entry of `nodedb_build(si.nodes, si.n_nodes)`. -/
+theorem nodeDbSlicesReady_nodes {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {si : Nat}
+    (hIA : InputAtStrongWith s S Nd si) (h : InputSlicesOK s si)
+    (harr : locN s "slice_arr" = memW s (si + 40)) (hn : locN s "n" = memW s (si + 48)) :
+    NodeDbSlicesReady s :=
+  nodeDbSlicesReady_of_cell hIA (nodeDbSlices_of_inputSlicesOK h harr hn)
+    (by rw [harr, hn]; simp [runAttemptCells])
+
+/-- `NodeDbSlicesReady` at the entry of `nodedb_build(si.codes, si.n_codes)`. -/
+theorem nodeDbSlicesReady_codes {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {si : Nat}
+    (hIA : InputAtStrongWith s S Nd si) (h : InputSlicesOK s si)
+    (harr : locN s "slice_arr" = memW s (si + 56)) (hn : locN s "n" = memW s (si + 64)) :
+    NodeDbSlicesReady s :=
+  nodeDbSlicesReady_of_cell hIA (codeDbSlices_of_inputSlicesOK h harr hn)
+    (by rw [harr, hn]; simp [runAttemptCells])
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.DecodeSlicesR32
