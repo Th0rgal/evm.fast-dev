@@ -72,12 +72,11 @@ Notes on the open leaves (none of these is proved here):
   `BlockReadyExecAttemptStrong` contains `InputReadyStrong`, which fails
   while a run-attempt cell is null, so each of them needs an `execute_block`
   bound at a null-tolerant guard. Given one, they are no longer leaves:
-  `GbodyRunAttemptNullR32` replays the strong `run_attempt` proof with the
-  list cells allowed null, and `CertificateR32Null` restates this certificate
-  without `hTx` / `hWit` / `hAcc` (`certificateR32_of_witness_null`, with
-  `hexec`, `hph`, `wph` at the null-tolerant guards) or without `hWit` /
-  `hAcc` (`certificateR32_of_witness_txNull`, with only `hexec` restated, at
-  `BlockReadyExecAttemptNull False`). The theorem below is unchanged.
+  `CertificateR32NT.certificateR32_nt` drops `hWit` / `hAcc` (replay
+  `GbodyRunAttemptNT`, `hexec` restated), and
+  `CertificateR32Null.certificateR32_null` drops `hTx` as well (replay
+  `GbodyRunAttemptNullR32`, with `hexec`, `hph`, `wph` restated at guards that
+  allow a null transaction cell). The theorem below is unchanged.
 * `hph` reduces (`ExecBlockAndCalleeClosureR32.hph_r32_of_mpt`) to a
   `build_mpt_indexed` bound and world contract. The proved world contract
   `R16Shards.MptC10C12.wk_build_mpt_indexed_strong` is at
