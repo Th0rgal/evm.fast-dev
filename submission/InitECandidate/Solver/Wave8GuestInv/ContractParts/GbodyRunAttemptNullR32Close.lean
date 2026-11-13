@@ -1,35 +1,43 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptNullR32
-import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptNTR32
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptStrongR32
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptR32Empty
 
-/-! Wave 8 R32: the transaction-null `run_attempt` leaf `hTx`.
+/-! Wave 8 R32: the null-list `run_attempt` leaves `hTx` / `hWit` / `hAcc`.
 
-`GbodyRunAttemptNTR32` closes the witness- and access-list null leaves `hWit`
-and `hAcc` of `GbodyRunAttemptR32Empty.hraR32_of` and keeps `hTx`: the
-transaction cell is one of `InputAt`'s `inputCells`, so `GbodyRunAttemptNT`
-leaves it `Inside`. This module removes `hTx` as well, using the replay
-`GbodyRunAttemptNullR32.gbody_run_attempt_null_of` at `Z := True`, whose guard
-`InputReadyNull True` lets the transaction cell be the null pair too.
+`GbodyRunAttemptR32Empty.hraR32_of` takes the `run_attempt` bound of the three
+null-list sub-cases (`TxNullCase`, `WitNullCase`, `AccNullCase`) as open leaf
+premises. This module removes them, using the null-tolerant replay
+`GbodyRunAttemptNullR32.gbody_run_attempt_null_of` (guard `InputReadyNull Z`,
+where `Z` says whether the transaction cell may be the null pair).
 
-* `run_attempt_r32_null`, `hraR32_null`: `run_attempt` bounded on the whole R32
-  guard `GbodyRunAttemptR32.InputReadyR32`, with no case split, no strong
-  bound and no null-list premise.
-* `txNullCase_run_attempt`: the `hTx` leaf, verbatim.
+Two closures are delivered, and neither is free: `run_attempt` reaches
+`execute_block` with the null cells still null, so the `execute_block` leaf has
+to be stated at a guard that admits them.
 
-This is not free. `run_attempt` reaches `payload_header` and `execute_block`
-with the transaction cell still null, so three of the five remaining leaves
-are stated at guards that allow it: `hexec` at `BlockReadyExecAttemptNull True`,
-`hph` at `InputReadyNwdZ True`, `wph` at `InputReadyZ True`. Each relaxed guard
-is implied by the one it replaces, so each restated leaf implies the leaf it
-replaces and the converse fails:
+* **`Z := True`** (`run_attempt_r32_null`, `hraR32_null`): the whole R32 guard
+  `GbodyRunAttemptR32.InputReadyR32` is covered at once, with no case split
+  and no strong bound. `hTx`, `hWit`, `hAcc` all disappear
+  (`txNullCase_run_attempt`, `witNullCase_run_attempt`,
+  `accNullCase_run_attempt` prove them verbatim). In exchange three of the
+  five remaining leaves are restated at relaxed guards: `hexec` at
+  `BlockReadyExecAttemptNull True`, `hph` at `InputReadyNwdZ True`, `wph` at
+  `InputReadyZ True`.
+* **`Z := False`** (`run_attempt_r32_of_txNull`, `hraR32_of_txNull`): `hWit`
+  and `hAcc` disappear, `hTx` stays a premise, and `hph` / `wph` are the
+  original leaves (`InputReadyNwdZ False` / `InputReadyZ False` are
+  `InputReadyNwd` / `InputReady`). Only `hexec` is restated, at
+  `BlockReadyExecAttemptNull False`: there the witness, access-list and
+  versioned-hash cells may be null, while the four cells shared with
+  `ExecBlock.inputRegions` are still `Inside`
+  (`blockReadyExecAttemptNull_false_inside`). The sub-cases as stated
+  (`WitNullCase`, `AccNullCase`) include states whose transaction cell is null
+  too, so `witNullCase_of_txNull` / `accNullCase_of_txNull` keep `hTx`.
 
-* `hexecNT_of_null` gives the `hexecNT` premise of
-  `GbodyRunAttemptNTR32.gbody_run_attempt_nt_r32` (and `hexec_strong_of_null`
-  the original `hexec`),
-* `hph_of_z` and `wph_of_z` give the original `hph` and `wph`.
-
-Only the `Z := True` instance of the replay is used here; at `Z := False` it
-has the strength of `GbodyRunAttemptNT`, which is the module to use for the
-route that keeps `hTx`. -/
+Each restated leaf is at a guard implied by the original one
+(`blockReadyExecAttemptNull_of_strong`, `inputReadyNwdZ_of_nwd`,
+`inputReadyZ_of_inputReady`), so it is a stronger statement:
+`hexec_strong_of_null`, `hph_of_z` and `wph_of_z` recover the original leaves
+from the restated ones. The converse does not hold. -/
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -182,6 +190,15 @@ theorem inputReadyNull_true_of_r32 {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : InputReadyR32 s) : InputReadyNull True s :=
   inputAtNull_of_r32 h (fun _ => trivial)
 
+/-- An R32 entry whose transaction cell is not null is null-tolerant at
+`Z := False`. -/
+theorem inputReadyNull_false_of_r32 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : InputReadyR32 s)
+    (hnn : ¬(memW s (memW s (locN s "si") + 32) = 0 ∧
+      memW s (memW s (locN s "si") + 40) = 0)) :
+    InputReadyNull False s :=
+  inputAtNull_of_r32 h (fun h0 => hnn ⟨h0.1, by have := h0.2; omega⟩)
+
 /-! ### The restated leaves imply the original ones -/
 
 theorem inputAtZ_of_inputAt {Z : Prop} {F : Type} {s : PanSemStateFiniteExact 64 F} {si : Nat}
@@ -227,62 +244,40 @@ theorem hph_of_z {Z : Prop}
 theorem wph_of_z {Z : Prop} (wph : WphAt (InputReadyZ Z)) : WphAt InputReady :=
   worldKeeps_mono_guard (fun _ hs => inputReadyZ_of_inputReady hs) wph
 
-/-! ### The `GbodyRunAttemptNT` guards imply the null-tolerant ones -/
+/-- At `Z := False` the `payload_header` bound is the original `hph`. -/
+theorem hph_false
+    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header")
+      K.«payload_header») :
+    TerminatingFunBoundedOn (InputReadyNwdZ False) (ofString "payload_header")
+      K.«payload_header» :=
+  hph.mono (fun s hs => (inputReadyNwdZ_false_iff s).mp hs)
 
-/-- A run-attempt cell is kept by `GbodyRunAttemptNT.runAttemptCells` or is
-the null pair. -/
-theorem mem_nt_or_null {F : Type} {s : PanSemStateFiniteExact 64 F} {si : Nat} {i : Ivl}
-    (hi : i ∈ runAttemptCells s si) :
-    i ∈ GbodyRunAttemptNT.runAttemptCells s si ∨ (i.1 = 0 ∧ i.2 = 0) := by
-  by_cases h0 : i.1 = 0 ∧ i.2 = 0
-  · exact Or.inr h0
-  · refine Or.inl ?_
-    unfold GbodyRunAttemptNT.runAttemptCells
-    simp only [runAttemptCells, List.mem_cons, List.mem_nil_iff, or_false] at hi
-    rcases hi with rfl | rfl | rfl | rfl | rfl | rfl | rfl
-    · exact List.mem_append_left _ (by simp)
-    · exact List.mem_append_left _ (by simp)
-    · exact List.mem_append_left _ (by simp)
-    · exact List.mem_append_left _ (by simp)
-    · exact List.mem_append_right _ (List.mem_filter.2 ⟨by simp, decide_eq_true h0⟩)
-    · exact List.mem_append_right _ (List.mem_filter.2 ⟨by simp, decide_eq_true h0⟩)
-    · exact List.mem_append_right _ (List.mem_filter.2 ⟨by simp, decide_eq_true h0⟩)
+/-- At `Z := False` the `payload_header` world contract is the original `wph`. -/
+theorem wph_false (wph : WphAt InputReady) : WphAt (InputReadyZ False) :=
+  worldKeeps_mono_guard (fun s hs => (inputReadyZ_false_iff s).mp hs) wph
 
-/-- The cell facts of the null-tolerant guard hold of the null pair. -/
-theorem nullCell_facts {F : Type} {s : PanSemStateFiniteExact 64 F} {i : Ivl} {lo hi : Nat}
-    (h0 : i.1 = 0 ∧ i.2 = 0) :
-    i.1 % 8 = 0 ∧ ((i.1 = 0 ∧ i.2 = 0) ∨ Inside i lo hi) ∧ WordsOK s i := by
-  obtain ⟨a, b⟩ := i
-  dsimp only at h0
-  obtain ⟨rfl, rfl⟩ := h0
-  exact ⟨rfl, Or.inl ⟨rfl, rfl⟩, rfl, rfl, fun k hk => by simp at hk⟩
+/-- What the `Z := False` execute-block guard still says about the cells of
+`ExecBlock.inputRegions` that come from the host input: the three header cells
+and the transaction cell are `Inside`, as under `BlockReadyExecAttemptStrong`.
+Only the witness, access-list and versioned-hash cells (not in
+`ExecBlock.inputRegions`) may be null. -/
+theorem blockReadyExecAttemptNull_false_inside {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : BlockReadyExecAttemptNull False s) :
+    Inside (locN s "si", 96) sourceBase (globN s "heap_ptr") ∧
+    Inside (memW s (locN s "si"), 136) sourceBase (globN s "heap_ptr") ∧
+    Inside (memW s (locN s "si" + 32), 80) sourceBase (globN s "heap_ptr") ∧
+    Inside (memW s (memW s (locN s "si") + 32), 16 * memW s (memW s (locN s "si") + 40))
+      sourceBase (globN s "heap_ptr") := by
+  obtain ⟨-, hN, -⟩ := h
+  obtain ⟨hZ, -, -, S, Nd, -, hcells, -⟩ := hN
+  obtain ⟨-, S', Nd', -, hc4, -⟩ := hZ
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · exact inside_of_nullOrInside (by simp) (hcells _ (by simp [runAttemptCells])).2.1
+  · exact inside_of_nullOrInside (by simp) (hcells _ (by simp [runAttemptCells])).2.1
+  · exact inside_of_nullOrInside (by simp) (hcells _ (by simp [runAttemptCells])).2.1
+  · exact (hc4 _ (by simp [inputCells])).1.resolve_left (fun hf => hf.1)
 
-theorem inputAtNull_of_nt {Z : Prop} {F : Type} {s : PanSemStateFiniteExact 64 F} {si : Nat}
-    (h : GbodyRunAttemptNT.InputAtStrong s si) : InputAtNull Z s si := by
-  obtain ⟨hIn, hnvh, hnwd, S, Nd, hWT, hcells, hdisj⟩ := h
-  refine ⟨inputAtZ_of_inputAt hIn, hnvh, hnwd, S, Nd, hWT, fun i hi => ?_, fun i hi j hj => ?_⟩
-  · rcases mem_nt_or_null hi with hm | h0
-    · exact ⟨(hcells i hm).1, Or.inr (hcells i hm).2.1, (hcells i hm).2.2⟩
-    · exact nullCell_facts h0
-  · rcases mem_nt_or_null hi with hm | h0
-    · exact hdisj i hm j hj
-    · exact Or.inl h0.2
-
-theorem blockReadyExecAttemptNull_of_nt {Z : Prop} {F : Type}
-    {s : PanSemStateFiniteExact 64 F} (h : GbodyRunAttemptNT.BlockReadyExecAttemptStrong s) :
-    BlockReadyExecAttemptNull Z s :=
-  ⟨⟨h.1.1, inputReadyZ_of_inputReady h.1.2.1, h.1.2.2⟩, inputAtNull_of_nt h.2.1, h.2.2⟩
-
-/-- The restated `execute_block` leaf gives the `hexecNT` premise of
-`GbodyRunAttemptNTR32.gbody_run_attempt_nt_r32`. -/
-theorem hexecNT_of_null {Z : Prop}
-    (hexec : TerminatingFunBoundedOn (BlockReadyExecAttemptNull Z)
-      (ofString "execute_block") K.«execute_block») :
-    TerminatingFunBoundedOn GbodyRunAttemptNT.BlockReadyExecAttemptStrong
-      (ofString "execute_block") K.«execute_block» :=
-  hexec.mono (fun _ hs => blockReadyExecAttemptNull_of_nt hs)
-
-/-! ### Closure at `Z := True` -/
+/-! ### Closure at `Z := True`: all three null-list leaves -/
 
 /-- `run_attempt` bounded on the whole R32 guard, null cells included, from the
 five sub-`run_attempt` leaves at the null-tolerant guards. No strong bound and
@@ -297,8 +292,8 @@ theorem run_attempt_r32_null
   (gbody_run_attempt_null_r32 hexec hph wph wsi wvhs).mono
     (fun _ hs => inputReadyNull_true_of_r32 hs)
 
-/-- The `hraR32` premise of `MainEntryR32.mainEntryR32` with no null-list
-premise. -/
+/-- The `hraR32` premise of `MainEntryR32.mainEntryR32`, without `hTx`, `hWit`,
+`hAcc`. -/
 theorem hraR32_null
     (hexec : TerminatingFunBoundedOn (BlockReadyExecAttemptNull True)
       (ofString "execute_block") K.«execute_block»)
@@ -319,5 +314,99 @@ theorem txNullCase_run_attempt
     (wph : WphAt (InputReadyZ True)) (wsi : WsiLeaf) (wvhs : WvhsLeaf) :
     TerminatingFunBoundedOn TxNullCase (ofString "run_attempt") K.«run_attempt» :=
   (run_attempt_r32_null hexec hph wph wsi wvhs).mono (fun _ hs => hs.1)
+
+/-- The `hWit` leaf of `GbodyRunAttemptR32Empty.hraR32_of`. -/
+theorem witNullCase_run_attempt
+    (hexec : TerminatingFunBoundedOn (BlockReadyExecAttemptNull True)
+      (ofString "execute_block") K.«execute_block»)
+    (hph : TerminatingFunBoundedOn (InputReadyNwdZ True) (ofString "payload_header")
+      K.«payload_header»)
+    (wph : WphAt (InputReadyZ True)) (wsi : WsiLeaf) (wvhs : WvhsLeaf) :
+    TerminatingFunBoundedOn WitNullCase (ofString "run_attempt") K.«run_attempt» :=
+  (run_attempt_r32_null hexec hph wph wsi wvhs).mono (fun _ hs => hs.1)
+
+/-- The `hAcc` leaf of `GbodyRunAttemptR32Empty.hraR32_of`. -/
+theorem accNullCase_run_attempt
+    (hexec : TerminatingFunBoundedOn (BlockReadyExecAttemptNull True)
+      (ofString "execute_block") K.«execute_block»)
+    (hph : TerminatingFunBoundedOn (InputReadyNwdZ True) (ofString "payload_header")
+      K.«payload_header»)
+    (wph : WphAt (InputReadyZ True)) (wsi : WsiLeaf) (wvhs : WvhsLeaf) :
+    TerminatingFunBoundedOn AccNullCase (ofString "run_attempt") K.«run_attempt» :=
+  (run_attempt_r32_null hexec hph wph wsi wvhs).mono (fun _ hs => hs.1)
+
+/-! ### Closure at `Z := False`: `hWit` and `hAcc`, original `hph` / `wph` -/
+
+/-- `run_attempt` bounded on the R32 states whose transaction cell is not null
+(the witness, access-list and versioned-hash cells may be), from the original
+`hph`, `wph`, `wsi`, `wvhs` and `hexec` at `BlockReadyExecAttemptNull False`. -/
+theorem run_attempt_r32_txPresent
+    (hexec : TerminatingFunBoundedOn (BlockReadyExecAttemptNull False)
+      (ofString "execute_block") K.«execute_block»)
+    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header")
+      K.«payload_header»)
+    (wph : WphAt InputReady) (wsi : WsiLeaf) (wvhs : WvhsLeaf) :
+    TerminatingFunBoundedOn
+      (fun s => InputReadyR32 s ∧
+        ¬(memW s (memW s (locN s "si") + 32) = 0 ∧ memW s (memW s (locN s "si") + 40) = 0))
+      (ofString "run_attempt") K.«run_attempt» :=
+  (gbody_run_attempt_null_r32 hexec (hph_false hph) (wph_false wph) wsi wvhs).mono
+    (fun _ hs => inputReadyNull_false_of_r32 hs.1 hs.2)
+
+/-- `run_attempt` bounded on the whole R32 guard from the transaction-null
+sub-case `hTx` and the `Z := False` bound: `hWit` and `hAcc` are not needed. -/
+theorem run_attempt_r32_of_txNull
+    (hexec : TerminatingFunBoundedOn (BlockReadyExecAttemptNull False)
+      (ofString "execute_block") K.«execute_block»)
+    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header")
+      K.«payload_header»)
+    (wph : WphAt InputReady) (wsi : WsiLeaf) (wvhs : WvhsLeaf)
+    (hTx : TerminatingFunBoundedOn TxNullCase (ofString "run_attempt") K.«run_attempt») :
+    TerminatingFunBoundedOn InputReadyR32 (ofString "run_attempt") K.«run_attempt» := by
+  obtain ⟨p, b, rs, hlk, hrun⟩ := run_attempt_r32_txPresent hexec hph wph wsi wvhs
+  obtain ⟨p2, b2, rs2, hlk2, hrun2⟩ := hTx
+  rw [hlk] at hlk2
+  obtain ⟨rfl, rfl, rfl⟩ := Option.some.inj hlk2
+  refine ⟨p, b, rs, hlk, fun state hcode hp => ?_⟩
+  by_cases h0 : memW state (memW state (locN state "si") + 32) = 0 ∧
+      memW state (memW state (locN state "si") + 40) = 0
+  · exact hrun2 state hcode ⟨hp, h0⟩
+  · exact hrun state hcode ⟨hp, h0⟩
+
+/-- The `hraR32` premise of `MainEntryR32.mainEntryR32`, without `hWit` and
+`hAcc`. -/
+theorem hraR32_of_txNull
+    (hexec : TerminatingFunBoundedOn (BlockReadyExecAttemptNull False)
+      (ofString "execute_block") K.«execute_block»)
+    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header")
+      K.«payload_header»)
+    (wph : WphAt InputReady) (wsi : WsiLeaf) (wvhs : WvhsLeaf)
+    (hTx : TerminatingFunBoundedOn TxNullCase (ofString "run_attempt") K.«run_attempt») :
+    TerminatingFunBoundedOn MainEntryR32.InputReadyR32 (ofString "run_attempt")
+      K.«run_attempt» :=
+  (run_attempt_r32_of_txNull hexec hph wph wsi wvhs hTx).mono
+    (fun s hs => (R32CanonicalBridges.inputReadyR32CanonBounded_iff s).mp hs)
+
+/-- The `hWit` leaf from `hTx` and the `Z := False` leaves. -/
+theorem witNullCase_of_txNull
+    (hexec : TerminatingFunBoundedOn (BlockReadyExecAttemptNull False)
+      (ofString "execute_block") K.«execute_block»)
+    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header")
+      K.«payload_header»)
+    (wph : WphAt InputReady) (wsi : WsiLeaf) (wvhs : WvhsLeaf)
+    (hTx : TerminatingFunBoundedOn TxNullCase (ofString "run_attempt") K.«run_attempt») :
+    TerminatingFunBoundedOn WitNullCase (ofString "run_attempt") K.«run_attempt» :=
+  (run_attempt_r32_of_txNull hexec hph wph wsi wvhs hTx).mono (fun _ hs => hs.1)
+
+/-- The `hAcc` leaf from `hTx` and the `Z := False` leaves. -/
+theorem accNullCase_of_txNull
+    (hexec : TerminatingFunBoundedOn (BlockReadyExecAttemptNull False)
+      (ofString "execute_block") K.«execute_block»)
+    (hph : TerminatingFunBoundedOn InputReadyNwd (ofString "payload_header")
+      K.«payload_header»)
+    (wph : WphAt InputReady) (wsi : WsiLeaf) (wvhs : WvhsLeaf)
+    (hTx : TerminatingFunBoundedOn TxNullCase (ofString "run_attempt") K.«run_attempt») :
+    TerminatingFunBoundedOn AccNullCase (ofString "run_attempt") K.«run_attempt» :=
+  (run_attempt_r32_of_txNull hexec hph wph wsi wvhs hTx).mono (fun _ hs => hs.1)
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.GbodyRunAttemptNullR32Close

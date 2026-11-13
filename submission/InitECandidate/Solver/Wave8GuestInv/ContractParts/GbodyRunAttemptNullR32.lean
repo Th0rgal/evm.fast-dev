@@ -24,9 +24,8 @@ The parameter `Z : Prop` says whether the *transaction* cell may be null:
   may be null. Then `InputReadyZ False ↔ InputReady` and
   `InputReadyNwdZ False ↔ InputReadyNwd`, so the `payload_header` leaves are
   the original ones.
-* `Z := True`: every list cell may be null; `InputReadyNull True` holds in
-  every `GbodyRunAttemptR32.InputReadyR32` state
-  (`GbodyRunAttemptNullR32Close.inputReadyNull_true_of_r32`).
+* `Z := True`: every list cell may be null; `InputReadyNull True` is
+  `GbodyRunAttemptR32.InputReadyR32`.
 
 What the replay cannot do is reuse the callee leaves whose own guard asks
 `Inside` of a cell that is now allowed to be null. Those are restated at the
