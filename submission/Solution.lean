@@ -1,6 +1,6 @@
 import InitE.Challenge
 import InitECandidate.Solver.Wave8GuestInv.Certificate
-import InitECandidate.Solver.Wave8GuestInv.ContractParts.CertificateR32NT2
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.CertificateR32NT2Direct
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -24,13 +24,11 @@ theorem claimedScore_eq_K_target :
 the `ConcreteM7313` oracle table (`same`). The stage transfer is the proved
 `Wave8Stage.StageTransfer.stageTransfer w same`; the main lane is the honest
 `MainEntryR32.mainEntryR32_honest` route, which takes no
-`ChainHandlersR32Stmt` / `WkProcessTransactionStmtR32` bundle; `hstrong` is
-closed by `GbodyRunAttemptStrongR32.gbody_run_attempt_strong_r32`; and the
-four null-list sub-cases of the `run_attempt` decode-empty case are all
-closed: the vh-list one by `GbodyRunAttemptR32Empty.vhNullCase_run_attempt`,
-the tx-, witness- and access-list ones by the null-tolerant replay
-`GbodyRunAttemptNT2` of the `run_attempt` proof
-(`CertificateR32.certificateR32_nt2`).
+`ChainHandlersR32Stmt` / `WkProcessTransactionStmtR32` bundle; and the
+`run_attempt` bound at the R32 guard is `GbodyRunAttemptNT2R32.hraR32_nt2`:
+the null-tolerant replay `GbodyRunAttemptNT2` of the `run_attempt` proof
+holds in every R32 entry state, so there is no decode-empty case split
+(`CertificateR32.certificateR32_nt2_direct`).
 
 The genuinely-open obligations are six frozen leaves: the compilation
 witness (`w` with `same`) and five premises, the sub-`run_attempt`
@@ -75,7 +73,7 @@ theorem certificate
       R16Shards.TopGbodyWk.RetHeadersStrong (ofString "validate_headers")) :
     InitE.Certificate submission claimedScore := by
   rw [claimedScore_eq_K_target]
-  exact ContractParts.CertificateR32.certificateR32_nt2
+  exact ContractParts.CertificateR32.certificateR32_nt2_direct
     w same hexecNT hphNT wphNT wsi wvhs
 
 end InitE.Challenge
