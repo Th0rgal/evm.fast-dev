@@ -24,8 +24,8 @@ exactly as in `certificateR32_of_witness`. Each of the first three implies
 the corresponding premise there (`hexec_of_nt2`, `hph_of_nt2`, `wph_of_nt2`),
 not conversely: its guard also admits the states with a null list cell.
 
-This is a variant; `certificateR32_of_witness`, `certificateR32` and
-`Solution.certificate` are unchanged. -/
+`Solution.certificate` is this theorem at `claimedScore`.
+`certificateR32_of_witness` and `certificateR32` are unchanged. -/
 
 set_option autoImplicit false
 set_option maxRecDepth 200000

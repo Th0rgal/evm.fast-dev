@@ -20,8 +20,9 @@ the `hexec` premise there (`GbodyRunAttemptNTR32.hexec_of_nt`), not
 conversely: its guard also admits the states whose witness, access or vh
 list cell is the null pair.
 
-This is a variant; `certificateR32_of_witness`, `certificateR32` and
-`Solution.certificate` are unchanged. -/
+This is a variant; `certificateR32_of_witness` and `certificateR32` are
+unchanged. `Solution.certificate` uses the further variant
+`certificateR32_nt2` (`CertificateR32NT2.lean`). -/
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
