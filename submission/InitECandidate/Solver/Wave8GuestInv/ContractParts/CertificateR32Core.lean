@@ -58,7 +58,28 @@ Notes on the open leaves (none of these is proved here):
 * `hTx`, `hWit`, `hAcc` do not follow from `hexec`: its guard
   `BlockReadyExecAttemptStrong` contains `InputReadyStrong`, which fails
   while a run-attempt cell is null, so each of them needs an `execute_block`
-  bound at a null-tolerant guard. -/
+  bound at a null-tolerant guard.
+* `hph` reduces (`ExecBlockAndCalleeClosureR32.hph_r32_of_mpt`) to a
+  `build_mpt_indexed` bound and world contract. The proved world contract
+  `R16Shards.MptC10C12.wk_build_mpt_indexed_strong` is at
+  `BuildMptIndexedReadyStrong`, which asks
+  `memW s (slice_arr + 16 * i) + 8 ≤ heap_ptr` of every slice; at the
+  transaction-list call site of `payload_header` that is a per-transaction
+  pointer fact which `InputReadyNwd` does not carry.
+* `wph` has only the reductions `wk_payload_header_of_bodyEffect` /
+  `wk_payload_header_of_heapByteEff` in `WkHostPayloadHeaders`. The first
+  asks, through `hret`, for a normal return on every `InputReady` state,
+  while the guest body has a `throw BlockErr 7` path; the second asks for
+  `RetHeader` of an arbitrary result. Neither premise has a supplier.
+* `hexec`: the proved `gbody_execute_block_strong` is at
+  `BlockReadyExecStrong`, whose `ExecBlock.EntryAt` again asks per-item
+  content bounds for the transaction list.
+
+Common root of `wsi`, `hph` and `hexec`: the decode post
+`RetInputStrongSound` (`WkDecodeHostInputMain`) states `Inside` / `WordsOK`
+only for the seven `runAttemptCells` (the list cells themselves) and says
+nothing about the `(ptr, len)` items stored in them, so no per-item fact
+reaches `run_attempt` through `MainEntryR32.InputReadyR32`. -/
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
