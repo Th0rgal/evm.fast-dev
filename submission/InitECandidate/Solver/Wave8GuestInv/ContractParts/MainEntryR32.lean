@@ -21,9 +21,14 @@ the legacy `InputAtNwd`-based lane, whose `RetInput` component is false at
 
 The only open premises are `whtrR32` (the R32 `htr_new_payload_request`
 world-effect contract) and `hra` (`run_attempt` terminating-bounded at the
-R32 entry). `hChain`/`hWkPtx` are the R32 statement bundles of
-`ContractParts.StrongBridgesR32`, carried as signature markers for the lanes
-that close `hra`. -/
+R32 entry). The composition itself is `mainEntryR32_honest`, which takes
+exactly those two premises. `mainEntryR32` is the legacy signature: it also
+lists the R32 statement bundles `hChain`/`hWkPtx` of
+`ContractParts.StrongBridgesR32`, which the proof never uses. Since
+`ChainHandlersR32Stmt` has the `LocFrame`-post fields
+`hU`/`hcc`/`hcc2`/`hgcr`/`hgca` (false: the callees write memory), a result
+stated through `mainEntryR32` is conditional on an uninhabitable bundle;
+the certificate route uses `mainEntryR32_honest` only. -/
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -782,11 +787,12 @@ theorem hoare_htr_inputReadyR32
 
 /-! ## 5. The R32 main-entry composition -/
 
-/-- The R32 main entry: `main` terminating-bounded on the covered entry
-state, recomposed from the proved leaves over the honest `RetInputStrongSound`
-decode post. Open premises: `whtrR32` and `hra`; `hChain`/`hWkPtx` are the
-R32 statement bundles carried as lane markers. -/
-theorem mainEntryR32 (hChain : ChainHandlersR32Stmt) (hWkPtx : WkProcessTransactionStmtR32)
+/-- The R32 main entry, honest route: `main` terminating-bounded on the
+covered entry state, recomposed from the proved leaves over the honest
+`RetInputStrongSound` decode post. Open premises: exactly `whtrR32` and
+`hra`. No statement bundle is taken: in particular nothing here depends on
+`ChainHandlersR32Stmt` and its `LocFrame`-post fields. -/
+theorem mainEntryR32_honest
     (whtrR32 : WorldKeeps HtrNewPayloadReadyR32
       (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
       ["heap_ptr"]
@@ -1039,5 +1045,20 @@ theorem mainEntryR32 (hChain : ChainHandlersR32Stmt) (hWkPtx : WkProcessTransact
                                 (GbodyC17ToC21Common.straight_guestInv _ rfl)
                                 (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))))))))))))))))))))))))))
   · unfold K.«main»; omega
+
+/-- Legacy signature of the R32 main entry, kept for the callers that still
+pass the R32 statement bundles. `hChain`/`hWkPtx` are unused: this is
+`mainEntryR32_honest`. Do not route a certificate through this form, because
+`ChainHandlersR32Stmt` is not inhabitable (see the module header). -/
+theorem mainEntryR32 (hChain : ChainHandlersR32Stmt) (hWkPtx : WkProcessTransactionStmtR32)
+    (whtrR32 : WorldKeeps HtrNewPayloadReadyR32
+      (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "htr_new_payload_request"))
+    (hra : TerminatingFunBoundedOn InputReadyR32 (ofString "run_attempt") K.«run_attempt») :
+    TerminatingFunBoundedOn MainEntry (ofString "main") K.«main» :=
+  mainEntryR32_honest whtrR32 hra
 
 end InitECandidate.Solver.Wave8GuestInv.ContractParts.MainEntryR32

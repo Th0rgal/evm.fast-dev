@@ -136,4 +136,33 @@ theorem assemblyR32 {hChain : ChainHandlersR32Stmt}
     CoveredSourceTicksConsumedBounded (K.«main» + 1) :=
   coveredSourceTicksConsumedBounded_of_terminatingMainOnEntry hMain
 
+/-- Honest R32 main lane: `main` terminating-bounded on the covered entry,
+from the two real leaves `whtrR32` and `hra` only, via
+`MainEntryR32.mainEntryR32_honest`. Unlike `mainEntryLaneR32` this takes no
+`ChainHandlersR32Stmt`/`WkProcessTransactionStmtR32` bundle, so it does not
+depend on the `LocFrame`-post fields `hU`/`hcc`/`hcc2`/`hgcr`/`hgca` of
+`ChainHandlersR32Stmt` (false: the callees write memory). -/
+theorem mainEntryLaneR32_honest
+    (whtrR32 : WorldKeeps MainEntryR32.HtrNewPayloadReadyR32
+      (fun s => [(locN s "out", 32),
+        (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "htr_new_payload_request"))
+    (hra : TerminatingFunBoundedOn MainEntryR32.InputReadyR32
+      (ofString "run_attempt") K.«run_attempt») :
+    TerminatingFunBoundedOn MainEntry (ofString "main") K.«main» :=
+  MainEntryR32.mainEntryR32_honest whtrR32 hra
+
+/-- Honest end-to-end R32 assembly: the campaign target
+`CoveredSourceTicksConsumedBounded (K.«main» + 1)` (definitionally `K_pan`)
+from the `main` bound alone, by the proved `EntryBridge` bridge. This is
+`assemblyR32` without the statement-bundle indices. -/
+theorem assemblyR32_honest
+    (hMain : TerminatingFunBoundedOn MainEntry (ofString "main") K.«main») :
+    CoveredSourceTicksConsumedBounded (K.«main» + 1) :=
+  coveredSourceTicksConsumedBounded_of_terminatingMainOnEntry hMain
+
 end InitECandidate.Solver.Wave8GuestInv.ContractParts
