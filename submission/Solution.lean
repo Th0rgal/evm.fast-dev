@@ -29,7 +29,8 @@ closed by `GbodyRunAttemptStrongR32.gbody_run_attempt_strong_r32`; and the
 `run_attempt` decode-empty case is split by
 `GbodyRunAttemptR32Empty.hemptyCanon_of` into its four null-list sub-cases.
 
-The genuinely-open obligations are the nine frozen leaf premises: the five
+The genuinely-open obligations are ten frozen leaves: the compilation
+witness (`w` with `same`) and nine premises, namely the five
 sub-`run_attempt` hypotheses of the strong bound (`hexec`, `hph`, `wph`,
 `wsi`, `wvhs`) and the four null-list sub-cases of `run_attempt` (`hTx`,
 `hWit`, `hAcc`, `hVh`). -/

@@ -12,8 +12,10 @@ compilation witness.
 transfer with `source_not_timeOut_K_pan`, which rests on the dishonest
 `assembly primitives` route (`Wave8GuestInv.Target`). This module assembles
 the honest replacement, parameterized only by a compilation witness with the
-`ConcreteM7313` oracle table (closed in `ContractParts.WitnessR32`) and by
-the frozen leaf premises listed below:
+`ConcreteM7313` oracle table (`w`, `same`: one frozen leaf, since its only
+inhabitant in the tree sits behind `InitECandidate.Proofs`, which the
+`Solution` import path must not reach) and by the frozen leaf premises listed
+below:
 
 * the stage transfer is the proved
   `Wave8Stage.StageTransfer.stageTransfer w same` — it is no longer a
