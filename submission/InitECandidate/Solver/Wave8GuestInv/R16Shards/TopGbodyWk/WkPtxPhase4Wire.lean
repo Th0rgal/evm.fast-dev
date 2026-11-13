@@ -1,4 +1,5 @@
-import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkPtxPhase4P
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkPtxPhase4O2
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkPtxPhase4Q6
 
 set_option Elab.async false
 set_option autoImplicit false
@@ -34,24 +35,24 @@ open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
 The full phase-4 cut `PtxRelCutStrong R13Shards.ptxPhase4 PtxAfterPhase3
 PtxAfterPhase4`, composed from the proven lane runners `p4Run_head` (4M),
 `p4Run_g5` (4N) and `p4Run_g7` (4P) after the `ptxPhase4_eq` spine
-decomposition, and parameterized over the two lane theorems not yet closed
-in this shard chain:
+decomposition, and parameterized over the two remaining lane statements:
 
-* `PtxPhase4OStep` — owed by `WkPtxPhase4O.lean` (`p4Run_g6`, the
+* `PtxPhase4OStep` — proved by `WkPtxPhase4O2.p4Run_g6` (the
   `encode_receipt` call and the two receipt-record stores, instructions
   24-30);
-* `PtxPhase4QStep` — owed by `WkPtxPhase4Q.lean` (`p4Run_g8`, the
-  stable-logs segment, instructions 31-39), whose continuation receives the
-  phase-5 handoff `PtxAfterPhase4` at the final state.
+* `PtxPhase4QStep` — proved by `WkPtxPhase4Q6.p4Run_g8` (the stable-logs
+  segment, instructions 31-39), whose continuation receives the phase-5
+  handoff `PtxAfterPhase4` at the final state.
 
-Instantiating `hG6`/`hG8` with the two lane theorems (once compiled) yields
-the unconditional phase-4 cut. -/
+`ptxPhase4_relCut_strong` instantiates `hG6`/`hG8` with the two lane
+theorems and is the unconditional phase-4 cut. -/
 
 /-- The step theorem owed by `WkPtxPhase4O.lean`: instructions 24-30 of the
 phase-4 spine (the `encode_receipt` call plus the two receipt-record stores
 into the `bo+32` array).  The input is the full `p4Run_g5` continuation
 bundle at `s`; the continuation receives the same bundle at the post-store
-state. -/
+state, plus the bound on the current receipt slice's length cell (the word
+written by the second store). -/
 abbrev PtxPhase4OStep : Prop :=
   ∀ {F : Type} {entry s s_pmc : PanSemStateFiniteExact 64 F} {w_out : BitVec 64},
     P4Data entry s s_pmc w_out →
@@ -79,14 +80,16 @@ abbrev PtxPhase4OStep : Prop :=
           memW s' (wl'.toNat + 8) = 0 ∧
           WordAt s' wl'.toNat ∧ WordAt s' (wl'.toNat + 8) ∧
           wl'.toNat + 32 ≤ globN s' "heap_ptr")) →
+      memW s' (memW s' (globN s' "bo" + 32) + 16 * locN entry "index" + 8) < 2 ^ 40 →
       PtxRelRunStrong entry rest s') →
     PtxRelRunStrong entry
       (.decCall (ofString "rc") (.comb [.one, .one]) (ofString "encode_receipt") [(.load .one (.op .add [(.var .local (ofString "tx")), (.const 0x0000000000000000#64)])), (.var .local (ofString "succeeded")), (.load .one (.op .add [(.var .global (ofString "bo")), (.const 0x0000000000000010#64)])), (.var .local (ofString "logs"))] (.seq (.store (.op .add [(.load .one (.op .add [(.var .global (ofString "bo")), (.const 0x0000000000000020#64)])), (.panop .mul [(.var .local (ofString "index")), (.const 0x0000000000000010#64)])]) (.rfield 0 (.var .local (ofString "rc")))) (.seq (.store (.op .add [(.load .one (.op .add [(.var .global (ofString "bo")), (.const 0x0000000000000020#64)])), (.panop .mul [(.var .local (ofString "index")), (.const 0x0000000000000010#64)]), (.const 0x0000000000000008#64)]) (.rfield 1 (.var .local (ofString "rc")))) rest))) s
 
 /-- The step theorem owed by `WkPtxPhase4Q.lean`: instructions 31-39 of the
 phase-4 spine (the stable-logs segment).  The input is exactly the
-`p4Run_g7` continuation bundle at `s`; the continuation receives the final
-state together with the phase-5 handoff `PtxAfterPhase4`. -/
+`p4Run_g7` continuation bundle at `s` (including the bound on the current
+receipt slice's length cell); the continuation receives the final state
+together with the phase-5 handoff `PtxAfterPhase4`. -/
 abbrev PtxPhase4QStep : Prop :=
   ∀ {F : Type} {entry s s_pmc : PanSemStateFiniteExact 64 F} {w_out : BitVec 64},
     P4Data entry s s_pmc w_out →
@@ -102,8 +105,19 @@ abbrev PtxPhase4QStep : Prop :=
         memW s (w_out.toNat + 16) ≠ 0 ∧
         nl_w.toNat < 2 ^ 28) ∨
       nl_w.toNat = 0) →
+    memW s (memW s (globN s "bo" + 32) + 16 * locN entry "index" + 8) < 2 ^ 40 →
+    -- NOTE (R32 closure amendment): the `P4Data entry s' s_pmc w_out`
+    -- premise was removed from this tail.  Instruction 39's `lst_push`
+    -- writes `n+1` into the receipt-list length slot at `hdr+8` of the
+    -- list at `bo+72` (`Guest.Software.guestFn_lst_push`), while
+    -- `P4Data.base.rcpt_len_eq` pins that length to the entry value, and
+    -- `x+1 ≠ x` holds for every `BitVec 64`.  So `P4Data` is false at
+    -- every post-push state and the premise was unsatisfiable.  The
+    -- post-push cut data is `PtxAfterPhase4`, whose `typing` field is
+    -- explicitly the post-push spec (it quantifies over the new element
+    -- via `StableLogsHeapDisj`); only `s'.code` and `PtxAfterPhase4`
+    -- are needed here.
     (∀ s' : PanSemStateFiniteExact 64 F,
-      P4Data entry s' s_pmc w_out →
       s'.code = originalRuntimeCode →
       PtxAfterPhase4 entry s' →
       PtxRelRunStrong entry rest s') →
@@ -124,11 +138,27 @@ theorem ptxPhase4_relCut_strong_of
   refine p4Run_g5 hD1 hc1 _ ?_
   intro s2 wl2 succw2 hD2 hc2 hlogs2 hsucc2 hLL2 hDF2 hdisj2
   refine hG6 hD2 hc2 _ wl2 succw2 hlogs2 hsucc2 hLL2 hDF2 hdisj2 ?_
-  intro s3 wl3 succw3 hD3 hc3 hlogs3 hsucc3 hLL3 hDF3 hdisj3
-  refine p4Run_g7 hD3 hc3 _ wl3 succw3 hlogs3 hsucc3 hLL3 hDF3 hdisj3 ?_
-  intro s4 nl4 lp4 hD4 hc4 hnl4 hlp4 hpin4
-  refine hG8 hD4 hc4 _ nl4 lp4 hnl4 hlp4 hpin4 ?_
-  intro s5 hD5 hc5 hAfter5
+  intro s3 wl3 succw3 hD3 hc3 hlogs3 hsucc3 hLL3 hDF3 hdisj3 hrc3
+  refine p4Run_g7 hD3 hc3 _ wl3 succw3 hlogs3 hsucc3 hLL3 hDF3 hdisj3 hrc3 ?_
+  intro s4 nl4 lp4 hD4 hc4 hnl4 hlp4 hpin4 hrc4
+  refine hG8 hD4 hc4 _ nl4 lp4 hnl4 hlp4 hpin4 hrc4 ?_
+  intro s5 hc5 hAfter5
   exact htail s5 hc5 hAfter5
+
+/-- The proved `p4Run_g6` (`WkPtxPhase4O2`) as the `PtxPhase4OStep` statement
+(binder order only). -/
+theorem ptxPhase4OStep_proved : PtxPhase4OStep :=
+  fun h hc rest wl succw hlogs hsucc hLL hDF hdisj htail =>
+    p4Run_g6 h hc succw wl hsucc hlogs hLL hDF hdisj rest htail
+
+/-- The proved `p4Run_g8` (`WkPtxPhase4Q6`) as the `PtxPhase4QStep` statement. -/
+theorem ptxPhase4QStep_proved : PtxPhase4QStep :=
+  fun h hc rest nl_w lp_w hnl hlp hpin hrc32 htail =>
+    p4Run_g8 h hc rest nl_w lp_w hnl hlp hpin hrc32 htail
+
+/-- The unconditional phase-4 cut. -/
+theorem ptxPhase4_relCut_strong :
+    PtxRelCutStrong R13Shards.ptxPhase4 PtxAfterPhase3 PtxAfterPhase4 :=
+  ptxPhase4_relCut_strong_of ptxPhase4OStep_proved ptxPhase4QStep_proved
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

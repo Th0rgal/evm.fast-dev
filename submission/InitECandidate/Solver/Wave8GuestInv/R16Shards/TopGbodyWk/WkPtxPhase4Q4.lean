@@ -197,6 +197,56 @@ theorem p4Q8_mul8_toNat (i_w : BitVec 64) (h8 : i_w.toNat * 8 < 2 ^ 64) :
   norm_num
   omega
 
+/-! ## The current receipt slice across block-out-preserving steps -/
+
+/-- The current receipt slice's length cell (written by instruction 27) is
+a cell of the `bo + 32` slice array, a block-out object: it survives any
+step between two base states that leaves the block-out objects unhit. -/
+theorem p4Q8_rcptCur_of_unhit {F : Type}
+    {entry t post : PanSemStateFiniteExact 64 F}
+    (hbase : PtxRelBase true entry t) (hbase' : PtxRelBase true entry post)
+    (hu : PtxBlockOutUnhit t post) :
+    memW post (memW post (globN post "bo" + 32) + 16 * locN entry "index" + 8) =
+      memW t (memW t (globN t "bo" + 32) + 16 * locN entry "index" + 8) := by
+  obtain ⟨⟨_, hbo_nz_e, hbo24_nz_e, hbo32_nz_e, hidx_lt_e⟩, _, hbo40_nz_e, hbo72_nz_e,
+    S_e, Nd_e, hWT_e, _⟩ := hbase.ready_entry
+  have hD_e : IvlsDisj (ptxRegions entry) (worldTypedIvls entry S_e Nd_e) := by
+    rw [ptxRegions_eq_bufRegions]
+    exact validBufList_disj validBufList_ptxBufs hWT_e
+  obtain ⟨Sc, Nc, _, hWT_w, _, _⟩ := hbase.typing S_e Nd_e hWT_e hD_e
+  have hbo_t : globN t "bo" = globN entry "bo" :=
+    globN_eq_of_lookup (hbase.globals (ofString "bo") (by decide))
+  have hbo_nz_t : globN t "bo" ≠ 0 := by rw [hbo_t]; exact hbo_nz_e
+  have hbo32_t : memW t (globN t "bo" + 32) = memW entry (globN entry "bo" + 32) :=
+    ptx_entry_bo_field_eq hWT_e hbase.globals hbase.records hbo_nz_e (by simp) (by omega)
+  have hbo80_t : memW t (globN t "bo" + 80) = memW entry (globN entry "bo" + 80) :=
+    ptx_entry_bo_field_eq hWT_e hbase.globals hbase.records hbo_nz_e (by simp) (by omega)
+  have hbo32_p : memW post (globN post "bo" + 32) = memW entry (globN entry "bo" + 32) :=
+    ptx_entry_bo_field_eq hWT_e hbase'.globals hbase'.records hbo_nz_e (by simp) (by omega)
+  rw [hbo32_p, ← hbo32_t]
+  exact ptx_slice_length_eq_of_blockOutUnhit (off := 32) (i := locN entry "index")
+    hbase.world.1 hWT_w hu hbo_nz_t (by simp) (by rw [hbo32_t]; exact hbo32_nz_e)
+    (by rw [hbo80_t]; omega)
+
+/-- The current receipt slice's length cell survives a fresh-heap
+allocation step (the `lst_new` callee). -/
+theorem p4Q8_rcptCur_of_fresh_heap {F : Type}
+    {entry t post : PanSemStateFiniteExact 64 F}
+    (hbase : PtxRelBase true entry t) (hbase' : PtxRelBase true entry post)
+    (hARp : ArenaReady post)
+    (hfr : FrameOutside t post [(globN t "scratch_ptr", 0)]
+      (globN t "heap_ptr", globN post "heap_ptr" - globN t "heap_ptr")) :
+    memW post (memW post (globN post "bo" + 32) + 16 * locN entry "index" + 8) =
+      memW t (memW t (globN t "bo" + 32) + 16 * locN entry "index" + 8) := by
+  obtain ⟨⟨_, hbo_nz_e, hbo24_nz_e, hbo32_nz_e, hidx_lt_e⟩, _, hbo40_nz_e, hbo72_nz_e,
+    S_e, Nd_e, hWT_e, _⟩ := hbase.ready_entry
+  have hD_e : IvlsDisj (ptxRegions entry) (worldTypedIvls entry S_e Nd_e) := by
+    rw [ptxRegions_eq_bufRegions]
+    exact validBufList_disj validBufList_ptxBufs hWT_e
+  obtain ⟨Sc, Nc, _, hWT_w, _, _⟩ := hbase.typing S_e Nd_e hWT_e hD_e
+  exact p4Q8_rcptCur_of_unhit hbase hbase'
+    (ptxBlockOutUnhit_of_fresh_heap hWT_w hbase.world.1 hARp hfr)
+
 /-! ## The loop-38 invariant -/
 
 /-- The loop-38 invariant at state `t` with index `i_w`.  Everything the
@@ -261,6 +311,13 @@ structure P4Q8Loop {F : Type} (entry s_pmc : PanSemStateFiniteExact 64 F)
   i_le : i_w.toNat ≤ nl_w.toNat
   copied : ∀ j, j < i_w.toNat →
     memW t (lw.toNat + 24 + 8 * j) = memW t (lp_w.toNat + 8 * j)
+  -- the facts the exit bundle (`P4Q8Exit`) reads beyond the loop's own needs
+  arena_pmc : ArenaReady s_pmc
+  idx_local : t.locals.lookup (ofString "index") = entry.locals.lookup (ofString "index")
+  hdr0 : memW t lw.toNat = lw.toNat + 24
+  hdr8 : memW t (lw.toNat + 8) = nl_w.toNat
+  hdr16 : memW t (lw.toNat + 16) = capw.toNat
+  rcpt_cur : memW t (memW t (globN t "bo" + 32) + 16 * locN entry "index" + 8) < 2 ^ 40
 
 /-- The invariant survives the loop's clock decrement. -/
 theorem p4Q8Loop_decClock {F : Type} {entry s_pmc : PanSemStateFiniteExact 64 F}
@@ -274,7 +331,7 @@ theorem p4Q8Loop_decClock {F : Type} {entry s_pmc : PanSemStateFiniteExact 64 F}
     h.heap_fr, h.heap_pmc, h.out_local, h.nl_local, h.sl_local, h.slp_local, h.lp_local,
     h.i_local, h.out_words, h.out_inside, h.out_below, h.marks, h.src_nz, h.src_logs,
     h.src_lp_eq, h.src_len, h.geo_out_hdr, h.geo_out_arr, h.src_ent, h.hdr_words, h.arr_words,
-    h.i_le, h.copied⟩
+    h.i_le, h.copied, h.arena_pmc, h.idx_local, h.hdr0, h.hdr8, h.hdr16, h.rcpt_cur⟩
 
 /-! ## The body transport -/
 
@@ -591,7 +648,12 @@ theorem p4Q8Loop_store_mem {F : Type}
           (lp_w.toNat + 8 * j) = memW u (lp_w.toNat + 8 * j) :=
         hmemW_geo lp_w.toNat (8 * nl_w.toNat) h.geo_out_arr _ (by omega) (by omega)
       rw [harrj, hsrcj]
-      exact h.copied j hj⟩, hcop⟩
+      exact h.copied j hj,
+    h.arena_pmc, h.idx_local,
+    (hmemW_below lw.toNat (by omega)).trans h.hdr0,
+    (hmemW_below (lw.toNat + 8) (by omega)).trans h.hdr8,
+    (hmemW_below (lw.toNat + 16) (by omega)).trans h.hdr16,
+    lt_of_eq_of_lt (p4Q8_rcptCur_of_unhit h.base hbase' hbo_unhit) h.rcpt_cur⟩, hcop⟩
 
 /-- The loop-38 body transport: one iteration of the copy loop.  At a
 state `u` satisfying the invariant with index `i_w < nl`, storing the
@@ -659,7 +721,10 @@ theorem p4Q8Loop_store {F : Type}
       · exact hmem.copied j hjie
       · have hj_eq : j = i_w.toNat := by omega
         subst hj_eq
-        exact hcop⟩
+        exact hcop,
+    hmem.arena_pmc,
+    by rw [hlu_others "index" (by decide)]; exact hmem.idx_local,
+    hmem.hdr0, hmem.hdr8, hmem.hdr16, hmem.rcpt_cur⟩
 
 /-! ## The loop-38 runner -/
 
