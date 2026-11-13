@@ -15,8 +15,10 @@ the stage transfer follows from any master witness carrying the
 
 This module stays clear of the compiler-correctness proof tree
 (`InitECandidate.Proofs.FullBaseline` and its stage modules): it does not
-import `Solver.ConcreteOracleWitness`. `ContractParts.WitnessR32` applies it
-to `concreteOracleWitness`. -/
+import `Solver.ConcreteOracleWitness`, and nothing on the `Solution` import
+path may, since that tree alone exceeds the import-closure budget of the
+final cutover check. The witness therefore stays a premise of the
+certificate; this bridge only records that either witness structure serves. -/
 
 set_option autoImplicit false
 
